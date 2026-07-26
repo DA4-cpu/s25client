@@ -11,6 +11,11 @@ uint8_t ByHumidity(const TerrainDesc& terrain)
     return terrain.humidity;
 }
 
+uint8_t ByTemperature(const TerrainDesc& terrain)
+{
+    return terrain.temperature;
+}
+
 bool IsWater(const TerrainDesc& terrain)
 {
     return terrain.kind == TerrainKind::Water;

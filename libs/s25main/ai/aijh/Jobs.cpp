@@ -139,15 +139,16 @@ void BuildJob::TryToBuild()
         state = JobState::Failed;
 #ifdef DEBUG_AI
         std::cout << "Player " << (unsigned)aijh.GetPlayerId() << ", Job failed: No Position found for "
-                  << BUILDING_NAMES[type] << " around " << foundPos << "." << std::endl;
+                  << BUILDING_NAMES[type] << " around " << foundPos.x << "/" << foundPos.y << std::endl;
 #endif
         return;
     }
 
 #ifdef DEBUG_AI
     if(type == BuildingType::Farm)
-        std::cout << " Player " << (unsigned)aijh.GetPlayerId() << " built farm at " << foundPos << " on value of "
-                  << aijh.resourceMaps[PLANTSPACE][foundPos] << std::endl;
+        std::cout << " Player " << (unsigned)aijh.GetPlayerId() << " built farm at " << foundPos.x << "/" << foundPos.y
+                  << " on value of "
+                  << aijh.GetResMapValue(foundPos, AIResource::Plantspace) << std::endl;
 #endif
 
     if(!aijh.GetInterface().SetBuildingSite(foundPos, type))
@@ -392,9 +393,9 @@ void EventJob::ExecuteJob()
 
 void ConnectJob::ExecuteJob()
 {
-#ifdef DEBUG_AI
+/* #ifdef DEBUG_AI
     std::cout << "Player " << (unsigned)aijh.GetPlayerId() << ", ConnectJob executed..." << std::endl;
-#endif
+#endif*/
 
     // can the ai still construct here? else return and try again later
     AIConstruction& construction = aijh.GetConstruction();

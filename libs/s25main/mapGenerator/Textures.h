@@ -39,6 +39,10 @@ public:
 
     uint8_t GetLandscapeId() const { return worldDesc_.get(landscape_).s2Id; }
 
+    /// Returns the full terrain description (humidity, temperature, ...) for a candidate texture -
+    /// useful when picking among several candidates by more than one property at once.
+    const TerrainDesc& GetDesc(DescIdx<TerrainDesc> texture) const { return worldDesc_.get(texture); }
+
     template<class T_Predicate>
     DescIdx<TerrainDesc> Find(T_Predicate predicate) const
     {
@@ -148,21 +152,23 @@ class Texturizer
 {
 private:
     NodeMapBase<uint8_t>& z_;
+    /// Local humidity [0, 100] per node (see Map::climate), independent of z_.
+    NodeMapBase<uint8_t>& climate_;
+    /// Local temperature [0, 100] per node (see Map::temperature), independent of z_ and climate_.
+    /// Together, climate_ and temperature_ form a 2D "biome space" (like a Whittaker diagram) used
+    /// to pick which land texture is placed at a given point - see ApplyTexturingByHeightMap.
+    NodeMapBase<uint8_t>& temperature_;
     NodeMapBase<TexturePair>& textures_;
     TextureMap& textureMap_;
     unsigned seaLevel_;
 
     /**
-     * Creates a mapping from z-value to texture based on sea- and mountain level.
-     *
-     * @param mountainLevel minimum height mountains start from
-     *
-     * @returns a vector of textures with each index representing a z-value.
-     */
-    std::vector<DescIdx<TerrainDesc>> CreateTextureMapping(unsigned mountainLevel);
-
-    /**
-     * Adds textures based on z-values, sea- and mountain levels.
+     * Adds textures based on z-values, sea- and mountain levels. Land textures within the
+     * buildable band (between sea level and mountainLevel) are chosen by matching climate_ and
+     * temperature_ against each candidate terrain's (humidity, temperature) pair - the closest
+     * match wins - rather than by z_ alone, so two points at the same height can get different
+     * biomes depending on their local climate. Mountain/snow/lava textures above mountainLevel
+     * remain purely height-driven.
      *
      * @param mountainLevel minimum height mountains start from
      */
@@ -191,8 +197,9 @@ private:
     void ApplyMountainWaterTransitions(const std::vector<MapPoint>& transitions);
 
 public:
-    Texturizer(NodeMapBase<uint8_t>& z, NodeMapBase<TexturePair>& textures, TextureMap& textureMap)
-        : z_(z), textures_(textures), textureMap_(textureMap)
+    Texturizer(NodeMapBase<uint8_t>& z, NodeMapBase<uint8_t>& climate, NodeMapBase<uint8_t>& temperature,
+               NodeMapBase<TexturePair>& textures, TextureMap& textureMap)
+        : z_(z), climate_(climate), temperature_(temperature), textures_(textures), textureMap_(textureMap)
     {
         seaLevel_ = GetRange(z).minimum;
     }

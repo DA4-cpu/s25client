@@ -4,7 +4,7 @@
 
 #pragma once
 
-//#define DEBUG_AI
+#define DEBUG_AI
 
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/Direction.h"

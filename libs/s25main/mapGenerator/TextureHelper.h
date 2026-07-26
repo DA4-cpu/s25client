@@ -10,6 +10,8 @@ namespace rttr::mapGenerator {
 
 uint8_t ByHumidity(const TerrainDesc& terrain);
 
+uint8_t ByTemperature(const TerrainDesc& terrain);
+
 bool IsWater(const TerrainDesc& terrain);
 
 bool IsSwamp(const TerrainDesc& terrain);

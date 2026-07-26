@@ -7,6 +7,7 @@
 #include "mapGenerator/TextureHelper.h"
 
 #include <algorithm>
+#include <limits>
 #include <set>
 #include <stdexcept>
 
@@ -44,61 +45,85 @@ DescIdx<TerrainDesc> TextureMap::Get(const Triangle& triangle) const
     }
 }
 
-std::vector<DescIdx<TerrainDesc>> Texturizer::CreateTextureMapping(unsigned mountainLevel)
+void Texturizer::ApplyTexturingByHeightMap(unsigned mountainLevel)
 {
     if(seaLevel_ + 2 > mountainLevel)
     {
         throw std::invalid_argument("sea level must be below mountain level by at least 2");
     }
 
-    const uint8_t maximum = *std::max_element(z_.begin(), z_.end());
-    std::vector<DescIdx<TerrainDesc>> mapping(maximum + 1);
+    const uint8_t maxZ = *std::max_element(z_.begin(), z_.end());
+
     const auto waterTexture = textureMap_.Find(IsShipableWater);
-    auto landTextures = textureMap_.FindAll(IsBuildableLand);
-    textureMap_.Sort(landTextures, ByHumidity);
+    const auto landTextures = textureMap_.FindAll(IsBuildableLand);
     auto mountainTextures = textureMap_.FindAll(IsMinableMountain);
     mountainTextures.push_back(textureMap_.Find(IsSnowOrLava));
 
-    for(uint8_t z = 0; z <= maximum; z++)
-    {
-        if(z <= seaLevel_)
-        {
-            mapping[z] = waterTexture;
-        } else if(z < mountainLevel)
-        {
-            ValueRange<uint8_t> range(seaLevel_ + 1, mountainLevel - 1);
-            mapping[z] = landTextures[MapValueToIndex(z, range, landTextures.size())];
-        } else
-        {
-            ValueRange<uint8_t> range(mountainLevel, maximum);
-            mapping[z] = mountainTextures[MapValueToIndex(z, range, mountainTextures.size())];
-        }
-    }
-
-    return mapping;
-}
-
-void Texturizer::ApplyTexturingByHeightMap(unsigned mountainLevel)
-{
-    const auto& mapping = CreateTextureMapping(mountainLevel);
     const MapExtent size = z_.GetSize();
     const auto& z = z_;
+    const auto& climate = climate_;
+    const auto& temperature = temperature_;
 
-    auto interpolateEdges = [&size, z](const Triangle& triangle) {
+    // Assumptions (same as before):
+    // 1) sum of 3 height/climate/temperature values is always < 256 (1 byte)
+    // 2) we always want to round to the next integer (ceil)
+    auto interpolate = [&size](const NodeMapBase<uint8_t>& values, const Triangle& triangle) {
         const auto& edges = GetTriangleEdges(triangle, size);
+        return static_cast<uint8_t>(
+          std::ceil(static_cast<double>(values[edges[0]] + values[edges[1]] + values[edges[2]]) / 3));
+    };
 
-        // Assumptions:
-        // 1) sum of 3 height values is always < 256 (1 byte)
-        // 2) we always want to round to the next integer (ceil)
-        return static_cast<uint8_t>(std::ceil(static_cast<double>(z[edges[0]] + z[edges[1]] + z[edges[2]]) / 3));
+    // Picks the buildable-land terrain whose (humidity, temperature) is closest (squared distance)
+    // to the given local climate/temperature reading - a simple 2D "biome diagram" lookup, e.g. a
+    // point that is both dry and hot ends up close to a desert/savanna terrain, while a point that
+    // is wet and warm ends up close to a swamp, regardless of terrains in between.
+    auto pickLandTexture = [&](uint8_t climateValue, uint8_t temperatureValue) {
+        DescIdx<TerrainDesc> best;
+        int bestDistance = std::numeric_limits<int>::max();
+        for(const auto& candidate : landTextures)
+        {
+            const TerrainDesc& desc = textureMap_.GetDesc(candidate);
+            const int dHumidity = static_cast<int>(desc.humidity) - climateValue;
+            const int dTemperature = static_cast<int>(desc.temperature) - temperatureValue;
+            const int distance = dHumidity * dHumidity + dTemperature * dTemperature;
+            if(distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+        return best;
+    };
+
+    // Combines the height map with the climate/temperature maps into a texture: the height decides
+    // *which band* a point falls into (water / buildable land / mountain), exactly as before. But
+    // *within* the land band, the texture is now picked by local humidity and temperature instead of
+    // by height, so e.g. a desert region and a swamp region can appear at the same altitude.
+    // Mountain/snow/lava textures stay purely height-driven, same as before.
+    auto pickTexture = [&](const Triangle& triangle) {
+        const uint8_t zValue = interpolate(z, triangle);
+
+        if(zValue <= seaLevel_)
+        {
+            return waterTexture;
+        }
+        if(zValue < mountainLevel)
+        {
+            const uint8_t climateValue = interpolate(climate, triangle);
+            const uint8_t temperatureValue = interpolate(temperature, triangle);
+            return pickLandTexture(climateValue, temperatureValue);
+        }
+
+        const ValueRange<uint8_t> mountainRange(mountainLevel, maxZ);
+        return mountainTextures[MapValueToIndex(zValue, mountainRange, mountainTextures.size())];
     };
 
     RTTR_FOREACH_PT(MapPoint, size)
     {
         if(!textures_[pt].rsu)
-            textures_[pt].rsu = mapping[interpolateEdges(Triangle(true, pt))];
+            textures_[pt].rsu = pickTexture(Triangle(true, pt));
         if(!textures_[pt].lsd)
-            textures_[pt].lsd = mapping[interpolateEdges(Triangle(false, pt))];
+            textures_[pt].lsd = pickTexture(Triangle(false, pt));
     }
 }
 

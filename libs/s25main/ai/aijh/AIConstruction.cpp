@@ -86,6 +86,7 @@ void AIConstruction::AddBuildJob(std::unique_ptr<BuildJob> job, bool front)
 
 void AIConstruction::ExecuteJobs(unsigned limit)
 {
+    //limit = std::min<unsigned>(limit, 10); // limit to 10 jobs per tick
     unsigned i = 0; // count up to limit
     unsigned initconjobs = std::min<unsigned>(connectJobs.size(), 5);
     unsigned initbuildjobs = std::min<unsigned>(buildJobs.size(), 5);
@@ -285,9 +286,6 @@ bool AIConstruction::ConnectFlagToRoadSytem(const noFlag* flag, std::vector<Dire
     {
         tmpRoute.clear();
         unsigned length;
-        // the flag should not be at a military building!
-        if(aii.gwb.IsMilitaryBuildingOnNode(aii.gwb.GetNeighbour(curFlag->GetPos(), Direction::NorthWest), true))
-            continue;
         // Gibts überhaupt einen Pfad zu dieser Flagge
         if(!aii.FindFreePathForNewRoad(flag->GetPos(), curFlag->GetPos(), &tmpRoute, &length))
             continue;
@@ -354,9 +352,9 @@ bool AIConstruction::ConnectFlagToRoadSytem(const noFlag* flag, std::vector<Dire
 bool AIConstruction::MinorRoadImprovements(const noRoadNode* start, const noRoadNode* target,
                                            std::vector<Direction>& route)
 {
-    return BuildRoad(start, target, route);
+    // return BuildRoad(start, target, route);
     // TODO: Enable later after checking for performance and correctness
-    RTTR_IGNORE_UNREACHABLE_CODE
+    // RTTR_IGNORE_UNREACHABLE_CODE
     MapPoint pStart = start->GetPos(); //-V779
     for(unsigned i = 0; i + 1 < route.size(); i++)
     {
@@ -559,11 +557,6 @@ bool AIConstruction::Wanted(BuildingType type) const
         return false;
     if(BuildingProperties::IsMilitary(type) || type == BuildingType::Storehouse)
         return bldPlanner.WantMoreMilitaryBlds(aijh);
-    if(type == BuildingType::Sawmill && bldPlanner.GetNumBuildings(BuildingType::Sawmill) > 1)
-    {
-        if(aijh.AmountInStorage(GoodType::Wood) < 15 * (bldPlanner.GetNumBuildingSites(BuildingType::Sawmill) + 1))
-            return false;
-    }
     return constructionorders[type] < bldPlanner.GetNumAdditionalBuildingsWanted(type);
 }
 
@@ -571,9 +564,9 @@ bool AIConstruction::BuildAlternativeRoad(const noFlag* flag, std::vector<Direct
 {
     // LOG.write(("ai build alt road player %i at %i %i\n", flag->GetPlayer(), flag->GetPos());
     // Radius in dem nach würdigen Fahnen gesucht wird
-    const unsigned short maxRoadLength = 10;
+    const unsigned short maxRoadLength = 12;
     // Faktor um den der Weg kürzer sein muss als ein vorhander Pfad, um gebaut zu werden
-    const unsigned short lengthFactor = 5;
+    const double lengthFactor = 2;
 
     // Flaggen in der Umgebung holen
     std::vector<const noFlag*> flags = FindFlags(flag->GetPos(), maxRoadLength);

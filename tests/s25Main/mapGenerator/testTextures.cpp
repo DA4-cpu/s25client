@@ -27,8 +27,15 @@ class TextureMapFixtureWithZ : public TextureMapFixture
 {
 public:
     NodeMapBase<uint8_t> z;
+    NodeMapBase<uint8_t> climate;
+    NodeMapBase<uint8_t> temperature;
 
-    TextureMapFixtureWithZ() { z.Resize(textures.GetSize()); }
+    TextureMapFixtureWithZ()
+    {
+        z.Resize(textures.GetSize());
+        climate.Resize(textures.GetSize(), 50);
+        temperature.Resize(textures.GetSize(), 50);
+    }
 };
 
 BOOST_AUTO_TEST_SUITE(TextureTests)
@@ -43,7 +50,7 @@ BOOST_FIXTURE_TEST_CASE(AddTextures_sets_valid_textures_for_entire_map, TextureM
         z[pt] = pt.x % 10;
     }
 
-    Texturizer texturizer(z, textures, textureMap);
+    Texturizer texturizer(z, climate, temperature, textures, textureMap);
     texturizer.AddTextures(mountainLevel, coastline);
 
     RTTR_FOREACH_PT(MapPoint, textures.GetSize())
@@ -65,7 +72,7 @@ BOOST_FIXTURE_TEST_CASE(AddTextures_does_not_override_textures, TextureMapFixtur
         z[pt] = static_cast<uint8_t>(pt.x % 256);
     }
 
-    Texturizer texturizer(z, textures, textureMap);
+    Texturizer texturizer(z, climate, temperature, textures, textureMap);
     texturizer.AddTextures(mountainLevel, coastline);
 
     RTTR_FOREACH_PT(MapPoint, textures.GetSize())
@@ -80,7 +87,7 @@ BOOST_FIXTURE_TEST_CASE(AddTextures_sets_water_textures_for_minimum_height, Text
     const unsigned mountainLevel = 3;
     const unsigned coastline = 2;
 
-    Texturizer texturizer(z, textures, textureMap);
+    Texturizer texturizer(z, climate, temperature, textures, textureMap);
     texturizer.AddTextures(mountainLevel, coastline);
 
     RTTR_FOREACH_PT(MapPoint, textures.GetSize())
@@ -97,7 +104,7 @@ BOOST_FIXTURE_TEST_CASE(AddTextures_sets_mountain_textures_above_mountain_level,
     z.Resize(z.GetSize(), mountainLevel);
     z[0] = 1; // sea
 
-    Texturizer texturizer(z, textures, textureMap);
+    Texturizer texturizer(z, climate, temperature, textures, textureMap);
     texturizer.AddTextures(mountainLevel, coastline);
 
     RTTR_FOREACH_PT(MapPoint, textures.GetSize())

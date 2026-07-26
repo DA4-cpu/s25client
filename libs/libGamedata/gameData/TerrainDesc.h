@@ -70,6 +70,11 @@ struct TerrainDesc
     ETerrain flags;
     /// How much water can be on the terrain [0, 100]
     uint8_t humidity;
+    /// How warm the terrain is [0, 100] - 0 = arctic/cold, 100 = tropical/hot. Independent of
+    /// humidity; used together with it by the map generator (rttr::mapGenerator::Texturizer) to
+    /// pick a terrain for a given point based on its local climate (humidity x temperature), similar
+    /// to a Whittaker biome diagram.
+    uint8_t temperature;
     ETexType texType;
     std::string texturePath;
     Rect posInTexture;

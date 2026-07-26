@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "mapGenerator/RandomMap.h"
+#include "mapGenerator/Climate.h"
 #include "mapGenerator/Harbors.h"
 #include "mapGenerator/HeadQuarters.h"
 #include "mapGenerator/Islands.h"
@@ -120,7 +121,7 @@ void SmoothHeightMap(NodeMapBase<uint8_t>& z, const ValueRange<uint8_t>& range)
 }
 
 RandomMap::RandomMap(RandomUtility& rnd, Map& map)
-    : rnd_(rnd), map_(map), texturizer_(map.z, map.getTextures(), map.textureMap)
+    : rnd_(rnd), map_(map), texturizer_(map.z, map.climate, map.temperature, map.getTextures(), map.textureMap)
 {}
 
 void RandomMap::Create(const MapSettings& settings)
@@ -129,6 +130,8 @@ void RandomMap::Create(const MapSettings& settings)
 
     settings_ = settings;
     map_.z.Resize(settings.size, defaultHeight);
+    map_.climate = GenerateClimateMap(rnd_, settings.size);
+    map_.temperature = GenerateClimateMap(rnd_, settings.size, 60);
 
     switch(settings.style)
     {

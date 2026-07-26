@@ -62,6 +62,19 @@ uint8_t getDefaultHumidity(TerrainKind kind)
     }
     throw GameDataError("Invalid terrain kind: " + helpers::toString(kind));
 }
+
+uint8_t getDefaultTemperature(TerrainKind kind)
+{
+    switch(kind)
+    {
+        case TerrainKind::Lava: return 100;
+        case TerrainKind::Snow: return 0;
+        case TerrainKind::Land:
+        case TerrainKind::Water:
+        case TerrainKind::Mountain: return 50;
+    }
+    throw GameDataError("Invalid terrain kind: " + helpers::toString(kind));
+}
 } // namespace
 
 TerrainDesc::TerrainDesc(CheckedLuaTable luaData, const WorldDescription& worldDesc)
@@ -96,6 +109,7 @@ TerrainDesc::TerrainDesc(CheckedLuaTable luaData, const WorldDescription& worldD
     else
         throw GameDataError("Invalid property '" + property + "'");
     humidity = luaData.getOrDefault("humidity", getDefaultHumidity(kind));
+    temperature = luaData.getOrDefault("temperature", getDefaultTemperature(kind));
     luaData.getOrThrow(texturePath, "texture");
     lua::validatePath(texturePath);
     posInTexture = luaData.getRectOrDefault("pos", Rect());

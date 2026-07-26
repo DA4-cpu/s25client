@@ -61,6 +61,9 @@ public:
     /// return number of seaIds with at least 2 harbor spots
     unsigned GetNumAIRelevantSeaIds() const;
 
+    BuildingType ChooseRandomMineType();
+    BuildingType ChooseRandomGrainUser();
+
     bool IsInvalidShipyardPosition(MapPoint pt);
 
     int GetResMapValue(MapPoint pt, AIResource res) const;
@@ -92,6 +95,9 @@ public:
     /// If searchPosition is true, then the point is searched for a good position (around that pt) otherwise the point
     /// is taken
     void AddBuildJob(BuildingType type, MapPoint pt, bool front = false, bool searchPosition = true);
+    /// Platziert bldToPlace direkt neben whPos – umgeht Wanted()/BuildingsWanted komplett.
+    /// Tut nichts, falls bldToAvoid schon in der Nähe von whPos existiert.
+    void PlaceBuildingNextToPoint(MapPoint whPos, BuildingType bldToPlace, BuildingType bldToAvoid);
     /// Build a new military building at that position
     void AddMilitaryBuildJob(MapPoint pt);
     /// adds buildjobs for a buildingtype around every warehouse or military building
@@ -208,6 +214,8 @@ public:
     bool ValidStoneinRange(MapPoint pt);
 
     bool ValidFishInRange(MapPoint pt);
+
+    bool WarehouseOrHarborNearby(MapPoint pt, unsigned maxDistance) const;
 
     void ExecuteLuaConstructionOrder(MapPoint pt, BuildingType bt, bool forced = false);
 

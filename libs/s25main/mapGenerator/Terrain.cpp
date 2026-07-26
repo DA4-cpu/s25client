@@ -11,10 +11,10 @@
 
 namespace rttr::mapGenerator {
 
-void Restructure(Map& map, const std::function<bool(const MapPoint&)>& predicate, double weight)
+void Restructure(NodeMapBase<uint8_t>& values, const ValueRange<uint8_t>& range,
+                  const std::function<bool(const MapPoint&)>& predicate, double weight)
 {
-    auto& z = map.z;
-    const MapExtent& size = map.size;
+    const MapExtent& size = values.GetSize();
     const auto distances = DistancesTo(size, predicate);
     const auto maximum = *std::max_element(distances.begin(), distances.end());
 
@@ -23,11 +23,16 @@ void Restructure(Map& map, const std::function<bool(const MapPoint&)>& predicate
         // value between 0 and 1 - depending on the distance to focused area
         auto value = static_cast<double>(maximum - distances[pt]) / maximum;
 
-        // combine weight, value and actual z-value
-        z[pt] = static_cast<uint8_t>(round(std::pow(value, weight) * z[pt]));
+        // combine weight, value and current value
+        values[pt] = static_cast<uint8_t>(round(std::pow(value, weight) * values[pt]));
     }
 
-    Scale(z, map.height.minimum, map.height.maximum);
+    Scale(values, range.minimum, range.maximum);
+}
+
+void Restructure(Map& map, const std::function<bool(const MapPoint&)>& predicate, double weight)
+{
+    Restructure(map.z, map.height, predicate, weight);
 }
 
 void ResetSeaLevel(Map& map, RandomUtility& rnd, unsigned seaLevel)

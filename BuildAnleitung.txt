@@ -1,0 +1,57 @@
+Patch Anwenden:
+3. Patch anwenden
+
+Lade dir climate-zones.patch (aus meiner letzten Antwort) herunter und leg die Datei direkt in den s25client-Hauptordner (da, wo auch CMakeLists.txt liegt).
+
+In Git Bash, im s25client-Ordner:
+
+cd /e/Github/Settlers-2-Return-To-The-Roots/s25client
+git apply --check climate-zones.patch
+
+
+
+Kommt keine Fehlermeldung, wirklich anwenden:
+
+git apply climate-zones.patch
+
+
+Kontrolle:
+
+git status
+ls libs/s25main/mapGenerator/Climate.*
+
+Du solltest Climate.h und Climate.cpp als neue Dateien sehen, plus "modified" bei Map.h, Map.cpp, Terrain.h, Terrain.cpp, Textures.h, Textures.cpp, RandomMap.cpp, tests/.../testTextures.cpp.
+
+
+
+
+
+builden:
+
+im Ordner "E:\Github\Settlers-2-Return-To-The-Roots\s25client" den alten Ordner "build" löschen und einen neuen Ordner "build" erstellen. 
+
+
+Boost bauen im developer Command prompt:
+
+cd E:\Programming\boost_1_91_0
+b2 --with-filesystem --with-iostreams --with-locale --with-program_options --with-test address-model=64 architecture=x86 link=static runtime-link=shared
+
+
+
+
+Dann in der PowerShell:
+
+cd E:\Github\Settlers-2-Return-To-The-Roots\s25client
+rmdir /s /q build
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DBOOST_ROOT="E:\Programming\boost_1_91_0" -DRTTR_INCLUDE_DEVTOOLS=ON
+
+
+
+Die Datei "E:\Github\Settlers-2-Return-To-The-Roots\s25client\build\RTTR.sln" in Visual Studio öffnen. 
+Oben in der Leiste wo das Play Icon ist links daneben auf Debug oder Release und auf x64 umstellen. 
+
+"Strg + B" drücken. 
+
+Die exe wird erstellt. 
+
+Du musst nicht nach jeder Änderung neu builden. Du kannst auch einfach F5 oder den grünen Pfeil in VS drücken. 

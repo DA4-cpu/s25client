@@ -135,7 +135,6 @@ public:
     {
         return player_.GetBuildingRegister().GetStorehouses();
     }
-
     /// Check if there is a building of the given type in a radius of at most maxDistance
     bool isBuildingNearby(BuildingType bldType, MapPoint pt, unsigned maxDistance) const;
     /// Check if there is a (useful) harbor spot in at most the given distance. onlyEmpty=True -> No harbor building

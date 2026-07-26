@@ -17,6 +17,8 @@ Map::Map(const MapExtent& size, uint8_t players, const WorldDescription& worldDe
       players(players), size(size)
 {
     z.Resize(size);
+    climate.Resize(size, 50);
+    temperature.Resize(size, 50);
     objectTypes.Resize(size, libsiedler2::OT_Empty);
     objectInfos.Resize(size, libsiedler2::OI_Empty);
     resources.Resize(size, libsiedler2::R_None);

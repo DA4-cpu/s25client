@@ -1019,7 +1019,7 @@ unsigned nobMilitary::GetSoldiersStrengthForAttack(const MapPoint dest, unsigned
     for(const auto& sld : helpers::reverse(troops))
     {
         if(numRemainingSoldiers--)
-            strength += HITPOINTS[sld->GetRank()];
+            strength += sld->GetHitpoints();
         else
             break;
     }
@@ -1032,7 +1032,7 @@ unsigned nobMilitary::GetSoldiersStrength() const
 {
     unsigned strength = 0;
     for(const auto& troop : troops)
-        strength += HITPOINTS[troop->GetRank()];
+        strength += troop->GetHitpoints();
 
     return strength;
 }

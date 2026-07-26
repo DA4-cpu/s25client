@@ -15,6 +15,7 @@
 #include "boost/filesystem/fstream.hpp"
 #include "buildings/noBuildingSite.h"
 #include "buildings/nobHarborBuilding.h"
+#include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
 #include "helpers/IdRange.h"
@@ -43,6 +44,8 @@
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
+#include "figures/nofPassiveSoldier.h"
+#include "gameData/MilitaryConsts.h"
 
 namespace {
 void HandleBuildingNote(AIEventManager& eventMgr, const BuildingNote& note)
@@ -236,7 +239,7 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
     if(gf == 100)
     {
         if(aii.GetMilitaryBuildings().empty() && aii.GetStorehouses().size() < 2)
-            aii.Chat(_("Hi, I'm an artifical player and I'm not very good yet!"));
+            aii.Chat(_("Hi, I'm an artifical player and I'm very good!"));
     }
 
     if(!nodesWithOutdatedBQ.empty())
@@ -342,8 +345,8 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
             DistributeMaxRankSoldiersByBlocking(5, wh);
         // 30 boards amd 50 stones for each warehouse - block after that - should speed up expansion and limit losses in
         // case a warehouse is destroyed unlimited when every warehouse has at least that amount
-        DistributeGoodsByBlocking(GoodType::Boards, 30);
-        DistributeGoodsByBlocking(GoodType::Stones, 50);
+        DistributeGoodsByBlocking(GoodType::Boards, 20);
+        DistributeGoodsByBlocking(GoodType::Stones, 22);
         // go to the picked random warehouse and try to build around it
         const auto* storehouse = AI::randomElement(storehouses);
         const MapPoint whPos = storehouse->GetPos();
@@ -690,7 +693,7 @@ void AIPlayerJH::ExecuteAIJob()
             currentJob = 0;
         }
     }*/
-    unsigned quota = 10; // limit the amount of events to handle
+    unsigned quota = 8; // limit the amount of events to handle
     while(eventManager.EventAvailable()
           && quota) // handle all new events - some will add new orders but they can all be handled instantly
     {
@@ -701,11 +704,11 @@ void AIPlayerJH::ExecuteAIJob()
     // how many construction & connect jobs the ai will attempt every gf, the ai gets new orders from events and every
     // 200 gf
     quota = (aii.GetStorehouses().size() + aii.GetMilitaryBuildings().size()) * 1;
-    if(quota > 40)
-        quota = 40;
+    if(quota > 30)
+        quota = 30;
 
     construction->ExecuteJobs(quota); // try to execute up to quota connect & construction jobs
-    /*
+    
     // if no current job available, take next one! events first, then constructions
     if (!currentJob)
     {
@@ -714,6 +717,7 @@ void AIPlayerJH::ExecuteAIJob()
             currentJob = construction->GetBuildJob();
         }
     }
+    /*
     // Something to do? Do it!
     if (currentJob)
         currentJob->ExecuteJob();
@@ -920,25 +924,51 @@ MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size
 
 MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapPoint& around)
 {
-    constexpr unsigned searchRadius = 11;
+    constexpr unsigned searchRadius = 15;
     MapPoint foundPos = MapPoint::Invalid();
     switch(type)
     {
         case BuildingType::Woodcutter:
         {
-            foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 20);
-            break;
-        }
-        case BuildingType::Forester:
-            // ensure some distance to other foresters and an minimal amount of plantspace
-            if(!construction->OtherUsualBuildingInRadius(around, 12, BuildingType::Forester)
-               && GetDensity(around, AIResource::Plantspace, 7) > 15)
+            if(GetDensity(around, AIResource::Wood, 12) > 8)
+                foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
+            else if(construction->OtherUsualBuildingInRadius(around, 12, BuildingType::Forester))
                 foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
             break;
+        }
+
+        case BuildingType::Forester:
+        { // ensure some distance to other foresters and an minimal amount of plantspace
+            if(GetBldPlanner().GetNumBuildings(BuildingType::Storehouse) < 2
+               && (GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4))
+            {
+                 foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
+            }
+            else
+            {
+                if((!construction->OtherUsualBuildingInRadius(around, 22, BuildingType::Forester)
+                    && GetDensity(around, AIResource::Plantspace, 8) > 0)
+                   && WarehouseOrHarborNearby(around, 32u))
+                    foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
+            }
+            break;
+        }
+        case BuildingType::Sawmill:
+        {
+            if (GetBldPlanner().GetNumBuildings(BuildingType::Sawmill) > 3)
+            {
+                if(!construction->OtherUsualBuildingInRadius(around, 25, BuildingType::Sawmill) && WarehouseOrHarborNearby(around, 15u))
+                    foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+                break;
+            } 
+            else
+                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            break;
+        }
         case BuildingType::Hunter:
         {
             // check if there are any animals in range
-            if(HuntablesinRange(around, (2 << GetBldPlanner().GetNumBuildings(BuildingType::Hunter))))
+            if(HuntablesinRange(around, 9))
                 foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
             break;
         }
@@ -1169,22 +1199,57 @@ void AIPlayerJH::HandleBuildingFinished(const MapPoint pt, BuildingType bld)
     switch(bld)
     {
         case BuildingType::HarborBuilding:
-            UpdateNodesAround(pt, 8); // todo: fix radius
+            UpdateNodesAround(pt, 15); // todo: fix radius
             RemoveAllUnusedRoads(
               pt); // repair & reconnect road system - required when a colony gets a new harbor by expedition
-            aii.ChangeReserve(pt, 0, 1); // order 1 defender to stay in the harborbuilding
 
-            // if there are positions free start an expedition!
             if(HarborPosRelevant(gwb.GetHarborPointID(pt), true))
             {
                 aii.StartStopExpedition(pt, true);
             }
+            PlaceBuildingNextToPoint(pt, BuildingType::Sawmill, BuildingType::Sawmill);
+            PlaceBuildingNextToPoint(pt, BuildingType::Forester, BuildingType::Forester);
+            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
+            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
             break;
 
         case BuildingType::Shipyard: aii.SetShipYardMode(pt, true); break;
-
-        case BuildingType::Storehouse: break;
-        case BuildingType::Woodcutter: AddBuildJob(BuildingType::Sawmill, pt); break;
+        case BuildingType::Farm:
+        {
+        
+            if((bldPlanner->GetNumBuildings(BuildingType::Farm) == 1))
+                AddBuildJob(BuildingType::Mill, pt);
+            if((bldPlanner->GetNumBuildings(BuildingType::Farm) == 2))
+                AddBuildJob(BuildingType::Brewery, pt);
+            if((bldPlanner->GetNumBuildings(BuildingType::Farm) > 2))
+                AddBuildJob(ChooseRandomGrainUser(), pt);
+            // Wähle random eine von 3 Minentypen und füge einen BuildJob hinzu
+            AddBuildJob(ChooseRandomMineType(), pt);
+            break;
+        }
+        case BuildingType::Storehouse: 
+        {
+            UpdateNodesAround(pt, 15);
+            PlaceBuildingNextToPoint(pt, BuildingType::Sawmill, BuildingType::Sawmill);
+            PlaceBuildingNextToPoint(pt, BuildingType::Forester, BuildingType::Forester);
+            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
+            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
+            break;
+        }
+        case BuildingType::Forester: AddBuildJob(BuildingType::Woodcutter, pt); break;
+        case BuildingType::Woodcutter: break;
+        case BuildingType::IronMine: 
+        {
+            // if(bldPlanner->GetNumBuildings(BuildingType::Ironsmelter) < 5)
+            AddBuildJob(BuildingType::Ironsmelter, pt);
+            break;
+        }
+        case BuildingType::GoldMine:
+        {
+            // if(bldPlanner->GetNumBuildings(BuildingType::Mint) < 4)
+            AddBuildJob(BuildingType::Mint, pt);
+            break;
+        }
         default: break;
     }
 }
@@ -1396,8 +1461,8 @@ void AIPlayerJH::MilUpgradeOptim()
                 aii.SetCoinsAllowed(milBld->GetPos(), true);
         } else if(milBld != upgradeBld) // not upgrade building
         {
-            if(!milBld->IsGoldDisabled()) // deactivate gold for all other buildings
-                aii.SetCoinsAllowed(milBld->GetPos(), false);
+            //if(!milBld->IsGoldDisabled()) // deactivate gold for all other buildings
+            //    aii.SetCoinsAllowed(milBld->GetPos(), false);
             // For dedicated inland buildings send out troops until 1 private is left, then cancel road
             // Connect frontier buildings to road system.
             if(milBld->GetFrontierDistance() != FrontierDistance::Far)
@@ -1559,6 +1624,7 @@ void AIPlayerJH::TryToAttack()
 
         unsigned attackersCount = 0;
         unsigned attackersStrength = 0;
+        unsigned enemyCount = 0;
 
         // ask each of nearby own military buildings for soldiers to contribute to the potential attack
         sortedMilitaryBlds myBuildings = gwb.LookForMilitaryBuildings(dest, 2);
@@ -1579,12 +1645,20 @@ void AIPlayerJH::TryToAttack()
         if(attackersCount == 0)
             continue;
 
-        if((level == AI::Level::Hard) && (target->GetGOT() == GO_Type::NobMilitary))
+        if((target->GetGOT() == GO_Type::NobMilitary))
         {
             const auto* enemyTarget = static_cast<const nobMilitary*>(target);
-            if(attackersStrength <= enemyTarget->GetSoldiersStrength() || enemyTarget->GetNumTroops() == 0)
+            enemyCount = enemyTarget->GetNumTroops();
+            if(enemyCount == 0)
+                enemyCount = 1;
+            if(((attackersStrength / attackersCount)
+                  < (enemyTarget->GetSoldiersStrength() / enemyCount - 1)
+                || attackersStrength < enemyTarget->GetSoldiersStrength())
+               || enemyTarget->GetNumTroops() == 0)
                 continue;
         }
+        if(attackersCount <= 1)
+            continue;
 
         aii.Attack(dest, attackersCount, true);
         return;
@@ -1731,23 +1805,43 @@ void AIPlayerJH::TrySeaAttack()
         }
     }
     std::shuffle(potentialTargets.begin(), potentialTargets.end(), prng);
-    for(const nobBaseMilitary* ship : potentialTargets)
+    for(const nobBaseMilitary* target : potentialTargets)
     {
-        // TODO: decide if it is worth attacking the target and not just "possible"
         // test only if we should have attackers from one of our valid sea ids
         const std::vector<SeaId> testseaidswithattackers =
-          gwb.GetFilteredSeaIDsForAttack(ship->GetPos(), seaidswithattackers, playerId);
+          gwb.GetFilteredSeaIDsForAttack(target->GetPos(), seaidswithattackers, playerId);
         if(!testseaidswithattackers.empty()) // only do the final check if it will probably be a good result
         {
             std::vector<GameWorldBase::PotentialSeaAttacker> attackers =
-              gwb.GetSoldiersForSeaAttack(playerId, ship->GetPos()); // now get a final list of attackers and attack it
+              gwb.GetSoldiersForSeaAttack(playerId, target->GetPos()); // now get a final list of attackers
             if(!attackers.empty())
             {
-                aii.SeaAttack(ship->GetPos(), attackers.size(), true);
+                const auto attackersCount = static_cast<unsigned>(attackers.size());
+                unsigned attackersStrength = 0;
+                for(const auto& attacker : attackers)
+                    attackersStrength += HITPOINTS[attacker.soldier->GetRank()];
+
+                // decide if it is worth attacking the target and not just "possible" - same check as TryToAttack()
+                if(target->GetGOT() == GO_Type::NobMilitary)
+                {
+                    const auto* enemyTarget = static_cast<const nobMilitary*>(target);
+                    unsigned enemyCount = enemyTarget->GetNumTroops();
+                    if(enemyCount == 0)
+                        enemyCount = 1;
+                    if(((attackersStrength / attackersCount) < (enemyTarget->GetSoldiersStrength() / enemyCount - 1)
+                        || attackersStrength < enemyTarget->GetSoldiersStrength())
+                       || enemyTarget->GetNumTroops() == 0)
+                        continue;
+                }
+                if(attackersCount <= 1)
+                    continue;
+
+                aii.SeaAttack(target->GetPos(), attackersCount, true);
                 return;
             }
         }
     }
+
 }
 
 void AIPlayerJH::RecalcGround(const MapPoint buildingPos, std::vector<Direction>& route_road)
@@ -2307,6 +2401,18 @@ bool AIPlayerJH::ValidFishInRange(const MapPoint pt)
       false);
 }
 
+bool AIPlayerJH::WarehouseOrHarborNearby(const MapPoint pt, unsigned maxDistance) const
+{
+    for(const nobBaseWarehouse* wh : aii.GetStorehouses())
+    {
+        if(wh->GetBuildingType() == BuildingType::Headquarters)
+            continue;
+        if(gwb.CalcDistance(pt, wh->GetPos()) <= maxDistance)
+            return true;
+    }
+    return false;
+}
+
 unsigned AIPlayerJH::GetNumAIRelevantSeaIds() const
 {
     std::vector<SeaId> validseaids;
@@ -2372,12 +2478,12 @@ void AIPlayerJH::AdjustSettings()
         for(const Tool tool : {Tool::Axe, Tool::Saw, Tool::PickAxe, Tool::Crucible})
             toolsettings[tool] = calcToolPriority(tool);
         // Set some minima
-        if(inventory[GoodType::Saw] + inventory[Job::Carpenter] < 2)
-            toolsettings[Tool::Saw] = 10;
-        if(inventory[GoodType::Axe] + inventory[Job::Woodcutter] < 2)
-            toolsettings[Tool::Axe] = 10;
-        if(inventory[GoodType::PickAxe] + inventory[Job::Stonemason] < 2)
-            toolsettings[Tool::PickAxe] = 7;
+        if(inventory[GoodType::Saw] < 2)
+            toolsettings[Tool::Saw] = 2;
+        if(inventory[GoodType::Axe] < 3)
+            toolsettings[Tool::Axe] = 2;
+        if(inventory[GoodType::PickAxe] < 2)
+            toolsettings[Tool::PickAxe] = 2;
         // Only if we haven't ordered any basic tool, we may order other tools
         if(toolsettings[Tool::Axe] == 0 && toolsettings[Tool::PickAxe] == 0 && toolsettings[Tool::Saw] == 0
            && toolsettings[Tool::Crucible] == 0)
@@ -2389,10 +2495,11 @@ void AIPlayerJH::AdjustSettings()
                 toolsettings[tool] = calcToolPriority(tool);
             }
             // Always have at least one of those in stock for other stuff
-            for(const Tool tool : {Tool::Hammer, Tool::Shovel, Tool::Tongs})
+            for(const Tool tool : {Tool::Hammer, Tool::Scythe, Tool::Rollingpin, Tool::Shovel, Tool::Tongs,
+                                   Tool::Cleaver, Tool::RodAndLine, Tool::Bow})
             {
                 if(inventory[TOOL_TO_GOOD[tool]] == 0)
-                    toolsettings[tool] = std::max<unsigned>(toolsettings[tool], 1u);
+                    toolsettings[tool] = std::max<unsigned>(toolsettings[tool], 2u);
             }
             // We want about 12 woodcutters, so if we don't have axes produce some
             if(inventory[GoodType::Axe] == 0 && inventory[Job::Woodcutter] < 12)
@@ -2487,4 +2594,44 @@ unsigned AIPlayerJH::CalcMilSettings()
     return returnValue;
 }
 
+BuildingType AIPlayerJH::ChooseRandomMineType()
+{
+    // gleichverteilte Auswahl zwischen IronMine, CoalMine und GoldMine
+    static constexpr std::array<BuildingType, 3> mineTypes = {BuildingType::IronMine, BuildingType::CoalMine,
+                                                              BuildingType::GoldMine};
+
+    // Verwende vorhandene Zufalls-Hilfsfunktionen; fallback auf randomValue falls randomElement
+    // nicht für std::array überladen ist.
+    return mineTypes[AI::randomValue(0u, static_cast<unsigned>(mineTypes.size() - 1))];
+}
+BuildingType AIPlayerJH::ChooseRandomGrainUser()
+{
+    // gleichverteilte Auswahl zwischen IronMine, CoalMine und GoldMine
+    static constexpr std::array<BuildingType, 3> userTypes = {BuildingType::Charburner, BuildingType::Mill,
+                                                              BuildingType::PigFarm};
+
+    // Verwende vorhandene Zufalls-Hilfsfunktionen; fallback auf randomValue falls randomElement
+    // nicht für std::array überladen ist.
+    return userTypes[AI::randomValue(0u, static_cast<unsigned>(userTypes.size() - 1))];
+}
+
+void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingType bldToPlace,
+                                          const BuildingType bldToAvoid)
+{
+    if(!aii.CanBuildBuildingtype(bldToPlace)) // z.B. per Addon deaktiviert -> gar nicht erst versuchen
+        return;
+    if(aii.isBuildingNearby(bldToAvoid, whPos, 16)) // schon vorhanden? -> fertig
+        return;
+
+    const MapPoint pos = SimpleFindPosition(whPos, BUILDING_SIZE[bldToPlace], /*enger Radius*/ 7);
+    if(!pos.isValid())
+        return;
+
+    aii.SetBuildingSite(pos, bldToPlace);
+    auto j = std::make_unique<BuildJob>(*this, bldToPlace, pos);
+    j->SetState(JobState::ExecutingRoad1); // überspringt TryToBuild() -> Wanted() wird nicht geprüft
+    j->SetTarget(pos);
+    construction->AddBuildJob(std::move(j), true);
+}
 } // namespace AIJH
+
