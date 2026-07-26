@@ -15,12 +15,13 @@ Kommt keine Fehlermeldung, wirklich anwenden:
 git apply climate-zones.patch
 
 
-Kontrolle:
+Kontrolle: 
 
 git status
 ls libs/s25main/mapGenerator/Climate.*
 
 Du solltest Climate.h und Climate.cpp als neue Dateien sehen, plus "modified" bei Map.h, Map.cpp, Terrain.h, Terrain.cpp, Textures.h, Textures.cpp, RandomMap.cpp, tests/.../testTextures.cpp.
+
 
 
 
