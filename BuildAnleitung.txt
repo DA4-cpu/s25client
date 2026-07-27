@@ -25,6 +25,12 @@ Du solltest Climate.h und Climate.cpp als neue Dateien sehen, plus "modified" be
 
 
 
+Patch rückgängig machen:
+
+git apply -R climate-zones.patch
+
+
+
 
 
 builden:

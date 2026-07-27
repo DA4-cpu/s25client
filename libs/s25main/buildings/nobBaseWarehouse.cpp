@@ -560,11 +560,11 @@ void nobBaseWarehouse::HandleProduceHelperEvent()
 
         if(inventory[Job::Helper] == 1)
         {
+            // evtl Träger mit Werkzeug kombiniert -> neuer Beruf
+            owner.FindWarehouseForAllJobs();
             // Wenn vorher keine Träger da waren, müssen alle unbesetzen Wege gucken, ob sie nen Weg hierher finden,
             // könnte ja sein, dass vorher nich genug Träger da waren
             owner.FindCarrierForAllRoads();
-            // evtl Träger mit Werkzeug kombiniert -> neuer Beruf
-            owner.FindWarehouseForAllJobs();
         }
     } else if(inventory[Job::Helper] > 100)
     {

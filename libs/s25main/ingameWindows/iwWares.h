@@ -13,8 +13,10 @@ class GamePlayer;
 class iwWares : public IngameWindow
 {
 protected:
-    const Inventory& inventory; /// Warenbestand
-    const GamePlayer& player;
+    // Note: These are pointers rather than references so that subclasses (e.g. iwInventory) can repoint them to
+    // another player's data at runtime. This is used by the "debug: browse other players' data" feature.
+    const Inventory* inventory; /// Warenbestand des aktuell angezeigten Spielers
+    const GamePlayer* player;   /// aktuell angezeigter Spieler
     unsigned warePageID, peoplePageID;
 
 public:

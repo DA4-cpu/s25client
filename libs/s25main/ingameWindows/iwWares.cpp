@@ -72,8 +72,8 @@ static void addElement(ctrlGroup& page, const glFont* font, const DrawPoint btPo
 
 iwWares::iwWares(unsigned id, const DrawPoint& pos, unsigned additionalYSpace, const std::string& title,
                  bool allow_outhousing, const glFont* font, const Inventory& inventory, const GamePlayer& player)
-    : IngameWindow(id, pos, Extent(167, 416), title, LOADER.GetImageN("io", 5)), inventory(inventory), player(player),
-      numPages(0)
+    : IngameWindow(id, pos, Extent(167, 416), title, LOADER.GetImageN("io", 5)), inventory(&inventory),
+      player(&player), numPages(0)
 {
     if(!font)
         font = SmallFont;
@@ -202,17 +202,26 @@ void iwWares::Msg_PaintBefore()
         const unsigned count =
           (curPage_ == warePageID) ? helpers::NumEnumValues_v<GoodType> : helpers::NumEnumValues_v<Job>;
 
+        if(curPage_ == warePageID)
+        {
+            // The shield icon depends on the nation of the displayed player. Usually this never changes, but when
+            // browsing other players' stock (debug feature) the displayed player, and thus their nation, can change.
+            auto* shieldImg = group->GetCtrl<ctrlImage>(300 + rttr::enum_cast(GoodType::ShieldRomans));
+            if(shieldImg)
+                shieldImg->SetImage(LOADER.GetWareTex(convertShieldToNation(GoodType::ShieldRomans, player->nation)));
+        }
+
         for(unsigned i = 0; i < count; ++i)
         {
             auto* text = group->GetCtrl<ctrlText>(600 + i);
             if(text)
             {
                 const unsigned amount =
-                  (curPage_ == warePageID) ? inventory[static_cast<GoodType>(i)] : inventory[static_cast<Job>(i)];
+                  (curPage_ == warePageID) ? (*inventory)[static_cast<GoodType>(i)] : (*inventory)[static_cast<Job>(i)];
                 text->SetText(std::to_string(amount));
                 text->SetTextColor((amount == 0) ? COLOR_RED : COLOR_YELLOW);
 
-                if(leatheraddon::isAddonActive(player.GetGameWorld()))
+                if(leatheraddon::isAddonActive(player->GetGameWorld()))
                 {
                     if(peoplePageID == curPage_ && isSoldier(static_cast<Job>(i)))
                     {
@@ -220,7 +229,7 @@ void iwWares::Msg_PaintBefore()
                         std::string toolTip = _(JOB_NAMES[static_cast<Job>(i)]);
 
                         toolTip += std::string(" (")
-                                   + std::to_string(inventory[jobEnumToAmoredSoldierEnum(static_cast<Job>(i))])
+                                   + std::to_string((*inventory)[jobEnumToAmoredSoldierEnum(static_cast<Job>(i))])
                                    + std::string("/") + std::to_string(amount) + std::string(" ")
                                    + std::string(_("with armor)"));
 

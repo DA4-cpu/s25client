@@ -1,9 +1,11 @@
-// Copyright (C) 2005 - 2021 Settlers Freaks (sf-team at siedler25.org)
+// Copyright (C) 2005 - 2026 Settlers Freaks (sf-team at siedler25.org)
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "iwBuildings.h"
 #include "AddonHelperFunctions.h"
+#include "Cheats.h"
+#include "GameInterface.h"
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
 #include "LeatherLoader.h"
@@ -15,6 +17,8 @@
 #include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "controls/ctrlComboBox.h"
+#include "controls/ctrlImageButton.h"
 #include "files.h"
 #include "iwBaseWarehouse.h"
 #include "iwBuilding.h"
@@ -65,19 +69,22 @@ namespace {
 enum
 {
     ID_Help,
+    ID_CbDebugPlayer,
     ID_BuildingsStart,
 };
-}
+} // namespace
 
 iwBuildings::iwBuildings(GameWorldView& gwv, GameCommandFactory& gcFactory)
     : IngameWindow(CGI_BUILDINGS, IngameWindow::posLastOrCenter, Extent(185, 480), _("Buildings"),
                    LOADER.GetImageN("resource", 41)),
-      gwv(gwv), gcFactory(gcFactory)
+      gwv(gwv), gcFactory(gcFactory), homePlayerId_(gwv.GetViewer().GetPlayerId()), viewedPlayerId_(homePlayerId_)
 {
     setBuildingOrder();
-    Resize(iconSpacing * Extent(4, helpers::divCeil(bts.size(), 4) + 1) + bldContentOffset);
+    // Reserve one extra icon-row's worth of vertical space (compared to the original "+ 1") for the debug player
+    // selector added below, see ID_CbDebugPlayer.
+    Resize(iconSpacing * Extent(4, helpers::divCeil(bts.size(), 4) + 2) + bldContentOffset);
 
-    const Nation playerNation = gwv.GetViewer().GetPlayer().nation;
+    lastDrawnNation_ = GetViewedPlayer().nation;
     // Symbole für die einzelnen Gebäude erstellen
     for(unsigned y = 0; y < bts.size() / 4 + (bts.size() % 4 > 0 ? 1 : 0); ++y)
     {
@@ -89,14 +96,43 @@ iwBuildings::iwBuildings(GameWorldView& gwv, GameCommandFactory& gcFactory)
             Extent btSize = Extent(32, 32);
             DrawPoint btPos = bldContentOffset - btSize / 2 + iconSpacing * DrawPoint(x, y);
             AddImageButton(ID_BuildingsStart + y * 4 + x, btPos, btSize, TextureColor::Grey,
-                           LOADER.GetNationIcon(playerNation, bts[y * 4 + x]), _(BUILDING_NAMES[bts[y * 4 + x]]));
+                           LOADER.GetNationIcon(lastDrawnNation_, bts[y * 4 + x]), _(BUILDING_NAMES[bts[y * 4 + x]]));
         }
     }
 
     // "Help" button
     Extent btSize = Extent(30, 32);
-    AddImageButton(ID_Help, GetFullSize() - DrawPoint(14, 20) - btSize, btSize, TextureColor::Grey,
-                   LOADER.GetImageN("io", 225), _("Help"));
+    const DrawPoint helpPos = GetFullSize() - DrawPoint(14, 20) - btSize;
+    AddImageButton(ID_Help, helpPos, btSize, TextureColor::Grey, LOADER.GetImageN("io", 225), _("Help"));
+
+    // Debug feature: lets you browse the building statistics of any player (including AI players). Hidden unless
+    // cheat/debug mode is active, see Msg_PaintBefore. Placed in the extra row reserved above, with a small gap
+    // above the Help button so the two never overlap regardless of window size.
+    const Extent cbSize(GetFullSize().x - (bldContentOffset.x - 14) * 2, 20);
+    const DrawPoint cbPos(bldContentOffset.x - 14, helpPos.y - 8 - cbSize.y);
+    ctrlComboBox* cb = AddComboBox(ID_CbDebugPlayer, cbPos, cbSize, TextureColor::Grey, NormalFont, 100);
+    cb->SetVisible(false);
+
+    const GameWorldBase& world = gwv.GetWorld();
+    unsigned homeSelection = 0;
+    for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
+    {
+        const GamePlayer& p = world.GetPlayer(i);
+        if(!p.isUsed())
+            continue;
+
+        if(i == homePlayerId_)
+            homeSelection = static_cast<unsigned>(selectablePlayerIds_.size());
+
+        cb->AddItem(p.isHuman() ? p.name : (p.name + " (" + _("AI") + ")"));
+        selectablePlayerIds_.push_back(i);
+    }
+    cb->SetSelection(homeSelection);
+}
+
+const GamePlayer& iwBuildings::GetViewedPlayer() const
+{
+    return gwv.GetWorld().GetPlayer(viewedPlayerId_);
 }
 
 /// Anzahlen der Gebäude zeichnen
@@ -105,7 +141,7 @@ void iwBuildings::Msg_PaintAfter()
     static boost::format fmt("%1%/%2%");
     IngameWindow::Msg_PaintAfter();
     // Anzahlen herausfinden
-    BuildingCount bc = gwv.GetViewer().GetPlayer().GetBuildingRegister().GetBuildingNums();
+    BuildingCount bc = GetViewedPlayer().GetBuildingRegister().GetBuildingNums();
 
     // Anzahlen unter die Gebäude schreiben
     DrawPoint rowPos = GetDrawPos() + bldContentOffset + DrawPoint(0, font_distance_y);
@@ -138,9 +174,12 @@ void iwBuildings::Msg_ButtonClick(const unsigned ctrl_id)
         return;
     }
 
+    if(ctrl_id < ID_BuildingsStart)
+        return; // not a building icon (defensive; Help and the combo box are handled above / don't reach here)
+
     // no buildings of type complete? -> do nothing
-    const GamePlayer& localPlayer = gwv.GetViewer().GetPlayer();
-    const BuildingRegister& buildingRegister = localPlayer.GetBuildingRegister();
+    const GamePlayer& viewedPlayer = GetViewedPlayer();
+    const BuildingRegister& buildingRegister = viewedPlayer.GetBuildingRegister();
 
     BuildingType bldType = bts[ctrl_id - ID_BuildingsStart];
     if(BuildingProperties::IsMilitary(bldType))
@@ -153,6 +192,56 @@ void iwBuildings::Msg_ButtonClick(const unsigned ctrl_id)
         GoToFirstMatching<iwTempleBuilding>(bldType, buildingRegister.GetBuildings(bldType));
     else
         GoToFirstMatching<iwBuilding>(bldType, buildingRegister.GetBuildings(bldType));
+}
+
+void iwBuildings::Msg_ComboSelectItem(const unsigned ctrl_id, const unsigned selection)
+{
+    if(ctrl_id == ID_CbDebugPlayer && selection < selectablePlayerIds_.size())
+        viewedPlayerId_ = selectablePlayerIds_[selection];
+}
+
+void iwBuildings::Msg_PaintBefore()
+{
+    IngameWindow::Msg_PaintBefore();
+
+    // The player selector is a debug feature and only usable while cheat mode is on (consistent with all other
+    // debug/cheat visualizations, e.g. the enemy productivity overlay).
+    const GameInterface* gi = gwv.GetWorld().GetGameInterface();
+    const bool debugModeOn = gi && gi->GI_GetCheats().isCheatModeOn();
+
+    auto* cb = GetCtrl<ctrlComboBox>(ID_CbDebugPlayer);
+    if(cb && cb->IsVisible() != debugModeOn)
+    {
+        cb->SetVisible(debugModeOn);
+
+        // Cheat mode got turned off while we were looking at another player's buildings -> jump back to our own
+        if(!debugModeOn && viewedPlayerId_ != homePlayerId_)
+        {
+            viewedPlayerId_ = homePlayerId_;
+            for(unsigned i = 0; i < selectablePlayerIds_.size(); ++i)
+            {
+                if(selectablePlayerIds_[i] == homePlayerId_)
+                {
+                    cb->SetSelection(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Building icons are nation-specific. Refresh them if we're now looking at a player of a different nation
+    // (only relevant while browsing other players' stats in debug mode).
+    const Nation viewedNation = GetViewedPlayer().nation;
+    if(viewedNation != lastDrawnNation_)
+    {
+        lastDrawnNation_ = viewedNation;
+        for(unsigned i = 0; i < bts.size(); ++i)
+        {
+            auto* icon = GetCtrl<ctrlImageButton>(ID_BuildingsStart + i);
+            if(icon)
+                icon->SetImage(LOADER.GetNationIcon(lastDrawnNation_, bts[i]));
+        }
+    }
 }
 
 template<class T_Window, class T_Building>

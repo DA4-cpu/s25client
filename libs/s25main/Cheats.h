@@ -101,7 +101,7 @@ public:
 private:
     void turnAllCheatsOff();
 
-    bool isCheatModeOn_ = false;
+    bool isCheatModeOn_ = true;
     bool isAllVisible_ = false;
     bool areAllBuildingsEnabled_ = false;
     bool shouldShowEnemyProductivityOverlay_ = false;

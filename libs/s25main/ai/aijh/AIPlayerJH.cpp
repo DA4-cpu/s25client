@@ -345,8 +345,8 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
             DistributeMaxRankSoldiersByBlocking(5, wh);
         // 30 boards amd 50 stones for each warehouse - block after that - should speed up expansion and limit losses in
         // case a warehouse is destroyed unlimited when every warehouse has at least that amount
-        DistributeGoodsByBlocking(GoodType::Boards, 20);
-        DistributeGoodsByBlocking(GoodType::Stones, 22);
+        DistributeGoodsByBlocking(GoodType::Boards, 8);
+        DistributeGoodsByBlocking(GoodType::Stones, 8);
         // go to the picked random warehouse and try to build around it
         const auto* storehouse = AI::randomElement(storehouses);
         const MapPoint whPos = storehouse->GetPos();
@@ -930,27 +930,29 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
     {
         case BuildingType::Woodcutter:
         {
-            if(GetDensity(around, AIResource::Wood, 12) > 8)
-                foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
+            if(GetDensity(around, AIResource::Wood, 8) > 8)
+                foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
             else if(construction->OtherUsualBuildingInRadius(around, 12, BuildingType::Forester))
-                foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
+                foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
             break;
         }
 
         case BuildingType::Forester:
-        { // ensure some distance to other foresters and an minimal amount of plantspace
+        { 
             if(GetBldPlanner().GetNumBuildings(BuildingType::Storehouse) < 2
                && (GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4))
             {
-                 foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
+                 foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
             }
             else
             {
-                if((!construction->OtherUsualBuildingInRadius(around, 22, BuildingType::Forester)
-                    && GetDensity(around, AIResource::Plantspace, 8) > 0)
-                   && WarehouseOrHarborNearby(around, 32u))
-                    foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 0);
+                if((!construction->OtherUsualBuildingInRadius(around, 9, BuildingType::Forester)
+                    && GetDensity(around, AIResource::Wood, 8) < 12)
+                   && WarehouseOrHarborNearby(around, 16u))
+                    foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
             }
+            if(!foundPos.isValid())
+                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
             break;
         }
         case BuildingType::Sawmill:
@@ -1657,11 +1659,12 @@ void AIPlayerJH::TryToAttack()
                || enemyTarget->GetNumTroops() == 0)
                 continue;
         }
-        if(attackersCount <= 1)
+        /* if(attackersCount <= 1)
             continue;
 
         aii.Attack(dest, attackersCount, true);
         return;
+        */
     }
 }
 
@@ -1833,11 +1836,12 @@ void AIPlayerJH::TrySeaAttack()
                        || enemyTarget->GetNumTroops() == 0)
                         continue;
                 }
-                if(attackersCount <= 1)
+                /* if(attackersCount <= 1)
                     continue;
 
                 aii.SeaAttack(target->GetPos(), attackersCount, true);
                 return;
+                */
             }
         }
     }
@@ -2620,7 +2624,7 @@ void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingTy
 {
     if(!aii.CanBuildBuildingtype(bldToPlace)) // z.B. per Addon deaktiviert -> gar nicht erst versuchen
         return;
-    if(aii.isBuildingNearby(bldToAvoid, whPos, 16)) // schon vorhanden? -> fertig
+    if(aii.isBuildingNearby(bldToAvoid, whPos, 9)) // schon vorhanden? -> fertig
         return;
 
     const MapPoint pos = SimpleFindPosition(whPos, BUILDING_SIZE[bldToPlace], /*enger Radius*/ 7);

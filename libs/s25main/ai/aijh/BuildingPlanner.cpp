@@ -165,8 +165,13 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         buildingsWanted[BuildingType::Forester] =
           std::max(GetNumBuildings(BuildingType::Woodcutter) / 2 - 1, buildingsWanted[BuildingType::Forester]);
 
+
         buildingsWanted[BuildingType::Forester] =
-          std::min(max_available_forester, buildingsWanted[BuildingType::Forester]);
+          std::max(GetNumBuildings(BuildingType::Woodcutter) / 2 - 1, buildingsWanted[BuildingType::Forester]);
+
+        if(4 > GetNumBuildings(BuildingType::Forester))
+            buildingsWanted[BuildingType::Forester] = 4;
+
 
         // woodcutters
         unsigned max_available_woodcutter = inventory.goods[GoodType::Axe] + inventory.people[Job::Woodcutter];
