@@ -162,9 +162,6 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
             buildingsWanted[BuildingType::Forester]++;
             buildingsWanted[BuildingType::Woodcutter]++;
         }
-        buildingsWanted[BuildingType::Forester] =
-          std::max(GetNumBuildings(BuildingType::Woodcutter) / 2 - 1, buildingsWanted[BuildingType::Forester]);
-
 
         buildingsWanted[BuildingType::Forester] =
           std::max(GetNumBuildings(BuildingType::Woodcutter) / 2 - 1, buildingsWanted[BuildingType::Forester]);
@@ -248,7 +245,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
 
         buildingsWanted[BuildingType::Mint] =
-          (2*GetNumBuildings(BuildingType::GoldMine)) / 3 + 2/3;
+          (2*GetNumBuildings(BuildingType::GoldMine)) / 3 + 1/2;
         if(1 > GetNumBuildings(BuildingType::Mint))
             buildingsWanted[BuildingType::Mint] = 1;
 
@@ -356,7 +353,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                     GetNumBuildings(BuildingType::Ironsmelter) > 10 ? 4 : 3 :
                     2 :
                     1;
-                buildingsWanted[BuildingType::GoldMine]++;
+                //buildingsWanted[BuildingType::GoldMine]++;
                 buildingsWanted[BuildingType::DonkeyBreeder] = 1;
                 if(aijh.ggs.isEnabled(AddonId::CHARBURNER)
                    && (buildingsWanted[BuildingType::CoalMine] > GetNumBuildings(BuildingType::CoalMine) + 4))
@@ -380,9 +377,9 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                    && numFoodProducers > 4) ?
                     2 :
                     1;
-                buildingsWanted[BuildingType::IronMine]++;
+                //buildingsWanted[BuildingType::IronMine]++;
                 buildingsWanted[BuildingType::GoldMine] = (inventory.people[Job::Miner] > 2) ? 1 : 0;
-                buildingsWanted[BuildingType::GoldMine]++;
+                //buildingsWanted[BuildingType::GoldMine]++;
                 resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel];
                 if(aijh.ggs.isEnabled(AddonId::CHARBURNER)
                    && (GetNumBuildings(BuildingType::CoalMine) < 1

@@ -59,4 +59,16 @@ BOOST_AUTO_TEST_CASE(MakeValid_ensures_total_ratio_for_mountain_resources_is_at_
     BOOST_TEST(settings.ratioCoal + settings.ratioGold + settings.ratioIron + settings.ratioGranite > 0);
 }
 
+BOOST_AUTO_TEST_CASE(MakeValid_clamps_climate_zone_size_to_a_safe_non_zero_range)
+{
+    MapSettings settings;
+    settings.climateZoneSize = 0;
+    settings.MakeValid();
+    BOOST_TEST(settings.climateZoneSize >= 10u);
+
+    settings.climateZoneSize = 5000;
+    settings.MakeValid();
+    BOOST_TEST(settings.climateZoneSize <= 150u);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

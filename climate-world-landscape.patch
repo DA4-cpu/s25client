@@ -1,0 +1,1738 @@
+diff --git a/data/RTTR/gamedata/world/default.lua b/data/RTTR/gamedata/world/default.lua
+index aa1c0ff..38c55a2 100644
+--- a/data/RTTR/gamedata/world/default.lua
++++ b/data/RTTR/gamedata/world/default.lua
+@@ -5,3 +5,4 @@
+ include "greenland.lua"
+ include "wasteland.lua"
+ include "winterworld.lua"
++include "world.lua"
+diff --git a/data/RTTR/gamedata/world/world.lua b/data/RTTR/gamedata/world/world.lua
+new file mode 100644
+index 0000000..30d4fc9
+--- /dev/null
++++ b/data/RTTR/gamedata/world/world.lua
+@@ -0,0 +1,1139 @@
++-- Copyright (C) 2005 - 2026 Settlers Freaks <sf-team at siedler25.org>
++--
++-- SPDX-License-Identifier: GPL-2.0-or-later
++
++-- A 4th landscape, "world", used exclusively by the map generator's climate system (see
++-- mapGenerator/Climate.h/.cpp): rather than generating a map from a single up-front choice of
++-- greenland/wasteland/winterworld, the generator now picks land textures by a (humidity,
++-- temperature) "biome" reading, so a single generated map can contain meadows, savanna, desert
++-- and tundra together, chosen by local climate. greenland.lua/wasteland.lua/winterworld.lua are
++-- left completely untouched (including their original s2Id 0/1/2) so existing, already-saved
++-- maps using them keep loading exactly as before; this file adds new, separate copies of their
++-- terrains/edges (renamed with a "w_" prefix, e.g. "gl_meadow" -> "w_gl_meadow") under this new
++-- landscape instead of modifying/reusing the originals, since terrain and edge names must be
++-- globally unique and a terrain's s2Id only needs to be unique within its own landscape.
++--
++-- Renumbering: this landscape's own s2Id is 3 (0/1/2 are already used by the three originals).
++-- Its terrains keep their original per-source id where it came from greenland (0-34), and are
++-- offset by +64 for wasteland-derived and +128 for winterworld-derived terrains, so all 70 stay
++-- unique within this landscape. `humidity`/`temperature` on the buildable-land terrains have
++-- been retuned as one coordinated set spanning the combined climate space, instead of three
++-- independent per-landscape ones.
++
++texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX5.LBM"
++
++rttr:AddLandscape{
++	-- Name used to reference this
++	name = __"world",
++	-- File used for the objects on the map (trees, stones, etc.). A single landscape can only
++	-- reference one such file, so this new landscape reuses greenland's set for all its terrains -
++	-- decorative objects placed by the map generator won't visually adapt to hot/cold regions the
++	-- way the terrain textures (chosen per-tile by humidity/temperature) do.
++	mapGfx = "<RTTR_GAME>/DATA/MAP_0_Z.LST",
++	-- Id used in the original S2. 0/1/2 are already taken by greenland/wasteland/winterworld
++	-- (kept fully intact for backwards compatibility with existing maps), so this new, 4th
++	-- landscape - used exclusively by the map generator from now on - takes the next free id.
++	s2Id = 3,
++	-- Not exclusively a winter world
++	isWinter = false,
++	-- Road textures used for this terrain. A landscape only has one road style, so - like mapGfx -
++	-- this reuses greenland's roads for the whole world landscape.
++	roads = {
++		-- Regular road
++		normal = {
++			-- Filename of the texture image
++			texture = texFile,
++			-- Position and size {x, y, w, h} in the image if it contains multiple textures
++			-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
++			pos = {192, 0, 64, 16}
++		},
++		-- Upgraded road (with 2nd carrier)
++		upgraded = {
++			texture = texFile,
++			pos = {192, 16, 64, 16}
++		},
++		-- Boat road
++		boat = {
++			texture = texFile,
++			pos = {192, 32, 64, 16}
++		},
++		-- Road on a mountain or mountain side
++		mountain = {
++			texture = texFile,
++			pos = {192, 160, 64, 16}
++		}
++	}
++}
++
++-- ===== Greenland-derived terrains (temperate grassland biomes) =====
++
++rttr:AddTerrainEdge{
++	-- Name used to reference this
++	name = "w_gl_snow",
++	-- Landscape to which this applies by default
++	landscape = "world",
++	-- Filename of the texture image
++	texture = texFile,
++	-- Position and size {x, y, w, h} in the image if it contains multiple textures
++	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
++	pos = {192, 176, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_gl_mountain",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 192, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_gl_desert",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 208, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_gl_meadow",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 224, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_gl_water",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 240, 64, 16}
++}
++
++rttr:AddTerrain{
++	-- Name used to reference this
++	name = "w_gl_snow",
++	-- Landscape to which this applies by default
++	landscape = "world",
++	-- Name of the edge drawn over neighbouring terrain or "none"
++	edgeType = "w_gl_snow",
++	-- Id used in the original S2. Defaults to 0xFF (not in S2)
++	s2Id = 2,
++	-- If this is higher than the neighbours edgePriority then it draws over the neighbour
++	-- Valid = [-128, 127], defaults to 0
++	edgePriority = 75,
++	-- What kind of terrain is this? (Used for animals, ships, etc)
++	-- Valid = land (default), water, lava, snow, mountain
++	kind = "snow",
++	-- Property for this terrain. 
++	-- Valid = buildable   (allows buildings, includes walkable), default for land
++	--	      mineable    (allows mines, includes walkable), default for mountain
++	--	      walkable    (allows flags, people, animals)
++	--        shippable   (allows ships only), default for water
++	--        unwalkable  (can't walk on, but near)
++	--        unreachable (dangerous, can't go near), default for snow, lava
++	property = "unreachable",
++	-- Humidity in percent (0..100) which determinate how much water can be on this terrain
++	-- Defaults to 0 for lava, snow, mountain, 100 otherwise
++	humidity = 0,
++	-- Filename of the texture image
++	texture = texFile,
++	-- Position and size {x, y, w, h} in the image if it contains multiple textures
++	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
++	pos = {0, 0, 32, 31},
++	-- How are the texture triangles positioned? Default: overlapped
++	-- overlapped: USD and RSU triangle overlap (like S2)
++	-- stacked: RSU on top, USD below forming a rotated rectangle
++	-- rotated: Similar to stacked but tips are left (RSU) and right (USD)
++	texType = "overlapped",
++	-- Index of the palette animation in the file, default -1 for no animation
++	palAnimIdx = -1,
++	-- Color used to display this on the minimap
++	color = 0xFFFFFFFF
++}
++rttr:AddTerrain{
++	name = "w_gl_desert1",
++	landscape = "world",
++	edgeType = "w_gl_desert",
++	s2Id = 4,
++	edgePriority = 65,
++	kind = "land",
++	property = "walkable",
++	humidity = 0,
++	temperature = 62,
++	texture = texFile,
++	pos = {48, 0, 32, 31},
++	color = 0xFFc09c7c
++}
++rttr:AddTerrain{
++	name = "w_gl_swamp",
++	landscape = "world",
++	edgeType = "w_gl_meadow",
++	s2Id = 3,
++	edgePriority = 10,
++	kind = "land",
++	humidity = 100,
++	temperature = 55,
++	property = "unwalkable",
++	texture = texFile,
++	pos = {96, 0, 32, 31},
++	color = 0xFF649014
++}
++rttr:AddTerrain{
++	name = "w_gl_meadowFlowers",
++	landscape = "world",
++	edgeType = "w_gl_meadow",
++	s2Id = 0xF,
++	edgePriority = 35,
++	kind = "land",
++	humidity = 75,
++	temperature = 48,
++	texture = texFile,
++	pos = {144, 0, 32, 31},
++	color = 0xFF48780c
++}
++rttr:AddTerrain{
++	name = "w_gl_mountain1",
++	landscape = "world",
++	edgeType = "w_gl_mountain",
++	s2Id = 1,
++	edgePriority = 55,
++	kind = "mountain",
++	texture = texFile,
++	pos = {0, 48, 32, 31},
++	color = 0xFF9c8058
++}
++rttr:AddTerrain{
++	name = "w_gl_mountain2",
++	landscape = "world",
++	edgeType = "w_gl_mountain",
++	s2Id = 0XB,
++	edgePriority = 50,
++	kind = "mountain",
++	texture = texFile,
++	pos = {48, 48, 32, 31},
++	color = 0xFF9c8058
++}
++rttr:AddTerrain{
++	name = "w_gl_mountain3",
++	landscape = "world",
++	edgeType = "w_gl_mountain",
++	s2Id = 0XC,
++	edgePriority = 45,
++	kind = "mountain",
++	texture = texFile,
++	pos = {96, 48, 32, 31},
++	color = 0xFF9c8058
++}
++rttr:AddTerrain{
++	name = "w_gl_mountain4",
++	landscape = "world",
++	edgeType = "w_gl_mountain",
++	s2Id = 0xD,
++	edgePriority = 40,
++	kind = "mountain",
++	texture = texFile,
++	pos = {144, 48, 32, 31},
++	color = 0xFF8c7048
++}
++rttr:AddTerrain{
++	name = "w_gl_savannah",
++	landscape = "world",
++	edgeType = "w_gl_desert",
++	s2Id = 0,
++	edgePriority = 15,
++	kind = "land",
++	humidity = 45,
++	temperature = 60,
++	texture = texFile,
++	pos = {0, 96, 32, 31},
++	color = 0xFF649014
++}
++rttr:AddTerrain{
++	name = "w_gl_meadow1",
++	landscape = "world",
++	edgeType = "w_gl_meadow",
++	s2Id = 8,
++	edgePriority = 30,
++	kind = "land",
++	humidity = 90,
++	temperature = 45,
++	texture = texFile,
++	pos = {48, 96, 32, 31},
++	color = 0xFF48780c
++}
++rttr:AddTerrain{
++	name = "w_gl_meadow2",
++	landscape = "world",
++	edgeType = "w_gl_meadow",
++	s2Id = 9,
++	edgePriority = 25,
++	kind = "land",
++	humidity = 65,
++	temperature = 50,
++	texture = texFile,
++	pos = {96, 96, 32, 31},
++	color = 0xFF649014
++}
++rttr:AddTerrain{
++	name = "w_gl_meadow3",
++	landscape = "world",
++	edgeType = "w_gl_meadow",
++	s2Id = 0xA,
++	edgePriority = 20,
++	kind = "land",
++	humidity = 55,
++	temperature = 55,
++	texture = texFile,
++	pos = {144, 96, 32, 31},
++	color = 0xFF407008
++}
++rttr:AddTerrain{
++	name = "w_gl_steppe",
++	landscape = "world",
++	edgeType = "w_gl_desert",
++	s2Id = 0xE,
++	edgePriority = 60,
++	kind = "land",
++	humidity = 25,
++	temperature = 63,
++	texture = texFile,
++	pos = {0, 144, 32, 31},
++	color = 0xFF88b028
++}
++rttr:AddTerrain{
++	name = "w_gl_mountainMeadow",
++	landscape = "world",
++	edgeType = "w_gl_mountain",
++	s2Id = 0x12,
++	edgePriority = 70,
++	kind = "mountain",
++	humidity = 100,
++	property = "buildable",
++	texture = texFile,
++	pos = {48, 144, 32, 31},
++	color = 0xFF9c8058
++}
++rttr:AddTerrain{
++	name = "w_gl_water",
++	landscape = "world",
++	edgeType = "w_gl_water",
++	s2Id = 5,
++	edgePriority = 5,
++	kind = "water",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF1038a4
++}
++rttr:AddTerrain{
++	name = "w_gl_lava",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 0x10,
++	kind = "lava",
++	texture = texFile,
++	pos = {193, 105, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_gl_reefWater",
++	landscape = "world",
++	edgeType = "w_gl_water",
++	s2Id = 19,
++	edgePriority = 80,
++	kind = "water",
++	property = "unwalkable",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF1038a4
++}
++rttr:AddTerrain{
++	name = "w_gl_shallowWater",
++	landscape = "world",
++	edgeType = "w_gl_water",
++	s2Id = 6,
++	edgePriority = 80,
++	kind = "water",
++	property = "buildable",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF1038a4
++}
++rttr:AddTerrain{
++	name = "w_gl_flatMountain",
++	landscape = "world",
++	edgeType = "w_gl_mountain",
++	s2Id = 0x22,
++	edgePriority = 50,
++	kind = "mountain",
++	property = "buildable",
++	texture = texFile,
++	pos = {48, 48, 32, 31},
++	color = 0xFF9c8058
++}
++rttr:AddTerrain{
++	name = "w_gl_lava2",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 0x14,
++	kind = "lava",
++	texture = texFile,
++	pos = {66, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_gl_lava3",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 0x15,
++	kind = "lava",
++	texture = texFile,
++	pos = {99, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_gl_lava4",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 0x16,
++	kind = "lava",
++	texture = texFile,
++	pos = {132, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_gl_desert2",
++	landscape = "world",
++	edgeType = "w_gl_desert",
++	s2Id = 7,
++	edgePriority = 65,
++	kind = "land",
++	property = "walkable",
++	humidity = 0,
++	temperature = 62,
++	texture = texFile,
++	pos = {48, 0, 32, 31},
++	color = 0xFFc09c7c
++}
++
++-- ===== Wasteland-derived terrains (hot/arid biomes). s2Id offset by +64. =====
++
++texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX6.LBM"
++
++rttr:AddTerrainEdge{
++	-- Name used to reference this
++	name = "w_wl_stone",
++	-- Landscape to which this applies by default
++	landscape = "world",
++	-- Filename of the texture image
++	texture = texFile,
++	-- Position and size {x, y, w, h} in the image if it contains multiple textures
++	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
++	pos = {192, 176, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_wl_moor",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 192, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_wl_wasteland",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 208, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_wl_mountain",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 224, 64, 16}
++}
++
++rttr:AddTerrain{
++	-- Name used to reference this
++	name = "w_wl_lavaFewStone",
++	-- Landscape to which this applies by default
++	landscape = "world",
++	-- Name of the edge drawn over neighbouring terrain or "none"
++	edgeType = "none",
++	-- Id used in the original S2. Defaults to 0xFF (not in S2)
++	s2Id = 66,
++	-- If this is higher than the neighbours edgePriority then it draws over the neighbour
++	-- Valid = [-128, 127], defaults to 0
++	edgePriority = 20,
++	-- What kind of terrain is this? (Used for animals, ships, etc)
++	-- Valid = land (default), water, lava, snow, mountain
++	kind = "lava",
++	-- Property for this terrain. 
++	-- Valid = buildable   (allows buildings, includes walkable), default for land
++	--	      mineable    (allows mines, includes walkable), default for mountain
++	--	      walkable    (allows flags, people, animals)
++	--        shippable   (allows ships only), default for water
++	--        unwalkable  (can't walk on, but near)
++	--        unreachable (dangerous, can't go near), default for snow, lava
++	property = "unreachable",
++	-- Humidity in percent (0..100) which determinate how much water can be on this terrain
++	-- Defaults to 0 for lava, snow, mountain, 100 otherwise
++	humidity = 0,
++	-- Filename of the texture image
++	texture = texFile,
++	-- Position and size {x, y, w, h} in the image if it contains multiple textures
++	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
++	pos = {0, 0, 30, 30},
++	-- Index of the palette animation in the file, default -1 for no animation
++	palAnimIdx = 7,
++	-- Color used to display this on the minimap
++	color = 0xFF860000
++}
++rttr:AddTerrain{
++	name = "w_wl_wasteland1",
++	landscape = "world",
++	edgeType = "w_wl_wasteland",
++	s2Id = 68,
++	edgePriority = 50,
++	kind = "land",
++	property = "walkable",
++	humidity = 0,
++	temperature = 88,
++	texture = texFile,
++	pos = {48, 0, 32, 31},
++	color = 0xFF9c7c64
++}
++rttr:AddTerrain{
++	name = "w_wl_lavaManyStone",
++	landscape = "world",
++	edgeType = "w_wl_stone",
++	s2Id = 67,
++	edgePriority = 80,
++	kind = "lava",
++	property = "unwalkable",
++	texture = texFile,
++	pos = {96, 0, 37, 31},
++	color = 0xFF001820
++}
++rttr:AddTerrain{
++	name = "w_wl_flowerPasture",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 79,
++	edgePriority = 40,
++	kind = "land",
++	humidity = 70,
++	temperature = 65,
++	texture = texFile,
++	pos = {144, 0, 32, 31},
++	color = 0xFF444850
++}
++rttr:AddTerrain{
++	name = "w_wl_mountain1",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 65,
++	edgePriority = 30,
++	kind = "mountain",
++	texture = texFile,
++	pos = {0, 48, 32, 31},
++	color = 0xFF706c54
++}
++rttr:AddTerrain{
++	name = "w_wl_mountain2",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 75,
++	edgePriority = 30,
++	kind = "mountain",
++	texture = texFile,
++	pos = {48, 48, 32, 31},
++	color = 0xFF706454
++}
++rttr:AddTerrain{
++	name = "w_wl_mountain3",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 76,
++	edgePriority = 30,
++	kind = "mountain",
++	texture = texFile,
++	pos = {96, 48, 32, 31},
++	color = 0xFF684c24
++}
++rttr:AddTerrain{
++	name = "w_wl_mountain4",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 77,
++	edgePriority = 30,
++	kind = "mountain",
++	texture = texFile,
++	pos = {144, 48, 32, 31},
++	color = 0xFF684c24
++}
++rttr:AddTerrain{
++	name = "w_wl_dSteppe",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 64,
++	edgePriority = 40,
++	kind = "land",
++	humidity = 20,
++	temperature = 85,
++	texture = texFile,
++	pos = {0, 96, 32, 31},
++	color = 0xFF444850
++}
++rttr:AddTerrain{
++	name = "w_wl_pasture1",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 72,
++	edgePriority = 40,
++	kind = "land",
++	humidity = 80,
++	temperature = 70,
++	texture = texFile,
++	pos = {48, 96, 32, 31},
++	color = 0xFF5c5840
++}
++rttr:AddTerrain{
++	name = "w_wl_pasture2",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 73,
++	edgePriority = 40,
++	kind = "land",
++	humidity = 50,
++	temperature = 75,
++	texture = texFile,
++	pos = {96, 96, 32, 31},
++	color = 0xFF646048
++}
++rttr:AddTerrain{
++	name = "w_wl_pasture3",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 74,
++	edgePriority = 40,
++	kind = "land",
++	humidity = 35,
++	temperature = 80,
++	texture = texFile,
++	pos = {144, 96, 32, 31},
++	color = 0xFF646048
++}
++rttr:AddTerrain{
++	name = "w_wl_lSteppe",
++	landscape = "world",
++	edgeType = "w_wl_wasteland",
++	s2Id = 78,
++	edgePriority = 60,
++	kind = "land",
++	humidity = 5,
++	temperature = 95,
++	texture = texFile,
++	pos = {0, 144, 32, 31},
++	color = 0xFF88b028
++}
++rttr:AddTerrain{
++	name = "w_wl_alpPasture",
++	landscape = "world",
++	edgeType = "w_wl_stone",
++	s2Id = 82,
++	edgePriority = 90,
++	kind = "mountain",
++	property = "buildable",
++	texture = texFile,
++	pos = {48, 144, 32, 31},
++	color = 0xFF001820
++}
++rttr:AddTerrain{
++	name = "w_wl_moor",
++	landscape = "world",
++	edgeType = "w_wl_moor",
++	s2Id = 69,
++	edgePriority = 70,
++	kind = "water",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF454520
++}
++rttr:AddTerrain{
++	name = "w_wl_lava",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 80,
++	edgePriority = 10,
++	kind = "lava",
++	texture = texFile,
++	pos = {193, 105, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 7,
++	color = 0xFFC32020
++}
++rttr:AddTerrain{
++	name = "w_wl_reefMoor",
++	landscape = "world",
++	edgeType = "w_wl_moor",
++	s2Id = 83,
++	edgePriority = 70,
++	kind = "water",
++	property = "unwalkable",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF454520
++}
++rttr:AddTerrain{
++	name = "w_wl_shallowMoor",
++	landscape = "world",
++	edgeType = "w_wl_moor",
++	s2Id = 70,
++	edgePriority = 70,
++	kind = "water",
++	property = "buildable",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF454520
++}
++rttr:AddTerrain{
++	name = "w_wl_flatMountain",
++	landscape = "world",
++	edgeType = "w_wl_mountain",
++	s2Id = 98,
++	edgePriority = 30,
++	kind = "mountain",
++	property = "buildable",
++	texture = texFile,
++	pos = {48, 48, 32, 31},
++	color = 0xFF706454
++}
++rttr:AddTerrain{
++	name = "w_wl_lava2",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 84,
++	edgePriority = 10,
++	kind = "lava",
++	texture = texFile,
++	pos = {66, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 7,
++	color = 0xFFC32020
++}
++rttr:AddTerrain{
++	name = "w_wl_lava3",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 85,
++	edgePriority = 10,
++	kind = "lava",
++	texture = texFile,
++	pos = {99, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 7,
++	color = 0xFFC32020
++}
++rttr:AddTerrain{
++	name = "w_wl_lava4",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 86,
++	edgePriority = 10,
++	kind = "lava",
++	texture = texFile,
++	pos = {132, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 7,
++	color = 0xFFC32020
++}
++rttr:AddTerrain{
++	name = "w_wl_wasteland2",
++	landscape = "world",
++	edgeType = "w_wl_wasteland",
++	s2Id = 71,
++	edgePriority = 50,
++	kind = "land",
++	property = "walkable",
++	humidity = 0,
++	temperature = 88,
++	texture = texFile,
++	pos = {48, 0, 32, 31},
++	color = 0xFF9c7c64
++}
++rttr:AddTerrain{
++	name = "w_wl_lava1",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 81,
++	edgePriority = 10,
++	kind = "lava",
++	texture = texFile,
++	pos = {193, 105, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 7,
++	color = 0xFFC32020
++}
++
++-- ===== Winterworld-derived terrains (cold/arctic biomes). s2Id offset by +128. =====
++
++texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX7.LBM"
++
++rttr:AddTerrainEdge{
++	-- Name used to reference this
++	name = "w_ww_snow",
++	-- Landscape to which this applies by default
++	landscape = "world",
++	-- Filename of the texture image
++	texture = texFile,
++	-- Position and size {x, y, w, h} in the image if it contains multiple textures
++	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
++	pos = {192, 176, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_ww_mountain",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 192, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_ww_ice",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 208, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_ww_tundra",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 224, 64, 16}
++}
++rttr:AddTerrainEdge{
++	name = "w_ww_water",
++	landscape = "world",
++	texture = texFile,
++	pos = {192, 240, 64, 16}
++}
++
++rttr:AddTerrain{
++	-- Name used to reference this
++	name = "w_ww_iceFloe",
++	-- Landscape to which this applies by default
++	landscape = "world",
++	-- Name of the edge drawn over neighbouring terrain or "none"
++	edgeType = "w_ww_water",
++	-- Id used in the original S2. Defaults to 0xFF (not in S2)
++	s2Id = 130,
++	-- If this is higher than the neighbours edgePriority then it draws over the neighbour
++	-- Valid = [-128, 127], defaults to 0
++	edgePriority = 73,
++	-- What kind of terrain is this? (Used for animals, ships, etc)
++	-- Valid = land (default), water, lava, snow, mountain
++	kind = "land",
++	-- Property for this terrain. 
++	-- Valid = buildable   (allows buildings, includes walkable), default for land
++	--	      mineable    (allows mines, includes walkable), default for mountain
++	--	      walkable    (allows flags, people, animals)
++	--        shippable   (allows ships only), default for water
++	--        unwalkable  (can't walk on, but near)
++	--        unreachable (dangerous, can't go near), default for snow, lava
++	property = "unreachable",
++	-- Humidity in percent (0..100) which determinate how much water can be on this terrain
++	-- Defaults to 0 for lava, snow, mountain, 100 otherwise
++	humidity = 0,
++	-- Filename of the texture image
++	texture = texFile,
++	-- Position and size {x, y, w, h} in the image if it contains multiple textures
++	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
++	pos = {0, 0, 30, 30},
++	-- Index of the palette animation in the file, default -1 for no animation
++	palAnimIdx = -1,
++	-- Color used to display this on the minimap
++	color = 0xFF00286C
++}
++rttr:AddTerrain{
++	name = "w_ww_ice1",
++	landscape = "world",
++	edgeType = "w_ww_ice",
++	s2Id = 132,
++	edgePriority = 43,
++	kind = "land",
++	property = "walkable",
++	humidity = 0,
++	temperature = 8,
++	texture = texFile,
++	pos = {48, 0, 32, 31},
++	color = 0xFF0070b0
++}
++rttr:AddTerrain{
++	name = "w_ww_iceFloes",
++	landscape = "world",
++	edgeType = "w_ww_water",
++	s2Id = 131,
++	edgePriority = 83,
++	kind = "water",
++	property = "unwalkable",
++	texture = texFile,
++	pos = {96, 0, 32, 31},
++	color = 0xFF00286c
++}
++rttr:AddTerrain{
++	name = "w_ww_tundraFlower",
++	landscape = "world",
++	edgeType = "w_ww_tundra",
++	s2Id = 143,
++	edgePriority = 13,
++	kind = "land",
++	humidity = 85,
++	temperature = 32,
++	texture = texFile,
++	pos = {144, 0, 32, 31},
++	color = 0xFF7c84ac
++}
++rttr:AddTerrain{
++	name = "w_ww_mountain1",
++	landscape = "world",
++	edgeType = "w_ww_mountain",
++	s2Id = 129,
++	edgePriority = 48,
++	kind = "mountain",
++	texture = texFile,
++	pos = {0, 48, 32, 31},
++	color = 0xFF54586c
++}
++rttr:AddTerrain{
++	name = "w_ww_mountain2",
++	landscape = "world",
++	edgeType = "w_ww_mountain",
++	s2Id = 139,
++	edgePriority = 63,
++	kind = "mountain",
++	texture = texFile,
++	pos = {48, 48, 32, 31},
++	color = 0xFF60607c
++}
++rttr:AddTerrain{
++	name = "w_ww_mountain3",
++	landscape = "world",
++	edgeType = "w_ww_mountain",
++	s2Id = 140,
++	edgePriority = 58,
++	kind = "mountain",
++	texture = texFile,
++	pos = {96, 48, 32, 31},
++	color = 0xFF686c8c
++}
++rttr:AddTerrain{
++	name = "w_ww_mountain4",
++	landscape = "world",
++	edgeType = "w_ww_mountain",
++	s2Id = 141,
++	edgePriority = 53,
++	kind = "mountain",
++	texture = texFile,
++	pos = {144, 48, 32, 31},
++	color = 0xFF686c8c
++}
++rttr:AddTerrain{
++	name = "w_ww_taiga",
++	landscape = "world",
++	edgeType = "w_ww_tundra",
++	s2Id = 128,
++	edgePriority = 18,
++	kind = "land",
++	humidity = 60,
++	temperature = 30,
++	texture = texFile,
++	pos = {0, 96, 32, 31},
++	color = 0xFFa0accc
++}
++rttr:AddTerrain{
++	name = "w_ww_tundra1",
++	landscape = "world",
++	edgeType = "w_ww_tundra",
++	s2Id = 136,
++	edgePriority = 23,
++	kind = "land",
++	humidity = 95,
++	temperature = 10,
++	texture = texFile,
++	pos = {48, 96, 32, 31},
++	color = 0xFFb0a494
++}
++rttr:AddTerrain{
++	name = "w_ww_tundra2",
++	landscape = "world",
++	edgeType = "w_ww_tundra",
++	s2Id = 137,
++	edgePriority = 28,
++	kind = "land",
++	humidity = 55,
++	temperature = 15,
++	texture = texFile,
++	pos = {96, 96, 32, 31},
++	color = 0xFF88a874
++}
++rttr:AddTerrain{
++	name = "w_ww_tundra3",
++	landscape = "world",
++	edgeType = "w_ww_tundra",
++	s2Id = 138,
++	edgePriority = 33,
++	kind = "land",
++	humidity = 75,
++	temperature = 20,
++	texture = texFile,
++	pos = {144, 96, 32, 31},
++	color = 0xFFa0accc
++}
++rttr:AddTerrain{
++	name = "w_ww_tundra4",
++	landscape = "world",
++	edgeType = "w_ww_tundra",
++	s2Id = 142,
++	edgePriority = 8,
++	kind = "land",
++	humidity = 15,
++	temperature = 5,
++	texture = texFile,
++	pos = {0, 144, 32, 31},
++	color = 0xFF88b15e
++}
++rttr:AddTerrain{
++	name = "w_ww_snow",
++	landscape = "world",
++	edgeType = "w_ww_snow",
++	s2Id = 146,
++	edgePriority = 68,
++	kind = "snow",
++	property = "buildable",
++	texture = texFile,
++	pos = {48, 144, 32, 31},
++	color = 0xFF94a0c0
++}
++rttr:AddTerrain{
++	name = "w_ww_water",
++	landscape = "world",
++	edgeType = "w_ww_water",
++	s2Id = 133,
++	edgePriority = 78,
++	kind = "water",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF1038a4
++}
++rttr:AddTerrain{
++	name = "w_ww_lava",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 144,
++	kind = "lava",
++	texture = texFile,
++	pos = {193, 105, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_ww_reefWater",
++	landscape = "world",
++	edgeType = "w_ww_water",
++	s2Id = 147,
++	edgePriority = 78,
++	kind = "water",
++	property = "unwalkable",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF1038a4
++}
++rttr:AddTerrain{
++	name = "w_ww_shallowWater",
++	landscape = "world",
++	edgeType = "w_ww_water",
++	s2Id = 134,
++	edgePriority = 78,
++	kind = "water",
++	property = "buildable",
++	texture = texFile,
++	pos = {193, 49, 53, 54},
++	texType = "rotated",
++	palAnimIdx = 10,
++	color = 0xFF1038a4
++}
++rttr:AddTerrain{
++	name = "w_ww_flatMountain",
++	landscape = "world",
++	edgeType = "w_ww_mountain",
++	s2Id = 162,
++	edgePriority = 38,
++	kind = "mountain",
++	property = "buildable",
++	texture = texFile,
++	pos = {48, 48, 32, 31},
++	color = 0xFF60607c
++}
++rttr:AddTerrain{
++	name = "w_ww_lava2",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 148,
++	kind = "lava",
++	texture = texFile,
++	pos = {66, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_ww_lava3",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 149,
++	kind = "lava",
++	texture = texFile,
++	pos = {99, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_ww_lava4",
++	landscape = "world",
++	edgeType = "none",
++	s2Id = 150,
++	kind = "lava",
++	texture = texFile,
++	pos = {132, 222, 31, 33},
++	texType = "stacked",
++	palAnimIdx = 11,
++	color = 0xFFc02020
++}
++rttr:AddTerrain{
++	name = "w_ww_ice2",
++	landscape = "world",
++	edgeType = "w_ww_ice",
++	s2Id = 135,
++	edgePriority = 43,
++	kind = "land",
++	property = "walkable",
++	humidity = 0,
++	temperature = 8,
++	texture = texFile,
++	pos = {48, 0, 32, 31},
++	color = 0xFF0070b0
++}
+diff --git a/libs/s25main/ingameWindows/iwMapGenerator.cpp b/libs/s25main/ingameWindows/iwMapGenerator.cpp
+index 506800d..559e959 100644
+--- a/libs/s25main/ingameWindows/iwMapGenerator.cpp
++++ b/libs/s25main/ingameWindows/iwMapGenerator.cpp
+@@ -18,8 +18,16 @@
+ 
+ using namespace rttr::mapGenerator;
+ 
++namespace {
++// Range of the "climate zone size" slider. Kept in sync with the clamping done in
++// MapSettings::MakeValid(); the slider itself (via ctrlProgress) only ever produces values in
++// [0, climateZoneSizeMax - climateZoneSizeMin], which are offset by climateZoneSizeMin below.
++constexpr unsigned short climateZoneSizeMin = 10;
++constexpr unsigned short climateZoneSizeMax = 150;
++} // namespace
++
+ iwMapGenerator::iwMapGenerator(MapSettings& settings)
+-    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(270, 520), _("Map Generator"),
++    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(270, 600), _("Map Generator"),
+                    LOADER.GetImageN("resource", 41), true, CloseBehavior::Custom),
+       mapSettings(settings)
+ {
+@@ -31,12 +39,25 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
+         return;
+     }
+ 
++    // The generator no longer lets the user pick a landscape up front (greenland/wasteland/
++    // winterworld remain available for backwards compatibility with existing maps, but are no
++    // longer offered here) - it always targets the combined "world" landscape, which draws on
++    // all of their terrains at once via the (humidity, temperature) climate system instead.
++    const DescIdx<LandscapeDesc> worldLandscape = desc.landscapes.getIndex("world");
++    if(!worldLandscape)
++    {
++        Close();
++        return;
++    }
++    mapSettings.type = worldLandscape;
++
+     DrawPoint curPos(20, 0);
+ 
+     constexpr Extent comboSize(230, 20);
+     constexpr Extent comboSizeSmall(130, 20);
+     constexpr Extent progressSize(130, 20);
+     constexpr Extent buttonSize(100, 20);
++    constexpr int pgrOffset = 120;
+ 
+     curPos.y += 30;
+     ctrlComboBox* combo = AddComboBox(ID_cbNumPlayers, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+@@ -65,13 +86,6 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
+         cbSizeY->AddItem(strSize);
+     }
+ 
+-    curPos.y += 30;
+-    AddText(ID_txtLandscape, curPos, _("Landscape"), COLOR_YELLOW, FontStyle{}, NormalFont);
+-    curPos.y += 20;
+-    combo = AddComboBox(ID_cbMapType, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+-    for(unsigned i = 0; i < desc.landscapes.size(); i++)
+-        combo->AddItem(_(desc.get(DescIdx<LandscapeDesc>(i)).name));
+-
+     curPos.y += 30;
+     AddText(ID_txtMountainDist, curPos, _("HQ distance to mountain"), COLOR_YELLOW, FontStyle{}, NormalFont);
+     curPos.y += 20;
+@@ -89,7 +103,29 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
+     combo->AddItem(_("Medium"));
+     combo->AddItem(_("Many"));
+ 
+-    constexpr int pgrOffset = 120;
++    curPos.y += 30;
++    AddText(ID_txtClimateTemperature, curPos, _("Temperature"), COLOR_YELLOW, FontStyle{}, NormalFont);
++    curPos.y += 20;
++    combo = AddComboBox(ID_cbClimateTemperature, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
++    combo->AddItem(_("Kalt"));
++    combo->AddItem(_("Kühl"));
++    combo->AddItem(_("Gemäßigt"));
++    combo->AddItem(_("Warm"));
++    combo->AddItem(_("Heiß"));
++
++    curPos.y += 30;
++    AddText(ID_txtClimateHumidity, curPos, _("Humidity"), COLOR_YELLOW, FontStyle{}, NormalFont);
++    curPos.y += 20;
++    combo = AddComboBox(ID_cbClimateHumidity, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
++    combo->AddItem(_("Feucht"));
++    combo->AddItem(_("Gemäßigt"));
++    combo->AddItem(_("Trocken"));
++
++    curPos.y += 30;
++    AddText(ID_txtClimateZoneSize, curPos, _("Climate zone size:"), COLOR_YELLOW, FontStyle{}, NormalFont);
++    AddProgress(ID_pgClimateZoneSize, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138,
++                climateZoneSizeMax - climateZoneSizeMin);
++
+     curPos.y += 35;
+     AddText(ID_txtGold, curPos, _("Gold:"), COLOR_YELLOW, FontStyle{}, NormalFont);
+     AddProgress(ID_pgGoldRatio, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
+@@ -165,9 +201,22 @@ void iwMapGenerator::Apply()
+         case 1: mapSettings.islands = IslandAmount::Normal; break;
+         case 2: mapSettings.islands = IslandAmount::Many; break;
+     }
+-    const auto& mapType = GetCtrl<ctrlComboBox>(ID_cbMapType)->GetSelection();
+-    if(mapType)
+-        mapSettings.type = DescIdx<LandscapeDesc>(*mapType);
++    switch(GetCtrl<ctrlComboBox>(ID_cbClimateTemperature)->GetSelection().value())
++    {
++        case 0: mapSettings.climateTemperature = ClimateTemperature::Cold; break;
++        case 1: mapSettings.climateTemperature = ClimateTemperature::Cool; break;
++        case 2: mapSettings.climateTemperature = ClimateTemperature::Temperate; break;
++        case 3: mapSettings.climateTemperature = ClimateTemperature::Warm; break;
++        case 4: mapSettings.climateTemperature = ClimateTemperature::Hot; break;
++    }
++    switch(GetCtrl<ctrlComboBox>(ID_cbClimateHumidity)->GetSelection().value())
++    {
++        case 0: mapSettings.climateHumidity = ClimateHumidity::Humid; break;
++        case 1: mapSettings.climateHumidity = ClimateHumidity::Temperate; break;
++        case 2: mapSettings.climateHumidity = ClimateHumidity::Dry; break;
++    }
++    mapSettings.climateZoneSize = static_cast<unsigned short>(
++      GetCtrl<ctrlProgress>(ID_pgClimateZoneSize)->GetPosition() + climateZoneSizeMin);
+ }
+ 
+ void iwMapGenerator::Reset()
+@@ -222,5 +271,24 @@ void iwMapGenerator::Reset()
+         case IslandAmount::Many: combo->SetSelection(2); break;
+     }
+ 
+-    GetCtrl<ctrlComboBox>(ID_cbMapType)->SetSelection(mapSettings.type.value);
++    combo = GetCtrl<ctrlComboBox>(ID_cbClimateTemperature);
++    switch(mapSettings.climateTemperature)
++    {
++        case ClimateTemperature::Cold: combo->SetSelection(0); break;
++        case ClimateTemperature::Cool: combo->SetSelection(1); break;
++        case ClimateTemperature::Temperate: combo->SetSelection(2); break;
++        case ClimateTemperature::Warm: combo->SetSelection(3); break;
++        case ClimateTemperature::Hot: combo->SetSelection(4); break;
++    }
++
++    combo = GetCtrl<ctrlComboBox>(ID_cbClimateHumidity);
++    switch(mapSettings.climateHumidity)
++    {
++        case ClimateHumidity::Humid: combo->SetSelection(0); break;
++        case ClimateHumidity::Temperate: combo->SetSelection(1); break;
++        case ClimateHumidity::Dry: combo->SetSelection(2); break;
++    }
++
++    GetCtrl<ctrlProgress>(ID_pgClimateZoneSize)
++      ->SetPosition(static_cast<unsigned short>(mapSettings.climateZoneSize - climateZoneSizeMin));
+ }
+diff --git a/libs/s25main/ingameWindows/iwMapGenerator.h b/libs/s25main/ingameWindows/iwMapGenerator.h
+index 6297e5e..dac9387 100644
+--- a/libs/s25main/ingameWindows/iwMapGenerator.h
++++ b/libs/s25main/ingameWindows/iwMapGenerator.h
+@@ -15,7 +15,6 @@ public:
+     {
+         ID_btBack,
+         ID_btApply,
+-        ID_txtLandscape,
+         ID_txtGold,
+         ID_txtIron,
+         ID_txtCoal,
+@@ -32,7 +31,6 @@ public:
+         ID_txtMapSizeX,
+         ID_cbMapSizeX,
+         ID_cbMapSizeY,
+-        ID_cbMapType,
+         ID_pgGoldRatio,
+         ID_pgIronRatio,
+         ID_pgCoalRatio,
+@@ -41,7 +39,13 @@ public:
+         ID_cbMountainDist,
+         ID_pgTrees,
+         ID_pgStonePiles,
+-        ID_cbIslands
++        ID_cbIslands,
++        ID_txtClimateTemperature,
++        ID_cbClimateTemperature,
++        ID_txtClimateHumidity,
++        ID_cbClimateHumidity,
++        ID_txtClimateZoneSize,
++        ID_pgClimateZoneSize
+     };
+ 
+     /**
+diff --git a/libs/s25main/mapGenerator/Climate.cpp b/libs/s25main/mapGenerator/Climate.cpp
+index 6a1f741..471a749 100644
+--- a/libs/s25main/mapGenerator/Climate.cpp
++++ b/libs/s25main/mapGenerator/Climate.cpp
+@@ -10,18 +10,46 @@
+ 
+ #include <algorithm>
+ #include <set>
++#include <stdexcept>
+ 
+ namespace rttr::mapGenerator {
+ 
+-NodeMapBase<uint8_t> GenerateClimateMap(RandomUtility& rnd, const MapExtent& size, unsigned zoneSize, double weight)
++ValueRange<uint8_t> GetTemperatureRange(ClimateTemperature temperature)
+ {
+-    NodeMapBase<uint8_t> climate;
++    switch(temperature)
++    {
++        // clang-format off
++        case ClimateTemperature::Cold:      return ValueRange<uint8_t>(0, 55);
++        case ClimateTemperature::Cool:      return ValueRange<uint8_t>(0, 75);
++        case ClimateTemperature::Temperate: return ValueRange<uint8_t>(0, 100); // original, unbiased range
++        case ClimateTemperature::Warm:      return ValueRange<uint8_t>(25, 100);
++        case ClimateTemperature::Hot:       return ValueRange<uint8_t>(45, 100);
++        // clang-format on
++    }
++    throw std::invalid_argument("Invalid climate temperature");
++}
+ 
+-    // start at "medium humid" everywhere - mirrors how map.z starts at a mid-range defaultHeight
+-    // in RandomMap::Create() before Restructure() reshapes it
+-    climate.Resize(size, 50);
++ValueRange<uint8_t> GetHumidityRange(ClimateHumidity humidity)
++{
++    switch(humidity)
++    {
++        // clang-format off
++        case ClimateHumidity::Humid:      return ValueRange<uint8_t>(45, 100);
++        case ClimateHumidity::Temperate:  return ValueRange<uint8_t>(0, 100); // original, unbiased range
++        case ClimateHumidity::Dry:        return ValueRange<uint8_t>(0, 55);
++        // clang-format on
++    }
++    throw std::invalid_argument("Invalid climate humidity");
++}
++
++NodeMapBase<uint8_t> GenerateClimateMap(RandomUtility& rnd, const MapExtent& size, unsigned zoneSize, double weight,
++                                         const ValueRange<uint8_t>& outputRange)
++{
++    NodeMapBase<uint8_t> climate;
+ 
+-    const ValueRange<uint8_t> humidityRange(0, 100);
++    // start at the middle of the output range everywhere - mirrors how map.z starts at a mid-range
++    // defaultHeight in RandomMap::Create() before Restructure() reshapes it
++    climate.Resize(size, static_cast<uint8_t>(outputRange.minimum + outputRange.GetDifference() / 2));
+ 
+     // scatter roughly one climate "pole" per zoneSize x zoneSize nodes across the whole map - same
+     // idea as CreateWaterMap()/CreateIsland() using a fixed number of focus points instead of a
+@@ -35,12 +63,12 @@ NodeMapBase<uint8_t> GenerateClimateMap(RandomUtility& rnd, const MapExtent& siz
+     }
+ 
+     Restructure(
+-      climate, humidityRange, [&poles](const MapPoint& pt) { return helpers::contains(poles, pt); }, weight);
++      climate, outputRange, [&poles](const MapPoint& pt) { return helpers::contains(poles, pt); }, weight);
+ 
+     // same smoothing as the height map, so climate zones get soft, natural-looking borders instead
+     // of sharp rings around each pole
+     Smooth(GetSmoothIterations(size), GetSmoothRadius(size), climate);
+-    Scale(climate, humidityRange.minimum, humidityRange.maximum);
++    Scale(climate, outputRange.minimum, outputRange.maximum);
+ 
+     return climate;
+ }
+diff --git a/libs/s25main/mapGenerator/Climate.h b/libs/s25main/mapGenerator/Climate.h
+index 782bc08..c5e06ce 100644
+--- a/libs/s25main/mapGenerator/Climate.h
++++ b/libs/s25main/mapGenerator/Climate.h
+@@ -4,6 +4,7 @@
+ 
+ #pragma once
+ 
++#include "mapGenerator/MapSettings.h" // ClimateTemperature, ClimateHumidity
+ #include "mapGenerator/NodeMapUtilities.h"
+ #include "mapGenerator/RandomUtility.h"
+ #include "world/NodeMapBase.h"
+@@ -11,14 +12,29 @@
+ namespace rttr::mapGenerator {
+ 
+ /**
+- * Generates a spatially smooth "climate" value in [0, 100] for every node of the map - the spatial
+- * counterpart to TerrainDesc::humidity. Where TerrainDesc::humidity is a static property of a terrain
+- * *type* (used to sort/rank terrains), this map describes the local humidity of a *location*,
+- * completely independent of the height map (map.z). It uses the exact same seed-point +
+- * distance-transform + smoothing technique as the height map (see Terrain::Restructure and
+- * RandomMap::SmoothHeightMap), just applied to its own NodeMapBase<uint8_t>, so that e.g. a dry
+- * region and a humid region can appear side by side at the same altitude instead of climate being
+- * fully determined by height.
++ * Maps a ClimateTemperature preset (as chosen in the map generator UI) to the value range
++ * GenerateClimateMap() should scale its result to. "Temperate" spans the full [0, 100] range - the
++ * original, unbiased behaviour - while "Cold"/"Hot" progressively shift and narrow the range towards
++ * the low/high end so the average generated temperature moves accordingly.
++ */
++ValueRange<uint8_t> GetTemperatureRange(ClimateTemperature temperature);
++
++/**
++ * Maps a ClimateHumidity preset (as chosen in the map generator UI) to the value range
++ * GenerateClimateMap() should scale its result to. "Temperate" (=moderate) spans the full [0, 100]
++ * range - the original, unbiased behaviour - while "Dry"/"Humid" shift the range towards the low/high
++ * end so the average generated humidity moves accordingly.
++ */
++ValueRange<uint8_t> GetHumidityRange(ClimateHumidity humidity);
++
++/**
++ * Generates a spatially smooth "climate" value for every node of the map - the spatial counterpart
++ * to TerrainDesc::humidity. Where TerrainDesc::humidity is a static property of a terrain *type*
++ * (used to sort/rank terrains), this map describes the local humidity of a *location*, completely
++ * independent of the height map (map.z). It uses the exact same seed-point + distance-transform +
++ * smoothing technique as the height map (see Terrain::Restructure and RandomMap::SmoothHeightMap),
++ * just applied to its own NodeMapBase<uint8_t>, so that e.g. a dry region and a humid region can
++ * appear side by side at the same altitude instead of climate being fully determined by height.
+  *
+  * @param rnd random utility used for scattering climate seed points ("poles")
+  * @param size size of the map
+@@ -26,10 +42,14 @@ namespace rttr::mapGenerator {
+  * point is scattered per zoneSize x zoneSize nodes. Smaller values produce more, smaller zones.
+  * @param weight factor influencing how sharply climate drops off with distance from a seed point
+  * (default: 2 - quadratic drop, same default as Restructure())
++ * @param outputRange value range the result is scaled to - use GetTemperatureRange()/
++ * GetHumidityRange() to derive this from a user-facing preset. Defaults to the full [0, 100] range.
+  *
+- * @returns a node map with values in [0, 100], directly comparable to TerrainDesc::humidity.
++ * @returns a node map with values in outputRange, directly comparable to TerrainDesc::humidity (or,
++ * once TerrainDesc::temperature is populated per terrain, TerrainDesc::temperature).
+  */
+ NodeMapBase<uint8_t> GenerateClimateMap(RandomUtility& rnd, const MapExtent& size, unsigned zoneSize = 40,
+-                                         double weight = 2.);
++                                         double weight = 2.,
++                                         const ValueRange<uint8_t>& outputRange = ValueRange<uint8_t>(0, 100));
+ 
+ } // namespace rttr::mapGenerator
+diff --git a/libs/s25main/mapGenerator/MapSettings.cpp b/libs/s25main/mapGenerator/MapSettings.cpp
+index a7fc170..4ea3b37 100644
+--- a/libs/s25main/mapGenerator/MapSettings.cpp
++++ b/libs/s25main/mapGenerator/MapSettings.cpp
+@@ -22,6 +22,9 @@ void MapSettings::MakeValid()
+     size = elMax(size, MapExtent::all(16));
+     if(ratioGold + ratioIron + ratioCoal + ratioGranite == 0)
+         ratioCoal = 1;
++    // Must be >0 (used as a divisor in GenerateClimateMap) and capped at a sane maximum
++    climateZoneSize =
++      helpers::clamp(climateZoneSize, static_cast<unsigned short>(10), static_cast<unsigned short>(150));
+ }
+ 
+ } // namespace rttr::mapGenerator
+diff --git a/libs/s25main/mapGenerator/MapSettings.h b/libs/s25main/mapGenerator/MapSettings.h
+index 4558255..9cafda9 100644
+--- a/libs/s25main/mapGenerator/MapSettings.h
++++ b/libs/s25main/mapGenerator/MapSettings.h
+@@ -37,6 +37,36 @@ enum class IslandAmount : uint8_t
+     Many = 30
+ };
+ 
++/// Overall temperature bias for the map generator's climate system (see rttr::mapGenerator::Climate.h).
++/// "Temperate" reproduces the original, unbiased behaviour (full [0, 100] value range); the other
++/// presets progressively shift and narrow that range towards the cold or hot end.
++enum class ClimateTemperature : uint8_t
++{
++    Cold,
++    Cool,
++    Temperate,
++    Warm,
++    Hot
++};
++constexpr auto maxEnumValue(ClimateTemperature)
++{
++    return ClimateTemperature::Hot;
++}
++
++/// Overall humidity bias for the map generator's climate system (see rttr::mapGenerator::Climate.h).
++/// "Temperate" (=moderate) reproduces the original, unbiased behaviour (full [0, 100] value range);
++/// the other presets shift that range towards dry or humid.
++enum class ClimateHumidity : uint8_t
++{
++    Humid,
++    Temperate,
++    Dry
++};
++constexpr auto maxEnumValue(ClimateHumidity)
++{
++    return ClimateHumidity::Dry;
++}
++
+ struct MapSettings
+ {
+     void MakeValid();
+@@ -53,8 +83,21 @@ struct MapSettings
+     unsigned short stonePiles = 5;
+     IslandAmount islands = IslandAmount::Few;
+     MountainDistance mountainDistance = MountainDistance::Normal;
+-    DescIdx<LandscapeDesc> type = DescIdx<LandscapeDesc>(0);
++    // Index 3 is the "world" landscape (data/RTTR/gamedata/world/world.lua), which is registered
++    // after the original greenland(0)/wasteland(1)/winterworld(2) and combines all of their
++    // terrains under one landscape for the climate system. This mirrors how the previous default
++    // of 0 only "worked" by relying on greenland being registered first - iwMapGenerator's
++    // constructor re-resolves this by name at runtime as well, so this default only matters if a
++    // map is generated without ever opening the map generator settings dialog.
++    DescIdx<LandscapeDesc> type = DescIdx<LandscapeDesc>(3);
+     MapStyle style = MapStyle::Mixed;
++    ClimateTemperature climateTemperature = ClimateTemperature::Temperate;
++    ClimateHumidity climateHumidity = ClimateHumidity::Temperate;
++    /// Approximate width/height (in nodes) of a single climate zone (see GenerateClimateMap()).
++    /// Smaller values produce many small zones, larger values produce few large, near-uniform zones.
++    /// Unlike the two presets above this is exposed as a fine-grained slider in the UI rather than a
++    /// small fixed set of options.
++    unsigned short climateZoneSize = 40;
+ };
+ 
+ } // namespace rttr::mapGenerator
+diff --git a/libs/s25main/mapGenerator/RandomMap.cpp b/libs/s25main/mapGenerator/RandomMap.cpp
+index c660705..3f242b9 100644
+--- a/libs/s25main/mapGenerator/RandomMap.cpp
++++ b/libs/s25main/mapGenerator/RandomMap.cpp
+@@ -130,8 +130,10 @@ void RandomMap::Create(const MapSettings& settings)
+ 
+     settings_ = settings;
+     map_.z.Resize(settings.size, defaultHeight);
+-    map_.climate = GenerateClimateMap(rnd_, settings.size);
+-    map_.temperature = GenerateClimateMap(rnd_, settings.size, 60);
++    map_.climate =
++      GenerateClimateMap(rnd_, settings.size, settings.climateZoneSize, 2., GetHumidityRange(settings.climateHumidity));
++    map_.temperature = GenerateClimateMap(rnd_, settings.size, settings.climateZoneSize, 2.,
++                                          GetTemperatureRange(settings.climateTemperature));
+ 
+     switch(settings.style)
+     {
+diff --git a/libs/s25main/mapGenerator/Resources.cpp b/libs/s25main/mapGenerator/Resources.cpp
+index a46bd94..66d97b8 100644
+--- a/libs/s25main/mapGenerator/Resources.cpp
++++ b/libs/s25main/mapGenerator/Resources.cpp
+@@ -43,6 +43,17 @@ std::vector<Tree> CreateTrees(const TextureMap& textures)
+         return {fir, oak, birch, cherry, pine, oak, birch, cherry, pine};
+     }
+ 
++    if(landscapeId == 0x3) // world (combined greenland/wasteland/winterworld climate landscape)
++    {
++        // The map generator no longer picks a single landscape up front, so this can't pick a
++        // matching tree list per region either (tree placement doesn't consider local
++        // humidity/temperature) - use a superset of the greenland/wasteland and winterworld lists
++        // so both warm-climate and cold-climate trees appear somewhere on the map.
++        return {pineApple, palm1,  palm2, cypress, oak,  birch, oak,  cherry, oak,
++                birch,     cherry, oak,   birch,   pine, birch, pine, fir,
++                fir,       oak,    birch, cherry,  pine, oak,   birch, cherry, pine};
++    }
++
+     throw std::invalid_argument("invalid landscape type");
+ }
+ 
+diff --git a/tests/s25Main/mapGenerator/testClimate.cpp b/tests/s25Main/mapGenerator/testClimate.cpp
+new file mode 100644
+index 0000000..cd7f8e9
+--- /dev/null
++++ b/tests/s25Main/mapGenerator/testClimate.cpp
+@@ -0,0 +1,121 @@
++// Copyright (C) 2005 - 2026 Settlers Freaks (sf-team at siedler25.org)
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "mapGenerator/Climate.h"
++#include "mapGenerator/MapSettings.h"
++#include <boost/test/unit_test.hpp>
++#include <algorithm>
++
++using namespace rttr::mapGenerator;
++
++namespace {
++double Midpoint(const ValueRange<uint8_t>& range)
++{
++    return (static_cast<double>(range.minimum) + range.maximum) / 2.;
++}
++} // namespace
++
++BOOST_AUTO_TEST_SUITE(ClimateTests)
++
++BOOST_AUTO_TEST_CASE(GetTemperatureRange_temperate_reproduces_the_original_unbiased_range)
++{
++    const auto range = GetTemperatureRange(ClimateTemperature::Temperate);
++    BOOST_TEST(range.minimum == 0);
++    BOOST_TEST(range.maximum == 100);
++}
++
++BOOST_AUTO_TEST_CASE(GetTemperatureRange_midpoint_increases_from_cold_to_hot)
++{
++    // Each preset should shift the average generated value further towards the hot end than the
++    // previous one - this is what makes the UI preset (Kalt/Kühl/Gemäßigt/Warm/Heiß) meaningful.
++    const auto cold = GetTemperatureRange(ClimateTemperature::Cold);
++    const auto cool = GetTemperatureRange(ClimateTemperature::Cool);
++    const auto temperate = GetTemperatureRange(ClimateTemperature::Temperate);
++    const auto warm = GetTemperatureRange(ClimateTemperature::Warm);
++    const auto hot = GetTemperatureRange(ClimateTemperature::Hot);
++
++    BOOST_TEST(Midpoint(cold) < Midpoint(cool));
++    BOOST_TEST(Midpoint(cool) < Midpoint(temperate));
++    BOOST_TEST(Midpoint(temperate) < Midpoint(warm));
++    BOOST_TEST(Midpoint(warm) < Midpoint(hot));
++}
++
++BOOST_AUTO_TEST_CASE(GetHumidityRange_temperate_reproduces_the_original_unbiased_range)
++{
++    const auto range = GetHumidityRange(ClimateHumidity::Temperate);
++    BOOST_TEST(range.minimum == 0);
++    BOOST_TEST(range.maximum == 100);
++}
++
++BOOST_AUTO_TEST_CASE(GetHumidityRange_midpoint_increases_from_dry_to_humid)
++{
++    // "Trocken" -> "Gemäßigt" -> "Feucht" should shift the average generated value upwards.
++    const auto dry = GetHumidityRange(ClimateHumidity::Dry);
++    const auto temperate = GetHumidityRange(ClimateHumidity::Temperate);
++    const auto humid = GetHumidityRange(ClimateHumidity::Humid);
++
++    BOOST_TEST(Midpoint(dry) < Midpoint(temperate));
++    BOOST_TEST(Midpoint(temperate) < Midpoint(humid));
++}
++
++BOOST_AUTO_TEST_CASE(GenerateClimateMap_stays_within_the_requested_output_range)
++{
++    RandomUtility rnd(1337);
++    const MapExtent size(16, 16);
++    const auto range = GetTemperatureRange(ClimateTemperature::Cold);
++
++    const auto climate = GenerateClimateMap(rnd, size, 4, 2., range);
++
++    RTTR_FOREACH_PT(MapPoint, size)
++    {
++        BOOST_TEST_REQUIRE(climate[pt] >= range.minimum);
++        BOOST_TEST_REQUIRE(climate[pt] <= range.maximum);
++    }
++}
++
++BOOST_AUTO_TEST_CASE(GenerateClimateMap_fills_the_requested_output_range)
++{
++    // Scale() always stretches the generated variation to fill the full output range - this is
++    // what makes the "climate zone size" slider produce visible zones instead of a flat value and
++    // what makes the min/max of a preset (e.g. "Kalt": [0, 55]) actually get used.
++    RandomUtility rnd(1337);
++    const MapExtent size(32, 32);
++    const ValueRange<uint8_t> range(20, 80);
++
++    const auto climate = GenerateClimateMap(rnd, size, 8, 2., range);
++
++    uint8_t minVal = 255;
++    uint8_t maxVal = 0;
++    RTTR_FOREACH_PT(MapPoint, size)
++    {
++        minVal = std::min(minVal, climate[pt]);
++        maxVal = std::max(maxVal, climate[pt]);
++    }
++
++    BOOST_TEST(minVal == range.minimum);
++    BOOST_TEST(maxVal == range.maximum);
++}
++
++BOOST_AUTO_TEST_CASE(GenerateClimateMap_defaults_to_the_full_range)
++{
++    // Backwards-compat check: calling without an explicit outputRange must behave exactly like
++    // before the climate presets were introduced.
++    RandomUtility rnd(1337);
++    const MapExtent size(32, 32);
++
++    const auto climate = GenerateClimateMap(rnd, size, 8);
++
++    uint8_t minVal = 255;
++    uint8_t maxVal = 0;
++    RTTR_FOREACH_PT(MapPoint, size)
++    {
++        minVal = std::min(minVal, climate[pt]);
++        maxVal = std::max(maxVal, climate[pt]);
++    }
++
++    BOOST_TEST(minVal == 0);
++    BOOST_TEST(maxVal == 100);
++}
++
++BOOST_AUTO_TEST_SUITE_END()
+diff --git a/tests/s25Main/mapGenerator/testMapSettings.cpp b/tests/s25Main/mapGenerator/testMapSettings.cpp
+index dd0f5d0..af37617 100644
+--- a/tests/s25Main/mapGenerator/testMapSettings.cpp
++++ b/tests/s25Main/mapGenerator/testMapSettings.cpp
+@@ -59,4 +59,16 @@ BOOST_AUTO_TEST_CASE(MakeValid_ensures_total_ratio_for_mountain_resources_is_at_
+     BOOST_TEST(settings.ratioCoal + settings.ratioGold + settings.ratioIron + settings.ratioGranite > 0);
+ }
+ 
++BOOST_AUTO_TEST_CASE(MakeValid_clamps_climate_zone_size_to_a_safe_non_zero_range)
++{
++    MapSettings settings;
++    settings.climateZoneSize = 0;
++    settings.MakeValid();
++    BOOST_TEST(settings.climateZoneSize >= 10u);
++
++    settings.climateZoneSize = 5000;
++    settings.MakeValid();
++    BOOST_TEST(settings.climateZoneSize <= 150u);
++}
++
+ BOOST_AUTO_TEST_SUITE_END()

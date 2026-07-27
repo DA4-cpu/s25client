@@ -130,8 +130,10 @@ void RandomMap::Create(const MapSettings& settings)
 
     settings_ = settings;
     map_.z.Resize(settings.size, defaultHeight);
-    map_.climate = GenerateClimateMap(rnd_, settings.size);
-    map_.temperature = GenerateClimateMap(rnd_, settings.size, 60);
+    map_.climate =
+      GenerateClimateMap(rnd_, settings.size, settings.climateZoneSize, 2., GetHumidityRange(settings.climateHumidity));
+    map_.temperature = GenerateClimateMap(rnd_, settings.size, settings.climateZoneSize, 2.,
+                                          GetTemperatureRange(settings.climateTemperature));
 
     switch(settings.style)
     {

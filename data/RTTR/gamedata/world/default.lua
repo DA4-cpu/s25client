@@ -5,3 +5,4 @@
 include "greenland.lua"
 include "wasteland.lua"
 include "winterworld.lua"
+include "world.lua"

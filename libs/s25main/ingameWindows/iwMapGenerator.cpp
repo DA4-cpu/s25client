@@ -18,8 +18,16 @@
 
 using namespace rttr::mapGenerator;
 
+namespace {
+// Range of the "climate zone size" slider. Kept in sync with the clamping done in
+// MapSettings::MakeValid(); the slider itself (via ctrlProgress) only ever produces values in
+// [0, climateZoneSizeMax - climateZoneSizeMin], which are offset by climateZoneSizeMin below.
+constexpr unsigned short climateZoneSizeMin = 10;
+constexpr unsigned short climateZoneSizeMax = 150;
+} // namespace
+
 iwMapGenerator::iwMapGenerator(MapSettings& settings)
-    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(270, 520), _("Map Generator"),
+    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(270, 600), _("Map Generator"),
                    LOADER.GetImageN("resource", 41), true, CloseBehavior::Custom),
       mapSettings(settings)
 {
@@ -31,12 +39,25 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
         return;
     }
 
+    // The generator no longer lets the user pick a landscape up front (greenland/wasteland/
+    // winterworld remain available for backwards compatibility with existing maps, but are no
+    // longer offered here) - it always targets the combined "world" landscape, which draws on
+    // all of their terrains at once via the (humidity, temperature) climate system instead.
+    const DescIdx<LandscapeDesc> worldLandscape = desc.landscapes.getIndex("world");
+    if(!worldLandscape)
+    {
+        Close();
+        return;
+    }
+    mapSettings.type = worldLandscape;
+
     DrawPoint curPos(20, 0);
 
     constexpr Extent comboSize(230, 20);
     constexpr Extent comboSizeSmall(130, 20);
     constexpr Extent progressSize(130, 20);
     constexpr Extent buttonSize(100, 20);
+    constexpr int pgrOffset = 120;
 
     curPos.y += 30;
     ctrlComboBox* combo = AddComboBox(ID_cbNumPlayers, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
@@ -66,13 +87,6 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
     }
 
     curPos.y += 30;
-    AddText(ID_txtLandscape, curPos, _("Landscape"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    curPos.y += 20;
-    combo = AddComboBox(ID_cbMapType, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
-    for(unsigned i = 0; i < desc.landscapes.size(); i++)
-        combo->AddItem(_(desc.get(DescIdx<LandscapeDesc>(i)).name));
-
-    curPos.y += 30;
     AddText(ID_txtMountainDist, curPos, _("HQ distance to mountain"), COLOR_YELLOW, FontStyle{}, NormalFont);
     curPos.y += 20;
     combo = AddComboBox(ID_cbMountainDist, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
@@ -89,7 +103,29 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
     combo->AddItem(_("Medium"));
     combo->AddItem(_("Many"));
 
-    constexpr int pgrOffset = 120;
+    curPos.y += 30;
+    AddText(ID_txtClimateTemperature, curPos, _("Temperature"), COLOR_YELLOW, FontStyle{}, NormalFont);
+    curPos.y += 20;
+    combo = AddComboBox(ID_cbClimateTemperature, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+    combo->AddItem(_("Kalt"));
+    combo->AddItem(_("Kühl"));
+    combo->AddItem(_("Gemäßigt"));
+    combo->AddItem(_("Warm"));
+    combo->AddItem(_("Heiß"));
+
+    curPos.y += 30;
+    AddText(ID_txtClimateHumidity, curPos, _("Humidity"), COLOR_YELLOW, FontStyle{}, NormalFont);
+    curPos.y += 20;
+    combo = AddComboBox(ID_cbClimateHumidity, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+    combo->AddItem(_("Feucht"));
+    combo->AddItem(_("Gemäßigt"));
+    combo->AddItem(_("Trocken"));
+
+    curPos.y += 30;
+    AddText(ID_txtClimateZoneSize, curPos, _("Climate zone size:"), COLOR_YELLOW, FontStyle{}, NormalFont);
+    AddProgress(ID_pgClimateZoneSize, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138,
+                climateZoneSizeMax - climateZoneSizeMin);
+
     curPos.y += 35;
     AddText(ID_txtGold, curPos, _("Gold:"), COLOR_YELLOW, FontStyle{}, NormalFont);
     AddProgress(ID_pgGoldRatio, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
@@ -165,9 +201,22 @@ void iwMapGenerator::Apply()
         case 1: mapSettings.islands = IslandAmount::Normal; break;
         case 2: mapSettings.islands = IslandAmount::Many; break;
     }
-    const auto& mapType = GetCtrl<ctrlComboBox>(ID_cbMapType)->GetSelection();
-    if(mapType)
-        mapSettings.type = DescIdx<LandscapeDesc>(*mapType);
+    switch(GetCtrl<ctrlComboBox>(ID_cbClimateTemperature)->GetSelection().value())
+    {
+        case 0: mapSettings.climateTemperature = ClimateTemperature::Cold; break;
+        case 1: mapSettings.climateTemperature = ClimateTemperature::Cool; break;
+        case 2: mapSettings.climateTemperature = ClimateTemperature::Temperate; break;
+        case 3: mapSettings.climateTemperature = ClimateTemperature::Warm; break;
+        case 4: mapSettings.climateTemperature = ClimateTemperature::Hot; break;
+    }
+    switch(GetCtrl<ctrlComboBox>(ID_cbClimateHumidity)->GetSelection().value())
+    {
+        case 0: mapSettings.climateHumidity = ClimateHumidity::Humid; break;
+        case 1: mapSettings.climateHumidity = ClimateHumidity::Temperate; break;
+        case 2: mapSettings.climateHumidity = ClimateHumidity::Dry; break;
+    }
+    mapSettings.climateZoneSize = static_cast<unsigned short>(
+      GetCtrl<ctrlProgress>(ID_pgClimateZoneSize)->GetPosition() + climateZoneSizeMin);
 }
 
 void iwMapGenerator::Reset()
@@ -222,5 +271,24 @@ void iwMapGenerator::Reset()
         case IslandAmount::Many: combo->SetSelection(2); break;
     }
 
-    GetCtrl<ctrlComboBox>(ID_cbMapType)->SetSelection(mapSettings.type.value);
+    combo = GetCtrl<ctrlComboBox>(ID_cbClimateTemperature);
+    switch(mapSettings.climateTemperature)
+    {
+        case ClimateTemperature::Cold: combo->SetSelection(0); break;
+        case ClimateTemperature::Cool: combo->SetSelection(1); break;
+        case ClimateTemperature::Temperate: combo->SetSelection(2); break;
+        case ClimateTemperature::Warm: combo->SetSelection(3); break;
+        case ClimateTemperature::Hot: combo->SetSelection(4); break;
+    }
+
+    combo = GetCtrl<ctrlComboBox>(ID_cbClimateHumidity);
+    switch(mapSettings.climateHumidity)
+    {
+        case ClimateHumidity::Humid: combo->SetSelection(0); break;
+        case ClimateHumidity::Temperate: combo->SetSelection(1); break;
+        case ClimateHumidity::Dry: combo->SetSelection(2); break;
+    }
+
+    GetCtrl<ctrlProgress>(ID_pgClimateZoneSize)
+      ->SetPosition(static_cast<unsigned short>(mapSettings.climateZoneSize - climateZoneSizeMin));
 }

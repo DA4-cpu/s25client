@@ -1661,10 +1661,10 @@ void AIPlayerJH::TryToAttack()
         }
         /* if(attackersCount <= 1)
             continue;
-
+            */
         aii.Attack(dest, attackersCount, true);
         return;
-        */
+        
     }
 }
 
@@ -1838,10 +1838,10 @@ void AIPlayerJH::TrySeaAttack()
                 }
                 /* if(attackersCount <= 1)
                     continue;
-
+                    */
                 aii.SeaAttack(target->GetPos(), attackersCount, true);
                 return;
-                */
+                
             }
         }
     }

@@ -43,6 +43,17 @@ std::vector<Tree> CreateTrees(const TextureMap& textures)
         return {fir, oak, birch, cherry, pine, oak, birch, cherry, pine};
     }
 
+    if(landscapeId == 0x3) // world (combined greenland/wasteland/winterworld climate landscape)
+    {
+        // The map generator no longer picks a single landscape up front, so this can't pick a
+        // matching tree list per region either (tree placement doesn't consider local
+        // humidity/temperature) - use a superset of the greenland/wasteland and winterworld lists
+        // so both warm-climate and cold-climate trees appear somewhere on the map.
+        return {pineApple, palm1,  palm2, cypress, oak,  birch, oak,  cherry, oak,
+                birch,     cherry, oak,   birch,   pine, birch, pine, fir,
+                fir,       oak,    birch, cherry,  pine, oak,   birch, cherry, pine};
+    }
+
     throw std::invalid_argument("invalid landscape type");
 }
 

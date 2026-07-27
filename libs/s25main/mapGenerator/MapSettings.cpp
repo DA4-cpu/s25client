@@ -22,6 +22,9 @@ void MapSettings::MakeValid()
     size = elMax(size, MapExtent::all(16));
     if(ratioGold + ratioIron + ratioCoal + ratioGranite == 0)
         ratioCoal = 1;
+    // Must be >0 (used as a divisor in GenerateClimateMap) and capped at a sane maximum
+    climateZoneSize =
+      helpers::clamp(climateZoneSize, static_cast<unsigned short>(10), static_cast<unsigned short>(150));
 }
 
 } // namespace rttr::mapGenerator

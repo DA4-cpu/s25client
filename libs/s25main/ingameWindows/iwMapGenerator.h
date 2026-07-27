@@ -15,7 +15,6 @@ public:
     {
         ID_btBack,
         ID_btApply,
-        ID_txtLandscape,
         ID_txtGold,
         ID_txtIron,
         ID_txtCoal,
@@ -32,7 +31,6 @@ public:
         ID_txtMapSizeX,
         ID_cbMapSizeX,
         ID_cbMapSizeY,
-        ID_cbMapType,
         ID_pgGoldRatio,
         ID_pgIronRatio,
         ID_pgCoalRatio,
@@ -41,7 +39,13 @@ public:
         ID_cbMountainDist,
         ID_pgTrees,
         ID_pgStonePiles,
-        ID_cbIslands
+        ID_cbIslands,
+        ID_txtClimateTemperature,
+        ID_cbClimateTemperature,
+        ID_txtClimateHumidity,
+        ID_cbClimateHumidity,
+        ID_txtClimateZoneSize,
+        ID_pgClimateZoneSize
     };
 
     /**
