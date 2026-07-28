@@ -1189,6 +1189,10 @@ bool nobBaseWarehouse::CanRecruit(const Job job) const
     {
         // Do we have a helper and a tool (if required)?
         return inventory[Job::Helper] > 0 && (*requiredTool == GoodType::Nothing || inventory[*requiredTool] > 0);
+        // Für den Bauarbeiter mind. 2 Hämmer verlangen, damit einer für
+        // Armorer/Geologist/Shipwright reserviert bleibt
+        const unsigned requiredAmount = (job == Job::Builder) ? 2u : 1u;
+        //const unsigned requiredAmount = (job == Job::Forester) ? 2u : 1u;
     } else // Cannot recruit
         return false;
 }

@@ -151,8 +151,8 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         const Inventory& inventory = aijh.player.GetInventory();
 
         // foresters
-        int max_available_forester = inventory[Job::Forester] + inventory[GoodType::Shovel] - 1; //eine Schaufel für  Charburner übrig lassen
-        max_available_forester = std::max(0, max_available_forester);
+        unsigned max_available_forester = inventory[Job::Forester] + inventory[GoodType::Shovel] - 1; //eine Schaufel für  Charburner übrig lassen
+        max_available_forester = std::max(0, int(max_available_forester));
 
 
         buildingsWanted[BuildingType::Forester] =
@@ -169,6 +169,9 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         buildingsWanted[BuildingType::Forester] =
           std::max(GetNumBuildings(BuildingType::Woodcutter) / 2 - 1, buildingsWanted[BuildingType::Forester]);
 
+        buildingsWanted[BuildingType::Forester] =
+          std::min(max_available_forester, buildingsWanted[BuildingType::Forester]);
+
         if(3 > GetNumBuildings(BuildingType::Forester))
             buildingsWanted[BuildingType::Forester] = 3;
 
@@ -179,7 +182,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
           std::min(max_available_woodcutter, (buildingsWanted[BuildingType::Forester] * 2 + 2)); // two per forester + 2 for 'natural' forest
 
         buildingsWanted[BuildingType::Woodcutter] =
-          std::max(GetNumBuildings(BuildingType::Sawmill) * 2 + GetNumBuildings(BuildingType::Charburner) * 2 + GetNumBuildings(BuildingType::Vineyard) * 2, buildingsWanted[BuildingType::Woodcutter]);
+          std::min(GetNumBuildings(BuildingType::Sawmill) * 2 + GetNumBuildings(BuildingType::Charburner) * 2 + GetNumBuildings(BuildingType::Vineyard) * 2, buildingsWanted[BuildingType::Woodcutter]);
 
 
         ////on maps with many trees the ai will build woodcutters all over the place which means the foresters are not
@@ -226,11 +229,6 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         {
             if((15 < aijh.AmountInStorage(GoodType::Wood)) || 0 < GetNumBuildingSites(BuildingType::Woodcutter) || 1 < GetNumBuildingSites(BuildingType::Woodcutter))
                 buildingsWanted[BuildingType::Sawmill]++;
-            else
-            {
-                buildingsWanted[BuildingType::Woodcutter] += 2;
-                buildingsWanted[BuildingType::Forester]++;
-            }
         }
         buildingsWanted[BuildingType::Sawmill] = std::min(buildingsWanted[BuildingType::Sawmill], max_sawmills);
         buildingsWanted[BuildingType::Sawmill] =
@@ -243,7 +241,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
          buildingsWanted[BuildingType::Ironsmelter] =
               std::min<unsigned>(inventory.goods[GoodType::Crucible] + inventory.people[Job::IronFounder],
                                  static_cast<unsigned>(available_mines));
-        if(2 > GetNumBuildings(BuildingType::Ironsmelter))
+         if(2 > GetNumBuildings(BuildingType::Ironsmelter) && 1 > GetNumBuildingSites(BuildingType::Ironsmelter))
             buildingsWanted[BuildingType::Ironsmelter] = 2;
         if(1 > GetNumBuildings(BuildingType::Ironsmelter))
             buildingsWanted[BuildingType::Ironsmelter] = 1;
@@ -368,7 +366,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                 buildingsWanted[BuildingType::DonkeyBreeder] = 1;
                 if(aijh.ggs.isEnabled(AddonId::CHARBURNER))
                 {
-                    resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel] + 1;
+                    resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel];
                     if (aijh.AmountInStorage(GoodType::IronOre) * 2 + aijh.AmountInStorage(GoodType::Gold) > 15)
                     {
                         if (aijh.AmountInStorage(GoodType::IronOre) * 2 + aijh.AmountInStorage(GoodType::Gold)
@@ -380,6 +378,8 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                             unsigned charburnerPerMissingCoal = 8;
                             buildingsWanted[BuildingType::Charburner] = std::max(
                               int(ironGoldSurplus / charburnerPerMissingCoal - GetNumBuildingSites(BuildingType::CoalMine)), 0);
+                            buildingsWanted[BuildingType::Charburner] = std::min(
+                              int(buildingsWanted[BuildingType::Charburner]), resourcelimit);
                         }
                     }
                 }
@@ -400,7 +400,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                 buildingsWanted[BuildingType::GoldMine] = (inventory.people[Job::Miner] > 2) ? 1 : 0;
                 //buildingsWanted[BuildingType::GoldMine]++;
                 resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel];
-                if(aijh.ggs.isEnabled(AddonId::CHARBURNER))
+                if(aijh.ggs.isEnabled(AddonId::CHARBURNER) && GetNumBuildings(BuildingType::Farm) > 2)
                 {
                     resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel] + 1;
                     if(aijh.AmountInStorage(GoodType::IronOre) * 2 + aijh.AmountInStorage(GoodType::Gold) > 16)

@@ -939,21 +939,25 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
 
         case BuildingType::Forester:
         { 
-            if(GetBldPlanner().GetNumBuildings(BuildingType::Storehouse) < 2
-               && (GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4))
+            foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
+            if(foundPos.isValid())
             {
-                 foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
+                if(GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4)
+                {
+                  break;
+                } 
+                else
+                {
+                    if((construction->OtherUsualBuildingInRadius(around, 9, BuildingType::Forester)
+                        || GetDensity(around, AIResource::Wood, 8) > 12)
+                       || aii.isBuildingNearby(BuildingType::Charburner, foundPos, 13))
+                        foundPos = MapPoint::Invalid();
+                }
+                
+                   // if(!foundPos.isValid())
+                   // foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+                   break;
             }
-            else
-            {
-                if((!construction->OtherUsualBuildingInRadius(around, 9, BuildingType::Forester)
-                    && GetDensity(around, AIResource::Wood, 8) < 12)
-                   && WarehouseOrHarborNearby(around, 16u))
-                    foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
-            }
-            //if(!foundPos.isValid())
-                //foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
-            break;
         }
         case BuildingType::Sawmill:
         {
@@ -1038,11 +1042,13 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
                 foundPos = MapPoint::Invalid();
             break;
         case BuildingType::Charburner:
-            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
-            if(!(BQsurroundcheck(foundPos, 4, true, 40) > 40))
-                
+        {
+            foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 92);
+            if(foundPos.isValid() && !BQsurroundcheck(foundPos, 5, true, 30)
+               || aii.isBuildingNearby(BuildingType::Forester, foundPos, 13))
                 foundPos = MapPoint::Invalid();
             break;
+        }
         default: foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius); break;
     }
     return foundPos;
@@ -2486,24 +2492,30 @@ void AIPlayerJH::AdjustSettings()
         for(const Tool tool : {Tool::Axe, Tool::Saw, Tool::PickAxe, Tool::Crucible})
             toolsettings[tool] = calcToolPriority(tool);
         // Set some minima
-        if(inventory[GoodType::Saw] < 2)
-            toolsettings[Tool::Saw] = 2;
-        if(inventory[GoodType::Axe] < 3)
+        if(inventory[GoodType::Saw] < 1)
+            toolsettings[Tool::Saw] = 1;
+        if(inventory[GoodType::Axe] < 2)
             toolsettings[Tool::Axe] = 2;
         if(inventory[GoodType::PickAxe] < 2)
             toolsettings[Tool::PickAxe] = 2;
+        if(inventory[GoodType::Shovel] < 1)
+            toolsettings[Tool::Shovel] = 1;
+        if(inventory[GoodType::Scythe] < 1)
+            toolsettings[Tool::Scythe] = 1;
+        if(inventory[GoodType::Crucible] < 1)
+            toolsettings[Tool::Crucible] = 1;
         // Only if we haven't ordered any basic tool, we may order other tools
         if(toolsettings[Tool::Axe] == 0 && toolsettings[Tool::PickAxe] == 0 && toolsettings[Tool::Saw] == 0
            && toolsettings[Tool::Crucible] == 0)
         {
             // Order those as required for existing and planned buildings
-            for(const Tool tool : {Tool::Hammer, Tool::Scythe, Tool::Rollingpin, Tool::Shovel, Tool::Tongs,
+            for(const Tool tool : {Tool::Hammer, Tool::Rollingpin, Tool::Tongs,
                                    Tool::Cleaver, Tool::RodAndLine, Tool::Bow})
             {
                 toolsettings[tool] = calcToolPriority(tool);
             }
             // Always have at least one of those in stock for other stuff
-            for(const Tool tool : {Tool::Hammer, Tool::Scythe, Tool::Rollingpin, Tool::Shovel, Tool::Tongs,
+            for(const Tool tool : {Tool::Hammer, Tool::Rollingpin, Tool::Tongs,
                                    Tool::Cleaver, Tool::RodAndLine, Tool::Bow})
             {
                 if(inventory[TOOL_TO_GOOD[tool]] == 0)
