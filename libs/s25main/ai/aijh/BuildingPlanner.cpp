@@ -39,12 +39,12 @@ bool BuildingPlanner::CalcIsExpansionRequired(AIPlayerJH& aijh, bool recalc) con
         return false;
     if(GetNumMilitaryBldSites() > 0 || GetNumMilitaryBlds() > 4)
         return false;
-    bool hasWood = GetNumBuildings(BuildingType::Woodcutter) > 0;
-    bool hasBoards = GetNumBuildings(BuildingType::Sawmill) > 0;
-    bool hasStone = GetNumBuildings(BuildingType::Quarry) > 0;
+    bool hasWood = GetNumBuildings(BuildingType::Woodcutter) - GetNumBuildingSites(BuildingType::Woodcutter) > 0;
+    bool hasBoards = GetNumBuildings(BuildingType::Sawmill) - GetNumBuildingSites(BuildingType::Sawmill) > 0;
+    bool hasStone = GetNumBuildings(BuildingType::Quarry) - GetNumBuildings(BuildingType::Quarry) > 0;
     if(expansionRequired)
     {
-        if(hasWood && hasBoards && hasStone)
+      if(hasWood && hasBoards && hasStone)
             return false;
     } else
     {
@@ -55,11 +55,11 @@ bool BuildingPlanner::CalcIsExpansionRequired(AIPlayerJH& aijh, bool recalc) con
         blds.insert(blds.end(), buildingRegister.GetStorehouses().begin(), buildingRegister.GetStorehouses().end());
         for(const noBuilding* bld : blds)
         {
-            if(!hasWood)
+            if(!hasWood && 1 > GetNumBuildingSites(BuildingType::Woodcutter))
                 hasWood = aijh.FindPositionForBuildingAround(BuildingType::Woodcutter, bld->GetPos()).isValid();
-            if(!hasBoards)
+            if(!hasBoards && 1 > GetNumBuildingSites(BuildingType::Sawmill))
                 hasBoards = aijh.FindPositionForBuildingAround(BuildingType::Sawmill, bld->GetPos()).isValid();
-            if(!hasStone)
+            if(!hasStone && 1 > GetNumBuildingSites(BuildingType::Quarry))
                 hasStone = aijh.FindPositionForBuildingAround(BuildingType::Quarry, bld->GetPos()).isValid();
         }
         return !(hasWood && hasBoards && hasStone);
@@ -427,7 +427,7 @@ bool BuildingPlanner::WantMoreMilitaryBlds(const AIPlayerJH& aijh) const
         return false;
     if(expansionRequired)
         return true;
-    if(GetNumBuildings(BuildingType::Sawmill) > 0)
+    if(GetNumBuildings(BuildingType::Sawmill) - GetNumBuildingSites(BuildingType::Sawmill) > 0)
         return true;
     if(aijh.player.GetInventory().goods[GoodType::Boards] > 30 && GetNumBuildingSites(BuildingType::Sawmill) > 0)
         return true;

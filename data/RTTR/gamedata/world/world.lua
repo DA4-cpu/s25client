@@ -8,17 +8,28 @@
 -- temperature) "biome" reading, so a single generated map can contain meadows, savanna, desert
 -- and tundra together, chosen by local climate. greenland.lua/wasteland.lua/winterworld.lua are
 -- left completely untouched (including their original s2Id 0/1/2) so existing, already-saved
--- maps using them keep loading exactly as before; this file adds new, separate copies of their
--- terrains/edges (renamed with a "w_" prefix, e.g. "gl_meadow" -> "w_gl_meadow") under this new
--- landscape instead of modifying/reusing the originals, since terrain and edge names must be
--- globally unique and a terrain's s2Id only needs to be unique within its own landscape.
+-- maps using them keep loading exactly as before; this file adds new, separate copies of a
+-- subset of their terrains/edges (renamed with a "w_" prefix, e.g. "gl_meadow" -> "w_gl_meadow")
+-- under this new landscape instead of modifying/reusing the originals, since terrain and edge
+-- names must be globally unique and a terrain's s2Id only needs to be unique within its own
+-- landscape.
 --
--- Renumbering: this landscape's own s2Id is 3 (0/1/2 are already used by the three originals).
--- Its terrains keep their original per-source id where it came from greenland (0-34), and are
--- offset by +64 for wasteland-derived and +128 for winterworld-derived terrains, so all 70 stay
--- unique within this landscape. `humidity`/`temperature` on the buildable-land terrains have
--- been retuned as one coordinated set spanning the combined climate space, instead of three
--- independent per-landscape ones.
+-- IMPORTANT, and the reason this is a *subset*: the original Settlers II map file format only
+-- has 6 bits (values 0-63) per tile to store which terrain it uses, *within* a landscape - see
+-- MapLoader::InitNodes(), `t1 & 0x3F`. All three original landscapes stay within that limit
+-- individually (~23-24 terrains each), but naively combining all of their terrains (70 total)
+-- into one landscape does not fit, and any terrain assigned an id above 63 gets silently
+-- corrupted (masked into a lower, wrong id) the moment a generated map is saved and reloaded -
+-- which is exactly what happens when starting a round from a freshly generated map. This is why
+-- only a curated 44-terrain subset is included here: it drops terrains that were already
+-- unreachable duplicates (e.g. a second "buildable mountain" terrain that Find() never returns
+-- because an earlier one already matches) or never referenced by any predicate the generator
+-- actually uses (e.g. "reef"/"shallow" water variants, or extra lava/ice textures beyond the one
+-- used for the mountain peak) - dropping them costs no generator behaviour. All 18 terrains that
+-- the climate system actually chooses between (the "biome" pool) are kept in full.
+--
+-- `humidity`/`temperature` on those 18 buildable-land terrains have been retuned as one
+-- coordinated set spanning the combined climate space, instead of three independent ones.
 
 texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX5.LBM"
 
@@ -111,7 +122,7 @@ rttr:AddTerrain{
 	-- Name of the edge drawn over neighbouring terrain or "none"
 	edgeType = "w_gl_snow",
 	-- Id used in the original S2. Defaults to 0xFF (not in S2)
-	s2Id = 2,
+	s2Id = 0,
 	-- If this is higher than the neighbours edgePriority then it draws over the neighbour
 	-- Valid = [-128, 127], defaults to 0
 	edgePriority = 75,
@@ -148,7 +159,7 @@ rttr:AddTerrain{
 	name = "w_gl_desert1",
 	landscape = "world",
 	edgeType = "w_gl_desert",
-	s2Id = 4,
+	s2Id = 1,
 	edgePriority = 65,
 	kind = "land",
 	property = "walkable",
@@ -162,7 +173,7 @@ rttr:AddTerrain{
 	name = "w_gl_swamp",
 	landscape = "world",
 	edgeType = "w_gl_meadow",
-	s2Id = 3,
+	s2Id = 2,
 	edgePriority = 10,
 	kind = "land",
 	humidity = 100,
@@ -176,7 +187,7 @@ rttr:AddTerrain{
 	name = "w_gl_meadowFlowers",
 	landscape = "world",
 	edgeType = "w_gl_meadow",
-	s2Id = 0xF,
+	s2Id = 3,
 	edgePriority = 35,
 	kind = "land",
 	humidity = 75,
@@ -189,7 +200,7 @@ rttr:AddTerrain{
 	name = "w_gl_mountain1",
 	landscape = "world",
 	edgeType = "w_gl_mountain",
-	s2Id = 1,
+	s2Id = 4,
 	edgePriority = 55,
 	kind = "mountain",
 	texture = texFile,
@@ -200,7 +211,7 @@ rttr:AddTerrain{
 	name = "w_gl_mountain2",
 	landscape = "world",
 	edgeType = "w_gl_mountain",
-	s2Id = 0XB,
+	s2Id = 5,
 	edgePriority = 50,
 	kind = "mountain",
 	texture = texFile,
@@ -211,7 +222,7 @@ rttr:AddTerrain{
 	name = "w_gl_mountain3",
 	landscape = "world",
 	edgeType = "w_gl_mountain",
-	s2Id = 0XC,
+	s2Id = 6,
 	edgePriority = 45,
 	kind = "mountain",
 	texture = texFile,
@@ -222,7 +233,7 @@ rttr:AddTerrain{
 	name = "w_gl_mountain4",
 	landscape = "world",
 	edgeType = "w_gl_mountain",
-	s2Id = 0xD,
+	s2Id = 7,
 	edgePriority = 40,
 	kind = "mountain",
 	texture = texFile,
@@ -233,7 +244,7 @@ rttr:AddTerrain{
 	name = "w_gl_savannah",
 	landscape = "world",
 	edgeType = "w_gl_desert",
-	s2Id = 0,
+	s2Id = 8,
 	edgePriority = 15,
 	kind = "land",
 	humidity = 45,
@@ -246,7 +257,7 @@ rttr:AddTerrain{
 	name = "w_gl_meadow1",
 	landscape = "world",
 	edgeType = "w_gl_meadow",
-	s2Id = 8,
+	s2Id = 9,
 	edgePriority = 30,
 	kind = "land",
 	humidity = 90,
@@ -259,7 +270,7 @@ rttr:AddTerrain{
 	name = "w_gl_meadow2",
 	landscape = "world",
 	edgeType = "w_gl_meadow",
-	s2Id = 9,
+	s2Id = 10,
 	edgePriority = 25,
 	kind = "land",
 	humidity = 65,
@@ -272,7 +283,7 @@ rttr:AddTerrain{
 	name = "w_gl_meadow3",
 	landscape = "world",
 	edgeType = "w_gl_meadow",
-	s2Id = 0xA,
+	s2Id = 11,
 	edgePriority = 20,
 	kind = "land",
 	humidity = 55,
@@ -285,7 +296,7 @@ rttr:AddTerrain{
 	name = "w_gl_steppe",
 	landscape = "world",
 	edgeType = "w_gl_desert",
-	s2Id = 0xE,
+	s2Id = 12,
 	edgePriority = 60,
 	kind = "land",
 	humidity = 25,
@@ -298,7 +309,7 @@ rttr:AddTerrain{
 	name = "w_gl_mountainMeadow",
 	landscape = "world",
 	edgeType = "w_gl_mountain",
-	s2Id = 0x12,
+	s2Id = 13,
 	edgePriority = 70,
 	kind = "mountain",
 	humidity = 100,
@@ -311,7 +322,7 @@ rttr:AddTerrain{
 	name = "w_gl_water",
 	landscape = "world",
 	edgeType = "w_gl_water",
-	s2Id = 5,
+	s2Id = 14,
 	edgePriority = 5,
 	kind = "water",
 	texture = texFile,
@@ -321,98 +332,10 @@ rttr:AddTerrain{
 	color = 0xFF1038a4
 }
 rttr:AddTerrain{
-	name = "w_gl_lava",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 0x10,
-	kind = "lava",
-	texture = texFile,
-	pos = {193, 105, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
-	name = "w_gl_reefWater",
-	landscape = "world",
-	edgeType = "w_gl_water",
-	s2Id = 19,
-	edgePriority = 80,
-	kind = "water",
-	property = "unwalkable",
-	texture = texFile,
-	pos = {193, 49, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 10,
-	color = 0xFF1038a4
-}
-rttr:AddTerrain{
-	name = "w_gl_shallowWater",
-	landscape = "world",
-	edgeType = "w_gl_water",
-	s2Id = 6,
-	edgePriority = 80,
-	kind = "water",
-	property = "buildable",
-	texture = texFile,
-	pos = {193, 49, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 10,
-	color = 0xFF1038a4
-}
-rttr:AddTerrain{
-	name = "w_gl_flatMountain",
-	landscape = "world",
-	edgeType = "w_gl_mountain",
-	s2Id = 0x22,
-	edgePriority = 50,
-	kind = "mountain",
-	property = "buildable",
-	texture = texFile,
-	pos = {48, 48, 32, 31},
-	color = 0xFF9c8058
-}
-rttr:AddTerrain{
-	name = "w_gl_lava2",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 0x14,
-	kind = "lava",
-	texture = texFile,
-	pos = {66, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
-	name = "w_gl_lava3",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 0x15,
-	kind = "lava",
-	texture = texFile,
-	pos = {99, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
-	name = "w_gl_lava4",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 0x16,
-	kind = "lava",
-	texture = texFile,
-	pos = {132, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
 	name = "w_gl_desert2",
 	landscape = "world",
 	edgeType = "w_gl_desert",
-	s2Id = 7,
+	s2Id = 15,
 	edgePriority = 65,
 	kind = "land",
 	property = "walkable",
@@ -423,7 +346,7 @@ rttr:AddTerrain{
 	color = 0xFFc09c7c
 }
 
--- ===== Wasteland-derived terrains (hot/arid biomes). s2Id offset by +64. =====
+-- ===== Wasteland-derived terrains (hot/arid biomes) =====
 
 texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX6.LBM"
 
@@ -458,46 +381,10 @@ rttr:AddTerrainEdge{
 }
 
 rttr:AddTerrain{
-	-- Name used to reference this
-	name = "w_wl_lavaFewStone",
-	-- Landscape to which this applies by default
-	landscape = "world",
-	-- Name of the edge drawn over neighbouring terrain or "none"
-	edgeType = "none",
-	-- Id used in the original S2. Defaults to 0xFF (not in S2)
-	s2Id = 66,
-	-- If this is higher than the neighbours edgePriority then it draws over the neighbour
-	-- Valid = [-128, 127], defaults to 0
-	edgePriority = 20,
-	-- What kind of terrain is this? (Used for animals, ships, etc)
-	-- Valid = land (default), water, lava, snow, mountain
-	kind = "lava",
-	-- Property for this terrain. 
-	-- Valid = buildable   (allows buildings, includes walkable), default for land
-	--	      mineable    (allows mines, includes walkable), default for mountain
-	--	      walkable    (allows flags, people, animals)
-	--        shippable   (allows ships only), default for water
-	--        unwalkable  (can't walk on, but near)
-	--        unreachable (dangerous, can't go near), default for snow, lava
-	property = "unreachable",
-	-- Humidity in percent (0..100) which determinate how much water can be on this terrain
-	-- Defaults to 0 for lava, snow, mountain, 100 otherwise
-	humidity = 0,
-	-- Filename of the texture image
-	texture = texFile,
-	-- Position and size {x, y, w, h} in the image if it contains multiple textures
-	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
-	pos = {0, 0, 30, 30},
-	-- Index of the palette animation in the file, default -1 for no animation
-	palAnimIdx = 7,
-	-- Color used to display this on the minimap
-	color = 0xFF860000
-}
-rttr:AddTerrain{
 	name = "w_wl_wasteland1",
 	landscape = "world",
 	edgeType = "w_wl_wasteland",
-	s2Id = 68,
+	s2Id = 16,
 	edgePriority = 50,
 	kind = "land",
 	property = "walkable",
@@ -508,22 +395,10 @@ rttr:AddTerrain{
 	color = 0xFF9c7c64
 }
 rttr:AddTerrain{
-	name = "w_wl_lavaManyStone",
-	landscape = "world",
-	edgeType = "w_wl_stone",
-	s2Id = 67,
-	edgePriority = 80,
-	kind = "lava",
-	property = "unwalkable",
-	texture = texFile,
-	pos = {96, 0, 37, 31},
-	color = 0xFF001820
-}
-rttr:AddTerrain{
 	name = "w_wl_flowerPasture",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 79,
+	s2Id = 17,
 	edgePriority = 40,
 	kind = "land",
 	humidity = 70,
@@ -536,7 +411,7 @@ rttr:AddTerrain{
 	name = "w_wl_mountain1",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 65,
+	s2Id = 18,
 	edgePriority = 30,
 	kind = "mountain",
 	texture = texFile,
@@ -547,7 +422,7 @@ rttr:AddTerrain{
 	name = "w_wl_mountain2",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 75,
+	s2Id = 19,
 	edgePriority = 30,
 	kind = "mountain",
 	texture = texFile,
@@ -558,7 +433,7 @@ rttr:AddTerrain{
 	name = "w_wl_mountain3",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 76,
+	s2Id = 20,
 	edgePriority = 30,
 	kind = "mountain",
 	texture = texFile,
@@ -569,7 +444,7 @@ rttr:AddTerrain{
 	name = "w_wl_mountain4",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 77,
+	s2Id = 21,
 	edgePriority = 30,
 	kind = "mountain",
 	texture = texFile,
@@ -580,7 +455,7 @@ rttr:AddTerrain{
 	name = "w_wl_dSteppe",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 64,
+	s2Id = 22,
 	edgePriority = 40,
 	kind = "land",
 	humidity = 20,
@@ -593,7 +468,7 @@ rttr:AddTerrain{
 	name = "w_wl_pasture1",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 72,
+	s2Id = 23,
 	edgePriority = 40,
 	kind = "land",
 	humidity = 80,
@@ -606,7 +481,7 @@ rttr:AddTerrain{
 	name = "w_wl_pasture2",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 73,
+	s2Id = 24,
 	edgePriority = 40,
 	kind = "land",
 	humidity = 50,
@@ -619,7 +494,7 @@ rttr:AddTerrain{
 	name = "w_wl_pasture3",
 	landscape = "world",
 	edgeType = "w_wl_mountain",
-	s2Id = 74,
+	s2Id = 25,
 	edgePriority = 40,
 	kind = "land",
 	humidity = 35,
@@ -632,7 +507,7 @@ rttr:AddTerrain{
 	name = "w_wl_lSteppe",
 	landscape = "world",
 	edgeType = "w_wl_wasteland",
-	s2Id = 78,
+	s2Id = 26,
 	edgePriority = 60,
 	kind = "land",
 	humidity = 5,
@@ -645,7 +520,7 @@ rttr:AddTerrain{
 	name = "w_wl_alpPasture",
 	landscape = "world",
 	edgeType = "w_wl_stone",
-	s2Id = 82,
+	s2Id = 27,
 	edgePriority = 90,
 	kind = "mountain",
 	property = "buildable",
@@ -657,7 +532,7 @@ rttr:AddTerrain{
 	name = "w_wl_moor",
 	landscape = "world",
 	edgeType = "w_wl_moor",
-	s2Id = 69,
+	s2Id = 28,
 	edgePriority = 70,
 	kind = "water",
 	texture = texFile,
@@ -665,104 +540,12 @@ rttr:AddTerrain{
 	texType = "rotated",
 	palAnimIdx = 10,
 	color = 0xFF454520
-}
-rttr:AddTerrain{
-	name = "w_wl_lava",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 80,
-	edgePriority = 10,
-	kind = "lava",
-	texture = texFile,
-	pos = {193, 105, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 7,
-	color = 0xFFC32020
-}
-rttr:AddTerrain{
-	name = "w_wl_reefMoor",
-	landscape = "world",
-	edgeType = "w_wl_moor",
-	s2Id = 83,
-	edgePriority = 70,
-	kind = "water",
-	property = "unwalkable",
-	texture = texFile,
-	pos = {193, 49, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 10,
-	color = 0xFF454520
-}
-rttr:AddTerrain{
-	name = "w_wl_shallowMoor",
-	landscape = "world",
-	edgeType = "w_wl_moor",
-	s2Id = 70,
-	edgePriority = 70,
-	kind = "water",
-	property = "buildable",
-	texture = texFile,
-	pos = {193, 49, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 10,
-	color = 0xFF454520
-}
-rttr:AddTerrain{
-	name = "w_wl_flatMountain",
-	landscape = "world",
-	edgeType = "w_wl_mountain",
-	s2Id = 98,
-	edgePriority = 30,
-	kind = "mountain",
-	property = "buildable",
-	texture = texFile,
-	pos = {48, 48, 32, 31},
-	color = 0xFF706454
-}
-rttr:AddTerrain{
-	name = "w_wl_lava2",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 84,
-	edgePriority = 10,
-	kind = "lava",
-	texture = texFile,
-	pos = {66, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 7,
-	color = 0xFFC32020
-}
-rttr:AddTerrain{
-	name = "w_wl_lava3",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 85,
-	edgePriority = 10,
-	kind = "lava",
-	texture = texFile,
-	pos = {99, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 7,
-	color = 0xFFC32020
-}
-rttr:AddTerrain{
-	name = "w_wl_lava4",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 86,
-	edgePriority = 10,
-	kind = "lava",
-	texture = texFile,
-	pos = {132, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 7,
-	color = 0xFFC32020
 }
 rttr:AddTerrain{
 	name = "w_wl_wasteland2",
 	landscape = "world",
 	edgeType = "w_wl_wasteland",
-	s2Id = 71,
+	s2Id = 29,
 	edgePriority = 50,
 	kind = "land",
 	property = "walkable",
@@ -772,21 +555,8 @@ rttr:AddTerrain{
 	pos = {48, 0, 32, 31},
 	color = 0xFF9c7c64
 }
-rttr:AddTerrain{
-	name = "w_wl_lava1",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 81,
-	edgePriority = 10,
-	kind = "lava",
-	texture = texFile,
-	pos = {193, 105, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 7,
-	color = 0xFFC32020
-}
 
--- ===== Winterworld-derived terrains (cold/arctic biomes). s2Id offset by +128. =====
+-- ===== Winterworld-derived terrains (cold/arctic biomes) =====
 
 texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX7.LBM"
 
@@ -827,46 +597,10 @@ rttr:AddTerrainEdge{
 }
 
 rttr:AddTerrain{
-	-- Name used to reference this
-	name = "w_ww_iceFloe",
-	-- Landscape to which this applies by default
-	landscape = "world",
-	-- Name of the edge drawn over neighbouring terrain or "none"
-	edgeType = "w_ww_water",
-	-- Id used in the original S2. Defaults to 0xFF (not in S2)
-	s2Id = 130,
-	-- If this is higher than the neighbours edgePriority then it draws over the neighbour
-	-- Valid = [-128, 127], defaults to 0
-	edgePriority = 73,
-	-- What kind of terrain is this? (Used for animals, ships, etc)
-	-- Valid = land (default), water, lava, snow, mountain
-	kind = "land",
-	-- Property for this terrain. 
-	-- Valid = buildable   (allows buildings, includes walkable), default for land
-	--	      mineable    (allows mines, includes walkable), default for mountain
-	--	      walkable    (allows flags, people, animals)
-	--        shippable   (allows ships only), default for water
-	--        unwalkable  (can't walk on, but near)
-	--        unreachable (dangerous, can't go near), default for snow, lava
-	property = "unreachable",
-	-- Humidity in percent (0..100) which determinate how much water can be on this terrain
-	-- Defaults to 0 for lava, snow, mountain, 100 otherwise
-	humidity = 0,
-	-- Filename of the texture image
-	texture = texFile,
-	-- Position and size {x, y, w, h} in the image if it contains multiple textures
-	-- Can be left out. A size of 0 (w and/or h) is interpreted as the remaining image
-	pos = {0, 0, 30, 30},
-	-- Index of the palette animation in the file, default -1 for no animation
-	palAnimIdx = -1,
-	-- Color used to display this on the minimap
-	color = 0xFF00286C
-}
-rttr:AddTerrain{
 	name = "w_ww_ice1",
 	landscape = "world",
 	edgeType = "w_ww_ice",
-	s2Id = 132,
+	s2Id = 30,
 	edgePriority = 43,
 	kind = "land",
 	property = "walkable",
@@ -877,22 +611,10 @@ rttr:AddTerrain{
 	color = 0xFF0070b0
 }
 rttr:AddTerrain{
-	name = "w_ww_iceFloes",
-	landscape = "world",
-	edgeType = "w_ww_water",
-	s2Id = 131,
-	edgePriority = 83,
-	kind = "water",
-	property = "unwalkable",
-	texture = texFile,
-	pos = {96, 0, 32, 31},
-	color = 0xFF00286c
-}
-rttr:AddTerrain{
 	name = "w_ww_tundraFlower",
 	landscape = "world",
 	edgeType = "w_ww_tundra",
-	s2Id = 143,
+	s2Id = 31,
 	edgePriority = 13,
 	kind = "land",
 	humidity = 85,
@@ -905,7 +627,7 @@ rttr:AddTerrain{
 	name = "w_ww_mountain1",
 	landscape = "world",
 	edgeType = "w_ww_mountain",
-	s2Id = 129,
+	s2Id = 32,
 	edgePriority = 48,
 	kind = "mountain",
 	texture = texFile,
@@ -916,7 +638,7 @@ rttr:AddTerrain{
 	name = "w_ww_mountain2",
 	landscape = "world",
 	edgeType = "w_ww_mountain",
-	s2Id = 139,
+	s2Id = 33,
 	edgePriority = 63,
 	kind = "mountain",
 	texture = texFile,
@@ -927,7 +649,7 @@ rttr:AddTerrain{
 	name = "w_ww_mountain3",
 	landscape = "world",
 	edgeType = "w_ww_mountain",
-	s2Id = 140,
+	s2Id = 34,
 	edgePriority = 58,
 	kind = "mountain",
 	texture = texFile,
@@ -938,7 +660,7 @@ rttr:AddTerrain{
 	name = "w_ww_mountain4",
 	landscape = "world",
 	edgeType = "w_ww_mountain",
-	s2Id = 141,
+	s2Id = 35,
 	edgePriority = 53,
 	kind = "mountain",
 	texture = texFile,
@@ -949,7 +671,7 @@ rttr:AddTerrain{
 	name = "w_ww_taiga",
 	landscape = "world",
 	edgeType = "w_ww_tundra",
-	s2Id = 128,
+	s2Id = 36,
 	edgePriority = 18,
 	kind = "land",
 	humidity = 60,
@@ -962,7 +684,7 @@ rttr:AddTerrain{
 	name = "w_ww_tundra1",
 	landscape = "world",
 	edgeType = "w_ww_tundra",
-	s2Id = 136,
+	s2Id = 37,
 	edgePriority = 23,
 	kind = "land",
 	humidity = 95,
@@ -975,7 +697,7 @@ rttr:AddTerrain{
 	name = "w_ww_tundra2",
 	landscape = "world",
 	edgeType = "w_ww_tundra",
-	s2Id = 137,
+	s2Id = 38,
 	edgePriority = 28,
 	kind = "land",
 	humidity = 55,
@@ -988,7 +710,7 @@ rttr:AddTerrain{
 	name = "w_ww_tundra3",
 	landscape = "world",
 	edgeType = "w_ww_tundra",
-	s2Id = 138,
+	s2Id = 39,
 	edgePriority = 33,
 	kind = "land",
 	humidity = 75,
@@ -1001,7 +723,7 @@ rttr:AddTerrain{
 	name = "w_ww_tundra4",
 	landscape = "world",
 	edgeType = "w_ww_tundra",
-	s2Id = 142,
+	s2Id = 40,
 	edgePriority = 8,
 	kind = "land",
 	humidity = 15,
@@ -1011,64 +733,12 @@ rttr:AddTerrain{
 	color = 0xFF88b15e
 }
 rttr:AddTerrain{
-	name = "w_ww_snow",
-	landscape = "world",
-	edgeType = "w_ww_snow",
-	s2Id = 146,
-	edgePriority = 68,
-	kind = "snow",
-	property = "buildable",
-	texture = texFile,
-	pos = {48, 144, 32, 31},
-	color = 0xFF94a0c0
-}
-rttr:AddTerrain{
 	name = "w_ww_water",
 	landscape = "world",
 	edgeType = "w_ww_water",
-	s2Id = 133,
+	s2Id = 41,
 	edgePriority = 78,
 	kind = "water",
-	texture = texFile,
-	pos = {193, 49, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 10,
-	color = 0xFF1038a4
-}
-rttr:AddTerrain{
-	name = "w_ww_lava",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 144,
-	kind = "lava",
-	texture = texFile,
-	pos = {193, 105, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
-	name = "w_ww_reefWater",
-	landscape = "world",
-	edgeType = "w_ww_water",
-	s2Id = 147,
-	edgePriority = 78,
-	kind = "water",
-	property = "unwalkable",
-	texture = texFile,
-	pos = {193, 49, 53, 54},
-	texType = "rotated",
-	palAnimIdx = 10,
-	color = 0xFF1038a4
-}
-rttr:AddTerrain{
-	name = "w_ww_shallowWater",
-	landscape = "world",
-	edgeType = "w_ww_water",
-	s2Id = 134,
-	edgePriority = 78,
-	kind = "water",
-	property = "buildable",
 	texture = texFile,
 	pos = {193, 49, 53, 54},
 	texType = "rotated",
@@ -1079,7 +749,7 @@ rttr:AddTerrain{
 	name = "w_ww_flatMountain",
 	landscape = "world",
 	edgeType = "w_ww_mountain",
-	s2Id = 162,
+	s2Id = 42,
 	edgePriority = 38,
 	kind = "mountain",
 	property = "buildable",
@@ -1088,46 +758,10 @@ rttr:AddTerrain{
 	color = 0xFF60607c
 }
 rttr:AddTerrain{
-	name = "w_ww_lava2",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 148,
-	kind = "lava",
-	texture = texFile,
-	pos = {66, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
-	name = "w_ww_lava3",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 149,
-	kind = "lava",
-	texture = texFile,
-	pos = {99, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
-	name = "w_ww_lava4",
-	landscape = "world",
-	edgeType = "none",
-	s2Id = 150,
-	kind = "lava",
-	texture = texFile,
-	pos = {132, 222, 31, 33},
-	texType = "stacked",
-	palAnimIdx = 11,
-	color = 0xFFc02020
-}
-rttr:AddTerrain{
 	name = "w_ww_ice2",
 	landscape = "world",
 	edgeType = "w_ww_ice",
-	s2Id = 135,
+	s2Id = 43,
 	edgePriority = 43,
 	kind = "land",
 	property = "walkable",

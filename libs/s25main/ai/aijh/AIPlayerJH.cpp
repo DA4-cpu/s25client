@@ -951,8 +951,8 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
                    && WarehouseOrHarborNearby(around, 16u))
                     foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
             }
-            if(!foundPos.isValid())
-                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            //if(!foundPos.isValid())
+                //foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
             break;
         }
         case BuildingType::Sawmill:
