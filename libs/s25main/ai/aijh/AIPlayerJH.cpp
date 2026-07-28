@@ -1037,6 +1037,12 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             if(foundPos.isValid() && aii.isBuildingNearby(BuildingType::Catapult, foundPos, 7))
                 foundPos = MapPoint::Invalid();
             break;
+        case BuildingType::Charburner:
+            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            if(!(BQsurroundcheck(foundPos, 4, true, 40) > 40))
+                
+                foundPos = MapPoint::Invalid();
+            break;
         default: foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius); break;
     }
     return foundPos;
@@ -1210,9 +1216,6 @@ void AIPlayerJH::HandleBuildingFinished(const MapPoint pt, BuildingType bld)
                 aii.StartStopExpedition(pt, true);
             }
             PlaceBuildingNextToPoint(pt, BuildingType::Sawmill, BuildingType::Sawmill);
-            PlaceBuildingNextToPoint(pt, BuildingType::Forester, BuildingType::Forester);
-            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
-            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
             break;
 
         case BuildingType::Shipyard: aii.SetShipYardMode(pt, true); break;
@@ -1233,9 +1236,6 @@ void AIPlayerJH::HandleBuildingFinished(const MapPoint pt, BuildingType bld)
         {
             UpdateNodesAround(pt, 15);
             PlaceBuildingNextToPoint(pt, BuildingType::Sawmill, BuildingType::Sawmill);
-            PlaceBuildingNextToPoint(pt, BuildingType::Forester, BuildingType::Forester);
-            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
-            PlaceBuildingNextToPoint(pt, BuildingType::Woodcutter, BuildingType::Woodcutter);
             break;
         }
         case BuildingType::Forester: AddBuildJob(BuildingType::Woodcutter, pt); break;
@@ -1528,7 +1528,6 @@ void AIPlayerJH::CheckExpeditions()
                                                              // OR not collecting and should -> toggle expedition
         {
             // Eine NEUE Expedition nur starten, wenn dafür noch ein Bauarbeiter (bzw. Hammer + freier Träger) übrig
-            // ist - sonst bliebe das Schiff nur untätig am Hafen liegen und Bretter/Steine wären unnötig gebunden.
             // Das Stoppen einer nicht mehr benötigten Expedition ist davon nicht betroffen und bleibt immer erlaubt.
             if(isHarborRelevant && !construction->HasEnoughBuildersAvailable())
                 continue;

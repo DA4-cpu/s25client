@@ -136,7 +136,7 @@ void Texturizer::ApplyCoastTexturing(const std::vector<MapPoint>& coast, unsigne
     auto sand = textureMap_.Find(IsCoastTerrain);
     auto sandGrass = textureMap_.FindAll(IsBuildableCoast);
     textureMap_.Sort(sandGrass, ByHumidity);
-    std::array<DescIdx<TerrainDesc>, 3> transitionTextures{sand, sandGrass[0], sandGrass[1]};
+    std::array<DescIdx<TerrainDesc>, 1> transitionTextures{sand};
 
     // exclude mountain & water textures from being replaced by water-land transition
     std::set<DescIdx<TerrainDesc>> excludedTextures;

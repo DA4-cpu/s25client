@@ -81,10 +81,10 @@ void BuildJob::TryToBuild()
     // versucht, sobald wieder Kapazität frei ist.
     if(!aiConstruction.HasEnoughBuildersAvailable())
     {
-#ifdef DEBUG_AI
+/* #ifdef DEBUG_AI
         std::cout << "Player " << (unsigned)aijh.GetPlayerId() << ", Job postponed: not enough builders/hammers for "
                   << BUILDING_NAMES[type] << std::endl;
-#endif
+#endif*/
         return;
     }
 
