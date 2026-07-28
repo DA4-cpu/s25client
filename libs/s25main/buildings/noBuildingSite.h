@@ -48,6 +48,8 @@ public:
     unsigned char getUsedStones() const { return used_stones; }
     unsigned char getBoards() const { return boards; }
     unsigned char getStones() const { return stones; }
+    /// Ist bereits ein Bauarbeiter (oder Planierer) dieser Baustelle zugewiesen, oder wartet sie noch auf einen?
+    bool HasBuilder() const { return builder != nullptr; }
 
     noBuildingSite(BuildingType type, MapPoint pos, unsigned char player);
     /// Konstruktor für Hafenbaustellen vom Schiff aus

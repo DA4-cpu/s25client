@@ -236,7 +236,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         // iron smelters limited by iron mines or crucibles
         buildingsWanted[BuildingType::Ironsmelter] =
           std::min(inventory.goods[GoodType::Crucible] + inventory.people[Job::IronFounder],
-          (2 * GetNumBuildings(BuildingType::IronMine)) / 3 + 2 / 3);
+          GetNumBuildings(BuildingType::IronMine) - GetNumBuildingSites(BuildingType::IronMine) - 1);
 
         if(2 > GetNumBuildings(BuildingType::Ironsmelter))
             buildingsWanted[BuildingType::Ironsmelter] = 2;
@@ -245,7 +245,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
 
         buildingsWanted[BuildingType::Mint] =
-          (2*GetNumBuildings(BuildingType::GoldMine)) / 3 + 1/2;
+          GetNumBuildings(BuildingType::GoldMine) - GetNumBuildingSites(BuildingType::GoldMine) - 1;
         if(1 > GetNumBuildings(BuildingType::Mint))
             buildingsWanted[BuildingType::Mint] = 1;
 

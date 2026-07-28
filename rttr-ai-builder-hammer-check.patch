@@ -1,0 +1,128 @@
+diff --git a/libs/s25main/buildings/noBuildingSite.h b/libs/s25main/buildings/noBuildingSite.h
+index 2b98cd6..409bafc 100644
+--- a/libs/s25main/buildings/noBuildingSite.h
++++ b/libs/s25main/buildings/noBuildingSite.h
+@@ -48,6 +48,8 @@ public:
+     unsigned char getUsedStones() const { return used_stones; }
+     unsigned char getBoards() const { return boards; }
+     unsigned char getStones() const { return stones; }
++    /// Ist bereits ein Bauarbeiter (oder Planierer) dieser Baustelle zugewiesen, oder wartet sie noch auf einen?
++    bool HasBuilder() const { return builder != nullptr; }
+ 
+     noBuildingSite(BuildingType type, MapPoint pos, unsigned char player);
+     /// Konstruktor für Hafenbaustellen vom Schiff aus
+diff --git a/libs/s25main/buildings/nobHarborBuilding.h b/libs/s25main/buildings/nobHarborBuilding.h
+index 7bb37bc..d7a7a84 100644
+--- a/libs/s25main/buildings/nobHarborBuilding.h
++++ b/libs/s25main/buildings/nobHarborBuilding.h
+@@ -135,6 +135,8 @@ public:
+ 
+     /// Ist Expedition in Vorbereitung?
+     bool IsExpeditionActive() const { return expedition.active; }
++    /// Hat eine aktive Expedition bereits ihren Bauarbeiter (für die Kolonie-Gründung) bekommen?
++    bool HasExpeditionBuilder() const { return expedition.builder; }
+     /// Ist Erkundungs-Expedition in Vorbereitung?
+     bool IsExplorationExpeditionActive() const { return exploration_expedition.active; }
+     /// Schiff ist angekommen
+diff --git a/libs/s25main/ai/aijh/AIConstruction.h b/libs/s25main/ai/aijh/AIConstruction.h
+index 74743e9..782f422 100644
+--- a/libs/s25main/ai/aijh/AIConstruction.h
++++ b/libs/s25main/ai/aijh/AIConstruction.h
+@@ -65,6 +65,11 @@ public:
+     helpers::OptionalEnum<BuildingType> ChooseMilitaryBuilding(MapPoint pt);
+     /// Checks whether a building type is wanted atm
+     bool Wanted(BuildingType type) const;
++    /// Checks whether there are enough builders available (idle Bauarbeiter, or Hammer + free Helper that could be
++    /// trained into one) to justify starting one more building site or expedition. Takes already pending building
++    /// sites/expeditions (which are still waiting for their own builder) into account, so the AI does not queue up
++    /// more construction than it can realistically staff.
++    bool HasEnoughBuildersAvailable() const;
+     /// Tries to build a second road to a flag, which is in any way better than the first one
+     bool BuildAlternativeRoad(const noFlag* flag, std::vector<Direction>& route);
+ 
+diff --git a/libs/s25main/ai/aijh/AIConstruction.cpp b/libs/s25main/ai/aijh/AIConstruction.cpp
+index f3e065d..8237d2c 100644
+--- a/libs/s25main/ai/aijh/AIConstruction.cpp
++++ b/libs/s25main/ai/aijh/AIConstruction.cpp
+@@ -14,6 +14,7 @@
+ #include "buildings/noBuildingSite.h"
+ #include "buildings/nobBaseMilitary.h"
+ #include "buildings/nobBaseWarehouse.h"
++#include "buildings/nobHarborBuilding.h"
+ #include "buildings/nobMilitary.h"
+ #include "buildings/nobUsual.h"
+ #include "helpers/containerUtils.h"
+@@ -563,6 +564,34 @@ bool AIConstruction::Wanted(BuildingType type) const
+     return constructionorders[type] < bldPlanner.GetNumAdditionalBuildingsWanted(type);
+ }
+ 
++bool AIConstruction::HasEnoughBuildersAvailable() const
++{
++    // Bauarbeiter, die schon ausgebildet und einsatzbereit in einem Lagerhaus/HQ liegen
++    const unsigned availableBuilders = aijh.AmountInStorage(Job::Builder);
++    // Hämmer, mit denen bei Bedarf noch ein freier Träger zum Bauarbeiter ausgebildet werden könnte
++    const unsigned availableHammers = aijh.AmountInStorage(GoodType::Hammer);
++    // Dafür wird zusätzlich ein freier Träger benötigt - ohne den nützt der Hammer nichts
++    const unsigned availableHelpers = aijh.AmountInStorage(Job::Helper);
++    const unsigned potentialBuilders = availableBuilders + std::min(availableHammers, availableHelpers);
++
++    // Baustellen, die noch auf ihren Bauarbeiter warten (schon zugewiesene zählen nicht mehr mit)
++    unsigned pendingDemand = 0;
++    for(const noBuildingSite* site : aii.GetBuildingSites())
++    {
++        if(!site->HasBuilder())
++            ++pendingDemand;
++    }
++    // Laufende Expeditionen, die noch auf ihren Bauarbeiter für die Kolonie-Gründung warten
++    for(const nobHarborBuilding* harbor : aii.GetHarbors())
++    {
++        if(harbor->IsExpeditionActive() && !harbor->HasExpeditionBuilder())
++            ++pendingDemand;
++    }
++
++    // Nur "ja" sagen, wenn nach Abzug des bereits wartenden Bedarfs noch mindestens 1 Bauarbeiter übrig bliebe
++    return potentialBuilders > pendingDemand;
++}
++
+ bool AIConstruction::BuildAlternativeRoad(const noFlag* flag, std::vector<Direction>& route)
+ {
+     // LOG.write(("ai build alt road player %i at %i %i\n", flag->GetPlayer(), flag->GetPos());
+diff --git a/libs/s25main/ai/aijh/Jobs.cpp b/libs/s25main/ai/aijh/Jobs.cpp
+index 4cc12a8..8002114 100644
+--- a/libs/s25main/ai/aijh/Jobs.cpp
++++ b/libs/s25main/ai/aijh/Jobs.cpp
+@@ -76,6 +76,18 @@ void BuildJob::TryToBuild()
+         return;
+     }
+ 
++    // Keine neue Baustelle eröffnen, wenn absehbar kein Bauarbeiter (bzw. Hammer + freier Träger) mehr dafür übrig
++    // ist. Der Job bleibt dabei im Status "Start" (kein Finished/Failed) und wird beim nächsten Durchlauf erneut
++    // versucht, sobald wieder Kapazität frei ist.
++    if(!aiConstruction.HasEnoughBuildersAvailable())
++    {
++#ifdef DEBUG_AI
++        std::cout << "Player " << (unsigned)aijh.GetPlayerId() << ", Job postponed: not enough builders/hammers for "
++                  << BUILDING_NAMES[type] << std::endl;
++#endif
++        return;
++    }
++
+     if(searchMode == SearchMode::Global)
+     {
+         // TODO: tmp solution for testing: only woodcutter
+diff --git a/libs/s25main/ai/aijh/AIPlayerJH.cpp b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+index bdd37ad..8e7b5d7 100644
+--- a/libs/s25main/ai/aijh/AIPlayerJH.cpp
++++ b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+@@ -1527,6 +1527,11 @@ void AIPlayerJH::CheckExpeditions()
+         if(harbor->IsExpeditionActive() != isHarborRelevant) // harbor is collecting for expedition and shouldn't
+                                                              // OR not collecting and should -> toggle expedition
+         {
++            // Eine NEUE Expedition nur starten, wenn dafür noch ein Bauarbeiter (bzw. Hammer + freier Träger) übrig
++            // ist - sonst bliebe das Schiff nur untätig am Hafen liegen und Bretter/Steine wären unnötig gebunden.
++            // Das Stoppen einer nicht mehr benötigten Expedition ist davon nicht betroffen und bleibt immer erlaubt.
++            if(isHarborRelevant && !construction->HasEnoughBuildersAvailable())
++                continue;
+             aii.StartStopExpedition(harbor->GetPos(), isHarborRelevant);
+         }
+     }

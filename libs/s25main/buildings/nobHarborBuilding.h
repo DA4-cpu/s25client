@@ -135,6 +135,8 @@ public:
 
     /// Ist Expedition in Vorbereitung?
     bool IsExpeditionActive() const { return expedition.active; }
+    /// Hat eine aktive Expedition bereits ihren Bauarbeiter (für die Kolonie-Gründung) bekommen?
+    bool HasExpeditionBuilder() const { return expedition.builder; }
     /// Ist Erkundungs-Expedition in Vorbereitung?
     bool IsExplorationExpeditionActive() const { return exploration_expedition.active; }
     /// Schiff ist angekommen

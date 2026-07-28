@@ -1527,6 +1527,11 @@ void AIPlayerJH::CheckExpeditions()
         if(harbor->IsExpeditionActive() != isHarborRelevant) // harbor is collecting for expedition and shouldn't
                                                              // OR not collecting and should -> toggle expedition
         {
+            // Eine NEUE Expedition nur starten, wenn dafür noch ein Bauarbeiter (bzw. Hammer + freier Träger) übrig
+            // ist - sonst bliebe das Schiff nur untätig am Hafen liegen und Bretter/Steine wären unnötig gebunden.
+            // Das Stoppen einer nicht mehr benötigten Expedition ist davon nicht betroffen und bleibt immer erlaubt.
+            if(isHarborRelevant && !construction->HasEnoughBuildersAvailable())
+                continue;
             aii.StartStopExpedition(harbor->GetPos(), isHarborRelevant);
         }
     }

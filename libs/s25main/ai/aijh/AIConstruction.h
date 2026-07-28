@@ -65,6 +65,11 @@ public:
     helpers::OptionalEnum<BuildingType> ChooseMilitaryBuilding(MapPoint pt);
     /// Checks whether a building type is wanted atm
     bool Wanted(BuildingType type) const;
+    /// Checks whether there are enough builders available (idle Bauarbeiter, or Hammer + free Helper that could be
+    /// trained into one) to justify starting one more building site or expedition. Takes already pending building
+    /// sites/expeditions (which are still waiting for their own builder) into account, so the AI does not queue up
+    /// more construction than it can realistically staff.
+    bool HasEnoughBuildersAvailable() const;
     /// Tries to build a second road to a flag, which is in any way better than the first one
     bool BuildAlternativeRoad(const noFlag* flag, std::vector<Direction>& route);
 

@@ -76,6 +76,18 @@ void BuildJob::TryToBuild()
         return;
     }
 
+    // Keine neue Baustelle eröffnen, wenn absehbar kein Bauarbeiter (bzw. Hammer + freier Träger) mehr dafür übrig
+    // ist. Der Job bleibt dabei im Status "Start" (kein Finished/Failed) und wird beim nächsten Durchlauf erneut
+    // versucht, sobald wieder Kapazität frei ist.
+    if(!aiConstruction.HasEnoughBuildersAvailable())
+    {
+#ifdef DEBUG_AI
+        std::cout << "Player " << (unsigned)aijh.GetPlayerId() << ", Job postponed: not enough builders/hammers for "
+                  << BUILDING_NAMES[type] << std::endl;
+#endif
+        return;
+    }
+
     if(searchMode == SearchMode::Global)
     {
         // TODO: tmp solution for testing: only woodcutter

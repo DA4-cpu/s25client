@@ -14,6 +14,7 @@
 #include "buildings/noBuildingSite.h"
 #include "buildings/nobBaseMilitary.h"
 #include "buildings/nobBaseWarehouse.h"
+#include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
 #include "helpers/containerUtils.h"
@@ -561,6 +562,34 @@ bool AIConstruction::Wanted(BuildingType type) const
     if(BuildingProperties::IsMilitary(type) || type == BuildingType::Storehouse)
         return bldPlanner.WantMoreMilitaryBlds(aijh);
     return constructionorders[type] < bldPlanner.GetNumAdditionalBuildingsWanted(type);
+}
+
+bool AIConstruction::HasEnoughBuildersAvailable() const
+{
+    // Bauarbeiter, die schon ausgebildet und einsatzbereit in einem Lagerhaus/HQ liegen
+    const unsigned availableBuilders = aijh.AmountInStorage(Job::Builder);
+    // Hämmer, mit denen bei Bedarf noch ein freier Träger zum Bauarbeiter ausgebildet werden könnte
+    const unsigned availableHammers = aijh.AmountInStorage(GoodType::Hammer);
+    // Dafür wird zusätzlich ein freier Träger benötigt - ohne den nützt der Hammer nichts
+    const unsigned availableHelpers = aijh.AmountInStorage(Job::Helper);
+    const unsigned potentialBuilders = availableBuilders + std::min(availableHammers, availableHelpers);
+
+    // Baustellen, die noch auf ihren Bauarbeiter warten (schon zugewiesene zählen nicht mehr mit)
+    unsigned pendingDemand = 0;
+    for(const noBuildingSite* site : aii.GetBuildingSites())
+    {
+        if(!site->HasBuilder())
+            ++pendingDemand;
+    }
+    // Laufende Expeditionen, die noch auf ihren Bauarbeiter für die Kolonie-Gründung warten
+    for(const nobHarborBuilding* harbor : aii.GetHarbors())
+    {
+        if(harbor->IsExpeditionActive() && !harbor->HasExpeditionBuilder())
+            ++pendingDemand;
+    }
+
+    // Nur "ja" sagen, wenn nach Abzug des bereits wartenden Bedarfs noch mindestens 1 Bauarbeiter übrig bliebe
+    return potentialBuilders > pendingDemand;
 }
 
 bool AIConstruction::BuildAlternativeRoad(const noFlag* flag, std::vector<Direction>& route)
