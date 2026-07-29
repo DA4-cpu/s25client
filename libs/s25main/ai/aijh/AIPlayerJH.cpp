@@ -302,6 +302,22 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
                 }
             }
         }
+        //check for useless Woodcutters
+        const std::list<nobUsual*>& woodCutters = aii.GetBuildings(BuildingType::Woodcutter);
+        if(woodCutters.size() > 4)
+        {
+            int burns = 0;
+            for(const nobUsual* woodcutter : woodCutters)
+            {
+                if((woodcutter->HasWorker() && (woodCutters.size() - burns) > 4)
+                   && 1 > GetDensity(woodcutter->GetPos(), AIResource::Wood, 7))
+                {
+                    aii.DestroyBuilding(woodcutter);
+                    RemoveUnusedRoad(*woodcutter->GetFlag(), Direction::NorthWest, true);
+                    burns++;
+                }
+            }
+        }
     }
 
     if((gf + playerId * 7) % build_interval == 0) // plan new buildings
@@ -930,34 +946,44 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
     {
         case BuildingType::Woodcutter:
         {
-            if(GetDensity(around, AIResource::Wood, 8) > 8)
-                foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
-            else if(construction->OtherUsualBuildingInRadius(around, 12, BuildingType::Forester))
-                foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
+            foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
+            std::cout << "Check Woodcutter " << std::endl;
+            if(8 > GetDensity(around, AIResource::Wood, 7)
+               && !construction->OtherUsualBuildingInRadius(around, 9, BuildingType::Forester))
+                foundPos = MapPoint::Invalid();
             break;
         }
 
         case BuildingType::Forester:
         { 
-            foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
+            foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius);
             if(foundPos.isValid())
             {
                 if(GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4)
                 {
-                  break;
+                    std::cout << "Check Forester " << std::endl;
+                    if(GetDensity(around, AIResource::Wood, 7) > 5 || GetDensity(around, AIResource::Plantspace, 7) < 10
+                       || GetDensity(around, AIResource::Borderland, 1) > 1)
+                    {
+                        std::cout << "Forester Placement Invalid!" << std::endl;
+                        foundPos = MapPoint::Invalid();
+                    }
+                    break;
                 } 
                 else
                 {
-                    if((construction->OtherUsualBuildingInRadius(around, 9, BuildingType::Forester)
-                        || GetDensity(around, AIResource::Wood, 8) > 12)
-                       || aii.isBuildingNearby(BuildingType::Charburner, foundPos, 13))
+                    if(construction->OtherUsualBuildingInRadius(around, 9, BuildingType::Forester)
+                       || aii.isBuildingNearby(BuildingType::Charburner, foundPos, 13)
+                       || !aii.isBuildingNearby(BuildingType::Sawmill, foundPos, 13)
+                       || !WarehouseOrHarborNearby(around, 13u) || GetDensity(around, AIResource::Wood, 7) > 7
+                       || GetDensity(around, AIResource::Borderland, 1) > 1)
                         foundPos = MapPoint::Invalid();
                 }
-                
-                   // if(!foundPos.isValid())
-                   // foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
-                   break;
             }
+            // if(!foundPos.isValid())
+            // foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            break;
+            
         }
         case BuildingType::Sawmill:
         {
@@ -1044,7 +1070,7 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
         case BuildingType::Charburner:
         {
             foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 92);
-            if(foundPos.isValid() && !BQsurroundcheck(foundPos, 5, true, 30)
+            if(foundPos.isValid() && !BQsurroundcheck(foundPos, 4, true, 30)
                || aii.isBuildingNearby(BuildingType::Forester, foundPos, 13))
                 foundPos = MapPoint::Invalid();
             break;
@@ -1054,10 +1080,26 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
     return foundPos;
 }
 
+static const char* AIResourceToString(AIResource res)
+{
+    switch(res)
+    {
+        case AIResource::Wood: return "Wood";
+        case AIResource::Stones: return "Stones";
+        case AIResource::Gold: return "Gold";
+        case AIResource::Ironore: return "Ironore";
+        case AIResource::Coal: return "Coal";
+        case AIResource::Granite: return "Granite";
+        case AIResource::Fish: return "Fish";
+        case AIResource::Plantspace: return "Plantspace";
+        case AIResource::Borderland: return "Borderland";
+        default: return "Unknown";
+    }
+}
+
 unsigned AIPlayerJH::GetDensity(MapPoint pt, AIResource res, int radius)
 {
     RTTR_Assert(pt.x < aiMap.GetWidth() && pt.y < aiMap.GetHeight());
-
     std::vector<MapPoint> pts = gwb.GetPointsInRadius(pt, radius);
     const unsigned numAllPTs = pts.size();
     RTTR_Assert(numAllPTs > 0);
@@ -1068,6 +1110,8 @@ unsigned AIPlayerJH::GetDensity(MapPoint pt, AIResource res, int radius)
         return CalcResource(curPt) == res;
     };
     const unsigned numGoodPts = helpers::count_if(pts, hasResource);
+    // Ausgabe: Zeigt nun den Ressourcen-Namen anstatt nur den enum-Wert
+    std::cout << "Density of " << AIResourceToString(res) << ": " << (numGoodPts * 100) / numAllPTs << std::endl;
     return (numGoodPts * 100) / numAllPTs;
 }
 
@@ -1213,7 +1257,7 @@ void AIPlayerJH::HandleBuildingFinished(const MapPoint pt, BuildingType bld)
     switch(bld)
     {
         case BuildingType::HarborBuilding:
-            UpdateNodesAround(pt, 15); // todo: fix radius
+            UpdateNodesAround(pt, 11);
             RemoveAllUnusedRoads(
               pt); // repair & reconnect road system - required when a colony gets a new harbor by expedition
 
@@ -1240,7 +1284,8 @@ void AIPlayerJH::HandleBuildingFinished(const MapPoint pt, BuildingType bld)
         }
         case BuildingType::Storehouse: 
         {
-            UpdateNodesAround(pt, 15);
+            UpdateNodesAround(pt, 11);
+            AddBuildJob(BuildingType::Forester, pt);
             PlaceBuildingNextToPoint(pt, BuildingType::Sawmill, BuildingType::Sawmill);
             break;
         }
@@ -2641,12 +2686,18 @@ void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingTy
     if(!aii.CanBuildBuildingtype(bldToPlace)) // z.B. per Addon deaktiviert -> gar nicht erst versuchen
         return;
     if(aii.isBuildingNearby(bldToAvoid, whPos, 9)) // schon vorhanden? -> fertig
+    {
+        // TEMP: warum wird abgebrochen?
+        std::cout << "Sawmill skip: existing sawmill within 9 of " << whPos.x << "/" << whPos.y << std::endl;
         return;
+    }
 
     const MapPoint pos = SimpleFindPosition(whPos, BUILDING_SIZE[bldToPlace], /*enger Radius*/ 7);
     if(!pos.isValid())
+    {
+        std::cout << "Sawmill skip: no valid pos found around " << whPos.x << "/" << whPos.y << std::endl;
         return;
-
+    }
     aii.SetBuildingSite(pos, bldToPlace);
     auto j = std::make_unique<BuildJob>(*this, bldToPlace, pos);
     j->SetState(JobState::ExecutingRoad1); // überspringt TryToBuild() -> Wanted() wird nicht geprüft

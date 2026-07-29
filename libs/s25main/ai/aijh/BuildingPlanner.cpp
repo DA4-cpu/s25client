@@ -132,7 +132,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         // probably only has 1 saw+carpenter but if that is the case the ai will try to produce 1 additional saw very
         // quickly
         buildingsWanted[BuildingType::Sawmill] = 4;
-        buildingsWanted[BuildingType::Woodcutter] = 6;
+        buildingsWanted[BuildingType::Woodcutter] = 12;
         buildingsWanted[BuildingType::Quarry] = 2;
         buildingsWanted[BuildingType::GraniteMine] = 0;
         buildingsWanted[BuildingType::CoalMine] = 3;
@@ -151,7 +151,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         const Inventory& inventory = aijh.player.GetInventory();
 
         // foresters
-        unsigned max_available_forester = inventory[Job::Forester] + inventory[GoodType::Shovel] - 1; //eine Schaufel für  Charburner übrig lassen
+        unsigned max_available_forester = inventory[Job::Forester] + inventory[GoodType::Shovel];
         max_available_forester = std::max(0, int(max_available_forester));
 
 
@@ -163,7 +163,6 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         if(8 > aijh.AmountInStorage(GoodType::Wood) && 1 > GetNumBuildingSites(BuildingType::Forester))
         {
             buildingsWanted[BuildingType::Forester]++;
-            buildingsWanted[BuildingType::Woodcutter]++;
         }
 
         buildingsWanted[BuildingType::Forester] =
@@ -178,11 +177,11 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         // woodcutters
         unsigned max_available_woodcutter = inventory.goods[GoodType::Axe] + inventory.people[Job::Woodcutter];
-        buildingsWanted[BuildingType::Woodcutter] =
-          std::min(max_available_woodcutter, (buildingsWanted[BuildingType::Forester] * 2 + 2)); // two per forester + 2 for 'natural' forest
+        buildingsWanted[BuildingType::Woodcutter] = std::min(buildingsWanted[BuildingType::Sawmill] * 2 + buildingsWanted[BuildingType::Charburner] * 2
+                     + buildingsWanted[BuildingType::Vineyard] * 2 + 3,
+                   max_available_woodcutter);
+        //std::cout << "buildingsWanted[BuildingType::Woodcutter]: " << buildingsWanted[BuildingType::Woodcutter] << std::endl;
 
-        buildingsWanted[BuildingType::Woodcutter] =
-          std::min(GetNumBuildings(BuildingType::Sawmill) * 2 + GetNumBuildings(BuildingType::Charburner) * 2 + GetNumBuildings(BuildingType::Vineyard) * 2, buildingsWanted[BuildingType::Woodcutter]);
 
 
         ////on maps with many trees the ai will build woodcutters all over the place which means the foresters are not
@@ -208,7 +207,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
             //>6miners = build up to 6 depending on resources, else max out at miners/2
             if(inventory.people[Job::Miner] > 6)
                 buildingsWanted[BuildingType::Quarry] =
-                  std::min(inventory.goods[GoodType::PickAxe] + inventory.people[Job::Stonemason], 8u);
+                  std::min(inventory.goods[GoodType::PickAxe] + inventory.people[Job::Stonemason], 6u);
             else
                 buildingsWanted[BuildingType::Quarry] = inventory.people[Job::Miner] / 2;
 
@@ -219,20 +218,18 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         // sawmills limited by woodcutters and carpenter+saws reduced by char burners minimum of 3
         int resourcelimit = inventory.people[Job::Carpenter] + inventory.goods[GoodType::Saw];
-        unsigned max_sawmills =
-          std::min(((GetNumBuildings(BuildingType::Woodcutter) / 2) - GetNumBuildings(BuildingType::Charburner)),
-                   (GetNumBuildings(BuildingType::Storehouse) + GetNumBuildings(BuildingType::HarborBuilding) + 3));
+        buildingsWanted[BuildingType::Sawmill] =
+          (GetNumBuildings(BuildingType::Storehouse) + GetNumBuildings(BuildingType::HarborBuilding) + 4);
         unsigned max_available_carpenters = inventory.goods[GoodType::Saw] + inventory.people[Job::Carpenter];
-
 
         if((15 > aijh.AmountInStorage(GoodType::Boards)) && 1 > GetNumBuildingSites(BuildingType::Sawmill))
         {
-            if((15 < aijh.AmountInStorage(GoodType::Wood)) || 0 < GetNumBuildingSites(BuildingType::Woodcutter) || 1 < GetNumBuildingSites(BuildingType::Woodcutter))
+            if((15 < aijh.AmountInStorage(GoodType::Wood)))
                 buildingsWanted[BuildingType::Sawmill]++;
         }
-        buildingsWanted[BuildingType::Sawmill] = std::min(buildingsWanted[BuildingType::Sawmill], max_sawmills);
         buildingsWanted[BuildingType::Sawmill] =
           std::min(max_available_carpenters, buildingsWanted[BuildingType::Sawmill]);
+
 
         // iron smelters limited by iron mines or crucibles
         int available_mines = static_cast<int>(GetNumBuildings(BuildingType::IronMine))

@@ -1,0 +1,95 @@
+diff --git a/libs/s25main/ai/aijh/AIPlayerJH.cpp b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+index a5299f9..0d9591a 100644
+--- a/libs/s25main/ai/aijh/AIPlayerJH.cpp
++++ b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+@@ -904,6 +904,14 @@ void AIPlayerJH::DistributeMaxRankSoldiersByBlocking(unsigned limit, nobBaseWare
+ }
+ MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius) const
+ {
++    // SimpleFindPosition is only ever used to place non-military buildings (e.g. woodcutter, forester,
++    // sawmill, quarry, fishery, storehouse, ...). Military buildings are placed via FindBestPosition with
++    // AIResource::Borderland instead. So directly-on-the-border spots are kept free here for the AI's
++    // military buildings, which are what actually expand the territory. We still remember the closest
++    // border spot as a fallback though, so construction never gets blocked entirely if that is the only
++    // valid position (e.g. very little territory early in the game).
++    MapPoint borderFallback = MapPoint::Invalid();
++
+     std::vector<MapPoint> pts = gwb.GetPointsInRadius(pt, radius);
+     for(const MapPoint& curPt : pts)
+     {
+@@ -915,11 +923,18 @@ MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size
+                 continue;
+         }
+         RTTR_Assert(aii.GetBuildingQuality(curPt) == GetAINode(curPt).bq);
+-        if(canUseBq(aii.GetBuildingQuality(curPt), size)) //(*nodes)[idx].bq; TODO: Update nodes BQ and use that
+-            return curPt;
++        if(!canUseBq(aii.GetBuildingQuality(curPt), size)) //(*nodes)[idx].bq; TODO: Update nodes BQ and use that
++            continue;
++        if(aiMap[curPt].border)
++        {
++            if(!borderFallback.isValid())
++                borderFallback = curPt;
++            continue;
++        }
++        return curPt;
+     }
+ 
+-    return MapPoint::Invalid();
++    return borderFallback;
+ }
+ 
+ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapPoint& around)
+diff --git a/libs/s25main/ai/aijh/AIResourceMap.cpp b/libs/s25main/ai/aijh/AIResourceMap.cpp
+index 9b498f9..6e39967 100644
+--- a/libs/s25main/ai/aijh/AIResourceMap.cpp
++++ b/libs/s25main/ai/aijh/AIResourceMap.cpp
+@@ -79,11 +79,19 @@ MapPoint AIResourceMap::findBestPosition(const MapPoint& pt, BuildingQuality siz
+     MapPoint best = MapPoint::Invalid();
+     int best_value = (minimum == std::numeric_limits<int>::min()) ? minimum : minimum - 1;
+ 
++    // Fallback candidate directly on the land border. We normally avoid placing non-military buildings
++    // there (those spots should stay free for military buildings, which are what actually expand the
++    // territory), but if it turns out to be the *only* valid spot (e.g. very little territory early in the
++    // game) we still want to be able to build, so we remember the best border spot separately and only use
++    // it when nothing better was found.
++    MapPoint bestBorder = MapPoint::Invalid();
++    int bestBorder_value = best_value;
++
+     std::vector<MapPoint> pts = aii.gwb.GetPointsInRadiusWithCenter(pt, radius);
+     for(const MapPoint& curPt : pts)
+     {
+         const unsigned idx = map.GetIdx(curPt);
+-        if(map[idx] > best_value)
++        if(map[idx] > best_value || map[idx] > bestBorder_value)
+         {
+             if(!aiMap[idx].reachable || !aiMap[idx].owned || aiMap[idx].farmed)
+                 continue;
+@@ -101,13 +109,27 @@ MapPoint AIResourceMap::findBestPosition(const MapPoint& pt, BuildingQuality siz
+             // dont build next to empty harborspots
+             if(aii.isHarborPosClose(curPt, 2, true))
+                 continue;
++            // Keep border spots free for military buildings (which search using AIResource::Borderland) -
++            // any other building type should only use one as a last resort. Mines are excluded from this
++            // entirely: they require BuildingQuality::Mine, which military buildings can never use, so a
++            // mine can never actually block a military building spot. Mine spots are also rare, so we
++            // don't want to restrict them any further than necessary.
++            if(res != AIResource::Borderland && size != BuildingQuality::Mine && aiMap[idx].border)
++            {
++                if(map[idx] > bestBorder_value)
++                {
++                    bestBorder = curPt;
++                    bestBorder_value = map[idx];
++                }
++                continue;
++            }
+             best = curPt;
+             best_value = map[idx];
+             // TODO: calculate "perfect" rating and instantly return if we got that already
+         }
+     }
+ 
+-    return best;
++    return best.isValid() ? best : bestBorder;
+ }
+ 
+ void AIResourceMap::avoidPosition(const MapPoint& pt)

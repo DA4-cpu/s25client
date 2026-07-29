@@ -112,4 +112,68 @@ BOOST_AUTO_TEST_CASE(CreateStream_which_ends_at_minimum_height)
     }
 }
 
+BOOST_AUTO_TEST_CASE(CreateStream_still_lowers_its_bed_when_it_reaches_the_sea_immediately)
+{
+    // Regression test: a stream used to `return` as soon as it reached sea level, skipping the
+    // height-carving step below entirely whenever that happened on its very first step. Now it
+    // always falls through to carve its bed, no matter how quickly it reaches the sea.
+    const MapPoint source(3, 3);
+    map.z.Resize(map.size, map.height.maximum);
+    map.z[source] = map.height.minimum;
+
+    const auto river = CreateStream(rnd, map, source, Direction::East, 20);
+
+    BOOST_TEST_REQUIRE(!river.empty());
+    for(const MapPoint& pt : river)
+    {
+        BOOST_TEST_REQUIRE(map.z[pt] <= map.height.maximum - 1);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(CreateStream_prefers_flowing_downhill)
+{
+    // Build a narrow, single-node-wide channel heading due East from "source" with a lone "sea" node
+    // right at its far end, surrounded by much higher terrain everywhere else. The channel is so
+    // narrow that a stream only ever reaches the sea node if it keeps picking the "continue straight"
+    // option at every single decision along the way; picking either of the other two candidate
+    // directions at any point leads it into the surrounding high terrain instead, away from the sea.
+    const MapPoint source(0, 4);
+    const unsigned channelLength = 4;
+
+    std::vector<MapPoint> channel{source};
+    for(unsigned i = 0; i < channelLength; ++i)
+    {
+        channel.push_back(map.z.GetNeighbour(channel.back(), Direction::East));
+    }
+    const MapPoint seaPoint = channel.back();
+    const auto seaVicinity = map.z.GetPointsInRadiusWithCenter(seaPoint, 1);
+
+    const auto resetTerrain = [&]() {
+        map.z.Resize(map.size, map.height.maximum);
+        for(const MapPoint& pt : channel)
+        {
+            map.z[pt] = map.height.minimum + 10;
+        }
+        map.z[seaPoint] = map.height.minimum;
+    };
+
+    const unsigned trials = 20;
+    unsigned reachedSea = 0;
+    for(unsigned trial = 0; trial < trials; ++trial)
+    {
+        resetTerrain();
+        const auto river = CreateStream(rnd, map, source, Direction::East, channelLength + 2);
+
+        if(helpers::contains_if(river, [&](const MapPoint& pt) { return helpers::contains(seaVicinity, pt); }))
+        {
+            ++reachedSea;
+        }
+    }
+
+    // A height-blind coin flip would make it down such a narrow channel only extremely rarely (about
+    // 1 in 3 per step, i.e. roughly 1% over 4 steps); the downhill bias should get there in the vast
+    // majority of the trials.
+    BOOST_TEST_REQUIRE(reachedSea >= trials / 2);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
