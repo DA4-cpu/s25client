@@ -1,0 +1,189 @@
+diff --git a/libs/s25main/ai/aijh/AIPlayerJH.cpp b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+index 82f4263..5673c23 100644
+--- a/libs/s25main/ai/aijh/AIPlayerJH.cpp
++++ b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+@@ -48,6 +48,14 @@
+ #include "gameData/MilitaryConsts.h"
+ 
+ namespace {
++/// Exact number of dedicated woodcutters a single forester should end up with.
++constexpr unsigned WOODCUTTERS_PER_FORESTER = 2;
++/// Minimum distance a "wild" woodcutter (one relying on naturally grown forest, without
++/// a forester assigned to it) has to keep from every forester. Chosen a bit larger than
++/// the forester's own effective planting radius (RES_RADIUS[Wood]) so wild woodcutters
++/// don't crowd a forester's planting area right at its border.
++constexpr unsigned WILD_WOODCUTTER_MIN_FORESTER_DIST = RES_RADIUS[AIResource::Wood] + 3;
++
+ void HandleBuildingNote(AIEventManager& eventMgr, const BuildingNote& note)
+ {
+     std::unique_ptr<AIEvent::Base> ev;
+@@ -938,6 +946,55 @@ MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size
+     return MapPoint::Invalid();
+ }
+ 
++MapPoint AIPlayerJH::FindServingForesterPos(const MapPoint& pt) const
++{
++    MapPoint nearestPos = MapPoint::Invalid();
++    unsigned nearestDist = RES_RADIUS[AIResource::Wood] + 1; // must be within radius to count at all
++
++    const auto consider = [&](const MapPoint& foresterPos) {
++        const unsigned dist = gwb.CalcDistance(pt, foresterPos);
++        if(dist <= RES_RADIUS[AIResource::Wood] && dist < nearestDist)
++        {
++            nearestDist = dist;
++            nearestPos = foresterPos;
++        }
++    };
++
++    for(const nobUsual* forester : aii.GetBuildings(BuildingType::Forester))
++        consider(forester->GetPos());
++    // Also consider foresters that are still being built: a woodcutter placed just before
++    // such a forester finishes should be counted against it too, otherwise both would be
++    // planned independently and the forester could end up with more than its 2 woodcutters.
++    for(const noBuildingSite* site : aii.GetBuildingSites())
++    {
++        if(site->GetBuildingType() == BuildingType::Forester)
++            consider(site->GetPos());
++    }
++    return nearestPos;
++}
++
++unsigned AIPlayerJH::CountWoodcuttersServing(const MapPoint& foresterPos) const
++{
++    unsigned count = 0;
++    const auto belongsHere = [&](const MapPoint& woodcutterPos) {
++        return FindServingForesterPos(woodcutterPos) == foresterPos;
++    };
++
++    for(const nobUsual* woodcutter : aii.GetBuildings(BuildingType::Woodcutter))
++    {
++        if(belongsHere(woodcutter->GetPos()))
++            ++count;
++    }
++    // Count building sites too so multiple build jobs resolved in the same game frame
++    // (or before the previous woodcutter site has finished) don't overshoot the target.
++    for(const noBuildingSite* site : aii.GetBuildingSites())
++    {
++        if(site->GetBuildingType() == BuildingType::Woodcutter && belongsHere(site->GetPos()))
++            ++count;
++    }
++    return count;
++}
++
+ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapPoint& around)
+ {
+     constexpr unsigned searchRadius = 15;
+@@ -947,10 +1004,30 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
+         case BuildingType::Woodcutter:
+         {
+             foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
+-            std::cout << "Check Woodcutter " << std::endl;
+-            if(8 > GetDensity(around, AIResource::Wood, 7)
+-               && !construction->OtherUsualBuildingInRadius(around, 9, BuildingType::Forester))
+-                foundPos = MapPoint::Invalid();
++            if(!foundPos.isValid())
++                break;
++
++            const MapPoint servingForester = FindServingForesterPos(foundPos);
++            if(servingForester.isValid())
++            {
++                // foundPos lies within a forester's service area: only allow the build if
++                // that specific forester doesn't already have its 2 dedicated woodcutters.
++                // This is what enforces "exactly 2 woodcutters per forester" - previously
++                // any forester in radius 9 of `around` (not of the actual foundPos!) was
++                // enough, with no check on how many woodcutters it already had.
++                if(CountWoodcuttersServing(servingForester) >= WOODCUTTERS_PER_FORESTER)
++                    foundPos = MapPoint::Invalid();
++            } else
++            {
++                // No forester serves this spot: this would be a "wild" woodcutter living off
++                // natural forest. Require good wood density right here (not at `around`,
++                // which may be far away) and keep enough distance to every forester so wild
++                // woodcutters don't crowd a forester's planting area.
++                if(8 > GetDensity(foundPos, AIResource::Wood, 7)
++                   || construction->OtherUsualBuildingInRadius(foundPos, WILD_WOODCUTTER_MIN_FORESTER_DIST,
++                                                                BuildingType::Forester))
++                    foundPos = MapPoint::Invalid();
++            }
+             break;
+         }
+ 
+@@ -1378,36 +1455,31 @@ void AIPlayerJH::HandleNoMoreResourcesReachable(const MapPoint pt, BuildingType
+     // keep 2 woodcutters for each forester even if they sometimes run out of trees
+     if(bld == BuildingType::Woodcutter)
+     {
+-        for(const nobUsual* forester : aii.GetBuildings(BuildingType::Forester))
+-        {
+-            // is the forester somewhat close?
+-            if(gwb.CalcDistance(pt, forester->GetPos()) <= RES_RADIUS[AIResource::Wood])
++        const MapPoint forester = FindServingForesterPos(pt);
++        if(forester.isValid())
++        {
++            // Count how many OTHER woodcutters assigned to the same forester are at least as
++            // close to it as `pt` is. If there are already 2 such (better-or-equally-placed)
++            // woodcutters, `pt` is a surplus one for this forester and can be destroyed even
++            // though it ran out of reachable trees. Otherwise the forester still needs it to
++            // reach its quota of 2, so keep it alive and hope the forest regrows.
++            const unsigned distToForester = gwb.CalcDistance(pt, forester);
++            unsigned closerOrEqualCount = 0;
++            for(const nobUsual* woodcutter : aii.GetBuildings(BuildingType::Woodcutter))
+             {
+-                // then find it's 2 woodcutters
+-                unsigned maxdist = gwb.CalcDistance(pt, forester->GetPos());
+-                int betterwoodcutters = 0;
+-                for(const nobUsual* woodcutter : aii.GetBuildings(BuildingType::Woodcutter))
++                if(woodcutter->GetPos() == pt)
++                    continue; // don't count the woodcutter in question
++                if(FindServingForesterPos(woodcutter->GetPos()) != forester)
++                    continue; // not assigned to the same forester
++                if(gwb.CalcDistance(woodcutter->GetPos(), forester) <= distToForester)
+                 {
+-                    // dont count the woodcutter in question
+-                    if(pt == woodcutter->GetPos())
+-                        continue;
+-                    // TODO: We currently don't take the distance to the forester into account when placing a woodcutter
+-                    // This leads to points beeing equally good for placing but later it will be destroyed. Avoid that
+-                    // by checking only close woddcutters
+-                    if(gwb.CalcDistance(woodcutter->GetPos(), pt) > RES_RADIUS[AIResource::Wood])
+-                        continue;
+-                    // closer or equally close to forester than woodcutter in question?
+-                    if(gwb.CalcDistance(woodcutter->GetPos(), forester->GetPos()) <= maxdist)
+-                    {
+-                        betterwoodcutters++;
+-                        if(betterwoodcutters >= 2)
+-                            break;
+-                    }
++                    if(++closerOrEqualCount >= WOODCUTTERS_PER_FORESTER)
++                        break;
+                 }
+-                // couldnt find 2 closer woodcutter -> keep it alive
+-                if(betterwoodcutters < 2)
+-                    return;
+             }
++            // couldn't find 2 closer-or-equal woodcutters assigned to this forester -> keep it alive
++            if(closerOrEqualCount < WOODCUTTERS_PER_FORESTER)
++                return;
+         }
+     }
+     aii.DestroyBuilding(pt);
+diff --git a/libs/s25main/ai/aijh/AIPlayerJH.h b/libs/s25main/ai/aijh/AIPlayerJH.h
+index 1e4401d..8ab9362 100644
+--- a/libs/s25main/ai/aijh/AIPlayerJH.h
++++ b/libs/s25main/ai/aijh/AIPlayerJH.h
+@@ -141,6 +141,16 @@ public:
+     MapPoint SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius) const;
+     /// Find a position for a specific building around a given point
+     MapPoint FindPositionForBuildingAround(BuildingType type, const MapPoint& around);
++    /// Returns the position of the forester (finished or still under construction) that is
++    /// responsible for supplying wood around `pt`, i.e. the closest forester within its
++    /// effective planting radius (RES_RADIUS[Wood]). Returns MapPoint::Invalid() if no
++    /// forester is close enough to serve this spot. This provides the single, unambiguous
++    /// forester-assignment used both when placing and when removing woodcutters.
++    MapPoint FindServingForesterPos(const MapPoint& pt) const;
++    /// Counts how many woodcutters (finished or still under construction) are currently
++    /// assigned to the forester at `foresterPos`, i.e. for how many woodcutters this
++    /// forester is the closest one (see FindServingForesterPos).
++    unsigned CountWoodcuttersServing(const MapPoint& foresterPos) const;
+     /// Density in percent (0-100)
+     unsigned GetDensity(MapPoint pt, AIResource res, int radius);
+     /// Does some actions after a new military building is occupied

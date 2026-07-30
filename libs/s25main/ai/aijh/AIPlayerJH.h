@@ -141,6 +141,16 @@ public:
     MapPoint SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius) const;
     /// Find a position for a specific building around a given point
     MapPoint FindPositionForBuildingAround(BuildingType type, const MapPoint& around);
+    /// Returns the position of the forester (finished or still under construction) that is
+    /// responsible for supplying wood around `pt`, i.e. the closest forester within its
+    /// effective planting radius (RES_RADIUS[Wood]). Returns MapPoint::Invalid() if no
+    /// forester is close enough to serve this spot. This provides the single, unambiguous
+    /// forester-assignment used both when placing and when removing woodcutters.
+    MapPoint FindServingForesterPos(const MapPoint& pt) const;
+    /// Counts how many woodcutters (finished or still under construction) are currently
+    /// assigned to the forester at `foresterPos`, i.e. for how many woodcutters this
+    /// forester is the closest one (see FindServingForesterPos).
+    unsigned CountWoodcuttersServing(const MapPoint& foresterPos) const;
     /// Density in percent (0-100)
     unsigned GetDensity(MapPoint pt, AIResource res, int radius);
     /// Does some actions after a new military building is occupied
