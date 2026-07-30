@@ -1,0 +1,566 @@
+diff --git a/libs/s25main/mapGenerator/RandomMap.cpp b/libs/s25main/mapGenerator/RandomMap.cpp
+index 3f242b9b1..6018103c8 100644
+--- a/libs/s25main/mapGenerator/RandomMap.cpp
++++ b/libs/s25main/mapGenerator/RandomMap.cpp
+@@ -15,6 +15,7 @@
+ #include "lua/GameDataLoader.h"
+ #include "libsiedler2/libsiedler2.h"
+ 
++#include <algorithm>
+ #include <stdexcept>
+ 
+ namespace rttr::mapGenerator {
+@@ -154,16 +155,81 @@ std::vector<River> RandomMap::CreateRivers(const MapPoint source)
+     std::vector<River> rivers;
+ 
+     const MapExtent size = settings_.size;
+-    const unsigned length = size.x + size.y;
++
++    // Distance (in nodes) from every point to the closest point at the map's minimum height (i.e. the
++    // sea/a lake). This lets every river get just enough of a length budget to actually reach the
++    // water, instead of the previous flat "width + height" guess, which could be far too short for
++    // sources near the middle of a large map and needlessly long for sources already close to the
++    // coast.
++    const auto distanceToSea =
++      DistancesTo(size, [this](const MapPoint& pt) { return map_.z[pt] == map_.height.minimum; });
++
++    // River sources look more natural coming from elevated terrain ("mountain springs") instead of an
++    // arbitrary point anywhere on the map, so prefer picking them from the upper ~15% of the height
++    // distribution.
++    const auto elevationThreshold = LimitFor(map_.z, 0.85, map_.height.minimum);
++    const auto elevatedPoints =
++      SelectPoints([this, elevationThreshold](const MapPoint& pt) { return map_.z[pt] > elevationThreshold; }, size);
++
++    // Keep multiple independent river sources spaced apart so they don't all start crowded into the
++    // same corner of the map.
++    const unsigned minSourceDistance = std::max(3u, static_cast<unsigned>(size.x + size.y) / 8);
++    std::vector<MapPoint> chosenSources;
++
++    const auto pickLandSource = [&]() {
++        if(elevatedPoints.empty())
++        {
++            // No meaningfully elevated terrain to speak of (e.g. a tiny or perfectly flat map) - fall
++            // back to picking any point, as before.
++            return rnd_.Point(size);
++        }
++
++        MapPoint candidate = rnd_.RandomItem(elevatedPoints);
++        for(unsigned attempt = 0; attempt < 10; ++attempt)
++        {
++            const bool farEnough =
++              std::all_of(chosenSources.begin(), chosenSources.end(), [&](const MapPoint& existing) {
++                  return map_.z.CalcDistance(candidate, existing) >= minSourceDistance;
++              });
++            if(farEnough)
++            {
++                break;
++            }
++            candidate = rnd_.RandomItem(elevatedPoints);
++        }
++        return candidate;
++    };
++
++    // For maps with a shared, given source (the central lake/mountain of mixed & water maps), every
++    // river direction gets its own point close to that source instead of the exact same node, so
++    // multiple rivers don't look like perfectly symmetric spokes radiating out of a single pixel.
++    const unsigned jitterRadius = std::max(2u, static_cast<unsigned>(std::min(size.x, size.y)) / 20);
++    const auto jitterSource = [&](const MapPoint& anchor) {
++        const auto nearby = map_.z.GetPointsInRadiusWithCenter(anchor, jitterRadius);
++        return nearby.empty() ? anchor : rnd_.RandomItem(nearby);
++    };
+ 
+     for(const auto dir : helpers::EnumRange<Direction>())
+     {
+-        if(rnd_.ByChance(settings_.rivers))
++        if(!rnd_.ByChance(settings_.rivers))
+         {
+-            const unsigned splitRate = rnd_.RandomValue(0u, 2u);
+-            rivers.push_back(
+-              CreateStream(rnd_, map_, source.isValid() ? source : rnd_.Point(map_.size), dir, length, splitRate));
++            continue;
+         }
++
++        const MapPoint riverSource = source.isValid() ? jitterSource(source) : pickLandSource();
++        chosenSources.push_back(riverSource);
++
++        const unsigned toSea = distanceToSea[riverSource];
++        // The stream now always makes exactly 1 step of guaranteed progress towards the sea per step
++        // (see CreateStream), so "toSea + 1" is already sufficient (+1 because reaching a node at
++        // distance D takes D+1 drawn steps, counting the starting node itself) - the small constant
++        // just adds a little extra slack. Falls back to the old width+height estimate if the map
++        // doesn't have any sea at all (e.g. in isolated unit tests), in which case there's no distance
++        // to measure against.
++        const unsigned length = (toSea == unsigned(-1)) ? (size.x + size.y) : toSea + 5;
++
++        const unsigned splitRate = rnd_.RandomValue(0u, 2u);
++        rivers.push_back(CreateStream(rnd_, map_, distanceToSea, riverSource, dir, length, splitRate));
+     }
+     return rivers;
+ }
+diff --git a/libs/s25main/mapGenerator/Rivers.cpp b/libs/s25main/mapGenerator/Rivers.cpp
+index 19badaada..794de301d 100644
+--- a/libs/s25main/mapGenerator/Rivers.cpp
++++ b/libs/s25main/mapGenerator/Rivers.cpp
+@@ -5,28 +5,133 @@
+ #include "mapGenerator/Rivers.h"
+ #include "mapGenerator/Terrain.h"
+ #include "mapGenerator/TextureHelper.h"
++#include "mapGenerator/Triangles.h"
++#include <algorithm>
++#include <array>
+ 
+ namespace rttr::mapGenerator {
+ 
+-River CreateStream(RandomUtility& rnd, Map& map, const MapPoint& source, Direction direction, unsigned length,
+-                   unsigned splitRate)
++namespace {
++
++struct DirectionCandidate
++{
++    Direction dir;
++    MapPoint neighbour;
++    unsigned distanceToSea;
++    unsigned height;
++};
++
++/**
++ * Picks the next direction for a stream out of all 6 neighbors of "currentNode". Only neighbors that get the
++ * stream strictly closer to the sea are ever considered - by construction of "distanceToSea" (a plain grid BFS
++ * distance field), a node with a nonzero distance D always has at least one neighbor with distance D-1, so this
++ * set is never empty and every single step is guaranteed to reduce the remaining distance to the sea by exactly
++ * 1. "cameFrom" (the direction the stream just arrived from) is excluded from that set to avoid immediately
++ * reversing, unless it is the only neighbor that actually provides that progress, in which case it is allowed
++ * anyway rather than leaving the stream stuck. Among multiple, equally-close candidates, lower terrain height is
++ * preferred, purely for a more natural-looking meander - this never overrides the progress guarantee above.
++ */
++Direction ChooseDirectionTowardsSea(RandomUtility& rnd, const Map& map, const NodeMapBase<unsigned>& distanceToSea,
++                                     const MapPoint& currentNode, Direction cameFrom)
++{
++    std::vector<DirectionCandidate> all;
++    all.reserve(6);
++    for(Direction dir : helpers::EnumRange<Direction>())
++    {
++        const auto neighbour = map.getTextures().GetNeighbour(currentNode, dir);
++        all.push_back(
++          DirectionCandidate{dir, neighbour, distanceToSea[neighbour], static_cast<unsigned>(map.z[neighbour])});
++    }
++
++    const unsigned bestDistance =
++      std::min_element(all.begin(), all.end(),
++                        [](const auto& a, const auto& b) { return a.distanceToSea < b.distanceToSea; })
++        ->distanceToSea;
++
++    std::vector<DirectionCandidate> candidates;
++    for(const auto& candidate : all)
++    {
++        if(candidate.distanceToSea == bestDistance && candidate.dir != cameFrom)
++        {
++            candidates.push_back(candidate);
++        }
++    }
++    if(candidates.empty())
++    {
++        // The only progress-making neighbor is the one we just came from - take it anyway rather than
++        // getting stuck; this still reduces the distance to the sea by exactly 1, same as any other step.
++        for(const auto& candidate : all)
++        {
++            if(candidate.distanceToSea == bestDistance)
++            {
++                candidates.push_back(candidate);
++            }
++        }
++    }
++
++    unsigned highest = 0;
++    for(const auto& candidate : candidates)
++    {
++        highest = std::max(highest, candidate.height);
++    }
++
++    // Weight = distance from the (locally) highest candidate's height, so the lowest one always has the
++    // biggest chance to get picked while every candidate keeps a weight of at least 1 - this only ever
++    // chooses among candidates that already make equal progress towards the sea, so it can't undermine
++    // the guarantee above, it just adds some natural-looking variation to the path taken.
++    unsigned totalWeight = 0;
++    std::vector<unsigned> weights;
++    weights.reserve(candidates.size());
++    for(const auto& candidate : candidates)
++    {
++        const unsigned weight = highest - candidate.height + 1;
++        weights.push_back(weight);
++        totalWeight += weight;
++    }
++
++    unsigned roll = rnd.RandomValue(0u, totalWeight - 1);
++    for(unsigned idx = 0; idx < candidates.size(); ++idx)
++    {
++        if(roll < weights[idx])
++        {
++            return candidates[idx].dir;
++        }
++        roll -= weights[idx];
++    }
++
++    return candidates.back().dir; // unreachable
++}
++
++} // namespace
++
++River CreateStream(RandomUtility& rnd, Map& map, const NodeMapBase<unsigned>& distanceToSea, const MapPoint& source,
++                   Direction direction, unsigned length, unsigned splitRate)
+ {
+     const MapExtent& size = map.size;
+ 
+     River river;
+-    std::vector<Direction> exlcuded{direction + 2, direction + 3, direction + 4};
+ 
+     auto& textures = map.textureMap;
+     const auto water = textures.Find(IsWater);
+ 
+     MapPoint currentNode = source;
+-    Direction currentDir = direction;
++    // Nothing yet - treat the stream as if it had just arrived from the opposite of its initial
++    // heading, so it won't immediately reverse out of the gate on its very first step either.
++    Direction cameFrom = direction + 3;
+ 
+-    for(unsigned node = 0; node < length; ++node)
++    for(unsigned step = 0; step < length; ++step)
+     {
+-        const auto& triangles = GetTriangles(currentNode, size, currentDir);
+-
+-        for(const auto& triangle : triangles)
++        // Mark both of the current node's own triangles as water, i.e. its whole tile - not just the
++        // 2 triangles pointing in some specific direction. Which 2 triangles "point forward" depends
++        // on both the direction and the row's parity in this hex grid, and for some combinations they
++        // don't include either of the node's own triangles at all. Whenever the stream then turned,
++        // this could leave one (or both) of a node's triangles unset, showing up as small notches of
++        // land poking into an otherwise straight stretch of river. Setting a node's own tile directly
++        // instead sidesteps that entirely: every node the stream visits becomes a solid, fully
++        // water-covered tile, independent of the direction it was entered or left in.
++        const std::array<Triangle, 2> tile{Triangle(true, currentNode), Triangle(false, currentNode)};
++
++        for(const auto& triangle : tile)
+         {
+             textures.Set(triangle, water);
+ 
+@@ -37,24 +142,24 @@ River CreateStream(RandomUtility& rnd, Map& map, const MapPoint& source, Directi
+             }
+         }
+ 
+-        if(map.z[currentNode] == map.height.minimum)
+-        {
+-            return river;
+-        }
+-
+-        const auto lastDir = currentDir;
+-
+-        while(currentDir == lastDir || helpers::contains(exlcuded, currentDir))
++        if(distanceToSea[currentNode] == 0 || map.z[currentNode] == map.height.minimum)
+         {
+-            currentDir = lastDir + (rnd.ByChance(50) ? 5 : 1);
++            // Reached the sea (or another body of water at the map's minimum height) - stop here
++            // instead of continuing to wander across the water. Note: we still fall through to the
++            // height-carving step below instead of returning early, so the river bed of a stream that
++            // reaches the sea quickly gets lowered just like that of any other stream.
++            break;
+         }
+ 
+-        currentNode = map.getTextures().GetNeighbour(currentNode, lastDir);
++        const auto chosenDir = ChooseDirectionTowardsSea(rnd, map, distanceToSea, currentNode, cameFrom);
++        cameFrom = chosenDir + 3;
++        currentNode = map.getTextures().GetNeighbour(currentNode, chosenDir);
+ 
+         if(rnd.ByChance(splitRate))
+         {
+             auto splitDirection = direction + (rnd.ByChance(50) ? 5 : 1);
+-            auto anotherRivers = CreateStream(rnd, map, currentNode, splitDirection, length / 2, splitRate / 2);
++            auto anotherRivers =
++              CreateStream(rnd, map, distanceToSea, currentNode, splitDirection, length / 2, splitRate / 2);
+ 
+             for(const MapPoint& node : anotherRivers)
+             {
+@@ -63,7 +168,7 @@ River CreateStream(RandomUtility& rnd, Map& map, const MapPoint& source, Directi
+         }
+     }
+ 
+-    auto seaLevel = static_cast<unsigned>(map.height.minimum);
++    const auto seaLevel = static_cast<unsigned>(map.height.minimum);
+     auto& z = map.z;
+ 
+     for(const MapPoint& node : river)
+diff --git a/libs/s25main/mapGenerator/Rivers.h b/libs/s25main/mapGenerator/Rivers.h
+index 9571047ce..c5c3da9eb 100644
+--- a/libs/s25main/mapGenerator/Rivers.h
++++ b/libs/s25main/mapGenerator/Rivers.h
+@@ -12,19 +12,32 @@ namespace rttr::mapGenerator {
+ using River = std::set<MapPoint, MapPointLess>;
+ 
+ /**
+- * Creates a small stream of water for the specified map with the specified initial direction, length and split
+- * rate.
++ * Creates a small stream of water for the specified map, starting at "source" and flowing towards the sea.
+  *
+- * @param rnd random number generator to to create a random flow
++ * At every step the stream looks at all 6 neighboring nodes (except the one it just came from, unless that is
++ * the only way to keep moving towards the sea) and picks among those that get it strictly closer to the sea -
++ * i.e. it always makes guaranteed progress and reliably reaches an actual sea/lake node (a node at the map's
++ * minimum height) rather than petering out on dry land or stopping short of the water. Where more than one
++ * direction gets it equally close, it's biased towards the neighbor with the lower terrain height, purely for a
++ * more natural-looking meander - "length" needs to be at least the actual distance from "source" to the sea
++ * *plus one* (one node is drawn per step, including the starting node itself, so reaching a node at distance D
++ * takes D+1 drawn steps) for the stream to be guaranteed to arrive; see RandomMap::CreateRivers, which sizes it
++ * with a comfortable safety margin on top of that. "length" exists mainly as a safety cap for degenerate inputs
++ * (e.g. a "source" that cannot reach any sea node at all).
++ *
++ * @param rnd random number generator used to pick directions and split points
+  * @param map reference to the map to place the stream on
++ * @param distanceToSea distance (in nodes) from every point of the map to the nearest node at the map's minimum
++ *        height, e.g. as returned by DistancesTo(map.size, isSeaLevel) - see RandomMap::CreateRivers
+  * @param source source of the stream
+- * @param direction initial direction of the stream
+- * @param length length of the ditch in triangles
++ * @param direction initial direction of the stream, used only to seed which direction counts as "just came
++ *        from" for the very first step
++ * @param length maximum length of the ditch in triangles
+  * @param splitRate chance of the ditch to split up into two streams (0 by default, a number between 0 and 100)
+  *
+  * @returns all nodes the stream (incl. split up streams) is covering.
+  */
+-River CreateStream(RandomUtility& rnd, Map& map, const MapPoint& source, Direction direction, unsigned length,
+-                   unsigned splitRate = 0);
++River CreateStream(RandomUtility& rnd, Map& map, const NodeMapBase<unsigned>& distanceToSea, const MapPoint& source,
++                   Direction direction, unsigned length, unsigned splitRate = 0);
+ 
+ } // namespace rttr::mapGenerator
+diff --git a/tests/s25Main/mapGenerator/testRivers.cpp b/tests/s25Main/mapGenerator/testRivers.cpp
+index 4c19ef3e8..46c1bd447 100644
+--- a/tests/s25Main/mapGenerator/testRivers.cpp
++++ b/tests/s25Main/mapGenerator/testRivers.cpp
+@@ -3,8 +3,10 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include "mapGenFixtures.h"
++#include "mapGenerator/Algorithms.h"
+ #include "mapGenerator/Rivers.h"
+ #include "mapGenerator/TextureHelper.h"
++#include "mapGenerator/Triangles.h"
+ #include <boost/test/unit_test.hpp>
+ 
+ using namespace rttr::mapGenerator;
+@@ -15,37 +17,51 @@ public:
+     Map map;
+     RandomUtility rnd;
+     RiverFixture() : map(createMap(MapExtent(8, 10))), rnd(0) { map.z.Resize(map.size, map.height.maximum); }
+-};
+-
+-BOOST_FIXTURE_TEST_SUITE(RiversTest, RiverFixture)
+-
+-BOOST_AUTO_TEST_CASE(CreateStream_returns_river_of_expected_size)
+-{
+-    const MapPoint source(4, 1);
+-    const int length = 6;
+ 
+-    for(const auto d : helpers::enumRange<Direction>())
++    /// A distance-to-sea field for maps with no sea at all: every entry is "unreachable". Streams fall
++    /// back to pure (unguaranteed) height-based meandering in that case - good enough for tests that
++    /// only care about invariants unrelated to actually reaching the sea.
++    NodeMapBase<unsigned> noSea() const
+     {
+-        auto river = CreateStream(rnd, map, source, d, length);
++        NodeMapBase<unsigned> distances;
++        distances.Resize(map.size, static_cast<unsigned>(-1));
++        return distances;
++    }
+ 
+-        // each point represents one triangle while length is given
+-        // in tiles (2 triangles) - and one more for the source (which
+-        // is not counted in length)
++    NodeMapBase<unsigned> distanceToSeaField() const
++    {
++        return DistancesTo(map.size, [this](const MapPoint& pt) { return map.z[pt] == map.height.minimum; });
++    }
++};
+ 
+-        const unsigned expectedNodes = (length + 1) * 2;
++BOOST_FIXTURE_TEST_SUITE(RiversTest, RiverFixture)
+ 
+-        BOOST_TEST_REQUIRE(static_cast<unsigned>(river.size()) == expectedNodes);
+-    }
++BOOST_AUTO_TEST_CASE(CreateStream_marks_both_triangles_of_every_visited_node)
++{
++    // Regression test for a gap bug: a stream used to only mark the 2 triangles pointing in its
++    // current direction of travel, which - depending on direction and row parity - sometimes missed
++    // one or even both of a node's own triangles, especially right after the stream turned. This
++    // showed up as small notches of land poking into an otherwise straight river. Now every node the
++    // stream visits gets its whole tile (both triangles) marked, regardless of direction, so this must
++    // hold even for a single, deterministic first step.
++    const auto distanceToSea = noSea();
++    const MapPoint source(3, 3);
++
++    CreateStream(rnd, map, distanceToSea, source, Direction::East, 1);
++
++    BOOST_TEST_REQUIRE(map.textureMap.Check(Triangle(true, source), IsWater));
++    BOOST_TEST_REQUIRE(map.textureMap.Check(Triangle(false, source), IsWater));
+ }
+ 
+ BOOST_AUTO_TEST_CASE(CreateStream_returns_only_connected_nodes)
+ {
++    const auto distanceToSea = noSea();
+     const MapPoint source(3, 2);
+-    const int length = 7;
++    const unsigned length = 7;
+ 
+     for(const auto d : helpers::enumRange<Direction>())
+     {
+-        auto river = CreateStream(rnd, map, source, d, length);
++        auto river = CreateStream(rnd, map, distanceToSea, source, d, length);
+ 
+         auto containedByRiver = [&river](const MapPoint& pt) { return helpers::contains(river, pt); };
+ 
+@@ -60,12 +76,13 @@ BOOST_AUTO_TEST_CASE(CreateStream_returns_only_nodes_covered_by_water)
+ {
+     auto land = map.textureMap.Find(IsBuildableLand);
+     map.getTextures().Resize(map.size, land);
++    const auto distanceToSea = noSea();
+     const MapPoint source(3, 2);
+-    const int length = 7;
++    const unsigned length = 7;
+ 
+     for(const auto d : helpers::enumRange<Direction>())
+     {
+-        auto river = CreateStream(rnd, map, source, d, length);
++        auto river = CreateStream(rnd, map, distanceToSea, source, d, length);
+ 
+         for(const MapPoint& pt : river)
+         {
+@@ -83,12 +100,13 @@ BOOST_AUTO_TEST_CASE(CreateStream_reduces_height_of_river_nodes)
+         originalZ[pt] = map.z[pt];
+     }
+ 
++    const auto distanceToSea = noSea();
+     const MapPoint source(4, 1);
+-    const int length = 6;
++    const unsigned length = 6;
+ 
+     for(const auto d : helpers::enumRange<Direction>())
+     {
+-        auto river = CreateStream(rnd, map, source, d, length);
++        auto river = CreateStream(rnd, map, distanceToSea, source, d, length);
+ 
+         for(const MapPoint& pt : river)
+         {
+@@ -97,19 +115,107 @@ BOOST_AUTO_TEST_CASE(CreateStream_reduces_height_of_river_nodes)
+     }
+ }
+ 
+-BOOST_AUTO_TEST_CASE(CreateStream_which_ends_at_minimum_height)
++BOOST_AUTO_TEST_CASE(CreateStream_still_lowers_its_bed_when_it_reaches_the_sea_immediately)
+ {
+-    MapPoint source(3, 3);
+-    map.z.Resize(map.size, map.height.minimum);
+-    map.z[source] = map.height.maximum;
++    // Regression test: a stream used to `return` as soon as it reached sea level, skipping the
++    // height-carving step below entirely whenever that happened on its very first step. Now it always
++    // falls through to carve its bed, no matter how quickly it reaches the sea.
++    const MapPoint source(3, 3);
++    map.z.Resize(map.size, map.height.maximum);
++    map.z[source] = map.height.minimum;
++    const auto distanceToSea = distanceToSeaField();
+ 
+-    const auto river = CreateStream(rnd, map, source, Direction::East, 20);
+-    const auto expectedRange = map.z.GetPointsInRadiusWithCenter(source, 2);
++    const auto river = CreateStream(rnd, map, distanceToSea, source, Direction::East, 20);
+ 
++    BOOST_TEST_REQUIRE(!river.empty());
+     for(const MapPoint& pt : river)
+     {
+-        BOOST_TEST_REQUIRE(helpers::contains(expectedRange, pt));
++        BOOST_TEST_REQUIRE(map.z[pt] <= map.height.maximum - 1);
++    }
++}
++
++BOOST_AUTO_TEST_CASE(CreateStream_always_reaches_the_sea)
++{
++    // The core guarantee this whole algorithm is built around: previously, a stream's very first
++    // (essentially arbitrary) heading fixed a 120-degree cone of directions it could never leave for
++    // its entire length. If the actual sea happened to lie outside that cone, the stream was doomed to
++    // wander the wrong general region of the map for its whole length, regardless of terrain - showing
++    // up as rivers that petered out on dry land or stopped just short of the water. Now it always
++    // reaches an actual sea node, given a length budget of at least "distance to sea" + 1 (see
++    // CreateStream's docs for why the "+1"), regardless of which of the 6 directions it starts in.
++    map.z.Resize(map.size, map.height.maximum);
++    for(unsigned y = 0; y < map.size.y; ++y)
++    {
++        for(unsigned x = 0; x < 3; ++x)
++        {
++            map.z[MapPoint(x, y)] = map.height.minimum;
++        }
+     }
++    const auto distanceToSea = distanceToSeaField();
++
++    const MapPoint source(6, 5);
++    BOOST_TEST_REQUIRE(distanceToSea[source] != static_cast<unsigned>(-1));
++
++    for(const auto d : helpers::enumRange<Direction>())
++    {
++        const unsigned length = distanceToSea[source] + 1;
++        const auto river = CreateStream(rnd, map, distanceToSea, source, d, length);
++
++        const bool reachedSea = helpers::contains_if(
++          river, [this](const MapPoint& pt) { return map.z[pt] == map.height.minimum; });
++        BOOST_TEST_REQUIRE(reachedSea);
++    }
++}
++
++BOOST_AUTO_TEST_CASE(CreateStream_prefers_lower_terrain_among_equally_short_paths)
++{
++    // Among several directions that are all equally good in terms of actual progress towards the sea,
++    // the stream should still prefer lower terrain, purely for a more natural-looking meander - this
++    // must never override the progress guarantee tested above, only break ties between equally good
++    // options.
++    auto land = map.textureMap.Find(IsBuildableLand);
++    map.getTextures().Resize(map.size, land);
++    map.z.Resize(map.size, map.height.maximum);
++
++    const MapPoint source(3, 4);
++    // NorthEast's reverse (SouthWest) doesn't touch either candidate below, so it can't skew the
++    // "avoid immediately reversing" rule towards or against either of them.
++    const Direction initialDirection = Direction::NorthEast;
++    const MapPoint lowNeighbour = map.z.GetNeighbour(source, Direction::East);
++    const MapPoint highNeighbour = map.z.GetNeighbour(source, Direction::West);
++
++    // Two separate "sea" points, one reachable via each neighbor, both exactly 2 hex-steps from
++    // source, so distanceToSea ties between the two neighbors from source's point of view.
++    map.z[map.z.GetNeighbour(lowNeighbour, Direction::East)] = map.height.minimum;
++    map.z[map.z.GetNeighbour(highNeighbour, Direction::West)] = map.height.minimum;
++    map.z[lowNeighbour] = map.height.minimum + 5;
++
++    const auto distanceToSea = distanceToSeaField();
++
++    // Sanity-check our own setup: the two candidates really do tie, and no other neighbor of "source"
++    // ties with them (which would dilute the test).
++    BOOST_TEST_REQUIRE(distanceToSea[lowNeighbour] == distanceToSea[highNeighbour]);
++    for(Direction dir : {Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest})
++    {
++        BOOST_TEST_REQUIRE(distanceToSea[map.z.GetNeighbour(source, dir)] > distanceToSea[lowNeighbour]);
++    }
++
++    unsigned pickedLow = 0;
++    const unsigned trials = 30;
++    for(unsigned trial = 0; trial < trials; ++trial)
++    {
++        map.getTextures().Resize(map.size, land);
++        CreateStream(rnd, map, distanceToSea, source, initialDirection, 2);
++
++        const bool lowVisited = map.textureMap.Check(Triangle(true, lowNeighbour), IsWater)
++                                 && map.textureMap.Check(Triangle(false, lowNeighbour), IsWater);
++        if(lowVisited)
++        {
++            ++pickedLow;
++        }
++    }
++
++    BOOST_TEST_REQUIRE(pickedLow > trials / 2);
+ }
+ 
+ BOOST_AUTO_TEST_SUITE_END()

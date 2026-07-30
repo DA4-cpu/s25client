@@ -220,13 +220,16 @@ std::vector<River> RandomMap::CreateRivers(const MapPoint source)
         chosenSources.push_back(riverSource);
 
         const unsigned toSea = distanceToSea[riverSource];
-        // Generous but bounded budget: comfortably enough steps for a downhill-biased stream to reach
-        // the sea from here, with headroom left for meandering. Falls back to the old estimate if the
-        // map doesn't have any sea at all (e.g. in isolated unit tests).
-        const unsigned length = (toSea == unsigned(-1)) ? (size.x + size.y) : toSea * 2 + 4;
+        // The stream now always makes exactly 1 step of guaranteed progress towards the sea per step
+        // (see CreateStream), so "toSea + 1" is already sufficient (+1 because reaching a node at
+        // distance D takes D+1 drawn steps, counting the starting node itself) - the small constant
+        // just adds a little extra slack. Falls back to the old width+height estimate if the map
+        // doesn't have any sea at all (e.g. in isolated unit tests), in which case there's no distance
+        // to measure against.
+        const unsigned length = (toSea == unsigned(-1)) ? (size.x + size.y) : toSea + 5;
 
         const unsigned splitRate = rnd_.RandomValue(0u, 2u);
-        rivers.push_back(CreateStream(rnd_, map_, riverSource, dir, length, splitRate));
+        rivers.push_back(CreateStream(rnd_, map_, distanceToSea, riverSource, dir, length, splitRate));
     }
     return rivers;
 }

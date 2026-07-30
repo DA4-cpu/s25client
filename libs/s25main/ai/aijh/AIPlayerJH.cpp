@@ -288,6 +288,7 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
     {
         CheckExpeditions();
         CheckForester();
+        PruneExcessForesterWoodcutters();
         CheckGranitMine();
     }
 
@@ -310,6 +311,22 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
                 }
             }
         }
+        // check for useless charburners
+        const std::list<nobUsual*>& charBurners = aii.GetBuildings(BuildingType::Charburner);
+        if(charBurners.size() > 0)
+        {
+            int burns = 0;
+            for(const nobUsual* charburner : charBurners)
+            {
+                if(charburner->GetProductivity() < 1 && charburner->HasWorker()
+                   && (charBurners.size() - burns) > 3 && !charburner->AreThereAnyOrderedWares())
+                {
+                    aii.DestroyBuilding(charburner);
+                    RemoveUnusedRoad(*charburner->GetFlag(), Direction::NorthWest, true);
+                    burns++;
+                }
+            }
+        }
         //check for useless Woodcutters
         const std::list<nobUsual*>& woodCutters = aii.GetBuildings(BuildingType::Woodcutter);
         if(woodCutters.size() > 4)
@@ -318,7 +335,7 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
             for(const nobUsual* woodcutter : woodCutters)
             {
                 if((woodcutter->HasWorker() && (woodCutters.size() - burns) > 4)
-                   && 1 > GetDensity(woodcutter->GetPos(), AIResource::Wood, 7))
+                   && 1 > GetDensity(woodcutter->GetPos(), AIResource::Wood, 9))
                 {
                     aii.DestroyBuilding(woodcutter);
                     RemoveUnusedRoad(*woodcutter->GetFlag(), Direction::NorthWest, true);
@@ -369,8 +386,9 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
             DistributeMaxRankSoldiersByBlocking(5, wh);
         // 30 boards amd 50 stones for each warehouse - block after that - should speed up expansion and limit losses in
         // case a warehouse is destroyed unlimited when every warehouse has at least that amount
-        DistributeGoodsByBlocking(GoodType::Boards, 8);
-        DistributeGoodsByBlocking(GoodType::Stones, 8);
+        // Das verstopft nur die Straßen unnötig, deswegen deaktiviert
+        //DistributeGoodsByBlocking(GoodType::Boards, 8);
+        //DistributeGoodsByBlocking(GoodType::Stones, 8);
         // go to the picked random warehouse and try to build around it
         const auto* storehouse = AI::randomElement(storehouses);
         const MapPoint whPos = storehouse->GetPos();
@@ -949,7 +967,7 @@ MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size
 MapPoint AIPlayerJH::FindServingForesterPos(const MapPoint& pt) const
 {
     MapPoint nearestPos = MapPoint::Invalid();
-    unsigned nearestDist = 6; // must be within radius to count at all
+    unsigned nearestDist = RES_RADIUS[AIResource::Wood] + 1; // must be within radius to count at all
 
     const auto consider = [&](const MapPoint& foresterPos) {
         const unsigned dist = gwb.CalcDistance(pt, foresterPos);
@@ -1036,25 +1054,25 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius);
             if(foundPos.isValid())
             {
-                if(GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4)
+                if(GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4u)
                 {
                     std::cout << "Check Forester " << std::endl;
-                    if(GetDensity(foundPos, AIResource::Wood, 7) > 5
-                       || GetDensity(foundPos, AIResource::Plantspace, 7) < 10
-                       || GetDensity(foundPos, AIResource::Borderland, 1) > 1)
+                    if(GetDensity(foundPos, AIResource::Wood, 9u) > 5u
+                       || GetDensity(foundPos, AIResource::Plantspace, 7u) < 10u
+                       || GetDensity(foundPos, AIResource::Borderland, 1u) > 1u)
                     {
-                        std::cout << "Forester Placement Invalid!" << std::endl;
+                        //std::cout << "Forester Placement Invalid!" << std::endl;
                         foundPos = MapPoint::Invalid();
                     }
                     break;
                 } 
                 else
                 {
-                    if(aii.isBuildingNearby(BuildingType::Forester, foundPos, 13)
-                       || aii.isBuildingNearby(BuildingType::Charburner, foundPos, 13)
-                       || !aii.isBuildingNearby(BuildingType::Sawmill, foundPos, 13)
-                       || !WarehouseOrHarborNearby(foundPos, 13u) || GetDensity(foundPos, AIResource::Wood, 7) > 7
-                       || GetDensity(foundPos, AIResource::Borderland, 1) > 1)
+                    if(aii.isBuildingNearby(BuildingType::Forester, foundPos, 8u)
+                       || aii.isBuildingNearby(BuildingType::Charburner, foundPos, 8u)
+                       || !(aii.isBuildingNearby(BuildingType::Sawmill, foundPos, 8u)
+                       && WarehouseOrHarborNearby(foundPos, 8u)) || GetDensity(foundPos, AIResource::Wood, 9u) > 5u
+                       || GetDensity(foundPos, AIResource::Borderland, 1u) > 1u)
                         foundPos = MapPoint::Invalid();
                 }
             }
@@ -1068,7 +1086,7 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
             if (GetBldPlanner().GetNumBuildings(BuildingType::Sawmill) > 3)
             {
-                if(construction->OtherUsualBuildingInRadius(foundPos, 18, BuildingType::Sawmill)
+                if(construction->OtherUsualBuildingInRadius(foundPos, 22u, BuildingType::Sawmill)
                    || !WarehouseOrHarborNearby(foundPos, 15u))
                     foundPos = MapPoint::Invalid();
             } 
@@ -1146,9 +1164,9 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             break;
         case BuildingType::Charburner:
         {
-            foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 90);
+            foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 86);
             if(foundPos.isValid() && !BQsurroundcheck(foundPos, 4, true, 20)
-               || aii.isBuildingNearby(BuildingType::Forester, foundPos, 13))
+               || aii.isBuildingNearby(BuildingType::Forester, foundPos, 8))
                 foundPos = MapPoint::Invalid();
             break;
         }
@@ -1188,7 +1206,7 @@ unsigned AIPlayerJH::GetDensity(MapPoint pt, AIResource res, int radius)
     };
     const unsigned numGoodPts = helpers::count_if(pts, hasResource);
     // Ausgabe: Zeigt nun den Ressourcen-Namen anstatt nur den enum-Wert
-    std::cout << "Density of " << AIResourceToString(res) << ": " << (numGoodPts * 100) / numAllPTs << std::endl;
+    //std::cout << "Density of " << AIResourceToString(res) << ": " << (numGoodPts * 100) / numAllPTs << std::endl;
     return (numGoodPts * 100) / numAllPTs;
 }
 
@@ -1378,6 +1396,12 @@ void AIPlayerJH::HandleBuildingFinished(const MapPoint pt, BuildingType bld)
         {
             // if(bldPlanner->GetNumBuildings(BuildingType::Mint) < 4)
             AddBuildJob(BuildingType::Mint, pt);
+            break;
+        }
+        case BuildingType::Ironsmelter:
+        {
+            if(bldPlanner->GetNumBuildings(BuildingType::Ironsmelter) < 2)
+                AddBuildJob(BuildingType::Metalworks, pt);
             break;
         }
         default: break;
@@ -1683,6 +1707,50 @@ void AIPlayerJH::CheckForester()
     }
 }
 
+void AIPlayerJH::PruneExcessForesterWoodcutters()
+{
+    // Woodcutters can end up "belonging" to a forester (see FindServingForesterPos) without
+    // ever having been planned together with it, e.g.:
+    //  - several wild woodcutters were built while the area still had natural forest, and a
+    //    forester is placed nearby only later (its service area now covers all of them), or
+    //  - a forester's own trees run low so a wild woodcutter is added close by, but the
+    //    forester's woodcutters never run fully dry (the forester keeps replanting *some*
+    //    trees for the whole cluster), so HandleNoMoreResourcesReachable is never triggered
+    //    for the surplus ones.
+    // Nothing else ever revisits such an assignment, so we periodically re-check every
+    // forester here and trim it back down to WOODCUTTERS_PER_FORESTER, keeping the
+    // woodcutters closest to the forester (best supplied) and destroying the rest.
+    for(const nobUsual* forester : aii.GetBuildings(BuildingType::Forester))
+    {
+        const MapPoint foresterPos = forester->GetPos();
+
+        std::vector<const nobUsual*> assigned;
+        for(const nobUsual* woodcutter : aii.GetBuildings(BuildingType::Woodcutter))
+        {
+            if(FindServingForesterPos(woodcutter->GetPos()) == foresterPos)
+                assigned.push_back(woodcutter);
+        }
+        if(assigned.size() <= WOODCUTTERS_PER_FORESTER)
+            continue;
+
+        std::sort(assigned.begin(), assigned.end(), [this, &foresterPos](const nobUsual* a, const nobUsual* b) {
+            return gwb.CalcDistance(a->GetPos(), foresterPos) < gwb.CalcDistance(b->GetPos(), foresterPos);
+        });
+
+        // Keep the first WOODCUTTERS_PER_FORESTER (closest) ones, destroy the surplus
+        for(size_t i = WOODCUTTERS_PER_FORESTER; i < assigned.size(); ++i)
+        {
+            const nobUsual* woodcutter = assigned[i];
+            // Give a freshly finished woodcutter a moment to get staffed before we consider
+            // tearing it down again, avoiding needless churn right after it was built.
+            if(!woodcutter->HasWorker())
+                continue;
+            aii.DestroyBuilding(woodcutter);
+            RemoveUnusedRoad(*woodcutter->GetFlag(), Direction::NorthWest, true);
+        }
+    }
+}
+
 void AIPlayerJH::CheckGranitMine()
 {
     // stop production in granite mines when the ai has many stones (100+ and at least 15 for each warehouse)
@@ -1782,7 +1850,7 @@ void AIPlayerJH::TryToAttack()
                 enemyCount = 1;
             if(((attackersStrength / attackersCount)
                   < (enemyTarget->GetSoldiersStrength() / enemyCount - 1)
-                || attackersStrength < enemyTarget->GetSoldiersStrength())
+                || attackersStrength <= enemyTarget->GetSoldiersStrength())
                || enemyTarget->GetNumTroops() == 0)
                 continue;
         }
@@ -1959,7 +2027,7 @@ void AIPlayerJH::TrySeaAttack()
                     if(enemyCount == 0)
                         enemyCount = 1;
                     if(((attackersStrength / attackersCount) < (enemyTarget->GetSoldiersStrength() / enemyCount - 1)
-                        || attackersStrength < enemyTarget->GetSoldiersStrength())
+                        || attackersStrength <= enemyTarget->GetSoldiersStrength())
                        || enemyTarget->GetNumTroops() == 0)
                         continue;
                 }
@@ -2760,14 +2828,14 @@ void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingTy
     if(aii.isBuildingNearby(bldToAvoid, whPos, 9)) // schon vorhanden? -> fertig
     {
         // TEMP: warum wird abgebrochen?
-        std::cout << "Sawmill skip: existing sawmill within 9 of " << whPos.x << "/" << whPos.y << std::endl;
+        //std::cout << "Sawmill skip: existing sawmill within 9 of " << whPos.x << "/" << whPos.y << std::endl;
         return;
     }
 
     const MapPoint pos = SimpleFindPosition(whPos, BUILDING_SIZE[bldToPlace], /*enger Radius*/ 7);
     if(!pos.isValid())
     {
-        std::cout << "Sawmill skip: no valid pos found around " << whPos.x << "/" << whPos.y << std::endl;
+        //std::cout << "Sawmill skip: no valid pos found around " << whPos.x << "/" << whPos.y << std::endl;
         return;
     }
     aii.SetBuildingSite(pos, bldToPlace);

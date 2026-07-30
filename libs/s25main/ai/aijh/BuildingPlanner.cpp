@@ -253,6 +253,9 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         if(1 > GetNumBuildings(BuildingType::Mint))
             buildingsWanted[BuildingType::Mint] = 1;
 
+        buildingsWanted[BuildingType::Metalworks] =
+          ((GetNumBuildings(BuildingType::Ironsmelter) > 0) ? 1 : 0);
+
         // armory count = smelter -metalworks if there is more than 1 smelter or 1 if there is just 1.
         buildingsWanted[BuildingType::Armory] =
           (GetNumBuildings(BuildingType::Ironsmelter) > 0) ?
@@ -270,10 +273,6 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                 buildingsWanted[BuildingType::Brewery] = 1 + GetNumBuildings(BuildingType::Armory) / 6;
         } else
             buildingsWanted[BuildingType::Brewery] = 0;
-        // metalworks is 1 if there is at least 1 smelter, 2 if mines are inexhaustible and we have at least 4 iron
-        // smelters
-        buildingsWanted[BuildingType::Metalworks] =
-          ((GetNumBuildings(BuildingType::Ironsmelter) > 0) ? 1 : 0);
 
         // max processing
         unsigned foodusers = GetNumBuildings(BuildingType::Charburner) + GetNumBuildings(BuildingType::Mill)

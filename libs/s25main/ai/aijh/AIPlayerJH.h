@@ -184,6 +184,11 @@ public:
     void CheckExpeditions();
     /// if we have 1 complete forester but less than 1 military building and less than 2 buildingsites stop production
     void CheckForester();
+    /// Destroys woodcutters that are surplus to a forester's quota of WOODCUTTERS_PER_FORESTER.
+    /// This is needed because a forester can be built next to woodcutters that were originally
+    /// placed for natural forest (or for a different, nearby forester); nothing else ever
+    /// revisits that assignment, so without this the surplus woodcutters would stay forever.
+    void PruneExcessForesterWoodcutters();
     /// stop/resume granitemine production
     void CheckGranitMine();
     /// Tries to attack the enemy
