@@ -1218,11 +1218,16 @@ void AIPlayerJH::HandleNewMilitaryBuildingOccupied(const MapPoint pt)
     const auto* mil = gwb.GetSpecObj<nobMilitary>(pt);
     if(!mil)
         return;
-    // if near border and gold disabled (by addon): enable it
+    // if near border and gold disabled (by addon): enable it - but only as a fallback while we don't have a
+    // dedicated central upgrade/training building yet. Once we do, MilUpgradeOptim() enforces that only that
+    // building may accept coins, so don't fight it here.
+    const bool haveUpgradeBld = UpdateUpgradeBuilding() != nullptr;
     if(mil->GetFrontierDistance() != FrontierDistance::Far)
     {
-        if(mil->IsGoldDisabled())
+        if(!haveUpgradeBld && mil->IsGoldDisabled())
             aii.SetCoinsAllowed(pt, true);
+        else if(haveUpgradeBld && !mil->IsGoldDisabled())
+            aii.SetCoinsAllowed(pt, false);
     } else if((mil->GetBuildingType() == BuildingType::Barracks || mil->GetBuildingType() == BuildingType::Guardhouse)
               && mil->GetBuildingType() != construction->GetBiggestAllowedMilBuilding())
     {
@@ -1569,12 +1574,18 @@ void AIPlayerJH::HandleBorderChanged(const MapPoint pt)
     {
         if(mil->GetFrontierDistance() != FrontierDistance::Far)
         {
-            if(mil->IsGoldDisabled())
+            const bool haveUpgradeBld = UpdateUpgradeBuilding() != nullptr;
+            if(!haveUpgradeBld && mil->IsGoldDisabled())
                 aii.SetCoinsAllowed(pt, true);
+            else if(haveUpgradeBld && !mil->IsGoldDisabled())
+                aii.SetCoinsAllowed(pt, false);
 
-            // Fill up with soldiers
+            // Fill up with soldiers - except rank 0 (recruits) while the coin-gated funnel is active; those
+            // should keep accumulating in the central upgrade building only, see MilUpgradeOptim.
             for(unsigned rank = 0; rank < NUM_SOLDIER_RANKS; ++rank)
             {
+                if(rank == 0 && recruitFunnelActive)
+                    continue;
                 if(mil->GetTroopLimit(rank) != mil->GetMaxTroopsCt())
                     aii.SetTroopLimit(mil->GetPos(), rank, mil->GetMaxTroopsCt());
             }
@@ -1599,6 +1610,22 @@ void AIPlayerJH::HandleLostLand(const MapPoint pt)
 void AIPlayerJH::MilUpgradeOptim()
 {
     const auto* upgradeBld = UpdateUpgradeBuilding();
+
+    // Coin-gated recruit funnel: once we have more than 1 coin in storage, new recruits (rank 0 / "Schütze")
+    // should only pile up in the central upgrade/training building so they actually get promoted there, instead
+    // of being spread thin over every military building. Once storage drops back below 1 coin (i.e. is empty),
+    // there is nothing to promote with anyway, so recruits are allowed to fill up other buildings normally again.
+    // The hysteresis (>1 to turn on, <1 to turn off) keeps this stable while sitting exactly at 1 coin.
+    if(upgradeBld)
+    {
+        const unsigned coinsStored = AmountInStorage(GoodType::Coins) + upgradeBld->GetNumCoins();
+        if(coinsStored > 1)
+            recruitFunnelActive = true;
+        else if(coinsStored < 1)
+            recruitFunnelActive = false;
+    } else
+        recruitFunnelActive = false;
+
     const std::list<nobMilitary*>& militaryBuildings = aii.GetMilitaryBuildings();
     const auto numPlannedConnectedInlandMilitaryBlds = GetNumPlannedConnectedInlandMilitaryBlds();
     unsigned count = 0;
@@ -1608,10 +1635,14 @@ void AIPlayerJH::MilUpgradeOptim()
         {
             if(milBld->IsGoldDisabled() && milBld->GetFrontierDistance() != FrontierDistance::Far)
                 aii.SetCoinsAllowed(milBld->GetPos(), true);
+            // No training building (anymore) - make sure nobody is stuck without recruits from an earlier funnel
+            if(milBld->GetTroopLimit(0) != milBld->GetMaxTroopsCt())
+                aii.SetTroopLimit(milBld->GetPos(), 0, milBld->GetMaxTroopsCt());
         } else if(milBld != upgradeBld) // not upgrade building
         {
-            //if(!milBld->IsGoldDisabled()) // deactivate gold for all other buildings
-            //    aii.SetCoinsAllowed(milBld->GetPos(), false);
+            if(!milBld->IsGoldDisabled()) // deactivate gold for all other buildings - only the upgrade
+                                          // building may accept coins
+                aii.SetCoinsAllowed(milBld->GetPos(), false);
             // For dedicated inland buildings send out troops until 1 private is left, then cancel road
             // Connect frontier buildings to road system.
             if(milBld->GetFrontierDistance() != FrontierDistance::Far)
@@ -1636,6 +1667,11 @@ void AIPlayerJH::MilUpgradeOptim()
                     RemoveUnusedRoad(*milBld->GetFlag(), Direction::NorthWest, true, true, true);
                 }
             }
+            // Final say on rank 0 (recruits): overrides whatever the blocks above set, so the coin-based funnel
+            // always wins, whether this is a frontier building, a pruned inland building or anything else.
+            const unsigned wantedRecruitLimit = recruitFunnelActive ? 0 : milBld->GetMaxTroopsCt();
+            if(milBld->GetTroopLimit(0) != wantedRecruitLimit)
+                aii.SetTroopLimit(milBld->GetPos(), 0, wantedRecruitLimit);
         } else // upgrade building
         {
             if(!construction->IsConnectedToRoadSystem(milBld->GetFlag()))
@@ -1645,7 +1681,9 @@ void AIPlayerJH::MilUpgradeOptim()
             }
             if(milBld->IsGoldDisabled()) // activate gold
                 aii.SetCoinsAllowed(milBld->GetPos(), true);
-            // Keep 0 max rank soldiers, 1 of each other rank and fill the rest with privates
+            // Keep 0 max rank soldiers (generals never stay here, they get sent out to the field right away),
+            // 1 of each other rank, and fill the rest with privates - this is where all new recruits accumulate
+            // to get promoted while coins are being funneled here.
             aii.SetTroopLimit(milBld->GetPos(), 0, milBld->GetMaxTroopsCt());
             for(unsigned rank = 1; rank < ggs.GetMaxMilitaryRank(); ++rank)
                 aii.SetTroopLimit(milBld->GetPos(), rank, 1);

@@ -15,7 +15,6 @@
 #include "lua/GameDataLoader.h"
 #include "libsiedler2/libsiedler2.h"
 
-#include <algorithm>
 #include <stdexcept>
 
 namespace rttr::mapGenerator {
@@ -155,81 +154,16 @@ std::vector<River> RandomMap::CreateRivers(const MapPoint source)
     std::vector<River> rivers;
 
     const MapExtent size = settings_.size;
-
-    // Distance (in nodes) from every point to the closest point at the map's minimum height (i.e. the
-    // sea/a lake). This lets every river get just enough of a length budget to actually reach the
-    // water, instead of the previous flat "width + height" guess, which could be far too short for
-    // sources near the middle of a large map and needlessly long for sources already close to the
-    // coast.
-    const auto distanceToSea =
-      DistancesTo(size, [this](const MapPoint& pt) { return map_.z[pt] == map_.height.minimum; });
-
-    // River sources look more natural coming from elevated terrain ("mountain springs") instead of an
-    // arbitrary point anywhere on the map, so prefer picking them from the upper ~15% of the height
-    // distribution.
-    const auto elevationThreshold = LimitFor(map_.z, 0.85, map_.height.minimum);
-    const auto elevatedPoints =
-      SelectPoints([this, elevationThreshold](const MapPoint& pt) { return map_.z[pt] > elevationThreshold; }, size);
-
-    // Keep multiple independent river sources spaced apart so they don't all start crowded into the
-    // same corner of the map.
-    const unsigned minSourceDistance = std::max(3u, static_cast<unsigned>(size.x + size.y) / 8);
-    std::vector<MapPoint> chosenSources;
-
-    const auto pickLandSource = [&]() {
-        if(elevatedPoints.empty())
-        {
-            // No meaningfully elevated terrain to speak of (e.g. a tiny or perfectly flat map) - fall
-            // back to picking any point, as before.
-            return rnd_.Point(size);
-        }
-
-        MapPoint candidate = rnd_.RandomItem(elevatedPoints);
-        for(unsigned attempt = 0; attempt < 10; ++attempt)
-        {
-            const bool farEnough =
-              std::all_of(chosenSources.begin(), chosenSources.end(), [&](const MapPoint& existing) {
-                  return map_.z.CalcDistance(candidate, existing) >= minSourceDistance;
-              });
-            if(farEnough)
-            {
-                break;
-            }
-            candidate = rnd_.RandomItem(elevatedPoints);
-        }
-        return candidate;
-    };
-
-    // For maps with a shared, given source (the central lake/mountain of mixed & water maps), every
-    // river direction gets its own point close to that source instead of the exact same node, so
-    // multiple rivers don't look like perfectly symmetric spokes radiating out of a single pixel.
-    const unsigned jitterRadius = std::max(2u, static_cast<unsigned>(std::min(size.x, size.y)) / 20);
-    const auto jitterSource = [&](const MapPoint& anchor) {
-        const auto nearby = map_.z.GetPointsInRadiusWithCenter(anchor, jitterRadius);
-        return nearby.empty() ? anchor : rnd_.RandomItem(nearby);
-    };
+    const unsigned length = size.x + size.y;
 
     for(const auto dir : helpers::EnumRange<Direction>())
     {
-        if(!rnd_.ByChance(settings_.rivers))
+        if(rnd_.ByChance(settings_.rivers))
         {
-            continue;
+            const unsigned splitRate = rnd_.RandomValue(0u, 2u);
+            rivers.push_back(
+              CreateStream(rnd_, map_, source.isValid() ? source : rnd_.Point(map_.size), dir, length, splitRate));
         }
-
-        const MapPoint riverSource = source.isValid() ? jitterSource(source) : pickLandSource();
-        chosenSources.push_back(riverSource);
-
-        const unsigned toSea = distanceToSea[riverSource];
-        // The stream now always makes exactly 1 step of guaranteed progress towards the sea per step
-        // (see CreateStream), so "toSea + 1" is already sufficient (+1 because reaching a node at
-        // distance D takes D+1 drawn steps, counting the starting node itself) - the small constant
-        // just adds a little extra slack. Falls back to the old width+height estimate if the map
-        // doesn't have any sea at all (e.g. in isolated unit tests), in which case there's no distance
-        // to measure against.
-        const unsigned length = (toSea == unsigned(-1)) ? (size.x + size.y) : toSea + 5;
-
-        const unsigned splitRate = rnd_.RandomValue(0u, 2u);
-        rivers.push_back(CreateStream(rnd_, map_, distanceToSea, riverSource, dir, length, splitRate));
     }
     return rivers;
 }

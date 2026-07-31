@@ -255,6 +255,11 @@ private:
     int isInitGfCompleted;
     /// resigned yes/no
     bool defeated;
+    /// Whether new recruits (rank 0 / "Schütze") are currently funneled exclusively into the central upgrade
+    /// building (see MilUpgradeOptim). Turned on once we have more than 1 coin in storage and only turned off
+    /// again once we have less than 1 (i.e. 0) - this hysteresis avoids flipping the troop limit back and forth
+    /// every time MilUpgradeOptim runs while storage sits right at the threshold.
+    bool recruitFunnelActive = false;
     AIEventManager eventManager;
     std::unique_ptr<BuildingPlanner> bldPlanner;
     std::unique_ptr<AIConstruction> construction;
