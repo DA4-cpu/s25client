@@ -28,6 +28,9 @@ class noFlag;
 class nofPassiveSoldier;
 class RoadPathFinder;
 class SoundManager;
+namespace civ {
+class TechTree;
+}
 
 constexpr Direction getOppositeDir(const RoadDir roadDir) noexcept
 {
@@ -62,6 +65,8 @@ class GameWorldBase : public World
     std::unique_ptr<SoundManager> soundManager;
     std::set<MapPoint, MapPointLess> ptsInsideComputerBarriers;
     LuaInterfaceGame* lua;
+    /// Tech tree of the civilization mode, loaded on first use
+    mutable std::unique_ptr<civ::TechTree> techTree_;
 
 protected:
     /// Interface zum GUI
@@ -84,6 +89,11 @@ public:
     /// Get the economy mode handler if set.
     /// TODO: Add const correct version, but iwEconomicProgress still needs to be able to call UpdateAmounts
     EconomyModeHandler* getEconHandler() const { return econHandler.get(); }
+
+    /// Tech tree of the civilization mode. Loaded from the game data on first use (empty if loading failed)
+    const civ::TechTree& GetTechTree() const;
+    /// Use the given tech tree instead of the one from the game data (scenarios, tests)
+    void SetTechTree(std::unique_ptr<civ::TechTree> techTree);
 
     /// Can a node be used for a road (no flag/bld, no other road, no danger...)
     /// Should only be used for the points between the 2 flags of a road

@@ -15,6 +15,7 @@
 #include "gameTypes/SettingsTypes.h"
 #include "gameTypes/ShipDirection.h"
 #include "gameTypes/TempleProductionMode.h"
+#include <optional>
 #include <vector>
 
 struct InventorySetting;
@@ -72,6 +73,8 @@ public:
     /// Toggles the construction mode of the shipyard between boat and ship
     bool SetShipYardMode(MapPoint pt, bool buildShips);
     bool SetTempleProductionMode(MapPoint pt, ProductionMode mode);
+    /// Civilization mode: Research the technology with the given index (nullopt: stop researching)
+    bool SetResearch(std::optional<unsigned> techIdx);
     /// Starts Preparation of an sea expedition in a habor
     bool StartStopExpedition(MapPoint pt, bool start);
     /// Lets a ship found a colony

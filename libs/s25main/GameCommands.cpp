@@ -12,6 +12,7 @@
 #include "buildings/nobMilitary.h"
 #include "buildings/nobShipYard.h"
 #include "buildings/nobTemple.h"
+#include "civ/Research.h"
 #include "enum_cast.hpp"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/format.hpp"
@@ -20,6 +21,7 @@
 #include "nodeObjs/noShip.h"
 #include "gameData/SettingTypeConv.h"
 #include <algorithm>
+#include <optional>
 #include <stdexcept>
 
 namespace gc {
@@ -247,6 +249,14 @@ void SetCoinsAllowed::Execute(GameWorld& world, uint8_t playerId)
     auto* const bld = world.GetSpecObj<nobMilitary>(pt_);
     if(bld && bld->GetPlayer() == playerId)
         bld->SetCoinsAllowed(enabled);
+}
+
+void SetResearch::Execute(GameWorld& world, uint8_t playerId)
+{
+    std::optional<civ::TechIdx> tech;
+    if(techIdx != STOP_RESEARCH)
+        tech = techIdx;
+    civ::setResearch(world, playerId, tech);
 }
 
 void SetArmorAllowed::Execute(GameWorld& world, uint8_t playerId)

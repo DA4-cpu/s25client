@@ -10,6 +10,7 @@
 #include "legacy/TerrainData.h"
 #include "lua/GameDataLoader.h"
 #include "gameData/EdgeDesc.h"
+#include "gameData/TechnologyDesc.h"
 #include "gameData/TerrainDesc.h"
 #include "gameData/WorldDescription.h"
 #include "rttr/test/ConfigOverride.hpp"
@@ -136,6 +137,65 @@ BOOST_AUTO_TEST_CASE(DetectError)
     rttr::test::LogAccessor logAcc;
     BOOST_TEST(!loader.Load());
     BOOST_CHECK_THROW(loadGameData(desc), std::runtime_error);
+}
+
+BOOST_AUTO_TEST_CASE(LoadTechnologies)
+{
+    rttr::test::TmpFolder tmp;
+    {
+        bnw::ofstream file(tmp / "default.lua");
+        file << R"(
+rttr:AddTechnology{ name = "a", title = "A", era = 0, cost = { Boards = 2, Stones = 1 },
+                    unlocks = { buildings = { "Farm" } } }
+rttr:AddTechnology{ name = "b", title = "B", description = "Desc", era = 2, requires = { "a" }, time = 30,
+                    exclusive = true, addon = "WINE", aiPriority = 5 }
+)";
+    }
+    WorldDescription desc;
+    GameDataLoader loader(desc, tmp);
+    BOOST_TEST_REQUIRE(loader.Load());
+    BOOST_TEST_REQUIRE(desc.technologies.size() == 2u);
+    const TechnologyDesc& a = *desc.technologies.tryGet("a");
+    BOOST_TEST(a.title == "A");
+    BOOST_TEST(a.cost.size() == 2u);
+    BOOST_TEST(a.cost.at("Boards") == 2u);
+    BOOST_TEST((a.unlockedBuildings == std::vector<std::string>{"Farm"}));
+    BOOST_TEST(!a.exclusive);
+    const TechnologyDesc& b = *desc.technologies.tryGet("b");
+    BOOST_TEST(b.description == "Desc");
+    BOOST_TEST(b.era == 2u);
+    BOOST_TEST((b.requirements == std::vector<std::string>{"a"}));
+    BOOST_TEST(b.time == 30u);
+    BOOST_TEST(b.exclusive);
+    BOOST_TEST(b.requiredAddon == "WINE");
+    BOOST_TEST(b.aiPriority == 5);
+}
+
+BOOST_AUTO_TEST_CASE(DetectInvalidTechnologies)
+{
+    const auto expectLoadFailure = [](const std::string& content) {
+        rttr::test::TmpFolder tmp;
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << content;
+        }
+        WorldDescription desc;
+        GameDataLoader loader(desc, tmp);
+        rttr::test::LogAccessor logAcc;
+        BOOST_TEST(!loader.Load());
+    };
+    // Prerequisite defined after use (would allow cycles)
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "b", requires = { "a" } }
+rttr:AddTechnology{ name = "a" })");
+    // Duplicate name
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a" }
+rttr:AddTechnology{ name = "a" })");
+    // Unknown key (typo)
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", cots = { Boards = 1 } })");
+    // Zero cost
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", cost = { Boards = 0 } })");
+    // Invalid era
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", era = 7 })");
 }
 
 BOOST_AUTO_TEST_CASE(DetectRecursion)

@@ -581,6 +581,31 @@ public:
     void Execute(GameWorld& world, uint8_t playerId) override;
 };
 
+/// Civilization mode: Set the technology to research (or stop researching)
+class SetResearch : public GameCommand
+{
+    GC_FRIEND_DECL;
+
+public:
+    /// Value of techIdx to stop the current research
+    static constexpr uint16_t STOP_RESEARCH = 0xFFFF;
+
+private:
+    const uint16_t techIdx;
+
+protected:
+    SetResearch(uint16_t techIdx) : GameCommand(GCType::SetResearch), techIdx(techIdx) {}
+    SetResearch(Serializer& ser) : GameCommand(GCType::SetResearch), techIdx(ser.PopUnsignedShort()) {}
+
+public:
+    void Execute(GameWorld& world, uint8_t playerId) override;
+    void Serialize(Serializer& ser) const override
+    {
+        GameCommand::Serialize(ser);
+        ser.PushUnsignedShort(techIdx);
+    }
+};
+
 /// Alle eigenen Fahnen zerstören
 class DestroyAll : public GameCommand
 {

@@ -13,6 +13,7 @@
 #include <boost/container/static_vector.hpp>
 #include <list>
 #include <memory>
+#include <optional>
 #include <queue>
 
 class noFlag;
@@ -191,6 +192,9 @@ public:
     void PruneExcessForesterWoodcutters();
     /// stop/resume granitemine production
     void CheckGranitMine();
+    /// Civilization mode: Choose the next technology to research if there is no current research
+    /// or switch to an affordable one if the current research is stuck (no wares available)
+    void CheckResearch(unsigned gf);
     /// Tries to attack the enemy
     void TryToAttack();
     /// sea attack
@@ -251,6 +255,10 @@ private:
     helpers::EnumArray<AIResourceMap, AIResource> resourceMaps;
 
     unsigned attack_interval;
+    /// Civilization mode: Last checked research and its paid amount to detect stuck research
+    std::optional<unsigned> lastResearchTech_;
+    unsigned lastResearchPaid_ = 0;
+    unsigned lastResearchProgressGF_ = 0;
     unsigned build_interval;
     int isInitGfCompleted;
     /// resigned yes/no

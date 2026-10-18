@@ -13,6 +13,7 @@
 #include "addons/const_addons.h"
 #include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
+#include "civ/TechTree.h"
 #include "figures/nofPassiveSoldier.h"
 #include "helpers/EnumRange.h"
 #include "helpers/IdRange.h"
@@ -27,6 +28,7 @@
 #include "gameData/BuildingProperties.h"
 #include "gameData/GameConsts.h"
 #include "gameData/TerrainDesc.h"
+#include "s25util/Log.h"
 #include <utility>
 
 GameWorldBase::GameWorldBase(std::vector<GamePlayer> players, const GlobalGameSettings& gameSettings, EventManager& em)
@@ -35,6 +37,27 @@ GameWorldBase::GameWorldBase(std::vector<GamePlayer> players, const GlobalGameSe
 {}
 
 GameWorldBase::~GameWorldBase() = default;
+
+const civ::TechTree& GameWorldBase::GetTechTree() const
+{
+    if(!techTree_)
+    {
+        try
+        {
+            techTree_ = std::make_unique<civ::TechTree>(civ::loadDefaultTechTree());
+        } catch(const std::exception& e)
+        {
+            LOG.write(_("Error: Failed to load the tech tree of the civilization mode: %1%\n")) % e.what();
+            techTree_ = std::make_unique<civ::TechTree>(WorldDescription());
+        }
+    }
+    return *techTree_;
+}
+
+void GameWorldBase::SetTechTree(std::unique_ptr<civ::TechTree> techTree)
+{
+    techTree_ = std::move(techTree);
+}
 
 void GameWorldBase::Init(const MapExtent& mapSize, DescIdx<LandscapeDesc> lt)
 {

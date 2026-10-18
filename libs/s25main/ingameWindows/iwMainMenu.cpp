@@ -8,6 +8,7 @@
 #include "Loader.h"
 #include "WindowManager.h"
 #include "addons/const_addons.h"
+#include "civ/Research.h"
 #include "controls/ctrlTextButton.h"
 #include "iwAIDebug.h"
 #include "iwBuildOrder.h"
@@ -20,6 +21,7 @@
 #include "iwMerchandiseStatistics.h"
 #include "iwMilitary.h"
 #include "iwOptionsWindow.h"
+#include "iwResearch.h"
 #include "iwShip.h"
 #include "iwStatistics.h"
 #include "iwTools.h"
@@ -30,11 +32,21 @@
 #include "world/GameWorldViewer.h"
 #include "gameData/const_gui_ids.h"
 
+namespace {
+/// Additional height of the window for the research button in the civilization mode
+constexpr unsigned short CIV_EXTRA_HEIGHT = 36;
+unsigned short getExtraHeight(const GameWorldView& gwv)
+{
+    return civ::isEnabled(gwv.GetWorld()) ? CIV_EXTRA_HEIGHT : 0;
+}
+} // namespace
+
 iwMainMenu::iwMainMenu(GameWorldView& gwv, GameCommandFactory& gcFactory)
-    : IngameWindow(CGI_MAINSELECTION, IngameWindow::posLastOrCenter, Extent(190, 286), _("Main selection"),
-                   LOADER.GetImageN("io", 5)),
+    : IngameWindow(CGI_MAINSELECTION, IngameWindow::posLastOrCenter, Extent(190, 286 + getExtraHeight(gwv)),
+                   _("Main selection"), LOADER.GetImageN("io", 5)),
       gwv(gwv), gcFactory(gcFactory)
 {
+    const unsigned short extraHeight = getExtraHeight(gwv);
     // Verteilung
     AddImageButton(0, DrawPoint(12, 22), Extent(53, 44), TextureColor::Grey, LOADER.GetImageN("io", 134),
                    _("Distribution of goods"));
@@ -94,9 +106,16 @@ iwMainMenu::iwMainMenu(GameWorldView& gwv, GameCommandFactory& gcFactory)
         bt->ResizeForMaxChars(bt->GetText().size());
     }
 
+    // Forschung (Zivilisationsmodus)
+    if(extraHeight)
+    {
+        AddTextButton(14, DrawPoint(12, 237), Extent(165, 28), TextureColor::Green2, _("Forschung"), NormalFont,
+                      _("Technologiebaum und Forschung"));
+    }
+
     // Optionen
-    AddImageButton(30, DrawPoint(12, 231), Extent(165, 32), TextureColor::Grey, LOADER.GetImageN("io", 37),
-                   _("Options"));
+    AddImageButton(30, DrawPoint(12, 231 + extraHeight), Extent(165, 32), TextureColor::Grey,
+                   LOADER.GetImageN("io", 37), _("Options"));
 }
 
 /**
@@ -187,6 +206,11 @@ void iwMainMenu::Msg_ButtonClick(const unsigned ctrl_id)
                 }
                 WINDOWMANAGER.Show(std::make_unique<iwAIDebug>(gwv, ais));
             }
+        }
+        break;
+        case 14: // Forschung
+        {
+            WINDOWMANAGER.ToggleWindow(std::make_unique<iwResearch>(gwv.GetViewer(), gcFactory));
         }
         break;
         case 30: // Optionen

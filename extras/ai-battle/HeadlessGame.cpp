@@ -7,6 +7,8 @@
 #include "GlobalGameSettings.h"
 #include "PlayerInfo.h"
 #include "Savegame.h"
+#include "civ/PlayerResearch.h"
+#include "civ/Research.h"
 #include "factories/AIFactory.h"
 #include "network/PlayerGameCommands.h"
 #include "world/GameWorld.h"
@@ -206,7 +208,10 @@ void HeadlessGame::PrintState()
     if(first_run)
         first_run = false;
     else
-        printConsole("\x1b[%dA", 8 + world_.GetNumPlayers()); // Move cursor back up
+    {
+        const unsigned numCivLines = civ::isEnabled(world_) ? 1 + world_.GetNumPlayers() : 0;
+        printConsole("\x1b[%dA", 8 + world_.GetNumPlayers() + numCivLines); // Move cursor back up
+    }
 
     printConsole("┌───────────────┬───────────────────────┬───────────────────────┬────────────────┐\n");
     printConsole(
@@ -231,6 +236,20 @@ void HeadlessGame::PrintState()
                      HumanReadableNumber(player.GetStatisticCurrentValue(StatisticType::Gold)).c_str());
     }
     printConsole("└────────────────────────┴─────────────────┴─────────────┴───────────┴───────────┘\n");
+
+    // Civilization mode: Research state
+    if(civ::isEnabled(world_))
+    {
+        printConsole("Forschung (von %u Technologien):\x1b[K\n", world_.GetTechTree().size());
+        for(unsigned playerId = 0; playerId < world_.GetNumPlayers(); ++playerId)
+        {
+            const civ::PlayerResearch& research = world_.GetPlayer(playerId).GetResearch();
+            const auto& current = research.GetCurrent();
+            printConsole("  %-22s %3u erforscht, aktuell: %s\x1b[K\n", world_.GetPlayer(playerId).name.c_str(),
+                         research.GetNumResearched(),
+                         current ? world_.GetTechTree().get(*current).name.c_str() : "-");
+        }
+    }
 
     lastReportGf_ = em_.GetCurrentGF();
 }

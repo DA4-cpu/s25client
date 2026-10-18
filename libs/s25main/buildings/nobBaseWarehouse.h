@@ -151,6 +151,9 @@ public:
     void AddToInventory(const GoodsAndPeopleCounts& what, bool addToPlayer);
     void AddToInventory(const PeopleCounts& people, bool addToPlayer);
     void AddToInventory(const GoodCounts& goods, bool addToPlayer);
+    /// Removes up to maxCount wares of the given (canonical) type which are not yet ordered from the warehouse
+    /// and the owners inventory (consumed e.g. by research). Returns the number of wares removed
+    unsigned TakeWares(GoodType good, unsigned maxCount);
 
     /// Gibt Anzahl der Waren bzw. Figuren zurück
     unsigned GetNumRealWares(GoodType type) const { return inventory.real[type]; }

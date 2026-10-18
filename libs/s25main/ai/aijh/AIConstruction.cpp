@@ -46,6 +46,9 @@ AIConstruction::~AIConstruction() = default;
 
 void AIConstruction::AddBuildJob(std::unique_ptr<BuildJob> job, bool front)
 {
+    // E.g. not yet researched in the civilization mode
+    if(!aii.CanBuildBuildingtype(job->GetType()))
+        return;
     if(job->GetType() == BuildingType::Shipyard && aijh.IsInvalidShipyardPosition(job->GetAround()))
         return;
     if(BuildingProperties::IsMilitary(

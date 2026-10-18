@@ -29,6 +29,7 @@ private:
     void AddLandscape(const kaguya::LuaTable& data);
     void AddTerrainEdge(const kaguya::LuaTable& data);
     void AddTerrain(const kaguya::LuaTable& data);
+    void AddTechnology(const kaguya::LuaTable& data);
 
     WorldDescription& worldDesc_;
     boost::filesystem::path basePath_, curFile_;

@@ -1155,6 +1155,19 @@ void nobBaseWarehouse::AddToInventory(const GoodCounts& goods, bool addToPlayer)
     }
 }
 
+unsigned nobBaseWarehouse::TakeWares(const GoodType good, const unsigned maxCount)
+{
+    RTTR_Assert(ConvertShields(good) == good);
+    const unsigned count = std::min(maxCount, inventory[good]);
+    if(count == 0)
+        return 0;
+    inventory.Remove(good, count);
+    world->GetPlayer(player).DecreaseInventoryWare(good, count);
+    // Weapons or beer might be gone now
+    TryStopRecruiting();
+    return count;
+}
+
 void nobBaseWarehouse::AddToInventory(const PeopleCounts& people, bool addToPlayer)
 {
     GamePlayer& owner = world->GetPlayer(player);

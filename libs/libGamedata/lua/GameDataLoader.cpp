@@ -10,6 +10,7 @@
 #include "helpers/format.hpp"
 #include "gameData/EdgeDesc.h"
 #include "gameData/LandscapeDesc.h"
+#include "gameData/TechnologyDesc.h"
 #include "gameData/TerrainDesc.h"
 #include "gameData/WorldDescription.h"
 #include "s25util/Log.h"
@@ -46,7 +47,8 @@ void GameDataLoader::Register(kaguya::State& state)
     state["RTTRGameData"].setClass(kaguya::UserdataMetatable<GameDataLoader, LuaInterfaceBase>()
                                      .addFunction("AddLandscape", &GameDataLoader::AddLandscape)
                                      .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
-                                     .addFunction("AddTerrain", &GameDataLoader::AddTerrain));
+                                     .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
+                                     .addFunction("AddTechnology", &GameDataLoader::AddTechnology));
 }
 
 class LuaIncludeError : public std::runtime_error
@@ -109,6 +111,11 @@ void GameDataLoader::AddTerrainEdge(const kaguya::LuaTable& data)
 void GameDataLoader::AddTerrain(const kaguya::LuaTable& data)
 {
     worldDesc_.terrain.add(TerrainDesc(data, worldDesc_));
+}
+
+void GameDataLoader::AddTechnology(const kaguya::LuaTable& data)
+{
+    worldDesc_.technologies.add(TechnologyDesc(data, worldDesc_));
 }
 
 void loadGameData(WorldDescription& worldDesc)

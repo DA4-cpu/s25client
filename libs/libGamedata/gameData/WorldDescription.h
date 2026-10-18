@@ -7,6 +7,7 @@
 #include "DescriptionContainer.h"
 #include "EdgeDesc.h"
 #include "LandscapeDesc.h"
+#include "TechnologyDesc.h"
 #include "TerrainDesc.h"
 #include <stdexcept>
 
@@ -27,6 +28,8 @@ struct WorldDescription
     DescriptionContainer<LandscapeDesc> landscapes;
     DescriptionContainer<EdgeDesc> edges;
     DescriptionContainer<TerrainDesc> terrain;
+    /// Tech tree of the civilization mode
+    DescriptionContainer<TechnologyDesc> technologies;
     // Convenience accessors
     template<class T>
     const T& get(DescIdx<T> idx) const
@@ -53,4 +56,10 @@ template<>
 inline const DescriptionContainer<TerrainDesc>& WorldDescription::getContainer() const
 {
     return terrain;
+}
+
+template<>
+inline const DescriptionContainer<TechnologyDesc>& WorldDescription::getContainer() const
+{
+    return technologies;
 }

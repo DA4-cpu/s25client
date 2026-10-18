@@ -18,6 +18,7 @@
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Research.h"
 #include "helpers/IdRange.h"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/containerUtils.h"
@@ -267,6 +268,9 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
     if(gf % 100 == 0)
         bldPlanner->UpdateBuildingsWanted(*this);
     ExecuteAIJob();
+
+    if((gf + playerId * 7) % 200 == 0)
+        CheckResearch(gf);
 
     if((gf + playerId * 17) % attack_interval == 0)
     {
@@ -1787,6 +1791,38 @@ void AIPlayerJH::PruneExcessForesterWoodcutters()
             RemoveUnusedRoad(*woodcutter->GetFlag(), Direction::NorthWest, true);
         }
     }
+}
+
+void AIPlayerJH::CheckResearch(const unsigned gf)
+{
+    // Civilization mode: Always research something
+    if(!civ::isEnabled(gwb))
+        return;
+    const std::optional<unsigned> current = player.GetResearch().GetCurrent();
+    if(!current)
+    {
+        if(const auto tech = civ::chooseResearchForAI(gwb, playerId))
+            aii.SetResearch(*tech);
+        lastResearchTech_.reset();
+        return;
+    }
+    const unsigned paid = civ::getAmountPaid(gwb, playerId, *current);
+    if(current != lastResearchTech_ || paid != lastResearchPaid_ || civ::isAffordable(gwb, playerId, *current))
+    {
+        // Progressing
+        lastResearchTech_ = current;
+        lastResearchPaid_ = paid;
+        lastResearchProgressGF_ = gf;
+        return;
+    }
+    // Waiting for wares for a long time -> switch to something we can pay right now (progress is kept)
+    constexpr unsigned maxStuckGFs = 3000;
+    if(gf - lastResearchProgressGF_ < maxStuckGFs)
+        return;
+    const auto alternative = civ::chooseResearchForAI(gwb, playerId, current);
+    if(alternative && civ::isAffordable(gwb, playerId, *alternative))
+        aii.SetResearch(*alternative);
+    lastResearchProgressGF_ = gf;
 }
 
 void AIPlayerJH::CheckGranitMine()

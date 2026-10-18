@@ -9,6 +9,7 @@
 #include "helpers/EnumArray.h"
 #include "helpers/MultiArray.h"
 #include "variant.h"
+#include "civ/PlayerResearch.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/Inventory.h"
 #include "gameTypes/MapCoordinates.h"
@@ -295,6 +296,9 @@ public:
     void EnableBuilding(BuildingType type) { building_enabled[type] = true; }
     void DisableBuilding(BuildingType type) { building_enabled[type] = false; }
     bool IsBuildingEnabled(BuildingType type) const;
+    /// Research state of the civilization mode (tech tree)
+    civ::PlayerResearch& GetResearch() { return research_; }
+    const civ::PlayerResearch& GetResearch() const { return research_; }
     /// Set the area the player may have territory in
     /// Nothing means all is allowed. See Lua description
     std::vector<MapPoint>& GetRestrictedArea() { return restricted_area; }
@@ -455,6 +459,8 @@ private:
      */
     std::vector<MapPoint> restricted_area;
     helpers::EnumArray<bool, BuildingType> building_enabled;
+    /// Research state of the civilization mode
+    civ::PlayerResearch research_;
 
     // TODO: Move to viewer. Mutable as a work-around
     mutable helpers::EnumArray<int8_t, Tool> tools_ordered_delta;

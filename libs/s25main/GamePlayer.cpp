@@ -21,6 +21,7 @@
 #include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Research.h"
 #include "figures/nofCarrier.h"
 #include "figures/nofFlagWorker.h"
 #include "helpers/containerUtils.h"
@@ -231,6 +232,12 @@ void GamePlayer::Serialize(SerializedGameData& sgd) const
     }
 
     sgd.PushBool(emergency);
+
+    // Civilization mode (only stored if active so normal games don't depend on the tech tree data)
+    const bool hasResearch = civ::isEnabled(world);
+    sgd.PushBool(hasResearch);
+    if(hasResearch)
+        research_.Serialize(sgd, world.GetTechTree());
 }
 
 void GamePlayer::Deserialize(SerializedGameData& sgd)
@@ -391,6 +398,10 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
     }
 
     emergency = sgd.PopBool();
+
+    research_ = civ::PlayerResearch();
+    if(sgd.GetGameDataVersion() >= 16 && sgd.PopBool())
+        research_.Deserialize(sgd, world.GetTechTree());
 }
 
 template<class T_IsWarehouseGood>
@@ -2304,7 +2315,11 @@ void GamePlayer::Trade(nobBaseWarehouse* goalWh, const boost_variant2<GoodType, 
 
 bool GamePlayer::IsBuildingEnabled(BuildingType type) const
 {
-    return building_enabled[type] || (isHuman() && world.GetGameInterface()->GI_GetCheats().areAllBuildingsEnabled());
+    if(building_enabled[type])
+        return true;
+    // No game interface e.g. in headless games/tests
+    const GameInterface* gi = world.GetGameInterface();
+    return isHuman() && gi && gi->GI_GetCheats().areAllBuildingsEnabled();
 }
 
 void GamePlayer::FillVisualSettings(VisualSettings& visualSettings) const

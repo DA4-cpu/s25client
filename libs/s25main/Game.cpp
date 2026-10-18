@@ -10,6 +10,7 @@
 #include "addons/AddonEconomyModeGameLength.h"
 #include "addons/const_addons.h"
 #include "ai/AIPlayer.h"
+#include "civ/Research.h"
 #include "lua/LuaInterfaceGame.h"
 #include "network/GameClient.h"
 #include "gameData/GameConsts.h"
@@ -30,6 +31,8 @@ void Game::Start(bool startFromSave)
     if(started_)
         return;
     started_ = true;
+    // Civilization mode: Lock/unlock buildings according to the research (also required after loading)
+    civ::startGame(world_);
     if(startFromSave)
         CheckObjective();
     else
@@ -86,6 +89,10 @@ void Game::RunGF()
             player.TestPacts();
         }
     }
+
+    // Civilization mode: Pay research costs and complete technologies
+    if(em_->GetCurrentGF() % civ::RESEARCH_UPDATE_INTERVAL == 0)
+        civ::update(world_);
 
     if(world_.HasLua())
         world_.GetLua().EventGameFrame(em_->GetCurrentGF());
