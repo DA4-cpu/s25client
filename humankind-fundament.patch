@@ -1,0 +1,3355 @@
+From 14154fcb21d3d83dc8517734994e09794b9f0b6e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 15:42:25 +0200
+Subject: [PATCH 1/2] Fix IwMapGenerator UI test after removal of the landscape
+ selection
+
+The map generator always uses the combined "world" landscape now, so the
+test must not reference ID_cbMapType anymore.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ecbt6iNe6TTNK8eeYFBMrj
+---
+ tests/s25Main/UI/testIngameWindow.cpp | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/tests/s25Main/UI/testIngameWindow.cpp b/tests/s25Main/UI/testIngameWindow.cpp
+index 8ef7fc6e4..5d1437acf 100644
+--- a/tests/s25Main/UI/testIngameWindow.cpp
++++ b/tests/s25Main/UI/testIngameWindow.cpp
+@@ -23,9 +23,11 @@
+ #include "ingameWindows/iwHelp.h"
+ #include "ingameWindows/iwMapGenerator.h"
+ #include "ingameWindows/iwMsgbox.h"
++#include "lua/GameDataLoader.h"
+ #include "ogl/glArchivItem_Bitmap.h"
+ #include "uiHelper/uiHelpers.hpp"
+ #include "gameTypes/GameTypesOutput.h"
++#include "gameData/WorldDescription.h"
+ #include "gameData/const_gui_ids.h"
+ #include "rttr/test/random.hpp"
+ #include "s25util/StringConversion.h"
+@@ -74,7 +76,6 @@ BOOST_AUTO_TEST_CASE(MinimizeWindow)
+ BOOST_AUTO_TEST_CASE(IwMapGenerator)
+ {
+     const auto expectedNumPlayers = rttr::test::randomValue(2u, 7u);
+-    const auto expectedMapType = rttr::test::randomValue<uint8_t>(0, 2);
+     const auto expectedGoldRatio = rttr::test::randomValue(0u, 100u);
+     const auto expectedIronRatio = rttr::test::randomValue(0u, 100u);
+     const auto expectedCoalRatio = rttr::test::randomValue(0u, 100u);
+@@ -83,14 +84,19 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
+     const auto expectedTrees = rttr::test::randomValue(0u, 100u);
+     const auto expectedStonePiles = rttr::test::randomValue(0u, 100u);
+ 
++    WorldDescription worldDesc;
++    loadGameData(worldDesc);
++    const DescIdx<LandscapeDesc> worldLandscape = worldDesc.landscapes.getIndex("world");
++    BOOST_TEST_REQUIRE(worldLandscape);
++
+     rttr::mapGenerator::MapSettings settings;
+     iwMapGenerator wnd(settings);
+     // UI values are set according to current values. Check that and adjust to random value to test apply-button
+     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbNumPlayers)->GetSelection().value()
+                == settings.numPlayers - 2u);
+     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbNumPlayers)->SetSelection(expectedNumPlayers - 2);
+-    BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapType)->GetSelection().value() == settings.type.value);
+-    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapType)->SetSelection(expectedMapType);
++    // The generator always uses the combined "world" landscape (climate zones), the landscape can't be chosen anymore
++    BOOST_TEST(settings.type == worldLandscape);
+     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapStyle)->GetSelection().value()
+                == static_cast<unsigned>(settings.style));
+     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapStyle)->SetSelection(1); // MapStyle::Land
+@@ -122,7 +128,7 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
+     BOOST_TEST(wnd.ShouldBeClosed());
+ 
+     BOOST_TEST(settings.numPlayers == expectedNumPlayers);
+-    BOOST_TEST(settings.type == DescIdx<LandscapeDesc>(expectedMapType));
++    BOOST_TEST(settings.type == worldLandscape);
+     BOOST_TEST(settings.size == MapExtent(256, 128));
+     BOOST_TEST(settings.style == rttr::mapGenerator::MapStyle::Land);
+     BOOST_TEST(settings.mountainDistance == rttr::mapGenerator::MountainDistance::VeryFar);
+-- 
+2.43.0
+
+
+From f505f4d0a2c223efef2966a911a2f1aa49ca2b0a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 15:42:25 +0200
+Subject: [PATCH 2/2] Zivilisationsmodus: Fundament mit Technologiebaum und
+ Forschung
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Neues Addon "Zivilisationsmodus (Technologiebaum)" (AddonId 0x01300000):
+- Technologiebaum datengetrieben in Lua (data/RTTR/gamedata/civ/techtree.lua),
+  geladen über GameDataLoader (rttr:AddTechnology), nur wenn der Modus aktiv ist
+- Zu Beginn nur Grundwirtschaft; alle von Technologien freigeschalteten Gebäude
+  sind gesperrt und werden durch Forschung freigeschaltet
+- Forschung verbraucht Waren aus dem freien Lagerbestand (alle 2 s), optionale
+  Mindestdauer, Fortschritt bleibt pro Technologie erhalten
+- Exklusive Technologien (Kulturen/Wunder): wer zuerst fertig ist, bekommt sie,
+  andere erhalten bezahlte Waren zurück
+- Addon-abhängige Technologien (Wein, Leder, Köhler)
+- Spielbefehl gc::SetResearch, Savegame-Version 16 (Technologien namentlich
+  gespeichert, robust gegen Änderungen am Baum)
+- Forschungsfenster (Hauptauswahl -> Forschung)
+- AIJH forscht selbstständig, wechselt bei Warenmangel, plant keine gesperrten
+  Gebäude
+- ai-battle zeigt den Forschungsstand
+- DescIdx unterstützt größere Indextypen (Technologien: uint16_t)
+- GamePlayer::IsBuildingEnabled stürzt ohne GameInterface nicht mehr ab
+- Tests: testResearch.cpp (13 Fälle), Lua-Lade-/Validierungstests
+- Designdokument und Grafik-Recherche unter doc/humankind/
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ecbt6iNe6TTNK8eeYFBMrj
+---
+ data/RTTR/gamedata/civ/default.lua            |   7 +
+ data/RTTR/gamedata/civ/techtree.lua           | 298 ++++++++++++++
+ doc/humankind/DESIGN.md                       | 150 +++++++
+ doc/humankind/GRAFIK.md                       |  77 ++++
+ extras/ai-battle/HeadlessGame.cpp             |  21 +-
+ libs/libGamedata/gameData/DescIdx.h           |  12 +-
+ libs/libGamedata/gameData/TechnologyDesc.cpp  |  50 +++
+ libs/libGamedata/gameData/TechnologyDesc.h    |  50 +++
+ libs/libGamedata/gameData/WorldDescription.h  |   9 +
+ libs/libGamedata/lua/GameDataLoader.cpp       |   9 +-
+ libs/libGamedata/lua/GameDataLoader.h         |   1 +
+ libs/s25main/CMakeLists.txt                   |   1 +
+ libs/s25main/Game.cpp                         |   7 +
+ libs/s25main/GameCommand.cpp                  |   1 +
+ libs/s25main/GameCommand.h                    |   3 +-
+ libs/s25main/GameCommands.cpp                 |  10 +
+ libs/s25main/GameCommands.h                   |  25 ++
+ libs/s25main/GamePlayer.cpp                   |  17 +-
+ libs/s25main/GamePlayer.h                     |   6 +
+ libs/s25main/GlobalGameSettings.cpp           |   3 +-
+ libs/s25main/SerializedGameData.cpp           |   3 +-
+ libs/s25main/addons/AddonCivilization.h       |  24 ++
+ libs/s25main/addons/Addons.h                  |   2 +
+ libs/s25main/addons/const_addons.h            |   4 +-
+ libs/s25main/ai/aijh/AIConstruction.cpp       |   3 +
+ libs/s25main/ai/aijh/AIPlayerJH.cpp           |  36 ++
+ libs/s25main/ai/aijh/AIPlayerJH.h             |   8 +
+ libs/s25main/buildings/nobBaseWarehouse.cpp   |  13 +
+ libs/s25main/buildings/nobBaseWarehouse.h     |   3 +
+ libs/s25main/civ/Identifiers.cpp              |  70 ++++
+ libs/s25main/civ/Identifiers.h                |  25 ++
+ libs/s25main/civ/PlayerResearch.cpp           | 130 ++++++
+ libs/s25main/civ/PlayerResearch.h             |  52 +++
+ libs/s25main/civ/Research.cpp                 | 286 ++++++++++++++
+ libs/s25main/civ/Research.h                   |  63 +++
+ libs/s25main/civ/TechTree.cpp                 | 126 ++++++
+ libs/s25main/civ/TechTree.h                   |  79 ++++
+ libs/s25main/factories/GameCommandFactory.cpp |   6 +
+ libs/s25main/factories/GameCommandFactory.h   |   3 +
+ libs/s25main/gameData/const_gui_ids.h         |   1 +
+ libs/s25main/ingameWindows/iwMainMenu.cpp     |  32 +-
+ libs/s25main/ingameWindows/iwResearch.cpp     | 306 ++++++++++++++
+ libs/s25main/ingameWindows/iwResearch.h       |  41 ++
+ libs/s25main/world/GameWorldBase.cpp          |  23 ++
+ libs/s25main/world/GameWorldBase.h            |  10 +
+ tests/libGameData/testGameData.cpp            |  60 +++
+ tests/s25Main/integration/testResearch.cpp    | 372 ++++++++++++++++++
+ 47 files changed, 2525 insertions(+), 13 deletions(-)
+ create mode 100644 data/RTTR/gamedata/civ/default.lua
+ create mode 100644 data/RTTR/gamedata/civ/techtree.lua
+ create mode 100644 doc/humankind/DESIGN.md
+ create mode 100644 doc/humankind/GRAFIK.md
+ create mode 100644 libs/libGamedata/gameData/TechnologyDesc.cpp
+ create mode 100644 libs/libGamedata/gameData/TechnologyDesc.h
+ create mode 100644 libs/s25main/addons/AddonCivilization.h
+ create mode 100644 libs/s25main/civ/Identifiers.cpp
+ create mode 100644 libs/s25main/civ/Identifiers.h
+ create mode 100644 libs/s25main/civ/PlayerResearch.cpp
+ create mode 100644 libs/s25main/civ/PlayerResearch.h
+ create mode 100644 libs/s25main/civ/Research.cpp
+ create mode 100644 libs/s25main/civ/Research.h
+ create mode 100644 libs/s25main/civ/TechTree.cpp
+ create mode 100644 libs/s25main/civ/TechTree.h
+ create mode 100644 libs/s25main/ingameWindows/iwResearch.cpp
+ create mode 100644 libs/s25main/ingameWindows/iwResearch.h
+ create mode 100644 tests/s25Main/integration/testResearch.cpp
+
+diff --git a/data/RTTR/gamedata/civ/default.lua b/data/RTTR/gamedata/civ/default.lua
+new file mode 100644
+index 000000000..c78183e29
+--- /dev/null
++++ b/data/RTTR/gamedata/civ/default.lua
+@@ -0,0 +1,7 @@
++-- Copyright (C) 2026 DA4-cpu
++--
++-- SPDX-License-Identifier: GPL-2.0-or-later
++
++-- Game data of the civilization mode (addon "Zivilisationsmodus").
++-- Loaded only when the addon is enabled.
++include "techtree.lua"
+diff --git a/data/RTTR/gamedata/civ/techtree.lua b/data/RTTR/gamedata/civ/techtree.lua
+new file mode 100644
+index 000000000..1ec7cc5b6
+--- /dev/null
++++ b/data/RTTR/gamedata/civ/techtree.lua
+@@ -0,0 +1,298 @@
++-- Copyright (C) 2026 DA4-cpu
++--
++-- SPDX-License-Identifier: GPL-2.0-or-later
++
++--[[
++Technologiebaum des Zivilisationsmodus.
++
++Felder von rttr:AddTechnology{...}:
++  name        eindeutiger Bezeichner (wird in Spielständen gespeichert, NICHT nachträglich umbenennen)
++  title       Anzeigename
++  description Beschreibung
++  era         Zeitalter 0..6 (0 Jungsteinzeit, 1 Antike, 2 Klassik, 3 Mittelalter, 4 Frühe Neuzeit,
++              5 Industriezeitalter, 6 Moderne)
++  requires    Liste von Voraussetzungen (Bezeichner). Müssen WEITER OBEN definiert sein.
++  cost        Warenkosten, z.B. { Boards = 4, Stones = 2 }. Bezeichner wie im Enum GoodType:
++              Beer Tongs Hammer Axe Saw PickAxe Shovel Crucible RodAndLine Scythe Water Cleaver Rollingpin Bow
++              Boat Sword Iron Flour Fish Bread Shield Wood Boards Stones Grain Coins Gold IronOre Coal Meat Ham
++              Grapes Wine Skins Leather Armor
++  time        Mindestdauer in Sekunden ab Forschungsbeginn
++  unlocks     { buildings = {...} } Bezeichner wie im Enum BuildingType:
++              Barracks Guardhouse Watchtower Fortress LookoutTower Catapult Woodcutter Forester Quarry Fishery
++              Hunter Well Sawmill Slaughterhouse Mill Bakery Ironsmelter Metalworks Armory Mint Shipyard Brewery
++              Storehouse Farm PigFarm DonkeyBreeder Charburner GoldMine IronMine CoalMine GraniteMine
++              HarborBuilding Vineyard Winery Temple Skinner Tannery LeatherWorks
++  exclusive   true: nur der Spieler, der sie zuerst erforscht, bekommt sie (Kulturen, Wunder)
++  addon       Technologie existiert nur, wenn dieses Addon aktiv ist (z.B. "WINE", "LEATHER", "CHARBURNER")
++  aiPriority  höher = die KI forscht sie früher
++
++Alles, was hier von einer Technologie freigeschaltet wird, ist zu Spielbeginn gesperrt.
++
++Balancing-Hinweis: Forschung bezahlt nur mit Waren, die frei im Lager liegen. Zwischenprodukte wie Getreide, Eisen
++oder Münzen werden meist direkt an verarbeitende Gebäude geliefert und liegen selten im Lager - solche Kosten
++werden nur langsam bezahlt. Gleiches gilt für Holz (geht direkt ins Sägewerk). Getreide kostet deshalb nur "Mahlen und Backen"
++(bevor es Abnehmer gibt); sonst werden v. a. Bretter, Steine, Fisch und Wasser verlangt.
++Ohne Forschung verfügbar (Grundwirtschaft): Holzfäller, Förster, Steinbruch, Sägewerk, Fischer, Jäger,
++Brunnen, Baracke, Wachstube, Spähturm.
++]]
++
++-------------------------------------------------------------------------------
++-- 0: Jungsteinzeit
++-------------------------------------------------------------------------------
++
++rttr:AddTechnology{
++    name = "storage",
++    title = "Vorratshaltung",
++    description = "Überschüsse werden nicht mehr nur im Lager des Stammes gesammelt, sondern in eigenen Vorratshäusern. "
++        .. "Das verkürzt die Wege in entlegene Gebiete.",
++    era = 0,
++    cost = { Boards = 4, Stones = 4 },
++    time = 30,
++    unlocks = { buildings = { "Storehouse" } },
++    aiPriority = 95,
++}
++
++rttr:AddTechnology{
++    name = "agriculture",
++    title = "Ackerbau",
++    description = "Statt nur zu jagen und zu sammeln, säen die Menschen Getreide aus und ernten es. "
++        .. "Die Grundlage für Brot, Bier und Viehzucht.",
++    era = 0,
++    cost = { Boards = 6 },
++    time = 30,
++    unlocks = { buildings = { "Farm" } },
++    aiPriority = 90,
++}
++
++rttr:AddTechnology{
++    name = "toolmaking",
++    title = "Werkzeugbau",
++    description = "Ein Werkzeugmacher stellt Äxte, Sägen, Hämmer und andere Werkzeuge her, "
++        .. "damit neue Berufe ausgebildet werden können.",
++    era = 0,
++    cost = { Boards = 6, Stones = 2 },
++    time = 30,
++    unlocks = { buildings = { "Metalworks" } },
++    aiPriority = 85,
++}
++
++rttr:AddTechnology{
++    name = "milling",
++    title = "Mahlen und Backen",
++    description = "Getreide wird zu Mehl gemahlen und mit Wasser zu Brot gebacken. Brot ernährt die Bergleute.",
++    era = 0,
++    requires = { "agriculture" },
++    cost = { Grain = 4, Stones = 4, Boards = 2 },
++    time = 45,
++    unlocks = { buildings = { "Mill", "Bakery" } },
++    aiPriority = 80,
++}
++
++rttr:AddTechnology{
++    name = "animal_husbandry",
++    title = "Viehzucht",
++    description = "Schweine werden mit Getreide und Wasser gemästet und in der Metzgerei zu Fleisch verarbeitet.",
++    era = 0,
++    requires = { "agriculture" },
++    cost = { Boards = 6, Stones = 2 },
++    time = 45,
++    unlocks = { buildings = { "PigFarm", "Slaughterhouse" } },
++    aiPriority = 70,
++}
++
++-------------------------------------------------------------------------------
++-- 1: Antike
++-------------------------------------------------------------------------------
++
++rttr:AddTechnology{
++    name = "mining",
++    title = "Bergbau",
++    description = "Stollen werden in die Berge getrieben, um Kohle, Eisenerz und Granit abzubauen. "
++        .. "Bergleute brauchen Nahrung.",
++    era = 1,
++    requires = { "toolmaking" },
++    cost = { Boards = 6, Fish = 4 },
++    time = 60,
++    unlocks = { buildings = { "CoalMine", "IronMine", "GraniteMine" } },
++    aiPriority = 88,
++}
++
++rttr:AddTechnology{
++    name = "metallurgy",
++    title = "Eisenverhüttung",
++    description = "In der Eisenschmelze wird Erz mit Kohle zu Eisen geschmolzen.",
++    era = 1,
++    requires = { "mining" },
++    cost = { IronOre = 4, Coal = 4, Stones = 6 },
++    time = 60,
++    unlocks = { buildings = { "Ironsmelter" } },
++    aiPriority = 86,
++}
++
++rttr:AddTechnology{
++    name = "charcoal",
++    title = "Köhlerei",
++    description = "Holz wird in Meilern langsam zu Holzkohle verschwelt - Kohle ganz ohne Bergwerk.",
++    era = 1,
++    requires = { "metallurgy" },
++    cost = { Boards = 4, Stones = 4 },
++    time = 45,
++    unlocks = { buildings = { "Charburner" } },
++    addon = "CHARBURNER",
++    aiPriority = 40,
++}
++
++rttr:AddTechnology{
++    name = "brewing",
++    title = "Brauwesen",
++    description = "Aus Getreide und Wasser wird Bier gebraut. Ohne Bier lassen sich keine Soldaten ausheben.",
++    era = 1,
++    requires = { "agriculture" },
++    cost = { Water = 4, Boards = 4 },
++    time = 45,
++    unlocks = { buildings = { "Brewery" } },
++    aiPriority = 78,
++}
++
++rttr:AddTechnology{
++    name = "weaponsmithing",
++    title = "Waffenschmiede",
++    description = "Schmiede fertigen aus Eisen und Kohle Schwerter und Schilde für neue Soldaten.",
++    era = 1,
++    requires = { "metallurgy", "brewing" },
++    cost = { Iron = 6, Coal = 6, Boards = 4 },
++    time = 60,
++    unlocks = { buildings = { "Armory" } },
++    aiPriority = 75,
++}
++
++rttr:AddTechnology{
++    name = "pack_animals",
++    title = "Lasttiere",
++    description = "Esel werden gezüchtet und tragen auf stark genutzten Straßen zusätzlich Waren.",
++    era = 1,
++    requires = { "animal_husbandry" },
++    cost = { Water = 6, Boards = 6 },
++    time = 60,
++    unlocks = { buildings = { "DonkeyBreeder" } },
++    aiPriority = 45,
++}
++
++rttr:AddTechnology{
++    name = "viticulture",
++    title = "Weinbau",
++    description = "An sonnigen Hängen werden Reben gepflanzt; der Winzer keltert aus den Trauben Wein.",
++    era = 1,
++    requires = { "agriculture" },
++    cost = { Boards = 6, Stones = 2 },
++    time = 45,
++    unlocks = { buildings = { "Vineyard", "Winery" } },
++    addon = "WINE",
++    aiPriority = 35,
++}
++
++rttr:AddTechnology{
++    name = "tanning",
++    title = "Gerberei",
++    description = "Häute aus der Schweinezucht werden gegerbt und zu Leder und Rüstungen verarbeitet.",
++    era = 1,
++    requires = { "animal_husbandry" },
++    cost = { Ham = 4, Boards = 4 },
++    time = 45,
++    unlocks = { buildings = { "Skinner", "Tannery", "LeatherWorks" } },
++    addon = "LEATHER",
++    aiPriority = 35,
++}
++
++-------------------------------------------------------------------------------
++-- 2: Klassik
++-------------------------------------------------------------------------------
++
++rttr:AddTechnology{
++    name = "fortification",
++    title = "Befestigungsbau",
++    description = "Steinerne Wachtürme sichern die Grenzen und beherbergen mehr Soldaten.",
++    era = 2,
++    requires = { "mining" },
++    cost = { Stones = 10, Boards = 6 },
++    time = 60,
++    unlocks = { buildings = { "Watchtower" } },
++    aiPriority = 65,
++}
++
++rttr:AddTechnology{
++    name = "currency",
++    title = "Münzprägung",
++    description = "Gold wird abgebaut und zu Münzen geprägt. Münzen spornen Soldaten zur Ausbildung an.",
++    era = 2,
++    requires = { "metallurgy" },
++    cost = { Iron = 2, Coal = 4, Stones = 6, Boards = 6 },
++    time = 90,
++    unlocks = { buildings = { "GoldMine", "Mint" } },
++    aiPriority = 55,
++}
++
++rttr:AddTechnology{
++    name = "shipbuilding",
++    title = "Schiffbau",
++    description = "Werften bauen Boote für Wasserstraßen und später hochseetaugliche Schiffe.",
++    era = 2,
++    requires = { "toolmaking" },
++    cost = { Boards = 14, Stones = 4 },
++    time = 60,
++    unlocks = { buildings = { "Shipyard" } },
++    aiPriority = 30,
++}
++
++rttr:AddTechnology{
++    name = "siege_engines",
++    title = "Belagerungstechnik",
++    description = "Katapulte schleudern Steine auf feindliche Militärgebäude.",
++    era = 2,
++    requires = { "fortification" },
++    cost = { Stones = 10, Boards = 8 },
++    time = 90,
++    unlocks = { buildings = { "Catapult" } },
++    aiPriority = 35,
++}
++
++rttr:AddTechnology{
++    name = "temple_cult",
++    title = "Tempelkult",
++    description = "Tempel nehmen Opfergaben aus Wein, Fleisch und Brot entgegen und bringen dafür Gold hervor.",
++    era = 2,
++    requires = { "viticulture" },
++    cost = { Wine = 4, Stones = 8, Boards = 6 },
++    time = 90,
++    unlocks = { buildings = { "Temple" } },
++    addon = "WINE",
++    aiPriority = 30,
++}
++
++-------------------------------------------------------------------------------
++-- 3: Mittelalter
++-------------------------------------------------------------------------------
++
++rttr:AddTechnology{
++    name = "castles",
++    title = "Burgenbau",
++    description = "Mächtige Burgen kontrollieren ein großes Gebiet und bieten Platz für eine ganze Garnison.",
++    era = 3,
++    requires = { "fortification", "currency" },
++    cost = { Stones = 20, Boards = 12, Coins = 4 },
++    time = 120,
++    unlocks = { buildings = { "Fortress" } },
++    aiPriority = 50,
++}
++
++rttr:AddTechnology{
++    name = "navigation",
++    title = "Hochseeschifffahrt",
++    description = "Häfen ermöglichen Expeditionen über das Meer, Handel mit Übersee und Angriffe von See aus.",
++    era = 3,
++    requires = { "shipbuilding" },
++    cost = { Boards = 16, Stones = 10 },
++    time = 120,
++    unlocks = { buildings = { "HarborBuilding" } },
++    aiPriority = 30,
++}
+diff --git a/doc/humankind/DESIGN.md b/doc/humankind/DESIGN.md
+new file mode 100644
+index 000000000..4b039febb
+--- /dev/null
++++ b/doc/humankind/DESIGN.md
+@@ -0,0 +1,150 @@
++<!--
++Copyright (C) 2026 DA4-cpu
++
++SPDX-License-Identifier: GPL-2.0-or-later
++-->
++
++# Zivilisationsmodus („Humankind-Schicht“) – Designdokument
++
++Lebendes Dokument. Jede Designentscheidung wird hier mit Datum festgehalten.
++Offene Fragen stehen am Ende; beantwortete Fragen wandern nach oben in die Entscheidungen.
++
++## Vision
++
++Siedler-2-Wirtschaft (Echtzeit, Träger, Straßen, Warenketten, indirekte Steuerung) bleibt der Kern.
++Darüber liegt eine Zivilisationsschicht nach dem Vorbild von *Humankind*:
++Zeitalter, Kulturen, Technologien, später Gesellschaft, Religion, Diplomatie.
++Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normales Siedler bleibt unverändert spielbar.
++
++## Grundsatzentscheidungen
++
++| Datum      | Entscheidung |
++|------------|--------------|
++| 2026-10-18 | Humankind-Schicht auf Siedler, kein 1:1-Nachbau, keine Rundenstrategie. |
++| 2026-10-18 | Optionaler Spielmodus über ein Addon, kein harter Fork der Spiellogik. |
++| 2026-10-18 | **Kein Ruhm, keine Ära-Sterne.** Der **Technologiebaum ist das Rückgrat**: Kulturen, Gebäude, Waren, Traits, Einheiten usw. hängen alle am Baum. |
++| 2026-10-18 | Forschung kostet **Wissen als Ware** (Schriftrollen aus einem Gelehrtenhaus) **plus Warenkosten** pro Technologie. |
++| 2026-10-18 | Kulturen werden **exklusiv** erforscht: Wer eine Kultur-Technologie zuerst abschließt, bekommt sie; für alle anderen ist sie gesperrt. |
++| 2026-10-18 | Erforschte Kulturen **stapeln vollständig** (alle Traits und emblematischen Inhalte bleiben aktiv). |
++| 2026-10-18 | Spielstart mit **Grundwirtschaft**; alle weiteren S2-Gebäude werden erforscht. |
++| 2026-10-18 | Grafik: vorhandene S2/RttR-Grafiken wiederverwenden; wo das nicht passt, Platzhalter, die später (u. a. per KI, siehe [GRAFIK.md](GRAFIK.md)) ersetzt werden. |
++| 2026-10-18 | Inhalte (Technologien, Kulturen …) sind **datengetrieben in Lua** (`data/RTTR/gamedata/civ/`), damit sie ohne Neukompilieren geändert werden können. Sie werden nur geladen, wenn der Modus aktiv ist. |
++| 2026-10-18 | Texte in eigenen Worten. Mechaniken dürfen übernommen werden, Texte/Bilder/Icons von Amplitude nicht. |
++
++## Zuordnung Humankind → Siedler
++
++| Humankind | Umsetzung im Zivilisationsmodus | Status |
++|-----------|----------------------------------|--------|
++| Technologiebaum | Lua-definierter Baum, Forschung kostet Waren, schaltet Gebäude frei | **Fundament fertig** |
++| Wissenschaft | Ware „Schriftrolle“ aus Gelehrtenhaus, wird von Technologien verbraucht | geplant (Phase 2) |
++| Kulturen (exklusiv) | Exklusive Technologien (`exclusive = true`); wer zuerst fertig ist, bekommt sie | Exklusivität fertig, Kultur-Inhalte geplant |
++| Legacy-Traits | Modifikatoren (Produktionstempo, Kampfkraft, Baukosten …), stapeln | geplant (Phase 3) |
++| Emblematische Quartiere | Besondere Gebäude pro Kultur (Grafik der RttR-Völker wiederverwenden) | geplant |
++| Emblematische Einheiten | Soldaten mit Kultur-Boni (Stärke, Tempo); echte Einheitentypen später | geplant |
++| Zeitalter | Ebenen des Baums (`era = 0…6`), keine eigene Aufstiegsmechanik | fertig (als Datenfeld) |
++| Strategische Ressourcen | Neue Bodenschätze/Warenketten pro Ära (Pferde, Salpeter, Öl …) | geplant (braucht Grafik) |
++| Wunder | Großbaustellen mit hohen Warenkosten, exklusiv | geplant |
++| Civics, Stabilität, Einfluss | Später; Stabilität z. B. über Versorgung mit Luxuswaren (Wein …) | später |
++| Religion | Tempel-Addon als Ausgangspunkt | später |
++| Diplomatie, Handel | Bündnis/Nichtangriffspakt und Handels-Addon existieren bereits | später |
++| Ereignisse | Lua-Scripting | später |
++| Straßen-Fortschritt | Pfad → Eselsweg → Pflasterstraße → Eisenbahn über Technologien | Idee |
++
++## Technologiebaum (Fundament)
++
++### Datenformat
++
++Datei: `data/RTTR/gamedata/civ/techtree.lua` (eingebunden von `civ/default.lua`).
++Wird nur geladen, wenn der Zivilisationsmodus aktiv ist; ein Fehler darin betrifft normale Spiele also nicht
++(er wird ins Log geschrieben und der Baum ist dann leer). Im Debug-Build hält ein unbekannter Schlüssel (Tippfehler)
++mit einer Assertion an.
++
++```lua
++rttr:AddTechnology{
++    name = "agriculture",            -- eindeutiger Bezeichner (für Savegames, Voraussetzungen)
++    title = "Ackerbau",              -- Anzeigename
++    description = "…",               -- Beschreibungstext
++    era = 0,                         -- Zeitalter/Ebene 0…6
++    requires = { "toolmaking" },     -- Voraussetzungen; müssen VORHER definiert sein (verhindert Zyklen)
++    cost = { Boards = 4, Stones = 2 }, -- Warenkosten (Bezeichner wie im Enum GoodType)
++    time = 60,                       -- Mindestdauer in Sekunden ab Forschungsbeginn (optional)
++    unlocks = { buildings = { "Farm", "Mill" } }, -- Bezeichner wie im Enum BuildingType
++    exclusive = false,               -- true: nur ein Spieler kann sie bekommen (Kulturen, Wunder)
++    addon = "WINE",                  -- optional: Technologie gibt es nur, wenn dieses Addon aktiv ist
++    aiPriority = 50,                 -- optional: höher = KI forscht früher
++}
++```
++
++### Regeln
++
++- Jedes Gebäude, das von irgendeiner Technologie freigeschaltet wird, ist zu Spielbeginn gesperrt.
++  Alle anderen Gebäude (Grundwirtschaft) sind sofort verfügbar.
++- Ein Spieler forscht immer an höchstens einer Technologie. Bereits bezahlte Waren bleiben pro Technologie gespeichert,
++  ein Wechsel kostet also nichts.
++- Alle 2 Sekunden werden fehlende Kosten aus dem freien Bestand der Lagerhäuser entnommen (nur Waren, die nicht schon
++  bestellt sind). Sind alle Kosten bezahlt und ist die Mindestdauer um, ist die Technologie erforscht.
++- Exklusive Technologien: Sobald ein Spieler sie abschließt, sind sie für alle anderen gesperrt;
++  deren bereits bezahlte Waren gehen zurück in ihr erstes Lagerhaus.
++- Savegames speichern die Technologien **namentlich**, damit Änderungen am Lua-Baum alte Spielstände nicht zerstören.
++- Die Computer-KI (AIJH) wählt selbstständig Forschungen: zuerst, was sie sofort bezahlen kann, dann nach `aiPriority`,
++  dann die günstigste. Hängt eine Forschung länger als ca. 2,5 Minuten mangels Waren, wechselt sie zu einer bezahlbaren
++  (der Fortschritt bleibt erhalten). Gesperrte Gebäude plant sie nicht.
++- Bekannte Schwäche des Lagerhaus-Modells: Zwischenprodukte (Getreide, Eisen, Münzen …) gehen meist direkt an
++  verarbeitende Gebäude und liegen selten im Lager. Solche Kosten werden dann langsam bezahlt. In Phase 2 soll eine
++  Akademie die Waren wie ein normales Gebäude **bestellen** (Transportsystem + Verteilung), dann ist das gelöst.
++
++### Testen ohne Grafik
++
++`ai-battle` (Headless-KI-gegen-KI) zeigt im Zivilisationsmodus zusätzlich den Forschungsstand:
++
++```sh
++# civ.ini:  [addons]  19922944=1   (0x01300000 = Zivilisationsmodus)
++ai-battle --map RTTR/MAPS/NEW/GreenPlains.SWD --ai aijh --ai aijh --settings civ.ini --maxGF 144000
++```
++
++Stand 2026-10-18 (Karte GreenPlains, 2 Stunden Spielzeit): Ohne Wein/Leder/Köhlerei erforschen zwei AIJH alle bzw.
++fast alle der 16 verfügbaren Technologien; mit allen Addons erforschen drei AIJH 17–18 von 20.
++Am längsten hängen Technologien, die Zwischenprodukte kosten (Burgenbau: Münzen, Gerberei: Schinken).
++
++### Code-Überblick
++
++| Teil | Ort |
++|------|-----|
++| Addon-Schalter (ID `0x01300000`) | `libs/s25main/addons/AddonCivilization.h` |
++| Rohdaten aus Lua | `libs/libGamedata/gameData/TechnologyDesc.*`, `GameDataLoader::AddTechnology` |
++| Aufgelöster Baum (Enums) | `libs/s25main/civ/TechTree.*` |
++| Forschungsstand pro Spieler | `libs/s25main/civ/PlayerResearch.*` (in `GamePlayer`) |
++| Forschungs-Logik | `libs/s25main/civ/Research.*` (aufgerufen aus `Game::RunGF`) |
++| Spielbefehl | `gc::SetResearch` (`GameCommands.h`) |
++| Fenster | `libs/s25main/ingameWindows/iwResearch.*` (Hauptauswahl → „Forschung“) |
++| Tests | `tests/s25Main/integration/testResearch.cpp`, `tests/libGameData/testGameData.cpp` |
++| Inhalte | `data/RTTR/gamedata/civ/techtree.lua` |
++
++## Phasen (Roadmap)
++
++1. **Fundament** – Addon, Lua-Technologiebaum, Forschung mit Warenkosten, Freischalten von S2-Gebäuden, Exklusivität,
++   Savegames, KI-Grundverhalten, Forschungsfenster. *(fertig, siehe oben)*
++2. **Wissen** – Ware „Schriftrolle“ + Gelehrtenhaus (Platzhaltergrafik), Schriftrollen als Kostenbestandteil.
++3. **Modifikatoren & Kulturen** – generisches Modifikatorsystem (Produktionstempo, Kampfkraft, Baukosten, Reichweiten …),
++   Kulturen als exklusive Technologien mit stapelnden Traits.
++4. **Emblematische Inhalte** – Kulturgebäude und -soldaten (Grafik der RttR-Völker wiederverwenden).
++5. **Neue Warenketten pro Ära** – z. B. Pferde, Salpeter; Grafik-Pipeline aus [GRAFIK.md](GRAFIK.md).
++6. **Gesellschaft** – Civics, Stabilität, Einfluss; Wunder.
++7. **Militär, Religion, Diplomatie, Ereignisse**; die KI wird in jeder Phase mitgezogen.
++
++## Offene Fragen
++
++- Soll man mehrere Technologien in eine **Warteschlange** legen können? (Vorschlag: ja, in Phase 2)
++- Zeitalter: Soll es eine Bedingung für den Übergang in die nächste Ära geben (z. B. X Technologien der aktuellen Ära),
++  oder reichen die Voraussetzungen im Baum?
++- Sollen Gegner sehen können, was man erforscht hat (Spionage/Statistik)?
++- Wie viele Kulturen pro Ära (Humankind hat 10+)? Vorschlag: anfangs 3–4 pro Ära, weil jede Grafik/Balancing braucht.
++
++## Bekannte Probleme im Fork (Stand 40aa9a2, nicht durch den Zivilisationsmodus verursacht)
++
++- `Test_gameData/LoadGameData` erwartet 14 Kanten, durch `world.lua` sind es 28.
++- 3 KI-Tests (`AI/BuildWoodIndustry`, `AI/ExpandWhenNoSpace`, `AI/DoBuildMilitaryBuildingsOutsideComputerBarrier`)
++  schlagen nach den eigenen KI-Änderungen fehl.
++- 22 Cheat-Tests (`CheatsTests/*`, `CheatCommandTrackerTests/*`) schlagen fehl.
++- `Test_UI/IwMapGenerator` kompilierte nicht mehr (Landschaftsauswahl entfernt) – im Branch `humankind` repariert.
++- `GamePlayer::IsBuildingEnabled` stürzte ohne GameInterface (Tests, Headless) bei gesperrten Gebäuden ab – repariert.
+diff --git a/doc/humankind/GRAFIK.md b/doc/humankind/GRAFIK.md
+new file mode 100644
+index 000000000..d8960bdc0
+--- /dev/null
++++ b/doc/humankind/GRAFIK.md
+@@ -0,0 +1,77 @@
++<!--
++Copyright (C) 2026 DA4-cpu
++
++SPDX-License-Identifier: GPL-2.0-or-later
++-->
++
++# Grafiken für den Zivilisationsmodus (Recherche, Stand 2026-10-18)
++
++## Was S2/RttR technisch verlangt
++
++- **Palette:** 256 Farben (`PAL5.BBM`). Alles muss am Ende auf diese Palette reduziert werden.
++- **Spielerfarbe:** separate Bilder mit Subtyp `player` (Fahnen, Soldaten, Dächer bekommen die Spielerfarbe).
++- **Schatten:** separate Bilder mit Subtyp `shadow`.
++- **Gebäude:** ein Bild pro Volk (Römer, Wikinger, Afrikaner, Japaner, Babylonier) + Schatten + Baustellen-Gerüst.
++- **Berufe (Figuren):** Laufanimation in **6 Richtungen × 8 Bilder**, dazu Arbeitsanimation und Icon. Figuren sind nur ca. 10–20 Pixel hoch.
++- **Waren:** Icon, Bild „auf der Fahne“, **Träger mit dieser Ware** (dicker + dünner Träger × 6 Richtungen × 8 Bilder = 96 Bilder), Esel/Boot mit Ware.
++  Zum Vergleich: Das Leder-Addon (3 Gebäude, 3 Waren, 3 Berufe) bringt rund 640 Einzelbilder mit.
++
++### Einbinden ohne Packer
++
++RttR lädt Ordner wie Archive (siehe `doc/ResourceLoading.md`). Eine neue Grafik ist einfach eine BMP-Datei:
++
++```text
++RTTR/assets/addons/<Addon-ID als Hex>/<archiv>/<index>.nx<X>.ny<Y>.bmp
++RTTR/assets/addons/<Addon-ID als Hex>/<archiv>/<index>.player.bmp
++RTTR/assets/addons/<Addon-ID als Hex>/<archiv>/<index>.shadow.bmp
++```
++
++`nx/ny` verschieben den Ursprung (z. B. die Tür des Gebäudes). Eigene Testgrafiken können auch im Benutzerordner
++`LSTS` liegen und überschreiben dann alles andere.
++
++## Drei Wege, Grafiken per KI zu erstellen
++
++### A) 2D-Pixel-Art-Generatoren – gut für Icons und Waren
++
++| Werkzeug | Stärken | Kosten (Stand Aug–Okt 2026) |
++|----------|---------|------------------------------|
++| PixelLab | 8 Richtungen auf einmal, Skelett-Animation, Stil-Referenzbilder, Aseprite-Plugin; max. 168×168 px | 40 Gratis-Generierungen, ab 12 $/Monat |
++| Retro Diffusion | Palette per Bild erzwingbar, Animationen (kurze Loops), Aseprite-Erweiterung lokal | einmalig 20–65 $ (Erweiterung) oder Credits |
++| Scenario | Eigenes Modell auf eigene Referenzgrafiken trainieren → sehr einheitlicher Stil | ab 15 $/Monat, Training ab 45 $ |
++
++Schwächen: Die exakte S2-Perspektive und die winzigen Figuren (10–20 px) treffen 2D-Generatoren schlecht;
++Richtungen und Animationsbilder passen oft nicht sauber zueinander. Für **Waren-Icons, Gebäude-Entwürfe und Porträts** gut geeignet.
++
++### B) KI-3D-Modell + Blender-Rendering – empfohlen für Gebäude und Figuren
++
++1. 3D-Modell per KI aus Text oder Bild erzeugen (Meshy, Tripo; **Hunyuan3D** ist Open Source und läuft lokal auf der eigenen GPU).
++   Meshy und Tripo bieten automatisches Rigging/Animationen für Figuren.
++2. In Blender mit **fester S2-Kamera und S2-Licht** rendern – 6 Richtungen, 8 Animationsbilder – automatisch per Skript.
++3. Verkleinern, auf die S2-Palette reduzieren, Schatten und Spielerfarbe als eigene Bilder ausgeben, BMPs nach obigem Schema benennen.
++
++Vorteil: Alle Richtungen und Bilder sind zueinander konsistent, Licht und Perspektive stimmen mit S2 überein.
++Die Skripte für Schritt 2 und 3 kann Claude schreiben; Schritt 1 machst du im jeweiligen Werkzeug.
++
++### C) Zusammensetzen per Skript – für Träger mit neuen Waren
++
++Die 96 Trägerbilder pro neuer Ware lassen sich ohne KI erzeugen: vorhandene Trägerbilder nehmen und das (kleine)
++Waren-Icon an die Hand-Position kopieren. Das kann ein Skript aus deinen Original-S2-Dateien machen.
++
++## Rechtliches (kein Rechtsrat)
++
++- Ein KI-Modell auf **Original-S2-Grafiken** zu trainieren oder sie als Stilreferenz zu nutzen ist für den
++  **privaten Gebrauch** unproblematischer als für eine Veröffentlichung. Für eine Veröffentlichung eigene Referenzen nutzen.
++- Lizenzbedingungen der Werkzeuge beachten: z. B. sind Meshy-Gratisergebnisse CC BY 4.0 (Namensnennung nötig),
++  Tripo-Gratisergebnisse nicht kommerziell nutzbar.
++
++## Vorschlag für den nächsten Schritt
++
++Ein Testobjekt komplett durch die Pipeline schicken: das **Gelehrtenhaus** (Phase 2) über Weg B
++und die Ware **Schriftrolle** (Icon über Weg A, Träger über Weg C). Danach wissen wir, was die Pipeline taugt.
++
++## Quellen
++
++- [Best AI Pixel Art and Sprite Generators for Games in 2026 (Cinevva)](https://app.cinevva.com/guides/ai-pixel-art-generators)
++- [PixelLab – Create 8 rotations (Pro)](https://www.pixellab.ai/docs/tools/create-8-rotations-pro)
++- [Retro Diffusion Models – The Essentials (Scenario)](https://help.scenario.com/en/articles/retro-diffusion-models-the-essentials/)
++- [Best AI 3D Model Generators 2026 (Krea)](https://www.krea.ai/blog/best-ai-3d-model-generators-2026)
+diff --git a/extras/ai-battle/HeadlessGame.cpp b/extras/ai-battle/HeadlessGame.cpp
+index 86c544ca2..25980ca9b 100644
+--- a/extras/ai-battle/HeadlessGame.cpp
++++ b/extras/ai-battle/HeadlessGame.cpp
+@@ -7,6 +7,8 @@
+ #include "GlobalGameSettings.h"
+ #include "PlayerInfo.h"
+ #include "Savegame.h"
++#include "civ/PlayerResearch.h"
++#include "civ/Research.h"
+ #include "factories/AIFactory.h"
+ #include "network/PlayerGameCommands.h"
+ #include "world/GameWorld.h"
+@@ -206,7 +208,10 @@ void HeadlessGame::PrintState()
+     if(first_run)
+         first_run = false;
+     else
+-        printConsole("\x1b[%dA", 8 + world_.GetNumPlayers()); // Move cursor back up
++    {
++        const unsigned numCivLines = civ::isEnabled(world_) ? 1 + world_.GetNumPlayers() : 0;
++        printConsole("\x1b[%dA", 8 + world_.GetNumPlayers() + numCivLines); // Move cursor back up
++    }
+ 
+     printConsole("┌───────────────┬───────────────────────┬───────────────────────┬────────────────┐\n");
+     printConsole(
+@@ -232,6 +237,20 @@ void HeadlessGame::PrintState()
+     }
+     printConsole("└────────────────────────┴─────────────────┴─────────────┴───────────┴───────────┘\n");
+ 
++    // Civilization mode: Research state
++    if(civ::isEnabled(world_))
++    {
++        printConsole("Forschung (von %u Technologien):\x1b[K\n", world_.GetTechTree().size());
++        for(unsigned playerId = 0; playerId < world_.GetNumPlayers(); ++playerId)
++        {
++            const civ::PlayerResearch& research = world_.GetPlayer(playerId).GetResearch();
++            const auto& current = research.GetCurrent();
++            printConsole("  %-22s %3u erforscht, aktuell: %s\x1b[K\n", world_.GetPlayer(playerId).name.c_str(),
++                         research.GetNumResearched(),
++                         current ? world_.GetTechTree().get(*current).name.c_str() : "-");
++        }
++    }
++
+     lastReportGf_ = em_.GetCurrentGF();
+ }
+ 
+diff --git a/libs/libGamedata/gameData/DescIdx.h b/libs/libGamedata/gameData/DescIdx.h
+index 70c7a6990..a1967c086 100644
+--- a/libs/libGamedata/gameData/DescIdx.h
++++ b/libs/libGamedata/gameData/DescIdx.h
+@@ -5,17 +5,25 @@
+ #pragma once
+ 
+ #include <cstdint>
++#include <limits>
++
++/// Storage type of the index for the description type T. Specialize for types needing more than 254 entries
++template<class T>
++struct DescIdxTraits
++{
++    using value_type = uint8_t;
++};
+ 
+ /// Type safe index for a description
+ //-V:DescIdx:801
+ template<class T>
+ struct DescIdx
+ {
+-    using value_type = uint8_t;
++    using value_type = typename DescIdxTraits<T>::value_type;
+     using index_type = T;
+ 
+     /// Invalid index
+-    static constexpr value_type INVALID = 0xFF;
++    static constexpr value_type INVALID = std::numeric_limits<value_type>::max();
+ 
+     value_type value = INVALID;
+ 
+diff --git a/libs/libGamedata/gameData/TechnologyDesc.cpp b/libs/libGamedata/gameData/TechnologyDesc.cpp
+new file mode 100644
+index 000000000..8b10f3893
+--- /dev/null
++++ b/libs/libGamedata/gameData/TechnologyDesc.cpp
+@@ -0,0 +1,50 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "TechnologyDesc.h"
++#include "WorldDescription.h"
++#include "lua/CheckedLuaTable.h"
++#include <set>
++
++TechnologyDesc::TechnologyDesc(CheckedLuaTable luaData, const WorldDescription& worldDesc)
++{
++    luaData.getOrThrow(name, "name");
++    if(name.empty())
++        throw GameDataError("Technology without name");
++    title = luaData.getOrDefault("title", name);
++    description = luaData.getOrDefault("description", std::string());
++    era = luaData.getOrDefault("era", 0u);
++    if(era > 6)
++        throw GameDataError("Technology '" + name + "': era must be in [0, 6]");
++
++    requirements = luaData.getOrDefault("requires", std::vector<std::string>());
++    std::set<std::string> seenRequirements;
++    for(const std::string& req : requirements)
++    {
++        // Requiring earlier definition guarantees that there are no cycles
++        if(!worldDesc.technologies.getIndex(req))
++            throw GameDataError("Technology '" + name + "' requires unknown technology '" + req
++                                + "'. Prerequisites must be defined before the technology using them.");
++        if(!seenRequirements.insert(req).second)
++            throw GameDataError("Technology '" + name + "' requires '" + req + "' twice");
++    }
++
++    cost = luaData.getOrDefault("cost", std::map<std::string, unsigned>());
++    for(const auto& entry : cost)
++    {
++        if(entry.second == 0)
++            throw GameDataError("Technology '" + name + "': cost of '" + entry.first + "' must be > 0");
++    }
++    time = luaData.getOrDefault("time", 0u);
++
++    if(auto unlocks = luaData.getOptional<CheckedLuaTable>("unlocks"))
++    {
++        unlockedBuildings = unlocks->getOrDefault("buildings", std::vector<std::string>());
++        unlocks->checkUnused();
++    }
++    exclusive = luaData.getOrDefault("exclusive", false);
++    requiredAddon = luaData.getOrDefault("addon", std::string());
++    aiPriority = luaData.getOrDefault("aiPriority", 0);
++    luaData.checkUnused();
++}
+diff --git a/libs/libGamedata/gameData/TechnologyDesc.h b/libs/libGamedata/gameData/TechnologyDesc.h
+new file mode 100644
+index 000000000..749a95592
+--- /dev/null
++++ b/libs/libGamedata/gameData/TechnologyDesc.h
+@@ -0,0 +1,50 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include "DescIdx.h"
++#include <map>
++#include <string>
++#include <vector>
++
++struct WorldDescription;
++class CheckedLuaTable;
++struct TechnologyDesc;
++
++/// The tech tree may become large (technologies + cultures + wonders) so allow more than 254 entries
++template<>
++struct DescIdxTraits<TechnologyDesc>
++{
++    using value_type = uint16_t;
++};
++
++/// Raw description of a technology of the tech tree used by the civilization mode.
++/// Buildings and goods are stored by their identifier (enum name) and resolved by the game (civ::TechTree)
++struct TechnologyDesc
++{
++    /// Unique identifier, used for prerequisites and savegames
++    std::string name;
++    /// Displayed name and description
++    std::string title, description;
++    /// Era/level of the technology (0 = neolithic, 6 = contemporary)
++    unsigned era = 0;
++    /// Technologies which have to be researched first. Must be defined before this one
++    std::vector<std::string> requirements;
++    /// Costs: Good identifier -> amount
++    std::map<std::string, unsigned> cost;
++    /// Minimum research duration in seconds (counted from the start of the research)
++    unsigned time = 0;
++    /// Buildings (identifiers) enabled by this technology
++    std::vector<std::string> unlockedBuildings;
++    /// Only one player can get this technology (cultures, wonders)
++    bool exclusive = false;
++    /// Name of an addon (AddonId, e.g. "WINE") which must be enabled for this technology to be available
++    std::string requiredAddon;
++    /// Higher priority means the AI will research it earlier
++    int aiPriority = 0;
++
++    TechnologyDesc() = default;
++    TechnologyDesc(CheckedLuaTable luaData, const WorldDescription& worldDesc);
++};
+diff --git a/libs/libGamedata/gameData/WorldDescription.h b/libs/libGamedata/gameData/WorldDescription.h
+index ab996e4a1..6735e05d1 100644
+--- a/libs/libGamedata/gameData/WorldDescription.h
++++ b/libs/libGamedata/gameData/WorldDescription.h
+@@ -7,6 +7,7 @@
+ #include "DescriptionContainer.h"
+ #include "EdgeDesc.h"
+ #include "LandscapeDesc.h"
++#include "TechnologyDesc.h"
+ #include "TerrainDesc.h"
+ #include <stdexcept>
+ 
+@@ -27,6 +28,8 @@ struct WorldDescription
+     DescriptionContainer<LandscapeDesc> landscapes;
+     DescriptionContainer<EdgeDesc> edges;
+     DescriptionContainer<TerrainDesc> terrain;
++    /// Tech tree of the civilization mode
++    DescriptionContainer<TechnologyDesc> technologies;
+     // Convenience accessors
+     template<class T>
+     const T& get(DescIdx<T> idx) const
+@@ -54,3 +57,9 @@ inline const DescriptionContainer<TerrainDesc>& WorldDescription::getContainer()
+ {
+     return terrain;
+ }
++
++template<>
++inline const DescriptionContainer<TechnologyDesc>& WorldDescription::getContainer() const
++{
++    return technologies;
++}
+diff --git a/libs/libGamedata/lua/GameDataLoader.cpp b/libs/libGamedata/lua/GameDataLoader.cpp
+index e034d5406..4e69ce71a 100644
+--- a/libs/libGamedata/lua/GameDataLoader.cpp
++++ b/libs/libGamedata/lua/GameDataLoader.cpp
+@@ -10,6 +10,7 @@
+ #include "helpers/format.hpp"
+ #include "gameData/EdgeDesc.h"
+ #include "gameData/LandscapeDesc.h"
++#include "gameData/TechnologyDesc.h"
+ #include "gameData/TerrainDesc.h"
+ #include "gameData/WorldDescription.h"
+ #include "s25util/Log.h"
+@@ -46,7 +47,8 @@ void GameDataLoader::Register(kaguya::State& state)
+     state["RTTRGameData"].setClass(kaguya::UserdataMetatable<GameDataLoader, LuaInterfaceBase>()
+                                      .addFunction("AddLandscape", &GameDataLoader::AddLandscape)
+                                      .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
+-                                     .addFunction("AddTerrain", &GameDataLoader::AddTerrain));
++                                     .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
++                                     .addFunction("AddTechnology", &GameDataLoader::AddTechnology));
+ }
+ 
+ class LuaIncludeError : public std::runtime_error
+@@ -111,6 +113,11 @@ void GameDataLoader::AddTerrain(const kaguya::LuaTable& data)
+     worldDesc_.terrain.add(TerrainDesc(data, worldDesc_));
+ }
+ 
++void GameDataLoader::AddTechnology(const kaguya::LuaTable& data)
++{
++    worldDesc_.technologies.add(TechnologyDesc(data, worldDesc_));
++}
++
+ void loadGameData(WorldDescription& worldDesc)
+ 
+ {
+diff --git a/libs/libGamedata/lua/GameDataLoader.h b/libs/libGamedata/lua/GameDataLoader.h
+index 01967574d..b2291467d 100644
+--- a/libs/libGamedata/lua/GameDataLoader.h
++++ b/libs/libGamedata/lua/GameDataLoader.h
+@@ -29,6 +29,7 @@ private:
+     void AddLandscape(const kaguya::LuaTable& data);
+     void AddTerrainEdge(const kaguya::LuaTable& data);
+     void AddTerrain(const kaguya::LuaTable& data);
++    void AddTechnology(const kaguya::LuaTable& data);
+ 
+     WorldDescription& worldDesc_;
+     boost::filesystem::path basePath_, curFile_;
+diff --git a/libs/s25main/CMakeLists.txt b/libs/s25main/CMakeLists.txt
+index da699b5af..65760bad1 100644
+--- a/libs/s25main/CMakeLists.txt
++++ b/libs/s25main/CMakeLists.txt
+@@ -17,6 +17,7 @@ AddDirectory(ai)
+ AddDirectory(ai/aijh)
+ AddDirectory(animation)
+ AddDirectory(buildings)
++AddDirectory(civ)
+ AddDirectory(controls)
+ AddDirectory(desktops)
+ AddDirectory(drivers)
+diff --git a/libs/s25main/Game.cpp b/libs/s25main/Game.cpp
+index 02b3fdea3..70b187c21 100644
+--- a/libs/s25main/Game.cpp
++++ b/libs/s25main/Game.cpp
+@@ -10,6 +10,7 @@
+ #include "addons/AddonEconomyModeGameLength.h"
+ #include "addons/const_addons.h"
+ #include "ai/AIPlayer.h"
++#include "civ/Research.h"
+ #include "lua/LuaInterfaceGame.h"
+ #include "network/GameClient.h"
+ #include "gameData/GameConsts.h"
+@@ -30,6 +31,8 @@ void Game::Start(bool startFromSave)
+     if(started_)
+         return;
+     started_ = true;
++    // Civilization mode: Lock/unlock buildings according to the research (also required after loading)
++    civ::startGame(world_);
+     if(startFromSave)
+         CheckObjective();
+     else
+@@ -87,6 +90,10 @@ void Game::RunGF()
+         }
+     }
+ 
++    // Civilization mode: Pay research costs and complete technologies
++    if(em_->GetCurrentGF() % civ::RESEARCH_UPDATE_INTERVAL == 0)
++        civ::update(world_);
++
+     if(world_.HasLua())
+         world_.GetLua().EventGameFrame(em_->GetCurrentGF());
+     // Update statistic every 30 seconds
+diff --git a/libs/s25main/GameCommand.cpp b/libs/s25main/GameCommand.cpp
+index 2de5a924e..3bee094fe 100644
+--- a/libs/s25main/GameCommand.cpp
++++ b/libs/s25main/GameCommand.cpp
+@@ -40,6 +40,7 @@ GameCommandPtr GameCommand::Deserialize(Deserializer& ser)
+         case GCType::SeaAttack: gc = new SeaAttack(ser); break;
+         case GCType::SetCoinsAllowed: gc = new SetCoinsAllowed(ser); break;
+         case GCType::SetArmorAllowed: gc = new SetArmorAllowed(ser); break;
++        case GCType::SetResearch: gc = new SetResearch(ser); break;
+         case GCType::SetProductionEnabled: gc = new SetProductionEnabled(ser); break;
+         case GCType::SetInventorySetting: gc = new SetInventorySetting(ser); break;
+         case GCType::SetAllInventorySettings: gc = new SetAllInventorySettings(ser); break;
+diff --git a/libs/s25main/GameCommand.h b/libs/s25main/GameCommand.h
+index faa1d662c..e599ea30a 100644
+--- a/libs/s25main/GameCommand.h
++++ b/libs/s25main/GameCommand.h
+@@ -63,10 +63,11 @@ enum class GCType : uint8_t
+     NotifyAlliesOfLocation,
+     SetTempleProductionMode,
+     SetArmorAllowed,
++    SetResearch,
+ };
+ constexpr auto maxEnumValue(GCType)
+ {
+-    return GCType::SetArmorAllowed;
++    return GCType::SetResearch;
+ }
+ 
+ class GameCommand
+diff --git a/libs/s25main/GameCommands.cpp b/libs/s25main/GameCommands.cpp
+index 5f16074de..c927c75f3 100644
+--- a/libs/s25main/GameCommands.cpp
++++ b/libs/s25main/GameCommands.cpp
+@@ -12,6 +12,7 @@
+ #include "buildings/nobMilitary.h"
+ #include "buildings/nobShipYard.h"
+ #include "buildings/nobTemple.h"
++#include "civ/Research.h"
+ #include "enum_cast.hpp"
+ #include "helpers/MaxEnumValue.h"
+ #include "helpers/format.hpp"
+@@ -20,6 +21,7 @@
+ #include "nodeObjs/noShip.h"
+ #include "gameData/SettingTypeConv.h"
+ #include <algorithm>
++#include <optional>
+ #include <stdexcept>
+ 
+ namespace gc {
+@@ -249,6 +251,14 @@ void SetCoinsAllowed::Execute(GameWorld& world, uint8_t playerId)
+         bld->SetCoinsAllowed(enabled);
+ }
+ 
++void SetResearch::Execute(GameWorld& world, uint8_t playerId)
++{
++    std::optional<civ::TechIdx> tech;
++    if(techIdx != STOP_RESEARCH)
++        tech = techIdx;
++    civ::setResearch(world, playerId, tech);
++}
++
+ void SetArmorAllowed::Execute(GameWorld& world, uint8_t playerId)
+ {
+     auto* const bld = world.GetSpecObj<nobMilitary>(pt_);
+diff --git a/libs/s25main/GameCommands.h b/libs/s25main/GameCommands.h
+index 024383082..1185dc3c1 100644
+--- a/libs/s25main/GameCommands.h
++++ b/libs/s25main/GameCommands.h
+@@ -581,6 +581,31 @@ public:
+     void Execute(GameWorld& world, uint8_t playerId) override;
+ };
+ 
++/// Civilization mode: Set the technology to research (or stop researching)
++class SetResearch : public GameCommand
++{
++    GC_FRIEND_DECL;
++
++public:
++    /// Value of techIdx to stop the current research
++    static constexpr uint16_t STOP_RESEARCH = 0xFFFF;
++
++private:
++    const uint16_t techIdx;
++
++protected:
++    SetResearch(uint16_t techIdx) : GameCommand(GCType::SetResearch), techIdx(techIdx) {}
++    SetResearch(Serializer& ser) : GameCommand(GCType::SetResearch), techIdx(ser.PopUnsignedShort()) {}
++
++public:
++    void Execute(GameWorld& world, uint8_t playerId) override;
++    void Serialize(Serializer& ser) const override
++    {
++        GameCommand::Serialize(ser);
++        ser.PushUnsignedShort(techIdx);
++    }
++};
++
+ /// Alle eigenen Fahnen zerstören
+ class DestroyAll : public GameCommand
+ {
+diff --git a/libs/s25main/GamePlayer.cpp b/libs/s25main/GamePlayer.cpp
+index c444ebc90..a950e7f3b 100644
+--- a/libs/s25main/GamePlayer.cpp
++++ b/libs/s25main/GamePlayer.cpp
+@@ -21,6 +21,7 @@
+ #include "buildings/nobHarborBuilding.h"
+ #include "buildings/nobMilitary.h"
+ #include "buildings/nobUsual.h"
++#include "civ/Research.h"
+ #include "figures/nofCarrier.h"
+ #include "figures/nofFlagWorker.h"
+ #include "helpers/containerUtils.h"
+@@ -231,6 +232,12 @@ void GamePlayer::Serialize(SerializedGameData& sgd) const
+     }
+ 
+     sgd.PushBool(emergency);
++
++    // Civilization mode (only stored if active so normal games don't depend on the tech tree data)
++    const bool hasResearch = civ::isEnabled(world);
++    sgd.PushBool(hasResearch);
++    if(hasResearch)
++        research_.Serialize(sgd, world.GetTechTree());
+ }
+ 
+ void GamePlayer::Deserialize(SerializedGameData& sgd)
+@@ -391,6 +398,10 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
+     }
+ 
+     emergency = sgd.PopBool();
++
++    research_ = civ::PlayerResearch();
++    if(sgd.GetGameDataVersion() >= 16 && sgd.PopBool())
++        research_.Deserialize(sgd, world.GetTechTree());
+ }
+ 
+ template<class T_IsWarehouseGood>
+@@ -2304,7 +2315,11 @@ void GamePlayer::Trade(nobBaseWarehouse* goalWh, const boost_variant2<GoodType,
+ 
+ bool GamePlayer::IsBuildingEnabled(BuildingType type) const
+ {
+-    return building_enabled[type] || (isHuman() && world.GetGameInterface()->GI_GetCheats().areAllBuildingsEnabled());
++    if(building_enabled[type])
++        return true;
++    // No game interface e.g. in headless games/tests
++    const GameInterface* gi = world.GetGameInterface();
++    return isHuman() && gi && gi->GI_GetCheats().areAllBuildingsEnabled();
+ }
+ 
+ void GamePlayer::FillVisualSettings(VisualSettings& visualSettings) const
+diff --git a/libs/s25main/GamePlayer.h b/libs/s25main/GamePlayer.h
+index ada0ba552..3b9f7dadd 100644
+--- a/libs/s25main/GamePlayer.h
++++ b/libs/s25main/GamePlayer.h
+@@ -9,6 +9,7 @@
+ #include "helpers/EnumArray.h"
+ #include "helpers/MultiArray.h"
+ #include "variant.h"
++#include "civ/PlayerResearch.h"
+ #include "gameTypes/BuildingType.h"
+ #include "gameTypes/Inventory.h"
+ #include "gameTypes/MapCoordinates.h"
+@@ -295,6 +296,9 @@ public:
+     void EnableBuilding(BuildingType type) { building_enabled[type] = true; }
+     void DisableBuilding(BuildingType type) { building_enabled[type] = false; }
+     bool IsBuildingEnabled(BuildingType type) const;
++    /// Research state of the civilization mode (tech tree)
++    civ::PlayerResearch& GetResearch() { return research_; }
++    const civ::PlayerResearch& GetResearch() const { return research_; }
+     /// Set the area the player may have territory in
+     /// Nothing means all is allowed. See Lua description
+     std::vector<MapPoint>& GetRestrictedArea() { return restricted_area; }
+@@ -455,6 +459,8 @@ private:
+      */
+     std::vector<MapPoint> restricted_area;
+     helpers::EnumArray<bool, BuildingType> building_enabled;
++    /// Research state of the civilization mode
++    civ::PlayerResearch research_;
+ 
+     // TODO: Move to viewer. Mutable as a work-around
+     mutable helpers::EnumArray<int8_t, Tool> tools_ordered_delta;
+diff --git a/libs/s25main/GlobalGameSettings.cpp b/libs/s25main/GlobalGameSettings.cpp
+index f5047f989..2ad25018a 100644
+--- a/libs/s25main/GlobalGameSettings.cpp
++++ b/libs/s25main/GlobalGameSettings.cpp
+@@ -108,7 +108,8 @@ void GlobalGameSettings::registerAllAddons()
+         AddonForesterFarmFieldAvoidance,
+         AddonForesterReachRadius,
+         AddonWoodcutterReachRadius,
+-        AddonStonemasonReachRadius
++        AddonStonemasonReachRadius,
++        AddonCivilization
+     >;
+     // clang-format on
+     using namespace boost::mp11;
+diff --git a/libs/s25main/SerializedGameData.cpp b/libs/s25main/SerializedGameData.cpp
+index 1b0997c91..b73217f2c 100644
+--- a/libs/s25main/SerializedGameData.cpp
++++ b/libs/s25main/SerializedGameData.cpp
+@@ -109,7 +109,8 @@
+ /// 13: SeaId & HarborId: World::harborData w/o dummy entry at 0
+ /// 14: Remove "age" field in nobBaseMilitary
+ /// 15: Add sea to HarborPos::Neighbor
+-static const unsigned currentGameDataVersion = 15;
++/// 16: Civilization mode: research state of players
++static const unsigned currentGameDataVersion = 16;
+ // clang-format on
+ 
+ std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)
+diff --git a/libs/s25main/addons/AddonCivilization.h b/libs/s25main/addons/AddonCivilization.h
+new file mode 100644
+index 000000000..ea54d6edf
+--- /dev/null
++++ b/libs/s25main/addons/AddonCivilization.h
+@@ -0,0 +1,24 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include "AddonBool.h"
++#include "mygettext/mygettext.h"
++
++/**
++ *  Civilization mode: Buildings have to be unlocked via a tech tree, research costs wares
++ */
++class AddonCivilization : public AddonBool
++{
++public:
++    AddonCivilization()
++        : AddonBool(AddonId::CIVILIZATION, AddonGroup::GamePlay | AddonGroup::Economy,
++                    _("Zivilisationsmodus (Technologiebaum)"),
++                    _("Nur die Grundwirtschaft ist zu Beginn verfügbar. Alle weiteren Gebäude werden über den "
++                      "Technologiebaum erforscht (Hauptauswahl -> Forschung). Forschung verbraucht Waren aus den "
++                      "Lagerhäusern. Exklusive Technologien (z. B. Kulturen) kann nur der Spieler bekommen, der sie "
++                      "zuerst erforscht."))
++    {}
++};
+diff --git a/libs/s25main/addons/Addons.h b/libs/s25main/addons/Addons.h
+index 96b3203ff..0156a7741 100644
+--- a/libs/s25main/addons/Addons.h
++++ b/libs/s25main/addons/Addons.h
+@@ -70,3 +70,5 @@
+ #include "addons/AddonForesterReachRadius.h"
+ #include "addons/AddonStonemasonReachRadius.h"
+ #include "addons/AddonWoodcutterReachRadius.h"
++
++#include "addons/AddonCivilization.h"
+diff --git a/libs/s25main/addons/const_addons.h b/libs/s25main/addons/const_addons.h
+index f7ddf54f0..93b9abacb 100644
+--- a/libs/s25main/addons/const_addons.h
++++ b/libs/s25main/addons/const_addons.h
+@@ -82,7 +82,9 @@ ENUM_WITH_STRING(AddonId, LIMIT_CATAPULTS = 0x00000000, INEXHAUSTIBLE_MINES = 0x
+                  FORESTER_FARM_FIELD_AVOIDANCE = 0x01100000,
+ 
+                  FORESTER_REACH_RADIUS = 0x01200000, WOODCUTTER_REACH_RADIUS = 0x01200001,
+-                 STONEMASON_REACH_RADIUS = 0x01200002)
++                 STONEMASON_REACH_RADIUS = 0x01200002,
++
++                 CIVILIZATION = 0x01300000)
+ //-V:AddonId:801
+ 
+ enum class AddonGroup : unsigned
+diff --git a/libs/s25main/ai/aijh/AIConstruction.cpp b/libs/s25main/ai/aijh/AIConstruction.cpp
+index 8237d2cfe..38564976c 100644
+--- a/libs/s25main/ai/aijh/AIConstruction.cpp
++++ b/libs/s25main/ai/aijh/AIConstruction.cpp
+@@ -46,6 +46,9 @@ AIConstruction::~AIConstruction() = default;
+ 
+ void AIConstruction::AddBuildJob(std::unique_ptr<BuildJob> job, bool front)
+ {
++    // E.g. not yet researched in the civilization mode
++    if(!aii.CanBuildBuildingtype(job->GetType()))
++        return;
+     if(job->GetType() == BuildingType::Shipyard && aijh.IsInvalidShipyardPosition(job->GetAround()))
+         return;
+     if(BuildingProperties::IsMilitary(
+diff --git a/libs/s25main/ai/aijh/AIPlayerJH.cpp b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+index 06f688db1..b4c9a33e9 100644
+--- a/libs/s25main/ai/aijh/AIPlayerJH.cpp
++++ b/libs/s25main/ai/aijh/AIPlayerJH.cpp
+@@ -18,6 +18,7 @@
+ #include "buildings/nobBaseWarehouse.h"
+ #include "buildings/nobMilitary.h"
+ #include "buildings/nobUsual.h"
++#include "civ/Research.h"
+ #include "helpers/IdRange.h"
+ #include "helpers/MaxEnumValue.h"
+ #include "helpers/containerUtils.h"
+@@ -268,6 +269,9 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
+         bldPlanner->UpdateBuildingsWanted(*this);
+     ExecuteAIJob();
+ 
++    if((gf + playerId * 7) % 200 == 0)
++        CheckResearch(gf);
++
+     if((gf + playerId * 17) % attack_interval == 0)
+     {
+         // CheckExistingMilitaryBuildings();
+@@ -1789,6 +1793,38 @@ void AIPlayerJH::PruneExcessForesterWoodcutters()
+     }
+ }
+ 
++void AIPlayerJH::CheckResearch(const unsigned gf)
++{
++    // Civilization mode: Always research something
++    if(!civ::isEnabled(gwb))
++        return;
++    const std::optional<unsigned> current = player.GetResearch().GetCurrent();
++    if(!current)
++    {
++        if(const auto tech = civ::chooseResearchForAI(gwb, playerId))
++            aii.SetResearch(*tech);
++        lastResearchTech_.reset();
++        return;
++    }
++    const unsigned paid = civ::getAmountPaid(gwb, playerId, *current);
++    if(current != lastResearchTech_ || paid != lastResearchPaid_ || civ::isAffordable(gwb, playerId, *current))
++    {
++        // Progressing
++        lastResearchTech_ = current;
++        lastResearchPaid_ = paid;
++        lastResearchProgressGF_ = gf;
++        return;
++    }
++    // Waiting for wares for a long time -> switch to something we can pay right now (progress is kept)
++    constexpr unsigned maxStuckGFs = 3000;
++    if(gf - lastResearchProgressGF_ < maxStuckGFs)
++        return;
++    const auto alternative = civ::chooseResearchForAI(gwb, playerId, current);
++    if(alternative && civ::isAffordable(gwb, playerId, *alternative))
++        aii.SetResearch(*alternative);
++    lastResearchProgressGF_ = gf;
++}
++
+ void AIPlayerJH::CheckGranitMine()
+ {
+     // stop production in granite mines when the ai has many stones (100+ and at least 15 for each warehouse)
+diff --git a/libs/s25main/ai/aijh/AIPlayerJH.h b/libs/s25main/ai/aijh/AIPlayerJH.h
+index 535245d8a..7edaf5b26 100644
+--- a/libs/s25main/ai/aijh/AIPlayerJH.h
++++ b/libs/s25main/ai/aijh/AIPlayerJH.h
+@@ -13,6 +13,7 @@
+ #include <boost/container/static_vector.hpp>
+ #include <list>
+ #include <memory>
++#include <optional>
+ #include <queue>
+ 
+ class noFlag;
+@@ -191,6 +192,9 @@ public:
+     void PruneExcessForesterWoodcutters();
+     /// stop/resume granitemine production
+     void CheckGranitMine();
++    /// Civilization mode: Choose the next technology to research if there is no current research
++    /// or switch to an affordable one if the current research is stuck (no wares available)
++    void CheckResearch(unsigned gf);
+     /// Tries to attack the enemy
+     void TryToAttack();
+     /// sea attack
+@@ -251,6 +255,10 @@ private:
+     helpers::EnumArray<AIResourceMap, AIResource> resourceMaps;
+ 
+     unsigned attack_interval;
++    /// Civilization mode: Last checked research and its paid amount to detect stuck research
++    std::optional<unsigned> lastResearchTech_;
++    unsigned lastResearchPaid_ = 0;
++    unsigned lastResearchProgressGF_ = 0;
+     unsigned build_interval;
+     int isInitGfCompleted;
+     /// resigned yes/no
+diff --git a/libs/s25main/buildings/nobBaseWarehouse.cpp b/libs/s25main/buildings/nobBaseWarehouse.cpp
+index b48e8a881..81de28291 100644
+--- a/libs/s25main/buildings/nobBaseWarehouse.cpp
++++ b/libs/s25main/buildings/nobBaseWarehouse.cpp
+@@ -1155,6 +1155,19 @@ void nobBaseWarehouse::AddToInventory(const GoodCounts& goods, bool addToPlayer)
+     }
+ }
+ 
++unsigned nobBaseWarehouse::TakeWares(const GoodType good, const unsigned maxCount)
++{
++    RTTR_Assert(ConvertShields(good) == good);
++    const unsigned count = std::min(maxCount, inventory[good]);
++    if(count == 0)
++        return 0;
++    inventory.Remove(good, count);
++    world->GetPlayer(player).DecreaseInventoryWare(good, count);
++    // Weapons or beer might be gone now
++    TryStopRecruiting();
++    return count;
++}
++
+ void nobBaseWarehouse::AddToInventory(const PeopleCounts& people, bool addToPlayer)
+ {
+     GamePlayer& owner = world->GetPlayer(player);
+diff --git a/libs/s25main/buildings/nobBaseWarehouse.h b/libs/s25main/buildings/nobBaseWarehouse.h
+index 75cda8f81..852c681df 100644
+--- a/libs/s25main/buildings/nobBaseWarehouse.h
++++ b/libs/s25main/buildings/nobBaseWarehouse.h
+@@ -151,6 +151,9 @@ public:
+     void AddToInventory(const GoodsAndPeopleCounts& what, bool addToPlayer);
+     void AddToInventory(const PeopleCounts& people, bool addToPlayer);
+     void AddToInventory(const GoodCounts& goods, bool addToPlayer);
++    /// Removes up to maxCount wares of the given (canonical) type which are not yet ordered from the warehouse
++    /// and the owners inventory (consumed e.g. by research). Returns the number of wares removed
++    unsigned TakeWares(GoodType good, unsigned maxCount);
+ 
+     /// Gibt Anzahl der Waren bzw. Figuren zurück
+     unsigned GetNumRealWares(GoodType type) const { return inventory.real[type]; }
+diff --git a/libs/s25main/civ/Identifiers.cpp b/libs/s25main/civ/Identifiers.cpp
+new file mode 100644
+index 000000000..12c08c8c5
+--- /dev/null
++++ b/libs/s25main/civ/Identifiers.cpp
+@@ -0,0 +1,70 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "civ/Identifiers.h"
++#include "helpers/EnumArray.h"
++#include "helpers/EnumRange.h"
++#include "gameData/ShieldConsts.h"
++
++namespace civ {
++namespace {
++    // Order must match the enum
++    const helpers::EnumArray<const char*, BuildingType> buildingIdentifiers = {
++      {"Headquarters", "Barracks",     "Guardhouse",    "Skinner",    "Watchtower", "Vineyard",       "Winery",
++       "Temple",       "Tannery",      "Fortress",      "GraniteMine", "CoalMine",  "IronMine",       "GoldMine",
++       "LookoutTower", "LeatherWorks", "Catapult",      "Woodcutter", "Fishery",    "Quarry",         "Forester",
++       "Slaughterhouse", "Hunter",     "Brewery",       "Armory",     "Metalworks", "Ironsmelter",    "Charburner",
++       "PigFarm",      "Storehouse",   "Nothing9",      "Mill",       "Bakery",     "Sawmill",        "Mint",
++       "Well",         "Shipyard",     "Farm",          "DonkeyBreeder", "HarborBuilding"}};
++
++    // Order must match the enum
++    const helpers::EnumArray<const char*, GoodType> goodIdentifiers = {
++      {"Beer",       "Tongs",  "Hammer",  "Axe",        "Saw",        "PickAxe",   "Shovel",  "Crucible",
++       "RodAndLine", "Scythe", "WaterEmpty", "Water",   "Cleaver",    "Rollingpin", "Bow",     "Boat",
++       "Sword",      "Iron",   "Flour",   "Fish",       "Bread",      "Shield",    "Wood",    "Boards",
++       "Stones",     "ShieldVikings", "ShieldAfricans", "Grain", "Coins", "Gold",     "IronOre", "Coal",
++       "Meat",       "Ham",    "ShieldJapanese", "Grapes", "Wine",    "Skins",     "Leather", "Armor"}};
++
++    bool isUsableBuilding(BuildingType bld)
++    {
++        return bld != BuildingType::Headquarters && bld != BuildingType::Nothing9;
++    }
++    bool isUsableGood(GoodType good)
++    {
++        // Only canonical shields and no empty water
++        return good != GoodType::WaterEmpty && ConvertShields(good) == good;
++    }
++} // namespace
++
++const char* getIdentifier(BuildingType bld)
++{
++    return buildingIdentifiers[bld];
++}
++
++const char* getIdentifier(GoodType good)
++{
++    return goodIdentifiers[ConvertShields(good)];
++}
++
++std::optional<BuildingType> buildingFromIdentifier(const std::string& identifier)
++{
++    for(const auto bld : helpers::enumRange<BuildingType>())
++    {
++        if(isUsableBuilding(bld) && identifier == buildingIdentifiers[bld])
++            return bld;
++    }
++    return std::nullopt;
++}
++
++std::optional<GoodType> goodFromIdentifier(const std::string& identifier)
++{
++    for(const auto good : helpers::enumRange<GoodType>())
++    {
++        if(isUsableGood(good) && identifier == goodIdentifiers[good])
++            return good;
++    }
++    return std::nullopt;
++}
++
++} // namespace civ
+diff --git a/libs/s25main/civ/Identifiers.h b/libs/s25main/civ/Identifiers.h
+new file mode 100644
+index 000000000..8efb8e0e6
+--- /dev/null
++++ b/libs/s25main/civ/Identifiers.h
+@@ -0,0 +1,25 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include "gameTypes/BuildingType.h"
++#include "gameTypes/GoodTypes.h"
++#include <optional>
++#include <string>
++
++/// Mapping between enum values and the identifiers used in the Lua game data of the civilization mode
++namespace civ {
++
++/// Identifier of a building type as used in Lua (name of the enum value, e.g. "Farm")
++const char* getIdentifier(BuildingType bld);
++/// Identifier of a good as used in Lua (name of the enum value, e.g. "Boards"). Shields use "Shield"
++const char* getIdentifier(GoodType good);
++
++/// Building type for the identifier or nullopt if there is none (or it cannot be used, like the HQ)
++std::optional<BuildingType> buildingFromIdentifier(const std::string& identifier);
++/// Good type for the identifier or nullopt if there is none or it cannot be stored (e.g. empty water buckets)
++std::optional<GoodType> goodFromIdentifier(const std::string& identifier);
++
++} // namespace civ
+diff --git a/libs/s25main/civ/PlayerResearch.cpp b/libs/s25main/civ/PlayerResearch.cpp
+new file mode 100644
+index 000000000..caed910ce
+--- /dev/null
++++ b/libs/s25main/civ/PlayerResearch.cpp
+@@ -0,0 +1,130 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "civ/PlayerResearch.h"
++#include "SerializedGameData.h"
++#include "helpers/serializeEnums.h"
++#include "s25util/Log.h"
++#include <algorithm>
++
++namespace civ {
++
++unsigned PlayerResearch::GetNumResearched() const
++{
++    return static_cast<unsigned>(std::count(researched_.begin(), researched_.end(), true));
++}
++
++const PlayerResearch::Progress* PlayerResearch::GetProgress(TechIdx tech) const
++{
++    const auto it = progress_.find(tech);
++    return it == progress_.end() ? nullptr : &it->second;
++}
++
++PlayerResearch::Progress& PlayerResearch::GetOrCreateProgress(const TechTree& techTree, TechIdx tech)
++{
++    Progress& progress = progress_[tech];
++    progress.paid.resize(techTree.get(tech).cost.size(), 0u);
++    return progress;
++}
++
++std::optional<PlayerResearch::Progress> PlayerResearch::RemoveProgress(TechIdx tech)
++{
++    const auto it = progress_.find(tech);
++    if(it == progress_.end())
++        return std::nullopt;
++    Progress result = std::move(it->second);
++    progress_.erase(it);
++    return result;
++}
++
++void PlayerResearch::SetResearched(TechIdx tech)
++{
++    if(researched_.size() <= tech)
++        researched_.resize(tech + 1, false);
++    researched_[tech] = true;
++    progress_.erase(tech);
++    if(current_ == tech)
++        current_.reset();
++}
++
++// Technologies are stored by name and costs by good type so that changes of the (Lua) tech tree
++// don't break existing savegames. Unknown technologies are dropped when loading.
++void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree) const
++{
++    std::vector<TechIdx> researchedTechs;
++    for(TechIdx i = 0; i < researched_.size(); ++i)
++    {
++        if(researched_[i])
++            researchedTechs.push_back(i);
++    }
++    sgd.PushUnsignedInt(static_cast<unsigned>(researchedTechs.size()));
++    for(const TechIdx tech : researchedTechs)
++        sgd.PushString(techTree.get(tech).name);
++
++    sgd.PushString(current_ ? techTree.get(*current_).name : std::string());
++
++    sgd.PushUnsignedInt(static_cast<unsigned>(progress_.size()));
++    for(const auto& entry : progress_)
++    {
++        const Technology& tech = techTree.get(entry.first);
++        sgd.PushString(tech.name);
++        sgd.PushUnsignedInt(entry.second.researchedGFs);
++        sgd.PushUnsignedInt(static_cast<unsigned>(tech.cost.size()));
++        for(unsigned i = 0; i < tech.cost.size(); ++i)
++        {
++            helpers::pushEnum<uint8_t>(sgd, tech.cost[i].good);
++            sgd.PushUnsignedInt(entry.second.paid.at(i));
++        }
++    }
++}
++
++void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTree)
++{
++    researched_.clear();
++    current_.reset();
++    progress_.clear();
++
++    const unsigned numResearched = sgd.PopUnsignedInt();
++    for(unsigned i = 0; i < numResearched; ++i)
++    {
++        const std::string name = sgd.PopString();
++        if(const auto tech = techTree.find(name))
++            SetResearched(*tech);
++        else
++            LOG.write("Savegame: Ignoring unknown researched technology '%1%'\n") % name;
++    }
++
++    const std::string currentName = sgd.PopString();
++    if(!currentName.empty())
++        current_ = techTree.find(currentName);
++
++    const unsigned numProgress = sgd.PopUnsignedInt();
++    for(unsigned i = 0; i < numProgress; ++i)
++    {
++        const std::string name = sgd.PopString();
++        const unsigned researchedGFs = sgd.PopUnsignedInt();
++        const unsigned numCosts = sgd.PopUnsignedInt();
++        const auto tech = techTree.find(name);
++        Progress* progress = nullptr;
++        if(tech && !IsResearched(*tech))
++        {
++            progress = &GetOrCreateProgress(techTree, *tech);
++            progress->researchedGFs = researchedGFs;
++        }
++        for(unsigned j = 0; j < numCosts; ++j)
++        {
++            const auto good = helpers::popEnum<GoodType>(sgd);
++            const unsigned paid = sgd.PopUnsignedInt();
++            if(!progress)
++                continue;
++            // Cost entries may have changed -> match by good and never store more than needed
++            if(const auto costIdx = techTree.get(*tech).GetCostIdx(good))
++                progress->paid[*costIdx] = std::min(paid, techTree.get(*tech).cost[*costIdx].amount);
++        }
++    }
++    if(current_ && IsResearched(*current_))
++        current_.reset();
++}
++
++} // namespace civ
+diff --git a/libs/s25main/civ/PlayerResearch.h b/libs/s25main/civ/PlayerResearch.h
+new file mode 100644
+index 000000000..5d357619a
+--- /dev/null
++++ b/libs/s25main/civ/PlayerResearch.h
+@@ -0,0 +1,52 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include "civ/TechTree.h"
++#include <map>
++#include <optional>
++#include <vector>
++
++class SerializedGameData;
++
++namespace civ {
++
++/// Research state of a single player in the civilization mode
++class PlayerResearch
++{
++public:
++    /// Progress of a technology which was (partially) paid but not yet completed
++    struct Progress
++    {
++        /// Amount paid for each cost entry of the technology (same order as Technology::cost)
++        std::vector<unsigned> paid;
++        /// Game frames spent researching this technology
++        unsigned researchedGFs = 0;
++    };
++
++    bool IsResearched(TechIdx tech) const { return tech < researched_.size() && researched_[tech]; }
++    unsigned GetNumResearched() const;
++    const std::optional<TechIdx>& GetCurrent() const { return current_; }
++    /// Progress of the technology or nullptr if nothing was paid yet
++    const Progress* GetProgress(TechIdx tech) const;
++
++    void SetCurrent(std::optional<TechIdx> tech) { current_ = tech; }
++    /// Get progress of the technology, creating it if required
++    Progress& GetOrCreateProgress(const TechTree& techTree, TechIdx tech);
++    /// Remove the progress of the technology and return what was paid
++    std::optional<Progress> RemoveProgress(TechIdx tech);
++    /// Mark the technology as researched. Removes its progress and resets current research if it was this tech
++    void SetResearched(TechIdx tech);
++
++    void Serialize(SerializedGameData& sgd, const TechTree& techTree) const;
++    void Deserialize(SerializedGameData& sgd, const TechTree& techTree);
++
++private:
++    std::vector<bool> researched_;
++    std::optional<TechIdx> current_;
++    std::map<TechIdx, Progress> progress_;
++};
++
++} // namespace civ
+diff --git a/libs/s25main/civ/Research.cpp b/libs/s25main/civ/Research.cpp
+new file mode 100644
+index 000000000..444d12e5f
+--- /dev/null
++++ b/libs/s25main/civ/Research.cpp
+@@ -0,0 +1,286 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "civ/Research.h"
++#include "EventManager.h"
++#include "GamePlayer.h"
++#include "GlobalGameSettings.h"
++#include "addons/const_addons.h"
++#include "buildings/nobBaseWarehouse.h"
++#include "civ/PlayerResearch.h"
++#include "helpers/EnumRange.h"
++#include "helpers/containerUtils.h"
++#include "helpers/format.hpp"
++#include "postSystem/PostMsg.h"
++#include "world/GameWorld.h"
++#include "gameTypes/Inventory.h"
++#include "s25util/Log.h"
++#include <limits>
++#include <memory>
++
++namespace civ {
++
++bool isEnabled(const GameWorldBase& world)
++{
++    return world.GetGGS().isEnabled(AddonId::CIVILIZATION);
++}
++
++std::optional<unsigned> getExclusiveOwner(const GameWorldBase& world, TechIdx tech)
++{
++    if(!world.GetTechTree().get(tech).exclusive)
++        return std::nullopt;
++    for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
++    {
++        if(world.GetPlayer(i).GetResearch().IsResearched(tech))
++            return i;
++    }
++    return std::nullopt;
++}
++
++TechState getTechState(const GameWorldBase& world, unsigned playerId, TechIdx tech)
++{
++    const PlayerResearch& research = world.GetPlayer(playerId).GetResearch();
++    if(research.IsResearched(tech))
++        return TechState::Researched;
++    const Technology& technology = world.GetTechTree().get(tech);
++    if(technology.requiredAddon && !world.GetGGS().isEnabled(*technology.requiredAddon))
++        return TechState::Unavailable;
++    if(getExclusiveOwner(world, tech))
++        return TechState::TakenByOther;
++    for(const TechIdx req : technology.requirements)
++    {
++        if(!research.IsResearched(req))
++            return TechState::MissingRequirements;
++    }
++    if(research.GetCurrent() == tech)
++        return TechState::InProgress;
++    return TechState::Available;
++}
++
++bool canResearch(const GameWorldBase& world, unsigned playerId, TechIdx tech)
++{
++    const TechState state = getTechState(world, playerId, tech);
++    return state == TechState::Available || state == TechState::InProgress;
++}
++
++void applyBuildingAvailability(GamePlayer& player)
++{
++    const TechTree& techTree = player.GetGameWorld().GetTechTree();
++    for(const auto bld : helpers::enumRange<BuildingType>())
++    {
++        if(techTree.IsLockedAtStart(bld))
++            player.DisableBuilding(bld);
++    }
++    const PlayerResearch& research = player.GetResearch();
++    for(TechIdx tech = 0; tech < techTree.size(); ++tech)
++    {
++        if(!research.IsResearched(tech))
++            continue;
++        for(const BuildingType bld : techTree.get(tech).unlockedBuildings)
++            player.EnableBuilding(bld);
++    }
++}
++
++void startGame(GameWorld& world)
++{
++    if(!isEnabled(world))
++        return;
++    for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
++        applyBuildingAvailability(world.GetPlayer(i));
++}
++
++bool setResearch(GameWorld& world, unsigned playerId, std::optional<TechIdx> tech)
++{
++    if(!isEnabled(world))
++        return false;
++    PlayerResearch& research = world.GetPlayer(playerId).GetResearch();
++    if(!tech)
++    {
++        research.SetCurrent(std::nullopt);
++        return true;
++    }
++    if(*tech >= world.GetTechTree().size() || !canResearch(world, playerId, *tech))
++        return false;
++    research.SetCurrent(tech);
++    return true;
++}
++
++namespace {
++    /// Take up to `amount` wares from the warehouses of the player. Returns the number of wares taken
++    unsigned takeWaresFromWarehouses(GamePlayer& player, GoodType good, unsigned amount)
++    {
++        unsigned taken = 0;
++        for(nobBaseWarehouse* wh : player.GetBuildingRegister().GetStorehouses())
++        {
++            if(taken >= amount)
++                break;
++            taken += wh->TakeWares(good, amount - taken);
++        }
++        return taken;
++    }
++
++    /// Return the paid costs to the first warehouse of the player (if any)
++    void refund(GamePlayer& player, const Technology& tech, const PlayerResearch::Progress& progress)
++    {
++        nobBaseWarehouse* wh = player.GetFirstWH();
++        if(!wh)
++            return;
++        GoodCounts goods;
++        for(unsigned i = 0; i < tech.cost.size(); ++i)
++            goods[tech.cost[i].good] += progress.paid.at(i);
++        wh->AddToInventory(goods, true);
++    }
++
++    void sendMessage(GameWorld& world, unsigned playerId, const std::string& text)
++    {
++        world.GetPlayer(playerId).SendPostMessage(
++          std::make_unique<PostMsg>(world.GetEvMgr().GetCurrentGF(), text, PostCategory::Economy));
++    }
++} // namespace
++
++void completeResearch(GameWorld& world, unsigned playerId, TechIdx tech)
++{
++    const TechTree& techTree = world.GetTechTree();
++    const Technology& technology = techTree.get(tech);
++    GamePlayer& player = world.GetPlayer(playerId);
++    PlayerResearch& research = player.GetResearch();
++    if(research.IsResearched(tech))
++        return;
++    research.SetResearched(tech);
++    for(const BuildingType bld : technology.unlockedBuildings)
++        player.EnableBuilding(bld);
++    sendMessage(world, playerId, helpers::format(_("Forschung abgeschlossen: %1%"), _(technology.title)));
++
++    if(!technology.exclusive)
++        return;
++    // Nobody else can get this technology anymore
++    for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
++    {
++        if(i == playerId)
++            continue;
++        GamePlayer& otherPlayer = world.GetPlayer(i);
++        PlayerResearch& otherResearch = otherPlayer.GetResearch();
++        const bool wasResearching = otherResearch.GetCurrent() == tech;
++        if(wasResearching)
++            otherResearch.SetCurrent(std::nullopt);
++        if(const auto progress = otherResearch.RemoveProgress(tech))
++            refund(otherPlayer, technology, *progress);
++        if(wasResearching)
++        {
++            sendMessage(world, i,
++                        helpers::format(_("%1% hat \"%2%\" zuerst erforscht. Bereits bezahlte Waren wurden erstattet."),
++                                        player.name, _(technology.title)));
++        }
++    }
++}
++
++void update(GameWorld& world, unsigned numGFs)
++{
++    if(!isEnabled(world))
++        return;
++    const TechTree& techTree = world.GetTechTree();
++    for(unsigned playerId = 0; playerId < world.GetNumPlayers(); ++playerId)
++    {
++        GamePlayer& player = world.GetPlayer(playerId);
++        if(!player.isUsed() || player.IsDefeated())
++            continue;
++        PlayerResearch& research = player.GetResearch();
++        const std::optional<TechIdx> current = research.GetCurrent();
++        if(!current)
++            continue;
++        if(!canResearch(world, playerId, *current))
++        {
++            // Should not happen (exclusive techs are handled on completion) but be safe
++            research.SetCurrent(std::nullopt);
++            continue;
++        }
++        const Technology& tech = techTree.get(*current);
++        PlayerResearch::Progress& progress = research.GetOrCreateProgress(techTree, *current);
++        progress.researchedGFs += numGFs;
++        bool allPaid = true;
++        for(unsigned i = 0; i < tech.cost.size(); ++i)
++        {
++            unsigned& paid = progress.paid[i];
++            if(paid < tech.cost[i].amount)
++                paid += takeWaresFromWarehouses(player, tech.cost[i].good, tech.cost[i].amount - paid);
++            if(paid < tech.cost[i].amount)
++                allPaid = false;
++        }
++        if(allPaid && progress.researchedGFs >= tech.minResearchGFs)
++            completeResearch(world, playerId, *current);
++    }
++}
++
++bool isAffordable(const GameWorldBase& world, unsigned playerId, TechIdx tech)
++{
++    const Technology& technology = world.GetTechTree().get(tech);
++    const GamePlayer& player = world.GetPlayer(playerId);
++    const PlayerResearch::Progress* progress = player.GetResearch().GetProgress(tech);
++    for(unsigned i = 0; i < technology.cost.size(); ++i)
++    {
++        const unsigned paid = progress ? progress->paid.at(i) : 0u;
++        if(paid >= technology.cost[i].amount)
++            continue;
++        unsigned stock = 0;
++        for(const nobBaseWarehouse* wh : player.GetBuildingRegister().GetStorehouses())
++            stock += wh->GetNumRealWares(technology.cost[i].good);
++        if(stock < technology.cost[i].amount - paid)
++            return false;
++    }
++    return true;
++}
++
++unsigned getAmountPaid(const GameWorldBase& world, unsigned playerId, TechIdx tech)
++{
++    const PlayerResearch::Progress* progress = world.GetPlayer(playerId).GetResearch().GetProgress(tech);
++    unsigned result = 0;
++    if(progress)
++    {
++        for(const unsigned paid : progress->paid)
++            result += paid;
++    }
++    return result;
++}
++
++std::optional<TechIdx> chooseResearchForAI(const GameWorldBase& world, unsigned playerId,
++                                           std::optional<TechIdx> exclude)
++{
++    const TechTree& techTree = world.GetTechTree();
++    std::optional<TechIdx> best;
++    bool bestAffordable = false;
++    for(TechIdx tech = 0; tech < techTree.size(); ++tech)
++    {
++        if(tech == exclude)
++            continue;
++        const TechState state = getTechState(world, playerId, tech);
++        if(state != TechState::Available && state != TechState::InProgress)
++            continue;
++        const bool affordable = isAffordable(world, playerId, tech);
++        if(!best)
++        {
++            best = tech;
++            bestAffordable = affordable;
++            continue;
++        }
++        const Technology& cur = techTree.get(tech);
++        const Technology& bestTech = techTree.get(*best);
++        bool isBetter;
++        if(affordable != bestAffordable)
++            isBetter = affordable;
++        else if(cur.aiPriority != bestTech.aiPriority)
++            isBetter = cur.aiPriority > bestTech.aiPriority;
++        else if(cur.GetTotalCost() != bestTech.GetTotalCost())
++            isBetter = cur.GetTotalCost() < bestTech.GetTotalCost();
++        else
++            isBetter = cur.era < bestTech.era;
++        if(isBetter)
++        {
++            best = tech;
++            bestAffordable = affordable;
++        }
++    }
++    return best;
++}
++
++} // namespace civ
+diff --git a/libs/s25main/civ/Research.h b/libs/s25main/civ/Research.h
+new file mode 100644
+index 000000000..cf77f5f5e
+--- /dev/null
++++ b/libs/s25main/civ/Research.h
+@@ -0,0 +1,63 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include "civ/TechTree.h"
++#include <optional>
++
++class GamePlayer;
++class GameWorld;
++class GameWorldBase;
++
++/// Game logic of the civilization mode (tech tree & research)
++namespace civ {
++
++/// Interval in game frames in which research costs are paid (2s at normal speed)
++constexpr unsigned RESEARCH_UPDATE_INTERVAL = 40;
++
++/// True if the civilization mode (tech tree) is active in this game
++bool isEnabled(const GameWorldBase& world);
++
++enum class TechState
++{
++    /// Not part of this game (required addon disabled)
++    Unavailable,
++    Researched,
++    InProgress,
++    Available,
++    MissingRequirements,
++    /// Exclusive technology already researched by another player
++    TakenByOther
++};
++
++/// Player who researched the exclusive technology or nullopt if none (or it is not exclusive)
++std::optional<unsigned> getExclusiveOwner(const GameWorldBase& world, TechIdx tech);
++TechState getTechState(const GameWorldBase& world, unsigned playerId, TechIdx tech);
++/// True if the player can start researching this technology
++bool canResearch(const GameWorldBase& world, unsigned playerId, TechIdx tech);
++
++/// Enable/disable buildings of the player according to its research. Call at game start and after loading
++void applyBuildingAvailability(GamePlayer& player);
++/// Initialize the civilization mode for all players at game start (new game or loaded). Noop if not enabled
++void startGame(GameWorld& world);
++
++/// Set the current research of the player (nullopt to stop researching). Returns false if not possible
++bool setResearch(GameWorld& world, unsigned playerId, std::optional<TechIdx> tech);
++/// Pay research costs from the warehouses and complete technologies. Called every RESEARCH_UPDATE_INTERVAL GFs
++void update(GameWorld& world, unsigned numGFs = RESEARCH_UPDATE_INTERVAL);
++/// Complete the technology for the player (unlocks buildings, handles exclusivity)
++void completeResearch(GameWorld& world, unsigned playerId, TechIdx tech);
++
++/// True if the remaining costs of the technology can be paid from the current stock of the warehouses
++bool isAffordable(const GameWorldBase& world, unsigned playerId, TechIdx tech);
++/// Sum of all wares already paid for the technology
++unsigned getAmountPaid(const GameWorldBase& world, unsigned playerId, TechIdx tech);
++
++/// Choose a technology for the AI to research (ignoring `exclude`):
++/// Affordable ones first, then highest priority, then cheapest, then lowest era
++std::optional<TechIdx> chooseResearchForAI(const GameWorldBase& world, unsigned playerId,
++                                           std::optional<TechIdx> exclude = std::nullopt);
++
++} // namespace civ
+diff --git a/libs/s25main/civ/TechTree.cpp b/libs/s25main/civ/TechTree.cpp
+new file mode 100644
+index 000000000..2efd90734
+--- /dev/null
++++ b/libs/s25main/civ/TechTree.cpp
+@@ -0,0 +1,126 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "civ/TechTree.h"
++#include "civ/Identifiers.h"
++#include "RttrConfig.h"
++#include "files.h"
++#include "helpers/containerUtils.h"
++#include "gameData/GameConsts.h"
++#include "gameData/WorldDescription.h"
++#include "lua/GameDataLoader.h"
++#include <algorithm>
++#include <chrono>
++
++namespace civ {
++
++unsigned Technology::GetTotalCost() const
++{
++    unsigned result = 0;
++    for(const TechCost& c : cost)
++        result += c.amount;
++    return result;
++}
++
++std::optional<unsigned> Technology::GetCostIdx(GoodType good) const
++{
++    for(unsigned i = 0; i < cost.size(); ++i)
++    {
++        if(cost[i].good == good)
++            return i;
++    }
++    return std::nullopt;
++}
++
++TechTree::TechTree(const WorldDescription& desc)
++{
++    std::fill(lockedAtStart_.begin(), lockedAtStart_.end(), false);
++    techs_.reserve(desc.technologies.size());
++    for(const TechnologyDesc& techDesc : desc.technologies)
++    {
++        Technology tech;
++        tech.name = techDesc.name;
++        tech.title = techDesc.title;
++        tech.description = techDesc.description;
++        tech.era = techDesc.era;
++        for(const std::string& req : techDesc.requirements)
++        {
++            const auto reqIdx = find(req);
++            // Checked by the loader already
++            if(!reqIdx)
++                throw GameDataError("Technology '" + tech.name + "' requires unknown technology '" + req + "'");
++            tech.requirements.push_back(*reqIdx);
++        }
++        for(const auto& entry : techDesc.cost)
++        {
++            const auto good = goodFromIdentifier(entry.first);
++            if(!good)
++                throw GameDataError("Technology '" + tech.name + "' has an invalid cost good '" + entry.first + "'");
++            tech.cost.push_back(TechCost{*good, entry.second});
++        }
++        std::sort(tech.cost.begin(), tech.cost.end(),
++                  [](const TechCost& lhs, const TechCost& rhs) { return lhs.good < rhs.good; });
++        tech.minResearchGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(techDesc.time)));
++        for(const std::string& bldName : techDesc.unlockedBuildings)
++        {
++            const auto bld = buildingFromIdentifier(bldName);
++            if(!bld)
++                throw GameDataError("Technology '" + tech.name + "' unlocks an invalid building '" + bldName + "'");
++            if(!helpers::contains(tech.unlockedBuildings, *bld))
++                tech.unlockedBuildings.push_back(*bld);
++            lockedAtStart_[*bld] = true;
++        }
++        tech.exclusive = techDesc.exclusive;
++        if(!techDesc.requiredAddon.empty())
++        {
++            for(const AddonId id : rttrEnum::values<AddonId>)
++            {
++                if(rttrEnum::toString(id) == techDesc.requiredAddon)
++                    tech.requiredAddon = id;
++            }
++            if(!tech.requiredAddon)
++                throw GameDataError("Technology '" + tech.name + "' requires an invalid addon '"
++                                    + techDesc.requiredAddon + "'");
++        }
++        tech.aiPriority = techDesc.aiPriority;
++        techs_.push_back(std::move(tech));
++    }
++}
++
++std::optional<TechIdx> TechTree::find(const std::string& name) const
++{
++    for(TechIdx i = 0; i < techs_.size(); ++i)
++    {
++        if(techs_[i].name == name)
++            return i;
++    }
++    return std::nullopt;
++}
++
++std::vector<TechIdx> TechTree::GetTechsUnlocking(BuildingType bld) const
++{
++    std::vector<TechIdx> result;
++    for(TechIdx i = 0; i < techs_.size(); ++i)
++    {
++        if(helpers::contains(techs_[i].unlockedBuildings, bld))
++            result.push_back(i);
++    }
++    return result;
++}
++
++TechTree loadTechTree(const boost::filesystem::path& folder)
++{
++    WorldDescription desc;
++    GameDataLoader loader(desc, folder);
++    if(!loader.Load())
++        throw GameDataLoadError("Could not load the tech tree from " + folder.string());
++    return TechTree(desc);
++}
++
++TechTree loadDefaultTechTree()
++{
++    return loadTechTree(RTTRCONFIG.ExpandPath(s25::folders::gamedata) / "civ");
++}
++
++} // namespace civ
+diff --git a/libs/s25main/civ/TechTree.h b/libs/s25main/civ/TechTree.h
+new file mode 100644
+index 000000000..22cd8e962
+--- /dev/null
++++ b/libs/s25main/civ/TechTree.h
+@@ -0,0 +1,79 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include "addons/const_addons.h"
++#include "helpers/EnumArray.h"
++#include "gameTypes/BuildingType.h"
++#include "gameTypes/GoodTypes.h"
++#include <boost/filesystem/path.hpp>
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++struct WorldDescription;
++
++namespace civ {
++
++/// Index of a technology in the TechTree
++using TechIdx = unsigned;
++
++struct TechCost
++{
++    GoodType good;
++    unsigned amount;
++};
++
++/// A technology with all identifiers resolved to game types
++struct Technology
++{
++    std::string name, title, description;
++    unsigned era = 0;
++    std::vector<TechIdx> requirements;
++    /// Costs, sorted by good type
++    std::vector<TechCost> cost;
++    /// Minimum research time in game frames
++    unsigned minResearchGFs = 0;
++    std::vector<BuildingType> unlockedBuildings;
++    bool exclusive = false;
++    /// Addon which must be enabled for this technology to be available at all
++    std::optional<AddonId> requiredAddon;
++    int aiPriority = 0;
++
++    unsigned GetTotalCost() const;
++    /// Index of the cost entry for the good or nullopt if the technology doesn't cost this good
++    std::optional<unsigned> GetCostIdx(GoodType good) const;
++};
++
++/// The tech tree of the civilization mode. Created from the WorldDescription (Lua game data)
++class TechTree
++{
++public:
++    /// Resolve the raw descriptions. Throws GameDataError for unknown buildings or goods
++    explicit TechTree(const WorldDescription& desc);
++
++    unsigned size() const { return static_cast<unsigned>(techs_.size()); }
++    bool empty() const { return techs_.empty(); }
++    const Technology& get(TechIdx idx) const { return techs_.at(idx); }
++    const std::vector<Technology>& GetTechs() const { return techs_; }
++    std::optional<TechIdx> find(const std::string& name) const;
++
++    /// True if the building is unlocked by any technology and hence not available at the start
++    bool IsLockedAtStart(BuildingType bld) const { return lockedAtStart_[bld]; }
++    /// Technologies which unlock the given building
++    std::vector<TechIdx> GetTechsUnlocking(BuildingType bld) const;
++
++private:
++    std::vector<Technology> techs_;
++    helpers::EnumArray<bool, BuildingType> lockedAtStart_;
++};
++
++/// Load the tech tree from the Lua file `default.lua` in the given folder. Throws on error
++TechTree loadTechTree(const boost::filesystem::path& folder);
++/// Load the tech tree from the game data folder (RTTR/gamedata/civ). Throws on error
++TechTree loadDefaultTechTree();
++
++} // namespace civ
+diff --git a/libs/s25main/factories/GameCommandFactory.cpp b/libs/s25main/factories/GameCommandFactory.cpp
+index c49979f5a..094fcd2e7 100644
+--- a/libs/s25main/factories/GameCommandFactory.cpp
++++ b/libs/s25main/factories/GameCommandFactory.cpp
+@@ -159,6 +159,12 @@ bool GameCommandFactory::SetShipYardMode(const MapPoint pt, bool buildShips)
+     return AddGC(new gc::SetShipYardMode(pt, buildShips));
+ }
+ 
++bool GameCommandFactory::SetResearch(std::optional<unsigned> techIdx)
++{
++    RTTR_Assert(!techIdx || *techIdx < gc::SetResearch::STOP_RESEARCH);
++    return AddGC(new gc::SetResearch(techIdx ? static_cast<uint16_t>(*techIdx) : gc::SetResearch::STOP_RESEARCH));
++}
++
+ bool GameCommandFactory::SetTempleProductionMode(MapPoint pt, ProductionMode mode)
+ {
+     return AddGC(new gc::SetTempleProductionMode(pt, mode));
+diff --git a/libs/s25main/factories/GameCommandFactory.h b/libs/s25main/factories/GameCommandFactory.h
+index 6a3faf350..bffef3d2b 100644
+--- a/libs/s25main/factories/GameCommandFactory.h
++++ b/libs/s25main/factories/GameCommandFactory.h
+@@ -15,6 +15,7 @@
+ #include "gameTypes/SettingsTypes.h"
+ #include "gameTypes/ShipDirection.h"
+ #include "gameTypes/TempleProductionMode.h"
++#include <optional>
+ #include <vector>
+ 
+ struct InventorySetting;
+@@ -72,6 +73,8 @@ public:
+     /// Toggles the construction mode of the shipyard between boat and ship
+     bool SetShipYardMode(MapPoint pt, bool buildShips);
+     bool SetTempleProductionMode(MapPoint pt, ProductionMode mode);
++    /// Civilization mode: Research the technology with the given index (nullopt: stop researching)
++    bool SetResearch(std::optional<unsigned> techIdx);
+     /// Starts Preparation of an sea expedition in a habor
+     bool StartStopExpedition(MapPoint pt, bool start);
+     /// Lets a ship found a colony
+diff --git a/libs/s25main/gameData/const_gui_ids.h b/libs/s25main/gameData/const_gui_ids.h
+index 2347ce919..46ad4fc4a 100644
+--- a/libs/s25main/gameData/const_gui_ids.h
++++ b/libs/s25main/gameData/const_gui_ids.h
+@@ -55,6 +55,7 @@ enum GUI_ID : unsigned
+     CGI_TOOLS,
+     CGI_TRANSPORT,
+     CGI_VICTORY,
++    CGI_RESEARCH,
+     CGI_BUILDING, /// Building windows use this as the base ID and add a unique number for each building
+     CGI_NEXT = CGI_BUILDING + MAX_MAP_SIZE * MAX_MAP_SIZE
+ };
+diff --git a/libs/s25main/ingameWindows/iwMainMenu.cpp b/libs/s25main/ingameWindows/iwMainMenu.cpp
+index edc71c4c2..bff00790b 100644
+--- a/libs/s25main/ingameWindows/iwMainMenu.cpp
++++ b/libs/s25main/ingameWindows/iwMainMenu.cpp
+@@ -8,6 +8,7 @@
+ #include "Loader.h"
+ #include "WindowManager.h"
+ #include "addons/const_addons.h"
++#include "civ/Research.h"
+ #include "controls/ctrlTextButton.h"
+ #include "iwAIDebug.h"
+ #include "iwBuildOrder.h"
+@@ -20,6 +21,7 @@
+ #include "iwMerchandiseStatistics.h"
+ #include "iwMilitary.h"
+ #include "iwOptionsWindow.h"
++#include "iwResearch.h"
+ #include "iwShip.h"
+ #include "iwStatistics.h"
+ #include "iwTools.h"
+@@ -30,11 +32,21 @@
+ #include "world/GameWorldViewer.h"
+ #include "gameData/const_gui_ids.h"
+ 
++namespace {
++/// Additional height of the window for the research button in the civilization mode
++constexpr unsigned short CIV_EXTRA_HEIGHT = 36;
++unsigned short getExtraHeight(const GameWorldView& gwv)
++{
++    return civ::isEnabled(gwv.GetWorld()) ? CIV_EXTRA_HEIGHT : 0;
++}
++} // namespace
++
+ iwMainMenu::iwMainMenu(GameWorldView& gwv, GameCommandFactory& gcFactory)
+-    : IngameWindow(CGI_MAINSELECTION, IngameWindow::posLastOrCenter, Extent(190, 286), _("Main selection"),
+-                   LOADER.GetImageN("io", 5)),
++    : IngameWindow(CGI_MAINSELECTION, IngameWindow::posLastOrCenter, Extent(190, 286 + getExtraHeight(gwv)),
++                   _("Main selection"), LOADER.GetImageN("io", 5)),
+       gwv(gwv), gcFactory(gcFactory)
+ {
++    const unsigned short extraHeight = getExtraHeight(gwv);
+     // Verteilung
+     AddImageButton(0, DrawPoint(12, 22), Extent(53, 44), TextureColor::Grey, LOADER.GetImageN("io", 134),
+                    _("Distribution of goods"));
+@@ -94,9 +106,16 @@ iwMainMenu::iwMainMenu(GameWorldView& gwv, GameCommandFactory& gcFactory)
+         bt->ResizeForMaxChars(bt->GetText().size());
+     }
+ 
++    // Forschung (Zivilisationsmodus)
++    if(extraHeight)
++    {
++        AddTextButton(14, DrawPoint(12, 237), Extent(165, 28), TextureColor::Green2, _("Forschung"), NormalFont,
++                      _("Technologiebaum und Forschung"));
++    }
++
+     // Optionen
+-    AddImageButton(30, DrawPoint(12, 231), Extent(165, 32), TextureColor::Grey, LOADER.GetImageN("io", 37),
+-                   _("Options"));
++    AddImageButton(30, DrawPoint(12, 231 + extraHeight), Extent(165, 32), TextureColor::Grey,
++                   LOADER.GetImageN("io", 37), _("Options"));
+ }
+ 
+ /**
+@@ -189,6 +208,11 @@ void iwMainMenu::Msg_ButtonClick(const unsigned ctrl_id)
+             }
+         }
+         break;
++        case 14: // Forschung
++        {
++            WINDOWMANAGER.ToggleWindow(std::make_unique<iwResearch>(gwv.GetViewer(), gcFactory));
++        }
++        break;
+         case 30: // Optionen
+         {
+             WINDOWMANAGER.ToggleWindow(std::make_unique<iwOptionsWindow>(gwv.GetSoundMgr()));
+diff --git a/libs/s25main/ingameWindows/iwResearch.cpp b/libs/s25main/ingameWindows/iwResearch.cpp
+new file mode 100644
+index 000000000..794e65e19
+--- /dev/null
++++ b/libs/s25main/ingameWindows/iwResearch.cpp
+@@ -0,0 +1,306 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "iwResearch.h"
++#include "GamePlayer.h"
++#include "Loader.h"
++#include "civ/PlayerResearch.h"
++#include "civ/Research.h"
++#include "controls/ctrlButton.h"
++#include "controls/ctrlMultiline.h"
++#include "controls/ctrlPercent.h"
++#include "controls/ctrlTable.h"
++#include "controls/ctrlText.h"
++#include "factories/GameCommandFactory.h"
++#include "helpers/format.hpp"
++#include "helpers/toString.h"
++#include "world/GameWorldBase.h"
++#include "world/GameWorldViewer.h"
++#include "gameData/BuildingConsts.h"
++#include "gameData/GoodConsts.h"
++#include "gameData/const_gui_ids.h"
++#include "s25util/StringConversion.h"
++#include "s25util/colors.h"
++#include <array>
++
++namespace {
++enum
++{
++    ID_txtCurrentLabel,
++    ID_txtCurrent,
++    ID_pctCurrent,
++    ID_txtCurrentCosts,
++    ID_tblTechs,
++    ID_mlDescription,
++    ID_btResearch,
++    ID_btStop,
++};
++
++/// Column containing the (hidden) index of the technology
++constexpr unsigned COL_TECH_IDX = 4;
++
++const std::array<const char*, 7> ERA_NAMES = {gettext_noop("Jungsteinzeit"), gettext_noop("Antike"),
++                                              gettext_noop("Klassik"),       gettext_noop("Mittelalter"),
++                                              gettext_noop("Frühe Neuzeit"), gettext_noop("Industriezeitalter"),
++                                              gettext_noop("Moderne")};
++
++std::string getEraName(unsigned era)
++{
++    return era < ERA_NAMES.size() ? _(ERA_NAMES[era]) : helpers::toString(era);
++}
++
++std::string getCostText(const civ::Technology& tech, const civ::PlayerResearch::Progress* progress)
++{
++    std::string result;
++    for(unsigned i = 0; i < tech.cost.size(); ++i)
++    {
++        if(!result.empty())
++            result += ", ";
++        if(progress)
++            result += helpers::format("%1%/%2% %3%", progress->paid.at(i), tech.cost[i].amount,
++                                      _(WARE_NAMES[tech.cost[i].good]));
++        else
++            result += helpers::format("%1% %2%", tech.cost[i].amount, _(WARE_NAMES[tech.cost[i].good]));
++    }
++    return result.empty() ? _("keine") : result;
++}
++
++std::string getStateText(const GameWorldBase& world, unsigned playerId, civ::TechIdx tech)
++{
++    switch(civ::getTechState(world, playerId, tech))
++    {
++        case civ::TechState::Unavailable: return _("Nicht verfügbar");
++        case civ::TechState::Researched: return _("Erforscht");
++        case civ::TechState::InProgress: return _("Wird erforscht");
++        case civ::TechState::Available: return _("Verfügbar");
++        case civ::TechState::MissingRequirements: return _("Gesperrt");
++        case civ::TechState::TakenByOther:
++        {
++            const auto owner = civ::getExclusiveOwner(world, tech);
++            return helpers::format(_("Vergeben an %1%"), owner ? world.GetPlayer(*owner).name : std::string());
++        }
++    }
++    return "";
++}
++} // namespace
++
++iwResearch::iwResearch(const GameWorldViewer& gwv, GameCommandFactory& gcFactory)
++    : IngameWindow(CGI_RESEARCH, IngameWindow::posLastOrCenter, Extent(640, 520), _("Forschung"),
++                   LOADER.GetImageN("resource", 41)),
++      gwv(gwv), gcFactory(gcFactory), currentProgress_(0)
++{
++    AddText(ID_txtCurrentLabel, DrawPoint(20, 30), _("Aktuelle Forschung:"), COLOR_YELLOW, FontStyle{}, NormalFont);
++    AddText(ID_txtCurrent, DrawPoint(180, 30), "", COLOR_WHITE, FontStyle{}, NormalFont);
++    AddPercent(ID_pctCurrent, DrawPoint(20, 50), Extent(600, 20), TextureColor::Grey, COLOR_YELLOW, SmallFont,
++               &currentProgress_);
++    AddText(ID_txtCurrentCosts, DrawPoint(20, 76), "", COLOR_YELLOW, FontStyle{}, SmallFont)->setMaxWidth(600);
++
++    using SRT = ctrlTable::SortType;
++    AddTable(ID_tblTechs, DrawPoint(20, 95), Extent(600, 230), TextureColor::Grey, NormalFont,
++             ctrlTable::Columns{{_("Zeitalter"), 110, SRT::String},
++                                {_("Technologie"), 190, SRT::String},
++                                {_("Status"), 140, SRT::String},
++                                {_("Kosten"), 260, SRT::String},
++                                {}});
++
++    AddMultiline(ID_mlDescription, DrawPoint(20, 335), Extent(600, 135), TextureColor::Grey, NormalFont);
++
++    AddTextButton(ID_btResearch, DrawPoint(20, 480), Extent(290, 22), TextureColor::Green2, _("Erforschen"),
++                  NormalFont);
++    AddTextButton(ID_btStop, DrawPoint(330, 480), Extent(290, 22), TextureColor::Red1, _("Forschung anhalten"),
++                  NormalFont);
++
++    RefreshTable();
++    RefreshCurrentResearch();
++    RefreshSelection();
++}
++
++std::string iwResearch::GetStateSignature() const
++{
++    const GameWorldBase& world = gwv.GetWorld();
++    std::string signature;
++    for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
++    {
++        const civ::PlayerResearch& research = world.GetPlayer(i).GetResearch();
++        signature += helpers::toString(research.GetNumResearched()) + ":";
++        signature += research.GetCurrent() ? helpers::toString(*research.GetCurrent()) : std::string("-");
++        signature += ";";
++    }
++    return signature;
++}
++
++void iwResearch::RefreshTable()
++{
++    const GameWorldBase& world = gwv.GetWorld();
++    const civ::TechTree& techTree = world.GetTechTree();
++    const unsigned playerId = gwv.GetPlayerId();
++    const civ::PlayerResearch& research = gwv.GetPlayer().GetResearch();
++    const std::optional<civ::TechIdx> selectedTech = GetSelectedTech();
++
++    auto* table = GetCtrl<ctrlTable>(ID_tblTechs);
++    table->DeleteAllItems();
++    for(civ::TechIdx tech = 0; tech < techTree.size(); ++tech)
++    {
++        // Technologies of disabled addons are not part of this game
++        if(civ::getTechState(world, playerId, tech) == civ::TechState::Unavailable)
++            continue;
++        const civ::Technology& technology = techTree.get(tech);
++        // Prefix with the era number so sorting by the era column keeps the eras in order
++        table->AddRow({helpers::format("%1% %2%", technology.era, getEraName(technology.era)), _(technology.title),
++                       getStateText(world, playerId, tech), getCostText(technology, research.GetProgress(tech)),
++                       helpers::toString(tech)});
++    }
++    if(selectedTech)
++    {
++        for(unsigned row = 0; row < table->GetNumRows(); ++row)
++        {
++            if(table->GetItemText(row, COL_TECH_IDX) == helpers::toString(*selectedTech))
++            {
++                table->SetSelection(row);
++                break;
++            }
++        }
++    }
++    lastStateSignature_ = GetStateSignature();
++}
++
++void iwResearch::RefreshCurrentResearch()
++{
++    const GameWorldBase& world = gwv.GetWorld();
++    const civ::PlayerResearch& research = gwv.GetPlayer().GetResearch();
++    auto* txtCurrent = GetCtrl<ctrlText>(ID_txtCurrent);
++    auto* txtCosts = GetCtrl<ctrlText>(ID_txtCurrentCosts);
++    if(!research.GetCurrent())
++    {
++        txtCurrent->SetText(_("keine"));
++        txtCosts->SetText(_("Wähle unten eine verfügbare Technologie aus und klicke auf \"Erforschen\"."));
++        currentProgress_ = 0;
++        GetCtrl<ctrlButton>(ID_btStop)->SetEnabled(false);
++        return;
++    }
++    const civ::Technology& tech = world.GetTechTree().get(*research.GetCurrent());
++    const civ::PlayerResearch::Progress* progress = research.GetProgress(*research.GetCurrent());
++    txtCurrent->SetText(_(tech.title));
++    txtCosts->SetText(helpers::format(_("Bezahlt: %1%"), getCostText(tech, progress)));
++    unsigned paid = 0;
++    if(progress)
++    {
++        for(unsigned i = 0; i < tech.cost.size(); ++i)
++            paid += progress->paid.at(i);
++    }
++    const unsigned total = tech.GetTotalCost();
++    currentProgress_ = static_cast<unsigned short>(total == 0 ? 100 : paid * 100 / total);
++    GetCtrl<ctrlButton>(ID_btStop)->SetEnabled(true);
++}
++
++void iwResearch::RefreshSelection()
++{
++    auto* description = GetCtrl<ctrlMultiline>(ID_mlDescription);
++    description->Clear();
++    const std::optional<civ::TechIdx> tech = GetSelectedTech();
++    auto* btResearch = GetCtrl<ctrlButton>(ID_btResearch);
++    if(!tech)
++    {
++        btResearch->SetEnabled(false);
++        if(gwv.GetWorld().GetTechTree().empty())
++            description->AddString(_("Es sind keine Technologien definiert."), COLOR_RED, false);
++        else
++            description->AddString(_("Wähle eine Technologie aus der Liste aus."), COLOR_YELLOW, false);
++        return;
++    }
++    const GameWorldBase& world = gwv.GetWorld();
++    const civ::TechTree& techTree = world.GetTechTree();
++    const civ::Technology& technology = techTree.get(*tech);
++    const civ::PlayerResearch& research = gwv.GetPlayer().GetResearch();
++
++    description->AddString(helpers::format("%1% (%2%)", _(technology.title), getEraName(technology.era)), COLOR_YELLOW,
++                           false);
++    if(!technology.description.empty())
++        description->AddString(_(technology.description), COLOR_WHITE, false);
++    if(!technology.unlockedBuildings.empty())
++    {
++        std::string buildings;
++        for(const BuildingType bld : technology.unlockedBuildings)
++        {
++            if(!buildings.empty())
++                buildings += ", ";
++            buildings += _(BUILDING_NAMES[bld]);
++        }
++        description->AddString(helpers::format(_("Schaltet frei: %1%"), buildings), COLOR_GREEN, false);
++    }
++    if(!technology.requirements.empty())
++    {
++        std::string reqs;
++        bool allResearched = true;
++        for(const civ::TechIdx req : technology.requirements)
++        {
++            if(!reqs.empty())
++                reqs += ", ";
++            reqs += _(techTree.get(req).title);
++            if(!research.IsResearched(req))
++            {
++                reqs += _(" (fehlt)");
++                allResearched = false;
++            }
++        }
++        description->AddString(helpers::format(_("Voraussetzungen: %1%"), reqs),
++                               allResearched ? COLOR_WHITE : COLOR_RED, false);
++    }
++    description->AddString(helpers::format(_("Kosten: %1%"), getCostText(technology, research.GetProgress(*tech))),
++                           COLOR_WHITE, false);
++    if(technology.exclusive)
++        description->AddString(_("Exklusiv: Nur der Spieler, der sie zuerst erforscht, erhält diese Technologie."),
++                               COLOR_ORANGE, false);
++    if(const auto owner = civ::getExclusiveOwner(world, *tech))
++    {
++        if(*owner != gwv.GetPlayerId())
++            description->AddString(helpers::format(_("Bereits erforscht von %1%."), world.GetPlayer(*owner).name),
++                                   COLOR_RED, false);
++    }
++
++    const civ::TechState state = civ::getTechState(world, gwv.GetPlayerId(), *tech);
++    btResearch->SetEnabled(state == civ::TechState::Available);
++}
++
++std::optional<civ::TechIdx> iwResearch::GetSelectedTech() const
++{
++    const auto* table = GetCtrl<ctrlTable>(ID_tblTechs);
++    const auto& selection = table->GetSelection();
++    if(!selection)
++        return std::nullopt;
++    const auto techIdx = s25util::fromStringClassicDef<unsigned>(table->GetItemText(*selection, COL_TECH_IDX),
++                                                                 gwv.GetWorld().GetTechTree().size());
++    if(techIdx >= gwv.GetWorld().GetTechTree().size())
++        return std::nullopt;
++    return techIdx;
++}
++
++void iwResearch::Msg_PaintBefore()
++{
++    IngameWindow::Msg_PaintBefore();
++    if(GetStateSignature() != lastStateSignature_)
++    {
++        RefreshTable();
++        RefreshSelection();
++    }
++    RefreshCurrentResearch();
++}
++
++void iwResearch::Msg_ButtonClick(const unsigned ctrl_id)
++{
++    switch(ctrl_id)
++    {
++        case ID_btResearch:
++            if(const auto tech = GetSelectedTech())
++                gcFactory.SetResearch(*tech);
++            break;
++        case ID_btStop: gcFactory.SetResearch(std::nullopt); break;
++        default: break;
++    }
++}
++
++void iwResearch::Msg_TableSelectItem(const unsigned /*ctrl_id*/, const std::optional<unsigned>& /*selection*/)
++{
++    RefreshSelection();
++}
+diff --git a/libs/s25main/ingameWindows/iwResearch.h b/libs/s25main/ingameWindows/iwResearch.h
+new file mode 100644
+index 000000000..243412844
+--- /dev/null
++++ b/libs/s25main/ingameWindows/iwResearch.h
+@@ -0,0 +1,41 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include "IngameWindow.h"
++#include "civ/TechTree.h"
++#include <optional>
++#include <string>
++
++class GameCommandFactory;
++class GameWorldViewer;
++
++/// Civilization mode: Shows the tech tree and lets the player choose the technology to research
++class iwResearch : public IngameWindow
++{
++public:
++    iwResearch(const GameWorldViewer& gwv, GameCommandFactory& gcFactory);
++
++private:
++    const GameWorldViewer& gwv;
++    GameCommandFactory& gcFactory;
++    /// Percentage of the costs of the current research which are already paid (displayed by a ctrlPercent)
++    unsigned short currentProgress_;
++    /// Signature of the research state of all players to detect when the table needs to be refreshed
++    std::string lastStateSignature_;
++
++    void Msg_PaintBefore() override;
++    void Msg_ButtonClick(unsigned ctrl_id) override;
++    void Msg_TableSelectItem(unsigned ctrl_id, const std::optional<unsigned>& selection) override;
++
++    /// Recreate all rows of the table (keeps selection)
++    void RefreshTable();
++    /// Update the area of the current research
++    void RefreshCurrentResearch();
++    /// Update the description and buttons for the selected technology
++    void RefreshSelection();
++    std::optional<civ::TechIdx> GetSelectedTech() const;
++    std::string GetStateSignature() const;
++};
+diff --git a/libs/s25main/world/GameWorldBase.cpp b/libs/s25main/world/GameWorldBase.cpp
+index 38363427f..f6c465d89 100644
+--- a/libs/s25main/world/GameWorldBase.cpp
++++ b/libs/s25main/world/GameWorldBase.cpp
+@@ -13,6 +13,7 @@
+ #include "addons/const_addons.h"
+ #include "buildings/nobHarborBuilding.h"
+ #include "buildings/nobMilitary.h"
++#include "civ/TechTree.h"
+ #include "figures/nofPassiveSoldier.h"
+ #include "helpers/EnumRange.h"
+ #include "helpers/IdRange.h"
+@@ -27,6 +28,7 @@
+ #include "gameData/BuildingProperties.h"
+ #include "gameData/GameConsts.h"
+ #include "gameData/TerrainDesc.h"
++#include "s25util/Log.h"
+ #include <utility>
+ 
+ GameWorldBase::GameWorldBase(std::vector<GamePlayer> players, const GlobalGameSettings& gameSettings, EventManager& em)
+@@ -36,6 +38,27 @@ GameWorldBase::GameWorldBase(std::vector<GamePlayer> players, const GlobalGameSe
+ 
+ GameWorldBase::~GameWorldBase() = default;
+ 
++const civ::TechTree& GameWorldBase::GetTechTree() const
++{
++    if(!techTree_)
++    {
++        try
++        {
++            techTree_ = std::make_unique<civ::TechTree>(civ::loadDefaultTechTree());
++        } catch(const std::exception& e)
++        {
++            LOG.write(_("Error: Failed to load the tech tree of the civilization mode: %1%\n")) % e.what();
++            techTree_ = std::make_unique<civ::TechTree>(WorldDescription());
++        }
++    }
++    return *techTree_;
++}
++
++void GameWorldBase::SetTechTree(std::unique_ptr<civ::TechTree> techTree)
++{
++    techTree_ = std::move(techTree);
++}
++
+ void GameWorldBase::Init(const MapExtent& mapSize, DescIdx<LandscapeDesc> lt)
+ {
+     RTTR_Assert(GetDescription().terrain.size() > 0); // Must have game data initialized
+diff --git a/libs/s25main/world/GameWorldBase.h b/libs/s25main/world/GameWorldBase.h
+index 3d5ff465d..0fc8f1be0 100644
+--- a/libs/s25main/world/GameWorldBase.h
++++ b/libs/s25main/world/GameWorldBase.h
+@@ -28,6 +28,9 @@ class noFlag;
+ class nofPassiveSoldier;
+ class RoadPathFinder;
+ class SoundManager;
++namespace civ {
++class TechTree;
++}
+ 
+ constexpr Direction getOppositeDir(const RoadDir roadDir) noexcept
+ {
+@@ -62,6 +65,8 @@ class GameWorldBase : public World
+     std::unique_ptr<SoundManager> soundManager;
+     std::set<MapPoint, MapPointLess> ptsInsideComputerBarriers;
+     LuaInterfaceGame* lua;
++    /// Tech tree of the civilization mode, loaded on first use
++    mutable std::unique_ptr<civ::TechTree> techTree_;
+ 
+ protected:
+     /// Interface zum GUI
+@@ -85,6 +90,11 @@ public:
+     /// TODO: Add const correct version, but iwEconomicProgress still needs to be able to call UpdateAmounts
+     EconomyModeHandler* getEconHandler() const { return econHandler.get(); }
+ 
++    /// Tech tree of the civilization mode. Loaded from the game data on first use (empty if loading failed)
++    const civ::TechTree& GetTechTree() const;
++    /// Use the given tech tree instead of the one from the game data (scenarios, tests)
++    void SetTechTree(std::unique_ptr<civ::TechTree> techTree);
++
+     /// Can a node be used for a road (no flag/bld, no other road, no danger...)
+     /// Should only be used for the points between the 2 flags of a road
+     bool IsRoadAvailable(bool boat_road, MapPoint pt) const;
+diff --git a/tests/libGameData/testGameData.cpp b/tests/libGameData/testGameData.cpp
+index dffa9d76c..bde4ca6c6 100644
+--- a/tests/libGameData/testGameData.cpp
++++ b/tests/libGameData/testGameData.cpp
+@@ -10,6 +10,7 @@
+ #include "legacy/TerrainData.h"
+ #include "lua/GameDataLoader.h"
+ #include "gameData/EdgeDesc.h"
++#include "gameData/TechnologyDesc.h"
+ #include "gameData/TerrainDesc.h"
+ #include "gameData/WorldDescription.h"
+ #include "rttr/test/ConfigOverride.hpp"
+@@ -138,6 +139,65 @@ BOOST_AUTO_TEST_CASE(DetectError)
+     BOOST_CHECK_THROW(loadGameData(desc), std::runtime_error);
+ }
+ 
++BOOST_AUTO_TEST_CASE(LoadTechnologies)
++{
++    rttr::test::TmpFolder tmp;
++    {
++        bnw::ofstream file(tmp / "default.lua");
++        file << R"(
++rttr:AddTechnology{ name = "a", title = "A", era = 0, cost = { Boards = 2, Stones = 1 },
++                    unlocks = { buildings = { "Farm" } } }
++rttr:AddTechnology{ name = "b", title = "B", description = "Desc", era = 2, requires = { "a" }, time = 30,
++                    exclusive = true, addon = "WINE", aiPriority = 5 }
++)";
++    }
++    WorldDescription desc;
++    GameDataLoader loader(desc, tmp);
++    BOOST_TEST_REQUIRE(loader.Load());
++    BOOST_TEST_REQUIRE(desc.technologies.size() == 2u);
++    const TechnologyDesc& a = *desc.technologies.tryGet("a");
++    BOOST_TEST(a.title == "A");
++    BOOST_TEST(a.cost.size() == 2u);
++    BOOST_TEST(a.cost.at("Boards") == 2u);
++    BOOST_TEST((a.unlockedBuildings == std::vector<std::string>{"Farm"}));
++    BOOST_TEST(!a.exclusive);
++    const TechnologyDesc& b = *desc.technologies.tryGet("b");
++    BOOST_TEST(b.description == "Desc");
++    BOOST_TEST(b.era == 2u);
++    BOOST_TEST((b.requirements == std::vector<std::string>{"a"}));
++    BOOST_TEST(b.time == 30u);
++    BOOST_TEST(b.exclusive);
++    BOOST_TEST(b.requiredAddon == "WINE");
++    BOOST_TEST(b.aiPriority == 5);
++}
++
++BOOST_AUTO_TEST_CASE(DetectInvalidTechnologies)
++{
++    const auto expectLoadFailure = [](const std::string& content) {
++        rttr::test::TmpFolder tmp;
++        {
++            bnw::ofstream file(tmp / "default.lua");
++            file << content;
++        }
++        WorldDescription desc;
++        GameDataLoader loader(desc, tmp);
++        rttr::test::LogAccessor logAcc;
++        BOOST_TEST(!loader.Load());
++    };
++    // Prerequisite defined after use (would allow cycles)
++    expectLoadFailure(R"(rttr:AddTechnology{ name = "b", requires = { "a" } }
++rttr:AddTechnology{ name = "a" })");
++    // Duplicate name
++    expectLoadFailure(R"(rttr:AddTechnology{ name = "a" }
++rttr:AddTechnology{ name = "a" })");
++    // Unknown key (typo)
++    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", cots = { Boards = 1 } })");
++    // Zero cost
++    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", cost = { Boards = 0 } })");
++    // Invalid era
++    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", era = 7 })");
++}
++
+ BOOST_AUTO_TEST_CASE(DetectRecursion)
+ {
+     rttr::test::TmpFolder tmp;
+diff --git a/tests/s25Main/integration/testResearch.cpp b/tests/s25Main/integration/testResearch.cpp
+new file mode 100644
+index 000000000..514291e80
+--- /dev/null
++++ b/tests/s25Main/integration/testResearch.cpp
+@@ -0,0 +1,372 @@
++// Copyright (C) 2026 DA4-cpu
++//
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "GamePlayer.h"
++#include "GlobalGameSettings.h"
++#include "SerializedGameData.h"
++#include "addons/const_addons.h"
++#include "buildings/noBaseBuilding.h"
++#include "buildings/nobBaseWarehouse.h"
++#include "civ/Identifiers.h"
++#include "civ/PlayerResearch.h"
++#include "civ/Research.h"
++#include "civ/TechTree.h"
++#include "buildings/nobHQ.h"
++#include "helpers/EnumRange.h"
++#include "helpers/OptionalIO.h"
++#include "worldFixtures/MockLocalGameState.h"
++#include "worldFixtures/WorldWithGCExecution.h"
++#include "gameData/ShieldConsts.h"
++#include "gameData/WorldDescription.h"
++#include <boost/test/unit_test.hpp>
++#include <memory>
++
++BOOST_AUTO_TEST_SUITE(ResearchSuite)
++
++BOOST_AUTO_TEST_CASE(IdentifiersRoundTrip)
++{
++    for(const auto bld : helpers::enumRange<BuildingType>())
++    {
++        BOOST_TEST_REQUIRE(civ::getIdentifier(bld));
++        if(bld == BuildingType::Headquarters || bld == BuildingType::Nothing9)
++            BOOST_TEST(!civ::buildingFromIdentifier(civ::getIdentifier(bld)));
++        else
++            BOOST_TEST((civ::buildingFromIdentifier(civ::getIdentifier(bld)) == bld));
++    }
++    for(const auto good : helpers::enumRange<GoodType>())
++    {
++        BOOST_TEST_REQUIRE(civ::getIdentifier(good));
++        const auto parsed = civ::goodFromIdentifier(civ::getIdentifier(good));
++        if(good == GoodType::WaterEmpty)
++            BOOST_TEST(!parsed);
++        else
++            BOOST_TEST((parsed == ConvertShields(good)));
++    }
++    BOOST_TEST((civ::goodFromIdentifier("Shield") == GoodType::ShieldRomans));
++    BOOST_TEST(!civ::buildingFromIdentifier("NotABuilding"));
++    BOOST_TEST(!civ::goodFromIdentifier("NotAGood"));
++}
++
++BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
++{
++    const civ::TechTree techTree = civ::loadDefaultTechTree();
++    BOOST_TEST_REQUIRE(!techTree.empty());
++    for(civ::TechIdx i = 0; i < techTree.size(); ++i)
++    {
++        const civ::Technology& tech = techTree.get(i);
++        BOOST_TEST(!tech.title.empty());
++        BOOST_TEST(tech.era <= 6u);
++        for(const civ::TechIdx req : tech.requirements)
++            BOOST_TEST(req < i); // Defined before -> no cycles
++    }
++    // Basic economy is available from the start
++    for(const auto bld : {BuildingType::Woodcutter, BuildingType::Forester, BuildingType::Quarry,
++                          BuildingType::Sawmill, BuildingType::Fishery, BuildingType::Hunter, BuildingType::Well,
++                          BuildingType::Barracks, BuildingType::Guardhouse, BuildingType::LookoutTower})
++        BOOST_TEST(!techTree.IsLockedAtStart(bld));
++    // Every other building can be researched
++    for(const auto bld : helpers::enumRange<BuildingType>())
++    {
++        if(bld == BuildingType::Headquarters || bld == BuildingType::Nothing9 || !techTree.IsLockedAtStart(bld))
++            continue;
++        BOOST_TEST(!techTree.GetTechsUnlocking(bld).empty());
++    }
++    const auto agriculture = techTree.find("agriculture");
++    BOOST_TEST_REQUIRE(agriculture);
++    BOOST_TEST(techTree.IsLockedAtStart(BuildingType::Farm));
++    BOOST_TEST((techTree.GetTechsUnlocking(BuildingType::Farm) == std::vector<civ::TechIdx>{*agriculture}));
++}
++
++namespace {
++TechnologyDesc makeTech(const std::string& name, std::map<std::string, unsigned> cost,
++                        std::vector<std::string> buildings, std::vector<std::string> requirements = {},
++                        unsigned time = 0, bool exclusive = false)
++{
++    TechnologyDesc desc;
++    desc.name = name;
++    desc.title = name;
++    desc.cost = std::move(cost);
++    desc.unlockedBuildings = std::move(buildings);
++    desc.requirements = std::move(requirements);
++    desc.time = time;
++    desc.exclusive = exclusive;
++    return desc;
++}
++
++struct ResearchFixture : public WorldWithGCExecution2P
++{
++    civ::TechIdx agriculture = 0, milling = 1, slowTech = 2, culture = 3, wineTech = 4;
++
++    ResearchFixture()
++    {
++        ggs.setSelection(AddonId::CIVILIZATION, 1);
++        WorldDescription desc;
++        desc.technologies.add(makeTech("agriculture", {{"Boards", 2}}, {"Farm"}));
++        desc.technologies.add(makeTech("milling", {{"Boards", 1}, {"Stones", 3}}, {"Mill", "Bakery"}, {"agriculture"}));
++        desc.technologies.add(makeTech("slow", {}, {"Mint"}, {}, 10));
++        desc.technologies.add(makeTech("culture", {{"Boards", 1}}, {"Fortress"}, {}, 0, true));
++        auto wine = makeTech("wine", {{"Boards", 1}}, {"Vineyard"});
++        wine.requiredAddon = "WINE";
++        desc.technologies.add(wine);
++        world.SetTechTree(std::make_unique<civ::TechTree>(desc));
++        civ::startGame(world);
++    }
++
++    nobBaseWarehouse& getHQ(unsigned playerId) { return *world.GetPlayer(playerId).GetHQ(); }
++    void addWares(unsigned playerId, GoodType good, unsigned amount)
++    {
++        getHQ(playerId).AddToInventory(GoodCounts::make(good, amount), true);
++    }
++    civ::PlayerResearch& research(unsigned playerId) { return world.GetPlayer(playerId).GetResearch(); }
++};
++} // namespace
++
++BOOST_FIXTURE_TEST_CASE(BuildingsLockedAtStart, ResearchFixture)
++{
++    const GamePlayer& player = world.GetPlayer(0);
++    BOOST_TEST(!player.IsBuildingEnabled(BuildingType::Farm));
++    BOOST_TEST(!player.IsBuildingEnabled(BuildingType::Mill));
++    BOOST_TEST(!player.IsBuildingEnabled(BuildingType::Fortress));
++    BOOST_TEST(player.IsBuildingEnabled(BuildingType::Woodcutter));
++    BOOST_TEST(player.IsBuildingEnabled(BuildingType::Watchtower)); // Not part of this tech tree
++    // Locked buildings can't be placed
++    const MapPoint bldPos = world.MakeMapPoint(hqPos + Position(4, 0));
++    this->SetBuildingSite(bldPos, BuildingType::Mill);
++    BOOST_TEST(!world.GetSpecObj<noBaseBuilding>(bldPos));
++    // But after researching them
++    research(0).SetResearched(agriculture);
++    research(0).SetResearched(milling);
++    civ::applyBuildingAvailability(world.GetPlayer(0));
++    BOOST_TEST(player.IsBuildingEnabled(BuildingType::Mill));
++    this->SetBuildingSite(bldPos, BuildingType::Mill);
++    BOOST_TEST(world.GetSpecObj<noBaseBuilding>(bldPos));
++}
++
++BOOST_FIXTURE_TEST_CASE(ResearchRequiresPrerequisitesAndUnlocksBuildings, ResearchFixture)
++{
++    // Not possible yet
++    this->SetResearch(milling);
++    BOOST_TEST(!research(0).GetCurrent());
++    BOOST_TEST((civ::getTechState(world, 0, milling) == civ::TechState::MissingRequirements));
++
++    addWares(0, GoodType::Boards, 5);
++    const unsigned boardsBefore = world.GetPlayer(0).GetInventory()[GoodType::Boards];
++    this->SetResearch(agriculture);
++    BOOST_TEST_REQUIRE((research(0).GetCurrent() == agriculture));
++    BOOST_TEST((civ::getTechState(world, 0, agriculture) == civ::TechState::InProgress));
++
++    civ::update(world);
++    BOOST_TEST(research(0).IsResearched(agriculture));
++    BOOST_TEST(!research(0).GetCurrent());
++    BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Farm));
++    BOOST_TEST(world.GetPlayer(0).GetInventory()[GoodType::Boards] == boardsBefore - 2u);
++    BOOST_TEST(getHQ(0).GetNumRealWares(GoodType::Boards) == 3u);
++    // Other player is unaffected
++    BOOST_TEST(!world.GetPlayer(1).IsBuildingEnabled(BuildingType::Farm));
++    BOOST_TEST((civ::getTechState(world, 0, milling) == civ::TechState::Available));
++    // Can't research twice
++    this->SetResearch(agriculture);
++    BOOST_TEST(!research(0).GetCurrent());
++}
++
++BOOST_FIXTURE_TEST_CASE(ResearchWaitsForWaresAndKeepsProgress, ResearchFixture)
++{
++    research(0).SetResearched(agriculture);
++    addWares(0, GoodType::Boards, 1);
++    addWares(0, GoodType::Stones, 1);
++    this->SetResearch(milling);
++    civ::update(world);
++    BOOST_TEST(!research(0).IsResearched(milling));
++    const civ::PlayerResearch::Progress* progress = research(0).GetProgress(milling);
++    BOOST_TEST_REQUIRE(progress);
++    // Costs are sorted by good type
++    BOOST_TEST_REQUIRE(world.GetTechTree().get(milling).cost.size() == 2u);
++    BOOST_TEST((progress->paid == std::vector<unsigned>{1, 1}));
++    BOOST_TEST(getHQ(0).GetNumRealWares(GoodType::Stones) == 0u);
++
++    // Switch research -> progress stays
++    this->SetResearch(slowTech);
++    BOOST_TEST((research(0).GetCurrent() == slowTech));
++    BOOST_TEST(research(0).GetProgress(milling));
++    this->SetResearch(std::nullopt);
++    BOOST_TEST(!research(0).GetCurrent());
++
++    // Continue and provide the missing wares
++    this->SetResearch(milling);
++    addWares(0, GoodType::Stones, 5);
++    civ::update(world);
++    BOOST_TEST(research(0).IsResearched(milling));
++    BOOST_TEST(!research(0).GetProgress(milling));
++    BOOST_TEST(getHQ(0).GetNumRealWares(GoodType::Stones) == 3u);
++    BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Mill));
++    BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Bakery));
++}
++
++BOOST_FIXTURE_TEST_CASE(MinimumResearchTime, ResearchFixture)
++{
++    const unsigned requiredGFs = world.GetTechTree().get(slowTech).minResearchGFs;
++    BOOST_TEST_REQUIRE(requiredGFs > civ::RESEARCH_UPDATE_INTERVAL);
++    this->SetResearch(slowTech);
++    unsigned numUpdates = 0;
++    while(!research(0).IsResearched(slowTech) && numUpdates < 1000)
++    {
++        civ::update(world);
++        ++numUpdates;
++    }
++    BOOST_TEST(research(0).IsResearched(slowTech));
++    BOOST_TEST(numUpdates * civ::RESEARCH_UPDATE_INTERVAL >= requiredGFs);
++    BOOST_TEST((numUpdates - 1) * civ::RESEARCH_UPDATE_INTERVAL < requiredGFs);
++}
++
++BOOST_FIXTURE_TEST_CASE(ExclusiveTechnology, ResearchFixture)
++{
++    // Player 1 already paid partially, player 0 can pay everything
++    addWares(0, GoodType::Boards, 1);
++    this->curPlayer = 1;
++    this->SetResearch(culture);
++    this->curPlayer = 0;
++    this->SetResearch(culture);
++    BOOST_TEST_REQUIRE((research(1).GetCurrent() == culture));
++    // Player 1 has no boards -> progress without payment
++    civ::update(world);
++    BOOST_TEST(research(0).IsResearched(culture));
++    BOOST_TEST(!research(1).IsResearched(culture));
++    BOOST_TEST(!research(1).GetCurrent());
++    BOOST_TEST(!research(1).GetProgress(culture));
++    BOOST_TEST((civ::getExclusiveOwner(world, culture) == 0u));
++    BOOST_TEST((civ::getTechState(world, 1, culture) == civ::TechState::TakenByOther));
++    BOOST_TEST(!civ::canResearch(world, 1, culture));
++    BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Fortress));
++    BOOST_TEST(!world.GetPlayer(1).IsBuildingEnabled(BuildingType::Fortress));
++    this->curPlayer = 1;
++    this->SetResearch(culture);
++    BOOST_TEST(!research(1).GetCurrent());
++}
++
++BOOST_FIXTURE_TEST_CASE(ExclusiveTechnologyRefundsPaidWares, ResearchFixture)
++{
++    // Make culture expensive for this test
++    WorldDescription desc;
++    desc.technologies.add(makeTech("culture", {{"Boards", 3}}, {"Fortress"}, {}, 0, true));
++    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
++    const civ::TechIdx expensiveCulture = 0;
++    addWares(1, GoodType::Boards, 2);
++    this->curPlayer = 1;
++    this->SetResearch(expensiveCulture);
++    civ::update(world);
++    BOOST_TEST_REQUIRE(research(1).GetProgress(expensiveCulture));
++    BOOST_TEST(getHQ(1).GetNumRealWares(GoodType::Boards) == 0u);
++
++    // Player 0 gets it first
++    civ::completeResearch(world, 0, expensiveCulture);
++    BOOST_TEST(!research(1).GetProgress(expensiveCulture));
++    BOOST_TEST(!research(1).GetCurrent());
++    BOOST_TEST(getHQ(1).GetNumRealWares(GoodType::Boards) == 2u);
++}
++
++BOOST_FIXTURE_TEST_CASE(AddonRequiredTechnology, ResearchFixture)
++{
++    ggs.setSelection(AddonId::WINE, 0);
++    BOOST_TEST((civ::getTechState(world, 0, wineTech) == civ::TechState::Unavailable));
++    this->SetResearch(wineTech);
++    BOOST_TEST(!research(0).GetCurrent());
++    ggs.setSelection(AddonId::WINE, 1);
++    BOOST_TEST((civ::getTechState(world, 0, wineTech) == civ::TechState::Available));
++}
++
++BOOST_FIXTURE_TEST_CASE(NothingHappensWithoutAddon, ResearchFixture)
++{
++    ggs.setSelection(AddonId::CIVILIZATION, 0);
++    addWares(0, GoodType::Boards, 5);
++    this->SetResearch(agriculture);
++    BOOST_TEST(!research(0).GetCurrent());
++    research(0).SetCurrent(agriculture);
++    civ::update(world);
++    BOOST_TEST(!research(0).IsResearched(agriculture));
++}
++
++BOOST_FIXTURE_TEST_CASE(AIChoosesResearch, ResearchFixture)
++{
++    ggs.setSelection(AddonId::WINE, 0);
++    // All have priority 0 -> cheapest first ("slow" has no costs)
++    BOOST_TEST((civ::chooseResearchForAI(world, 0) == slowTech));
++    research(0).SetResearched(slowTech);
++    // agriculture (2) vs culture (1)
++    BOOST_TEST((civ::chooseResearchForAI(world, 0) == culture));
++    research(1).SetResearched(culture); // Taken by other player
++    BOOST_TEST((civ::chooseResearchForAI(world, 0) == agriculture));
++}
++
++BOOST_FIXTURE_TEST_CASE(SerializeResearch, ResearchFixture)
++{
++    research(0).SetResearched(agriculture);
++    addWares(0, GoodType::Stones, 2);
++    this->SetResearch(milling);
++    civ::update(world);
++    research(1).SetResearched(culture);
++    BOOST_TEST_REQUIRE(research(0).GetProgress(milling));
++
++    SerializedGameData sgd;
++    sgd.MakeSnapshot(*game);
++    MockLocalGameState lgs;
++    em.Clear();
++    world.Unload();
++    sgd.ReadSnapshot(*game, lgs);
++    civ::startGame(world);
++
++    BOOST_TEST(research(0).IsResearched(agriculture));
++    BOOST_TEST(!research(0).IsResearched(milling));
++    BOOST_TEST((research(0).GetCurrent() == milling));
++    const civ::PlayerResearch::Progress* progress = research(0).GetProgress(milling);
++    BOOST_TEST_REQUIRE(progress);
++    BOOST_TEST((progress->paid == std::vector<unsigned>{0, 2}));
++    BOOST_TEST(research(1).IsResearched(culture));
++    // Building availability restored
++    BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Farm));
++    BOOST_TEST(!world.GetPlayer(0).IsBuildingEnabled(BuildingType::Mill));
++    BOOST_TEST(world.GetPlayer(1).IsBuildingEnabled(BuildingType::Fortress));
++    BOOST_TEST(!world.GetPlayer(1).IsBuildingEnabled(BuildingType::Farm));
++
++    // Serialize again and compare
++    SerializedGameData sgd2;
++    sgd2.MakeSnapshot(*game);
++    BOOST_CHECK_EQUAL_COLLECTIONS(sgd.GetData(), sgd.GetData() + sgd.GetLength(), sgd2.GetData(),
++                                  sgd2.GetData() + sgd2.GetLength());
++}
++
++BOOST_FIXTURE_TEST_CASE(LoadWithChangedTechTree, ResearchFixture)
++{
++    research(0).SetResearched(agriculture);
++    research(0).SetResearched(culture);
++    addWares(0, GoodType::Stones, 2);
++    this->SetResearch(milling);
++    civ::update(world);
++
++    SerializedGameData sgd;
++    sgd.MakeSnapshot(*game);
++
++    // New tree: culture removed, milling costs changed (stones only), new tech inserted at the start
++    WorldDescription desc;
++    desc.technologies.add(makeTech("new", {{"Wood", 1}}, {"Shipyard"}));
++    desc.technologies.add(makeTech("agriculture", {{"Boards", 2}}, {"Farm"}));
++    desc.technologies.add(makeTech("milling", {{"Stones", 1}}, {"Mill"}, {"agriculture"}));
++    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
++
++    MockLocalGameState lgs;
++    em.Clear();
++    world.Unload();
++    sgd.ReadSnapshot(*game, lgs);
++
++    const civ::TechTree& tree = world.GetTechTree();
++    BOOST_TEST(research(0).IsResearched(*tree.find("agriculture")));
++    BOOST_TEST(!research(0).IsResearched(*tree.find("new")));
++    BOOST_TEST((research(0).GetCurrent() == tree.find("milling")));
++    const auto* progress = research(0).GetProgress(*tree.find("milling"));
++    BOOST_TEST_REQUIRE(progress);
++    // Paid 2 stones before, only 1 required now
++    BOOST_TEST((progress->paid == std::vector<unsigned>{1}));
++    BOOST_TEST(research(0).GetNumResearched() == 1u);
++}
++
++BOOST_AUTO_TEST_SUITE_END()
+-- 
+2.43.0
+

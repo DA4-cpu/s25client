@@ -1,0 +1,75 @@
+Zivilisationsmodus (Humankind-Schicht) - Branch "humankind" einspielen
+======================================================================
+
+Inhalt: 2 Commits auf deinem master (40aa9a2)
+  1. Reparatur des UI-Tests IwMapGenerator (kompilierte seit dem Klimazonen-Umbau nicht mehr)
+  2. Zivilisationsmodus: Fundament mit Technologiebaum und Forschung
+
+Design, Entscheidungen und Roadmap stehen danach in:  doc/humankind/DESIGN.md
+Recherche zu KI-Grafiken:                              doc/humankind/GRAFIK.md
+
+
+VARIANTE A (empfohlen): Git-Bundle
+----------------------------------
+In Git Bash im s25client-Ordner:
+
+  cd /e/Github/Settlers-2-Return-To-The-Roots/s25client
+  git status                                   (keine offenen Änderungen an getrackten Dateien?
+                                                sonst vorher committen oder "git stash")
+  git fetch humankind.bundle humankind:humankind
+  git checkout humankind
+
+Zurück zum alten Stand jederzeit mit:  git checkout master
+
+
+VARIANTE B: Patch (falls A nicht klappt)
+----------------------------------------
+  git checkout -b humankind
+  git am humankind-fundament.patch
+
+
+BAUEN
+-----
+Wie gewohnt (siehe BuildAnleitung.txt). Es gibt einen neuen Code-Ordner libs/s25main/civ.
+Visual Studio konfiguriert CMake beim nächsten Bauen normalerweise selbst neu. Falls der neue
+Code fehlt (Linkerfehler zu civ::...), den build-Ordner wie gewohnt neu erzeugen.
+
+
+AUSPROBIEREN
+------------
+1. Einzelspieler -> Spiel erstellen -> Addon-Einstellungen
+   -> "Zivilisationsmodus (Technologiebaum)" aktivieren (steht u. a. in der Gruppe Wirtschaft).
+2. Im Spiel: Hauptauswahl -> grüner Button "Forschung".
+3. Technologie in der Liste auswählen -> "Erforschen".
+   Die Kosten werden alle 2 Sekunden aus dem freien Lagerbestand genommen.
+4. Gesperrte Gebäude erscheinen im Baumenü erst, wenn sie erforscht sind.
+   Ohne Forschung gibt es nur: Holzfäller, Förster, Steinbruch, Sägewerk, Fischer, Jäger,
+   Brunnen, Baracke, Wachstube, Spähturm.
+5. KI-Gegner forschen selbstständig.
+
+
+TECHNOLOGIEN BEARBEITEN
+-----------------------
+Datei: data/RTTR/gamedata/civ/techtree.lua (oben in der Datei sind alle Felder erklärt).
+Kein Neukompilieren nötig. Die Datei wird beim Bauen in den Ausgabeordner kopiert
+(...\RTTR\gamedata\civ\techtree.lua) - entweder neu bauen oder dort direkt ändern.
+Wichtig: den "name" einer Technologie nicht nachträglich ändern (Spielstände speichern ihn).
+
+
+SPIELSTÄNDE
+-----------
+Die Savegame-Version ist jetzt 16. Alte Spielstände lassen sich weiter laden,
+neue Spielstände aber nicht mit älteren Programmversionen.
+
+
+WAS GETESTET IST - UND WAS NICHT
+--------------------------------
+Getestet (Linux/GCC): kompletter Build, alle automatischen Tests (13 neue Forschungstests,
+Lade-/Fehlertests für die Lua-Datei, keine neuen Fehlschläge), mehrere KI-gegen-KI-Partien
+über 2 Stunden Spielzeit mit dem Tool ai-battle.
+NICHT getestet: der Visual-Studio-Build und das Aussehen des Forschungsfensters
+(in meiner Umgebung gibt es keine Original-S2-Grafiken). Bitte kurz Bescheid geben,
+wenn etwas nicht kompiliert oder im Fenster etwas verrutscht ist.
+
+Hinweis: In deinem master schlagen schon vorher 26 Testfälle fehl (Kanten-Anzahl in
+Test_gameData, 3 KI-Tests nach deinen KI-Änderungen, 22 Cheat-Tests). Daran hat sich nichts geändert.
