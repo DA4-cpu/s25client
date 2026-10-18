@@ -23,9 +23,11 @@
 #include "ingameWindows/iwHelp.h"
 #include "ingameWindows/iwMapGenerator.h"
 #include "ingameWindows/iwMsgbox.h"
+#include "lua/GameDataLoader.h"
 #include "ogl/glArchivItem_Bitmap.h"
 #include "uiHelper/uiHelpers.hpp"
 #include "gameTypes/GameTypesOutput.h"
+#include "gameData/WorldDescription.h"
 #include "gameData/const_gui_ids.h"
 #include "rttr/test/random.hpp"
 #include "s25util/StringConversion.h"
@@ -74,7 +76,6 @@ BOOST_AUTO_TEST_CASE(MinimizeWindow)
 BOOST_AUTO_TEST_CASE(IwMapGenerator)
 {
     const auto expectedNumPlayers = rttr::test::randomValue(2u, 7u);
-    const auto expectedMapType = rttr::test::randomValue<uint8_t>(0, 2);
     const auto expectedGoldRatio = rttr::test::randomValue(0u, 100u);
     const auto expectedIronRatio = rttr::test::randomValue(0u, 100u);
     const auto expectedCoalRatio = rttr::test::randomValue(0u, 100u);
@@ -83,14 +84,19 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     const auto expectedTrees = rttr::test::randomValue(0u, 100u);
     const auto expectedStonePiles = rttr::test::randomValue(0u, 100u);
 
+    WorldDescription worldDesc;
+    loadGameData(worldDesc);
+    const DescIdx<LandscapeDesc> worldLandscape = worldDesc.landscapes.getIndex("world");
+    BOOST_TEST_REQUIRE(worldLandscape);
+
     rttr::mapGenerator::MapSettings settings;
     iwMapGenerator wnd(settings);
     // UI values are set according to current values. Check that and adjust to random value to test apply-button
     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbNumPlayers)->GetSelection().value()
                == settings.numPlayers - 2u);
     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbNumPlayers)->SetSelection(expectedNumPlayers - 2);
-    BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapType)->GetSelection().value() == settings.type.value);
-    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapType)->SetSelection(expectedMapType);
+    // The generator always uses the combined "world" landscape (climate zones), the landscape can't be chosen anymore
+    BOOST_TEST(settings.type == worldLandscape);
     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapStyle)->GetSelection().value()
                == static_cast<unsigned>(settings.style));
     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapStyle)->SetSelection(1); // MapStyle::Land
@@ -122,7 +128,7 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     BOOST_TEST(wnd.ShouldBeClosed());
 
     BOOST_TEST(settings.numPlayers == expectedNumPlayers);
-    BOOST_TEST(settings.type == DescIdx<LandscapeDesc>(expectedMapType));
+    BOOST_TEST(settings.type == worldLandscape);
     BOOST_TEST(settings.size == MapExtent(256, 128));
     BOOST_TEST(settings.style == rttr::mapGenerator::MapStyle::Land);
     BOOST_TEST(settings.mountainDistance == rttr::mapGenerator::MountainDistance::VeryFar);
