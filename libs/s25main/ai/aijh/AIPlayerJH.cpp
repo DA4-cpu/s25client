@@ -315,7 +315,8 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
                 }
             }
         }
-        // check for useless charburners
+        // check for useless charburners (currently disabled because it crashes the game
+        /*
         const std::list<nobUsual*>& charBurners = aii.GetBuildings(BuildingType::Charburner);
         if(charBurners.size() > 0)
         {
@@ -331,6 +332,7 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
                 }
             }
         }
+        */
         //check for useless Woodcutters
         const std::list<nobUsual*>& woodCutters = aii.GetBuildings(BuildingType::Woodcutter);
         if(woodCutters.size() > 4)
@@ -1623,7 +1625,9 @@ void AIPlayerJH::MilUpgradeOptim()
     if(upgradeBld)
     {
         const unsigned coinsStored = AmountInStorage(GoodType::Coins) + upgradeBld->GetNumCoins();
-        if(coinsStored > 1)
+        if(coinsStored > 1 
+            || (bldPlanner->GetNumBuildings(BuildingType::GoldMine) > 0u
+           && bldPlanner->GetNumBuildings(BuildingType::Mint) - bldPlanner->GetNumBuildingSites(BuildingType::Mint) > 0u))
             recruitFunnelActive = true;
         else if(coinsStored < 1)
             recruitFunnelActive = false;
@@ -2247,23 +2251,20 @@ bool AIPlayerJH::RemoveUnusedRoad(const noFlag& startFlag, helpers::OptionalEnum
                                   bool firstflag /*= true*/, bool allowcircle /*= true*/,
                                   bool keepstartflag /*= false*/)
 {
+    // Diese Prüfung darf NIE von excludeDir übersprungen werden können.
+    if(aii.IsObjectTypeOnNode(gwb.GetNeighbour(startFlag.GetPos(), Direction::NorthWest), NodalObjectType::Building)
+       || aii.IsObjectTypeOnNode(gwb.GetNeighbour(startFlag.GetPos(), Direction::NorthWest),
+                                 NodalObjectType::Buildingsite))
+    {
+        return true;
+    }
+
     helpers::OptionalEnum<Direction> foundDir, foundDir2;
     unsigned char finds = 0;
-    // Count roads from this flag...
     for(Direction dir : helpers::EnumRange<Direction>{})
     {
         if(dir == excludeDir)
             continue;
-        if(dir == Direction::NorthWest
-           && (aii.IsObjectTypeOnNode(gwb.GetNeighbour(startFlag.GetPos(), Direction::NorthWest),
-                                      NodalObjectType::Building)
-               || aii.IsObjectTypeOnNode(gwb.GetNeighbour(startFlag.GetPos(), Direction::NorthWest),
-                                         NodalObjectType::Buildingsite)))
-        {
-            // the flag belongs to a building - update the pathing map around us and try to reconnect it (if we cant
-            // reconnect it -> burn it(burning takes place at the pathfinding job))
-            return true;
-        }
         if(startFlag.GetRoute(dir))
         {
             finds++;

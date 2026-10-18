@@ -232,7 +232,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
 
         // iron smelters limited by iron mines or crucibles
-        int available_mines = static_cast<int>(GetNumBuildings(BuildingType::IronMine))
+        int available_mines = static_cast<int>(GetNumBuildings(BuildingType::IronMine) - GetNumBuildingSites(BuildingType::IronMine))
                                   - static_cast<int>(GetNumBuildingSites(BuildingType::IronMine)) - 1;
          available_mines = std::max(0, available_mines);
          buildingsWanted[BuildingType::Ironsmelter] =
@@ -244,7 +244,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
             buildingsWanted[BuildingType::Ironsmelter] = 1;
 
 
-        available_mines = static_cast<int>(GetNumBuildings(BuildingType::GoldMine))
+        available_mines = static_cast<int>(GetNumBuildings(BuildingType::GoldMine) - GetNumBuildingSites(BuildingType::GoldMine))
                               - static_cast<int>(GetNumBuildingSites(BuildingType::GoldMine)) - 1;
         available_mines = std::max(0, available_mines);
         buildingsWanted[BuildingType::Mint] =
