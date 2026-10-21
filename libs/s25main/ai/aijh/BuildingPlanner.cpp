@@ -143,6 +143,8 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         buildingsWanted[BuildingType::Hunter] = 1;
         buildingsWanted[BuildingType::Farm] = 0;
         buildingsWanted[BuildingType::Charburner] = 0;
+        buildingsWanted[BuildingType::Slaughterhouse] = 0;
+        buildingsWanted[BuildingType::Skinner] = 0;
     } else
     {
         // at least some expansion happened -> more buildings wanted
@@ -268,8 +270,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
             buildingsWanted[BuildingType::Armory] =
               std::max<unsigned>(GetNumBuildings(BuildingType::Ironsmelter) - GetNumBuildings(BuildingType::Metalworks), 0);
         }
-        if(aijh.ggs.isEnabled(AddonId::HALF_COST_MIL_EQUIP))
-            buildingsWanted[BuildingType::Armory] *= 2;
+
         // brewery count = 1+(armory/5) if there is at least 1 armory or armory /6 for exhaustible mines
         if(GetNumBuildings(BuildingType::Armory) > 0 && GetNumBuildings(BuildingType::Farm) > 0)
         {
@@ -323,6 +324,8 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         else
             buildingsWanted[BuildingType::Slaughterhouse] = GetNumBuildings(BuildingType::Slaughterhouse);
+        buildingsWanted[BuildingType::Slaughterhouse] =
+          std::min<unsigned>(resourcelimit, buildingsWanted[BuildingType::Slaughterhouse]);
         
         if(aijh.ggs.isEnabled(AddonId::LEATHER))
         {
@@ -333,8 +336,9 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
             else
                 buildingsWanted[BuildingType::Skinner] = GetNumBuildings(BuildingType::Skinner);
+            buildingsWanted[BuildingType::Skinner] =
+              std::min<unsigned>(resourcelimit, buildingsWanted[BuildingType::Skinner]);
 
-            buildingsWanted[BuildingType::Skinner] = 1;
             resourcelimit =
               inventory.people[Job::Carpenter] + inventory.people[Job::Tanner] + inventory.goods[GoodType::Saw] + 1;
             buildingsWanted[BuildingType::Tannery] =

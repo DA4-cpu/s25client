@@ -366,7 +366,7 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
 
     // pick a random storehouse and try to build one of these buildings around it (checks if we actually want more of
     // the building type)
-    std::array<BuildingType, 24> bldToTest = {
+    std::array<BuildingType, 27> bldToTest = {
       {BuildingType::HarborBuilding, BuildingType::Shipyard,   BuildingType::Sawmill,
        BuildingType::Forester,       BuildingType::Farm,       BuildingType::Fishery,
        BuildingType::Woodcutter,     BuildingType::Quarry,     BuildingType::GoldMine,
@@ -374,7 +374,8 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
        BuildingType::Hunter,         BuildingType::Charburner, BuildingType::Ironsmelter,
        BuildingType::Mint,           BuildingType::Armory,     BuildingType::Metalworks,
        BuildingType::Brewery,        BuildingType::Mill,       BuildingType::PigFarm,
-       BuildingType::Slaughterhouse, BuildingType::Bakery,     BuildingType::DonkeyBreeder}};
+       BuildingType::Slaughterhouse, BuildingType::Bakery,     BuildingType::DonkeyBreeder,
+       BuildingType::Skinner,        BuildingType::Tannery,    BuildingType::LeatherWorks}};
     const unsigned numResGatherBlds = 14; /* The first n buildings in the above list, that gather resources */
 
     // LOG.write(("new buildorders %i whs and %i mil for player %i
