@@ -2,17 +2,26 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "GamePlayer.h"
 #include "GlobalGameSettings.h"
 #include "WindowManager.h"
+#include "addons/const_addons.h"
+#include "civ/PlayerResearch.h"
+#include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "controls/ctrlButton.h"
 #include "controls/ctrlCheck.h"
 #include "controls/ctrlComboBox.h"
 #include "controls/ctrlGroup.h"
 #include "controls/ctrlImage.h"
 #include "controls/ctrlMultiline.h"
+#include "controls/ctrlText.h"
 #include "controls/ctrlTextButton.h"
 #include "desktops/Desktop.h"
+#include "factories/GameCommandFactory.h"
+#include "helpers/containerUtils.h"
 #include "ingameWindows/iwAddons.h"
+#include "ingameWindows/iwResearch.h"
 #include "ingameWindows/iwSkipGFs.h"
 #include "ingameWindows/iwVictory.h"
 #include "uiHelper/uiHelpers.hpp"
@@ -20,6 +29,7 @@
 #include "worldFixtures/WorldFixture.h"
 #include "world/GameWorldView.h"
 #include "world/GameWorldViewer.h"
+#include "gameData/WorldDescription.h"
 #include <turtle/mock.hpp>
 #include <boost/test/unit_test.hpp>
 #include <mygettext/mygettext.h>
@@ -28,6 +38,7 @@
 //-V:MOCK_EXPECT:807
 
 using SmallWorldFixture = WorldFixture<CreateEmptyWorld, 1, 10, 10>;
+using TwoPlayerWorldFixture = WorldFixture<CreateEmptyWorld, 2>;
 
 BOOST_FIXTURE_TEST_SUITE(Windows, uiHelper::Fixture)
 
@@ -98,6 +109,60 @@ BOOST_FIXTURE_TEST_CASE(JumpWindow, SmallWorldFixture)
     BOOST_TEST(bts.size() > 4);
     const auto numIncBts = helpers::count_if(bts, [](const ctrlTextButton* bt) { return bt->GetText().at(0) == '+'; });
     BOOST_TEST(numIncBts >= 4);
+}
+
+namespace {
+struct NoGCFactory : GameCommandFactory
+{
+    unsigned numGCs = 0;
+    bool AddGC(gc::GameCommandPtr) override
+    {
+        ++numGCs;
+        return true;
+    }
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(ResearchWindowShowsOtherPlayers, TwoPlayerWorldFixture)
+{
+    uiHelper::Fixture f;
+    ggs.setSelection(AddonId::CIVILIZATION, 1);
+    WorldDescription desc;
+    TechnologyDesc alpha;
+    alpha.name = "alpha";
+    alpha.title = "Alpha";
+    desc.technologies.add(alpha);
+    TechnologyDesc beta;
+    beta.name = "beta";
+    beta.title = "Beta";
+    desc.technologies.add(beta);
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
+    civ::startGame(world);
+    world.GetPlayer(1).GetResearch().SetCurrent(1u);
+
+    GameWorldViewer gwv(0, world);
+    NoGCFactory gcFactory;
+    iwResearch wnd(gwv, gcFactory);
+    const auto hasText = [&wnd](const std::string& text) {
+        return helpers::contains_if(wnd.GetCtrls<ctrlText>(),
+                                    [&text](const ctrlText* txt) { return txt->GetText() == text; });
+    };
+    const auto cbs = wnd.GetCtrls<ctrlComboBox>();
+    BOOST_TEST_REQUIRE(cbs.size() == 1u);
+    ctrlComboBox* cb = cbs.front();
+    BOOST_TEST(cb->GetNumItems() == 2u);
+    BOOST_TEST(!cb->IsVisible()); // No cheat mode without a game interface
+    BOOST_TEST(!hasText("Beta"));
+
+    // Switch to player 1: Shows its research, but it can't be changed
+    static_cast<Window&>(wnd).Msg_ComboSelectItem(cb->GetID(), 1);
+    BOOST_TEST(hasText("Beta"));
+    for(const ctrlTextButton* bt : wnd.GetCtrls<ctrlTextButton>())
+        BOOST_TEST(!bt->GetEnabled());
+    // Back to the own player
+    static_cast<Window&>(wnd).Msg_ComboSelectItem(cb->GetID(), 0);
+    BOOST_TEST(!hasText("Beta"));
+    BOOST_TEST(gcFactory.numGCs == 0u);
 }
 
 namespace {

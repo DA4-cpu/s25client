@@ -39,7 +39,7 @@ Brunnen, Baracke, Wachstube, Spähturm.
 
 WP-Hinweis: Wissenspunkte werden nicht verbraucht, sondern "belegt". Um alle Technologien zu haben, braucht ein Spieler
 mindestens so viele Gesamt-WP wie die Summe aller WP-Kosten (derzeit LWP 43, IWP 50, MWP 41 mit allen Addons).
-Zum Start bringt das Hauptquartier 5/5/5. Die Werte sind ein erster Vorschlag zum Ausprobieren.
+Zum Start bringt das Hauptquartier 5/5/5. Die WP-Kosten waren Startwerte; Balancing macht der Nutzer.
 ]]
 
 -------------------------------------------------------------------------------

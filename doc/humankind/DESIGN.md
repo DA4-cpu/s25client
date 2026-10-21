@@ -20,6 +20,7 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 
 | Datum      | Entscheidung |
 |------------|--------------|
+| 2026-10-21 | **Gamedesign und Balancing macht ausschließlich der Nutzer.** Claude setzt technisch um, legt keine Inhalte, Zahlenwerte, Kosten oder Regeln fest und ändert keine. Braucht der Code Werte, die noch niemand festgelegt hat, verwendet Claude deutlich markierte Platzhalter und fragt nach. |
 | 2026-10-18 | Humankind-Schicht auf Siedler, kein 1:1-Nachbau, keine Rundenstrategie. |
 | 2026-10-18 | Optionaler Spielmodus über ein Addon, kein harter Fork der Spiellogik. |
 | 2026-10-18 | **Kein Ruhm, keine Ära-Sterne.** Der **Technologiebaum ist das Rückgrat**: Kulturen, Gebäude, Waren, Traits, Einheiten usw. hängen alle am Baum. |
@@ -176,7 +177,7 @@ Waffenschmiede 2, Eisenschmelze 3, Schlosserei 3, Werft 3, Münzprägerei 3, Hau
 Gerberei 3, Tempel 3. MWP – Lagerhaus 1, Hafen 1, Hauptquartier 5, Baracke 2, Wachstube 3, Wachturm 4, Festung 5,
 Spähturm 1, Brauerei 1, Katapult −5, Waffenschmiede 1, Lederei 3.
 
-Die WP-Kosten der Technologien sind ein erster Vorschlag von Claude (2026-10-21) zum Ausprobieren und Anpassen.
+Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Werte legt ab jetzt der Nutzer fest.
 
 ## Phasen (Roadmap)
 
@@ -199,11 +200,11 @@ Die WP-Kosten der Technologien sind ein erster Vorschlag von Claude (2026-10-21)
 
 ## Offene Fragen
 
-- Soll man mehrere Technologien in eine **Warteschlange** legen können? (Vorschlag: ja, in Phase 2)
+- Soll man mehrere Technologien in eine **Warteschlange** legen können?
 - Zeitalter: Soll es eine Bedingung für den Übergang in die nächste Ära geben (z. B. X Technologien der aktuellen Ära),
   oder reichen die Voraussetzungen im Baum?
 - Sollen Gegner sehen können, was man erforscht hat (Spionage/Statistik)?
-- Wie viele Kulturen pro Ära (Humankind hat 10+)? Vorschlag: anfangs 3–4 pro Ära, weil jede Grafik/Balancing braucht.
+- Wie viele Kulturen pro Ära (Humankind hat 10+)?
 - Warenkosten der Forschung: weiter aus dem Lagerbestand nehmen oder von einem Gebäude per Träger bestellen lassen?
 - Warenlimit für Lager (Idee des Nutzers, noch nicht ausgearbeitet).
 - Welt: Gelten Klimazonen und Rohstoffverteilung nur für generierte Karten oder auch für Originalkarten?

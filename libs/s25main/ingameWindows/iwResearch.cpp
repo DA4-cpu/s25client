@@ -3,12 +3,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "iwResearch.h"
+#include "Cheats.h"
+#include "GameInterface.h"
 #include "GamePlayer.h"
 #include "Loader.h"
 #include "civ/Knowledge.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "controls/ctrlButton.h"
+#include "controls/ctrlComboBox.h"
 #include "controls/ctrlMultiline.h"
 #include "controls/ctrlPercent.h"
 #include "controls/ctrlTable.h"
@@ -38,6 +41,7 @@ enum
     ID_mlDescription,
     ID_btResearch,
     ID_btStop,
+    ID_cbPlayer,
     ID_txtKnowledgeLabel,
     ID_txtKnowledgeFirst, // One text per kind of knowledge
 };
@@ -146,7 +150,8 @@ std::string getStateText(const GameWorldBase& world, unsigned playerId, civ::Tec
 iwResearch::iwResearch(const GameWorldViewer& gwv, GameCommandFactory& gcFactory)
     : IngameWindow(CGI_RESEARCH, IngameWindow::posLastOrCenter, Extent(640, 542), _("Forschung"),
                    LOADER.GetImageN("resource", 41)),
-      gwv(gwv), gcFactory(gcFactory), currentProgress_(0)
+      gwv(gwv), gcFactory(gcFactory), homePlayerId_(gwv.GetPlayerId()), viewedPlayerId_(homePlayerId_),
+      currentProgress_(0)
 {
     AddText(ID_txtKnowledgeLabel, DrawPoint(20, 30), _("Wissen (verfügbar/gesamt):"), COLOR_YELLOW, FontStyle{},
             NormalFont);
@@ -176,15 +181,57 @@ iwResearch::iwResearch(const GameWorldViewer& gwv, GameCommandFactory& gcFactory
     AddTextButton(ID_btStop, DrawPoint(330, 502), Extent(290, 22), TextureColor::Red1, _("Forschung anhalten"),
                   NormalFont);
 
+    // Debug feature like in the building and stock windows: Show the research of any player (including AI players).
+    // Hidden unless cheat/debug mode is active, see Msg_PaintBefore.
+    ctrlComboBox* cb =
+      AddComboBox(ID_cbPlayer, DrawPoint(430, 48), Extent(190, 20), TextureColor::Grey, NormalFont, 100);
+    cb->SetVisible(false);
+    const GameWorldBase& world = gwv.GetWorld();
+    unsigned homeSelection = 0;
+    for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
+    {
+        const GamePlayer& p = world.GetPlayer(i);
+        if(!p.isUsed())
+            continue;
+        if(i == homePlayerId_)
+            homeSelection = static_cast<unsigned>(selectablePlayerIds_.size());
+        cb->AddItem(p.isHuman() ? p.name : (p.name + " (" + _("AI") + ")"));
+        selectablePlayerIds_.push_back(i);
+    }
+    cb->SetSelection(homeSelection);
+
     RefreshKnowledge();
     RefreshTable();
     RefreshCurrentResearch();
     RefreshSelection();
 }
 
+const GamePlayer& iwResearch::GetViewedPlayer() const
+{
+    return gwv.GetWorld().GetPlayer(viewedPlayerId_);
+}
+
+void iwResearch::ShowPlayer(unsigned playerId)
+{
+    if(playerId == viewedPlayerId_)
+        return;
+    viewedPlayerId_ = playerId;
+    knowledgeShown_ = false;
+    RefreshKnowledge();
+    RefreshTable();
+    RefreshCurrentResearch();
+    RefreshSelection();
+}
+
+void iwResearch::Msg_ComboSelectItem(const unsigned ctrl_id, const unsigned selection)
+{
+    if(ctrl_id == ID_cbPlayer && selection < selectablePlayerIds_.size())
+        ShowPlayer(selectablePlayerIds_[selection]);
+}
+
 bool iwResearch::RefreshKnowledge()
 {
-    const GamePlayer& player = gwv.GetPlayer();
+    const GamePlayer& player = GetViewedPlayer();
     const civ::KnowledgePoints total = civ::calcTotalKnowledge(player);
     const civ::KnowledgePoints available = civ::calcAvailableKnowledge(player);
     const auto isSame = [](const civ::KnowledgePoints& lhs, const civ::KnowledgePoints& rhs) {
@@ -223,8 +270,8 @@ void iwResearch::RefreshTable()
 {
     const GameWorldBase& world = gwv.GetWorld();
     const civ::TechTree& techTree = world.GetTechTree();
-    const unsigned playerId = gwv.GetPlayerId();
-    const civ::PlayerResearch& research = gwv.GetPlayer().GetResearch();
+    const unsigned playerId = viewedPlayerId_;
+    const civ::PlayerResearch& research = GetViewedPlayer().GetResearch();
     const std::optional<civ::TechIdx> selectedTech = GetSelectedTech();
 
     auto* table = GetCtrl<ctrlTable>(ID_tblTechs);
@@ -257,7 +304,7 @@ void iwResearch::RefreshTable()
 void iwResearch::RefreshCurrentResearch()
 {
     const GameWorldBase& world = gwv.GetWorld();
-    const civ::PlayerResearch& research = gwv.GetPlayer().GetResearch();
+    const civ::PlayerResearch& research = GetViewedPlayer().GetResearch();
     auto* txtCurrent = GetCtrl<ctrlText>(ID_txtCurrent);
     auto* txtCosts = GetCtrl<ctrlText>(ID_txtCurrentCosts);
     if(!research.GetCurrent())
@@ -272,7 +319,7 @@ void iwResearch::RefreshCurrentResearch()
     const civ::Technology& tech = world.GetTechTree().get(*research.GetCurrent());
     const civ::PlayerResearch::Progress* progress = research.GetProgress(*research.GetCurrent());
     txtCurrent->SetText(_(tech.title));
-    const civ::KnowledgePoints missing = civ::getMissingKnowledge(world, gwv.GetPlayerId(), *research.GetCurrent());
+    const civ::KnowledgePoints missing = civ::getMissingKnowledge(world, viewedPlayerId_, *research.GetCurrent());
     std::string costText;
     const std::string wareText = getWareCostText(tech, progress);
     if(!wareText.empty())
@@ -297,7 +344,7 @@ void iwResearch::RefreshCurrentResearch()
     }
     const unsigned total = tech.GetTotalCost();
     currentProgress_ = static_cast<unsigned short>(total == 0 ? 100 : paid * 100 / total);
-    GetCtrl<ctrlButton>(ID_btStop)->SetEnabled(true);
+    GetCtrl<ctrlButton>(ID_btStop)->SetEnabled(IsViewingOwnPlayer());
 }
 
 void iwResearch::RefreshSelection()
@@ -318,7 +365,7 @@ void iwResearch::RefreshSelection()
     const GameWorldBase& world = gwv.GetWorld();
     const civ::TechTree& techTree = world.GetTechTree();
     const civ::Technology& technology = techTree.get(*tech);
-    const civ::PlayerResearch& research = gwv.GetPlayer().GetResearch();
+    const civ::PlayerResearch& research = GetViewedPlayer().GetResearch();
 
     description->AddString(helpers::format("%1% (%2%)", _(technology.title), getEraName(technology.era)), COLOR_YELLOW,
                            false);
@@ -356,7 +403,7 @@ void iwResearch::RefreshSelection()
     const std::string knowledgeText = getKnowledgeCostText(technology);
     if(!knowledgeText.empty())
     {
-        const civ::KnowledgePoints missing = civ::getMissingKnowledge(world, gwv.GetPlayerId(), *tech);
+        const civ::KnowledgePoints missing = civ::getMissingKnowledge(world, viewedPlayerId_, *tech);
         const bool researched = research.IsResearched(*tech);
         if(researched || !hasMissingKnowledge(missing))
             description->AddString(helpers::format(_("Wissenspunkte: %1%"), knowledgeText), COLOR_WHITE, false);
@@ -374,13 +421,14 @@ void iwResearch::RefreshSelection()
                                COLOR_ORANGE, false);
     if(const auto owner = civ::getExclusiveOwner(world, *tech))
     {
-        if(*owner != gwv.GetPlayerId())
+        if(*owner != viewedPlayerId_)
             description->AddString(helpers::format(_("Bereits erforscht von %1%."), world.GetPlayer(*owner).name),
                                    COLOR_RED, false);
     }
 
-    const civ::TechState state = civ::getTechState(world, gwv.GetPlayerId(), *tech);
-    btResearch->SetEnabled(state == civ::TechState::Available);
+    const civ::TechState state = civ::getTechState(world, viewedPlayerId_, *tech);
+    // Only the own research can be changed
+    btResearch->SetEnabled(state == civ::TechState::Available && IsViewingOwnPlayer());
 }
 
 std::optional<civ::TechIdx> iwResearch::GetSelectedTech() const
@@ -399,6 +447,27 @@ std::optional<civ::TechIdx> iwResearch::GetSelectedTech() const
 void iwResearch::Msg_PaintBefore()
 {
     IngameWindow::Msg_PaintBefore();
+
+    // The player selector is a debug feature and only usable while cheat mode is on (like in the building and stock
+    // windows)
+    const GameInterface* gi = gwv.GetWorld().GetGameInterface();
+    const bool debugModeOn = gi && gi->GI_GetCheats().isCheatModeOn();
+    auto* cb = GetCtrl<ctrlComboBox>(ID_cbPlayer);
+    if(cb->IsVisible() != debugModeOn)
+    {
+        cb->SetVisible(debugModeOn);
+        // Cheat mode got turned off while looking at another player -> back to the own research
+        if(!debugModeOn && !IsViewingOwnPlayer())
+        {
+            for(unsigned i = 0; i < selectablePlayerIds_.size(); ++i)
+            {
+                if(selectablePlayerIds_[i] == homePlayerId_)
+                    cb->SetSelection(i);
+            }
+            ShowPlayer(homePlayerId_);
+        }
+    }
+
     const bool knowledgeChanged = RefreshKnowledge();
     if(GetStateSignature() != lastStateSignature_)
     {
@@ -414,10 +483,13 @@ void iwResearch::Msg_ButtonClick(const unsigned ctrl_id)
     switch(ctrl_id)
     {
         case ID_btResearch:
-            if(const auto tech = GetSelectedTech())
+            if(const auto tech = GetSelectedTech(); tech && IsViewingOwnPlayer())
                 gcFactory.SetResearch(*tech);
             break;
-        case ID_btStop: gcFactory.SetResearch(std::nullopt); break;
+        case ID_btStop:
+            if(IsViewingOwnPlayer())
+                gcFactory.SetResearch(std::nullopt);
+            break;
         default: break;
     }
 }

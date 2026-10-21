@@ -16,7 +16,7 @@ Neu:
 - Werte ändern ohne Neukompilieren:
     Gebäude:      data/RTTR/gamedata/civ/knowledge.lua
     Technologien: data/RTTR/gamedata/civ/techtree.lua  (Feld "knowledge")
-  Die WP-Kosten der Technologien sind ein erster Vorschlag von mir.
+  Die WP-Kosten der Technologien sind Startwerte von mir; Balancing machst ab jetzt nur du.
 - Spielstände: Version 17. Alte Spielstände laden weiter (bereits erforschte Technologien gelten als bezahlt).
 Danach wie gewohnt bauen (neue Dateien: libs/s25main/civ/Knowledge.*). Falls Visual Studio die neuen
 Dateien nicht findet: CMake neu konfigurieren.

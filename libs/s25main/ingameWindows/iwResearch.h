@@ -9,9 +9,11 @@
 #include "civ/TechTree.h"
 #include <optional>
 #include <string>
+#include <vector>
 
 class GameCommandFactory;
 class GameWorldViewer;
+class GamePlayer;
 
 /// Civilization mode: Shows the tech tree and lets the player choose the technology to research
 class iwResearch : public IngameWindow
@@ -22,6 +24,12 @@ public:
 private:
     const GameWorldViewer& gwv;
     GameCommandFactory& gcFactory;
+    /// Player who opened the window (only this one can be given commands)
+    const unsigned homePlayerId_;
+    /// Player whose research is shown. Other players can be selected in cheat/debug mode
+    unsigned viewedPlayerId_;
+    /// Player IDs corresponding to the entries of the debug player combo box, in the same order
+    std::vector<unsigned> selectablePlayerIds_;
     /// Percentage of the costs of the current research which are already paid (displayed by a ctrlPercent)
     unsigned short currentProgress_;
     /// Signature of the research state of all players to detect when the table needs to be refreshed
@@ -33,6 +41,12 @@ private:
     void Msg_PaintBefore() override;
     void Msg_ButtonClick(unsigned ctrl_id) override;
     void Msg_TableSelectItem(unsigned ctrl_id, const std::optional<unsigned>& selection) override;
+    void Msg_ComboSelectItem(unsigned ctrl_id, unsigned selection) override;
+
+    const GamePlayer& GetViewedPlayer() const;
+    bool IsViewingOwnPlayer() const { return viewedPlayerId_ == homePlayerId_; }
+    /// Show the research of another player (debug feature)
+    void ShowPlayer(unsigned playerId);
 
     /// Recreate all rows of the table (keeps selection)
     void RefreshTable();
