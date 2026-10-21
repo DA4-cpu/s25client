@@ -91,6 +91,15 @@ WorldDescription makeInheritDesc()
     return desc;
 }
 
+/// Stones (built-in) -> Product
+WorldDescription makeBuiltinInputDesc()
+{
+    WorldDescription desc;
+    desc.wares.push_back(makeWare("Product", "", {}, "Boards"));
+    desc.workshops.push_back(makeWorkshop("Shop", {{"Stones"}}, {"Product"}));
+    return desc;
+}
+
 /// Sets the content as active for the lifetime of this object
 struct ActiveContent
 {
@@ -414,6 +423,23 @@ BOOST_FIXTURE_TEST_CASE(WorkshopProducesWares, ContentWorldFixture)
     BOOST_TEST(countInHQ(GoodType::Custom0) == 0u);
     BOOST_TEST(world.GetPlayer(0).GetInventory()[GoodType::Custom0] == 0u);
     BOOST_TEST(world.GetPlayer(0).GetInventory()[product] >= 3u);
+}
+
+struct BuiltinInputWorldFixture : public ContentWorldFixture
+{
+    BuiltinInputWorldFixture() : ContentWorldFixture(makeBuiltinInputDesc()) {}
+};
+
+BOOST_FIXTURE_TEST_CASE(WorkshopUsesBuiltinInput, BuiltinInputWorldFixture)
+{
+    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 1), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 5), true);
+    const unsigned stonesBefore = world.GetPlayer(0).GetInventory()[GoodType::Stones];
+    placeConnectedBuilding(BuildingType::Custom0);
+    const GoodType product = getCustomGood(0);
+    // Stones are delivered by carriers like for any other consumer
+    RTTR_EXEC_TILL(10000, countInHQ(product) >= 2u);
+    BOOST_TEST(world.GetPlayer(0).GetInventory()[GoodType::Stones] < stonesBefore);
 }
 
 BOOST_FIXTURE_TEST_CASE(WorkshopPassesOnProperties, InheritWorldFixture)
