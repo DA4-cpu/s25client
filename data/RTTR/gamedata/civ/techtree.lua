@@ -52,11 +52,11 @@ rttr:AddTechnology{
     description = "Überschüsse werden nicht mehr nur im Lager des Stammes gesammelt, sondern in eigenen Vorratshäusern. "
         .. "Das verkürzt die Wege in entlegene Gebiete.",
     era = 0,
-    knowledge = { LWP = 2, IWP = 2 },
-    cost = { Boards = 4, Stones = 4 },
+    knowledge = { LWP = 7, IWP = 7, MWP = 7 },
+    cost = { Stones = 1 },
     time = 30,
     unlocks = { buildings = { "Storehouse" } },
-    aiPriority = 95,
+    aiPriority = 100,
 }
 
 rttr:AddTechnology{
@@ -65,24 +65,11 @@ rttr:AddTechnology{
     description = "Statt nur zu jagen und zu sammeln, säen die Menschen Getreide aus und ernten es. "
         .. "Die Grundlage für Brot, Bier und Viehzucht.",
     era = 0,
-    knowledge = { LWP = 4 },
-    cost = { Boards = 6 },
-    time = 30,
+    knowledge = { LWP = 5 },
+    cost = { Stones = 1 },
+    time = 60,
     unlocks = { buildings = { "Farm" } },
     aiPriority = 90,
-}
-
-rttr:AddTechnology{
-    name = "toolmaking",
-    title = "Werkzeugbau",
-    description = "Ein Werkzeugmacher stellt Äxte, Sägen, Hämmer und andere Werkzeuge her, "
-        .. "damit neue Berufe ausgebildet werden können.",
-    era = 0,
-    knowledge = { IWP = 4 },
-    cost = { Boards = 6, Stones = 2 },
-    time = 30,
-    unlocks = { buildings = { "Metalworks" } },
-    aiPriority = 85,
 }
 
 rttr:AddTechnology{
@@ -92,8 +79,8 @@ rttr:AddTechnology{
     era = 0,
     requires = { "agriculture" },
     knowledge = { LWP = 6 },
-    cost = { Grain = 4, Stones = 4, Boards = 2 },
-    time = 45,
+    cost = { Wood = 1 },
+    time = 1,
     unlocks = { buildings = { "Mill", "Bakery" } },
     aiPriority = 80,
 }
@@ -103,13 +90,26 @@ rttr:AddTechnology{
     title = "Viehzucht",
     description = "Schweine werden mit Getreide und Wasser gemästet und in der Metzgerei zu Fleisch verarbeitet.",
     era = 0,
-    requires = { "agriculture" },
+    requires = { "agriculture" },  
     knowledge = { LWP = 6 },
-    cost = { Boards = 6, Stones = 2 },
-    time = 45,
+    cost = { Wood = 1 },
+    time = 1,
     unlocks = { buildings = { "PigFarm", "Slaughterhouse" } },
-    aiPriority = 70,
+    aiPriority = 80,
 }
+
+rttr:AddTechnology{
+    name = "stone_walls",
+    title = "Steinmauern",
+    description = "Steinmauern bieten Schutz vor Feinden und verbessern die Verteidigungsfähigkeit des Dorfes.",
+    era = 0,
+    knowledge = { MWP = 10 },
+    cost = { Stones = 1 },
+    time = 60,
+    unlocks = { buildings = { "Guardhouse"} },
+    aiPriority = 80,
+}
+
 
 -------------------------------------------------------------------------------
 -- 1: Antike
@@ -121,12 +121,12 @@ rttr:AddTechnology{
     description = "Stollen werden in die Berge getrieben, um Kohle, Eisenerz und Granit abzubauen. "
         .. "Bergleute brauchen Nahrung.",
     era = 1,
-    requires = { "toolmaking" },
-    knowledge = { IWP = 5 },
-    cost = { Boards = 6, Fish = 4 },
+    requires = { "agriculture", "storage" }, -- hier soll eigentlich milling oder animal_husbandry als Voraussetzung hin (mindestens 1 von den beiden muss erforscht sein), aber es gibt kein "or" bei der Abfrage glaube ich
+    knowledge = { IWP = 16 },
+    cost = { Wood = 1 },
     time = 60,
-    unlocks = { buildings = { "CoalMine", "IronMine", "GraniteMine" } },
-    aiPriority = 88,
+    unlocks = { buildings = { "CoalMine", "IronMine", "GraniteMine", "GoldMine" } },
+    aiPriority = 90,
 }
 
 rttr:AddTechnology{
@@ -135,11 +135,24 @@ rttr:AddTechnology{
     description = "In der Eisenschmelze wird Erz mit Kohle zu Eisen geschmolzen.",
     era = 1,
     requires = { "mining" },
-    knowledge = { IWP = 6 },
-    cost = { IronOre = 4, Coal = 4, Stones = 6 },
-    time = 60,
+    knowledge = { IWP = 12 },
+    cost = {},
+    time = 120,
     unlocks = { buildings = { "Ironsmelter" } },
-    aiPriority = 86,
+    aiPriority = 90,
+}
+rttr:AddTechnology{
+    name = "toolmaking",
+    title = "Werkzeugbau",
+    description = "Ein Werkzeugmacher stellt Äxte, Sägen, Hämmer und andere Werkzeuge her, "
+        .. "damit neue Berufe ausgebildet werden können.",
+    era = 1,
+    requires = { "metallurgy" },
+    knowledge = { IWP = 16 },
+    cost = {},
+    time = 60,
+    unlocks = { buildings = { "Metalworks" } },
+    aiPriority = 90,
 }
 
 rttr:AddTechnology{
@@ -148,9 +161,9 @@ rttr:AddTechnology{
     description = "Holz wird in Meilern langsam zu Holzkohle verschwelt - Kohle ganz ohne Bergwerk.",
     era = 1,
     requires = { "metallurgy" },
-    knowledge = { IWP = 4 },
-    cost = { Boards = 4, Stones = 4 },
-    time = 45,
+    knowledge = { IWP = 12 },
+    cost = { Wood = 4 },
+    time = 120,
     unlocks = { buildings = { "Charburner" } },
     addon = "CHARBURNER",
     aiPriority = 40,
@@ -162,9 +175,9 @@ rttr:AddTechnology{
     description = "Aus Getreide und Wasser wird Bier gebraut. Ohne Bier lassen sich keine Soldaten ausheben.",
     era = 1,
     requires = { "agriculture" },
-    knowledge = { LWP = 4 },
-    cost = { Water = 4, Boards = 4 },
-    time = 45,
+    knowledge = { LWP = 12 },
+    cost = { Wood = 1 },
+    time = 60,
     unlocks = { buildings = { "Brewery" } },
     aiPriority = 78,
 }
@@ -174,12 +187,25 @@ rttr:AddTechnology{
     title = "Waffenschmiede",
     description = "Schmiede fertigen aus Eisen und Kohle Schwerter und Schilde für neue Soldaten.",
     era = 1,
-    requires = { "metallurgy", "brewing" },
-    knowledge = { IWP = 3, MWP = 6 },
-    cost = { Iron = 6, Coal = 6, Boards = 4 },
+    requires = { "metallurgy"},
+    knowledge = { IWP = 10, MWP = 10 },
+    cost = {},
     time = 60,
     unlocks = { buildings = { "Armory" } },
-    aiPriority = 75,
+    aiPriority = 90,
+}
+
+rttr:AddTechnology{
+    name = "currency",
+    title = "Münzprägung",
+    description = "Gold wird abgebaut und zu Münzen geprägt. Münzen spornen Soldaten zur Ausbildung an.",
+    era = 1,
+    requires = { "mining" },
+    knowledge = { IWP = 16 },
+    cost = { },
+    time = 90,
+    unlocks = { buildings = { "Mint" } },
+    aiPriority = 90,
 }
 
 rttr:AddTechnology{
@@ -188,11 +214,11 @@ rttr:AddTechnology{
     description = "Esel werden gezüchtet und tragen auf stark genutzten Straßen zusätzlich Waren.",
     era = 1,
     requires = { "animal_husbandry" },
-    knowledge = { LWP = 8 },
-    cost = { Water = 6, Boards = 6 },
-    time = 60,
+    knowledge = { LWP = 12 },
+    cost = { Wood = 1 },
+    time = 1,
     unlocks = { buildings = { "DonkeyBreeder" } },
-    aiPriority = 45,
+    aiPriority = 50,
 }
 
 rttr:AddTechnology{
@@ -201,12 +227,12 @@ rttr:AddTechnology{
     description = "An sonnigen Hängen werden Reben gepflanzt; der Winzer keltert aus den Trauben Wein.",
     era = 1,
     requires = { "agriculture" },
-    knowledge = { LWP = 6 },
-    cost = { Boards = 6, Stones = 2 },
-    time = 45,
+    knowledge = { LWP = 12 },
+    cost = { Wood = 4, Water = 12 },
+    time = 30,
     unlocks = { buildings = { "Vineyard", "Winery" } },
     addon = "WINE",
-    aiPriority = 35,
+    aiPriority = 30,
 }
 
 rttr:AddTechnology{
@@ -215,13 +241,29 @@ rttr:AddTechnology{
     description = "Häute aus der Schweinezucht werden gegerbt und zu Leder und Rüstungen verarbeitet.",
     era = 1,
     requires = { "animal_husbandry" },
-    knowledge = { LWP = 3, IWP = 3 },
-    cost = { Ham = 4, Boards = 4 },
-    time = 45,
+    knowledge = { LWP = 8, IWP = 8 },
+    cost = { },
+    time = 60,
     unlocks = { buildings = { "Skinner", "Tannery", "LeatherWorks" } },
     addon = "LEATHER",
-    aiPriority = 35,
+    aiPriority = 70,
 }
+
+rttr:AddTechnology{
+    name = "lookout",
+    title = "Spähturm",
+    description = "Durch Späher kann man Feinde schon frühzeitig ausfindig machen.",
+    era = 1,
+    requires = { "stone_walls" },
+    knowledge = { MWP = 12 },
+    cost = { Wood = 1 },
+    time = 60,
+    unlocks = { buildings = { "LookoutTower" } },
+    addon = "LEATHER",
+    aiPriority = 89,
+}
+
+
 
 -------------------------------------------------------------------------------
 -- 2: Klassik
@@ -232,25 +274,12 @@ rttr:AddTechnology{
     title = "Befestigungsbau",
     description = "Steinerne Wachtürme sichern die Grenzen und beherbergen mehr Soldaten.",
     era = 2,
-    requires = { "mining" },
-    knowledge = { MWP = 8 },
-    cost = { Stones = 10, Boards = 6 },
-    time = 60,
+    requires = { "metallurgy", "lookout" },
+    knowledge = { MWP = 20 },
+    cost = { Stones = 6 },
+    time = 120,
     unlocks = { buildings = { "Watchtower" } },
-    aiPriority = 65,
-}
-
-rttr:AddTechnology{
-    name = "currency",
-    title = "Münzprägung",
-    description = "Gold wird abgebaut und zu Münzen geprägt. Münzen spornen Soldaten zur Ausbildung an.",
-    era = 2,
-    requires = { "metallurgy" },
-    knowledge = { IWP = 7 },
-    cost = { Iron = 2, Coal = 4, Stones = 6, Boards = 6 },
-    time = 90,
-    unlocks = { buildings = { "GoldMine", "Mint" } },
-    aiPriority = 55,
+    aiPriority = 89,
 }
 
 rttr:AddTechnology{
@@ -259,11 +288,24 @@ rttr:AddTechnology{
     description = "Werften bauen Boote für Wasserstraßen und später hochseetaugliche Schiffe.",
     era = 2,
     requires = { "toolmaking" },
-    knowledge = { IWP = 5 },
-    cost = { Boards = 14, Stones = 4 },
+    knowledge = { IWP = 20 },
+    cost = { Boards = 8 },
     time = 60,
     unlocks = { buildings = { "Shipyard" } },
-    aiPriority = 30,
+    aiPriority = 40,
+}
+
+rttr:AddTechnology{
+    name = "navigation",
+    title = "Seefahrt",
+    description = "Häfen ermöglichen Expeditionen über das Meer, Handel mit Übersee und Angriffe von See aus.",
+    era = 2,
+    requires = { "shipbuilding" },
+    knowledge = { LWP = 20, IWP = 10, MWP = 20 },
+    cost = {},
+    time = 120,
+    unlocks = { buildings = { "HarborBuilding" } },
+    aiPriority = 40,
 }
 
 rttr:AddTechnology{
@@ -272,11 +314,11 @@ rttr:AddTechnology{
     description = "Katapulte schleudern Steine auf feindliche Militärgebäude.",
     era = 2,
     requires = { "fortification" },
-    knowledge = { MWP = 12 },
-    cost = { Stones = 10, Boards = 8 },
-    time = 90,
+    knowledge = { MWP = 30 },
+    cost = { Stones = 1 },
+    time = 160,
     unlocks = { buildings = { "Catapult" } },
-    aiPriority = 35,
+    aiPriority = 20,
 }
 
 rttr:AddTechnology{
@@ -285,9 +327,9 @@ rttr:AddTechnology{
     description = "Tempel nehmen Opfergaben aus Wein, Fleisch und Brot entgegen und bringen dafür Gold hervor.",
     era = 2,
     requires = { "viticulture" },
-    knowledge = { LWP = 4, IWP = 3 },
-    cost = { Wine = 4, Stones = 8, Boards = 6 },
-    time = 90,
+    knowledge = { LWP = 5, IWP = 10 },
+    cost = {},
+    time = 160,
     unlocks = { buildings = { "Temple" } },
     addon = "WINE",
     aiPriority = 30,
@@ -303,22 +345,8 @@ rttr:AddTechnology{
     description = "Mächtige Burgen kontrollieren ein großes Gebiet und bieten Platz für eine ganze Garnison.",
     era = 3,
     requires = { "fortification", "currency" },
-    knowledge = { MWP = 15 },
-    cost = { Stones = 20, Boards = 12, Coins = 4 },
-    time = 120,
+    knowledge = { MWP = 30 },
+    time = 240,
     unlocks = { buildings = { "Fortress" } },
-    aiPriority = 50,
-}
-
-rttr:AddTechnology{
-    name = "navigation",
-    title = "Hochseeschifffahrt",
-    description = "Häfen ermöglichen Expeditionen über das Meer, Handel mit Übersee und Angriffe von See aus.",
-    era = 3,
-    requires = { "shipbuilding" },
-    knowledge = { IWP = 8 },
-    cost = { Boards = 16, Stones = 10 },
-    time = 120,
-    unlocks = { buildings = { "HarborBuilding" } },
-    aiPriority = 30,
+    aiPriority = 90,
 }

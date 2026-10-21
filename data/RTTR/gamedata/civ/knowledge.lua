@@ -16,7 +16,7 @@ Die WP-Kosten der Technologien stehen in techtree.lua unter "knowledge".
 
 rttr:SetBuildingKnowledge{
     -- Lager
-    Headquarters   = { LWP = 5, IWP = 5, MWP = 5 }, -- Hauptquartier
+    Headquarters   = { LWP = 7, IWP = 7, MWP = 7 }, -- Hauptquartier
     Storehouse     = { LWP = 1, IWP = 1, MWP = 1 }, -- Lagerhaus
     HarborBuilding = { LWP = 1, IWP = 1, MWP = 1 }, -- Hafen
 
@@ -24,7 +24,7 @@ rttr:SetBuildingKnowledge{
     Fishery        = { LWP = 2 },                   -- Fischer
     Hunter         = { LWP = 2 },                   -- Jäger
     Well           = { LWP = 1 },                   -- Brunnen
-    Farm           = { LWP = 3, IWP = 1 },          -- Bauernhof
+    Farm           = { LWP = 3 },                   -- Bauernhof
     Mill           = { LWP = 3 },                   -- Mühle
     Bakery         = { LWP = 3 },                   -- Bäcker
     PigFarm        = { LWP = 4 },                   -- Schweinezucht
@@ -46,7 +46,7 @@ rttr:SetBuildingKnowledge{
     Charburner     = { IWP = 4 },                   -- Köhler (Köhlerei-Addon)
     Ironsmelter    = { IWP = 3 },                   -- Eisenschmelze
     Metalworks     = { IWP = 3 },                   -- Schlosserei
-    Armory         = { IWP = 2, MWP = 1 },          -- Waffenschmiede
+    Armory         = { IWP = 2 },                   -- Waffenschmiede
     Mint           = { IWP = 3 },                   -- Münzprägerei
     Shipyard       = { IWP = 3 },                   -- Werft
     Temple         = { IWP = 3 },                   -- Tempel (Wein-Addon)
@@ -55,10 +55,10 @@ rttr:SetBuildingKnowledge{
     LeatherWorks   = { MWP = 3 },                   -- Lederei (Leder-Addon)
 
     -- Militär
-    Barracks       = { MWP = 2 },                   -- Baracke
-    Guardhouse     = { MWP = 3 },                   -- Wachstube
-    Watchtower     = { MWP = 4 },                   -- Wachturm
-    Fortress       = { MWP = 5 },                   -- Festung
+    Barracks       = { MWP = 1 },                   -- Baracke
+    Guardhouse     = { MWP = 2 },                   -- Wachstube
+    Watchtower     = { MWP = 3 },                   -- Wachturm
+    Fortress       = { MWP = 4 },                   -- Festung
     LookoutTower   = { MWP = 1 },                   -- Spähturm
     Catapult       = { MWP = -5 },                  -- Katapult (absichtlich negativ)
 }

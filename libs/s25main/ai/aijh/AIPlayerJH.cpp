@@ -1062,7 +1062,7 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             {
                 if(GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4u)
                 {
-                    std::cout << "Check Forester " << std::endl;
+                    //std::cout << "Check Forester " << std::endl;
                     if(GetDensity(foundPos, AIResource::Wood, 9u) > 5u
                        || GetDensity(foundPos, AIResource::Plantspace, 7u) < 10u
                        || GetDensity(foundPos, AIResource::Borderland, 1u) > 1u)
@@ -1820,7 +1820,7 @@ void AIPlayerJH::CheckResearch(const unsigned gf)
         return;
     }
     // Waiting for wares for a long time -> switch to something we can pay right now (progress is kept)
-    constexpr unsigned maxStuckGFs = 3000;
+    constexpr unsigned maxStuckGFs = 300;
     if(gf - lastResearchProgressGF_ < maxStuckGFs)
         return;
     const auto alternative = civ::chooseResearchForAI(gwb, playerId, current);

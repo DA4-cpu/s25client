@@ -150,6 +150,8 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         // buildings which are linked to others in a chain / profession-tool-rivalry have additional limits.
         const Inventory& inventory = aijh.player.GetInventory();
 
+        unsigned numMines = GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::IronMine)
+                            + GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::GraniteMine);
         // foresters
         unsigned max_available_forester = inventory[Job::Forester] + inventory[GoodType::Shovel];
         max_available_forester = std::max(0, int(max_available_forester));
@@ -257,11 +259,15 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
           ((GetNumBuildings(BuildingType::Ironsmelter) > 0) ? 1 : 0);
 
         // armory count = smelter -metalworks if there is more than 1 smelter or 1 if there is just 1.
-        buildingsWanted[BuildingType::Armory] =
-          (GetNumBuildings(BuildingType::Ironsmelter) > 0) ?
-            std::max(0, static_cast<int>(GetNumBuildings(BuildingType::Ironsmelter))
-                          - static_cast<int>(GetNumBuildings(BuildingType::Metalworks))):
-            GetNumBuildings(BuildingType::Ironsmelter);
+        if (GetNumBuildings(BuildingType::Metalworks)
+            > 0)
+        {
+            resourcelimit = inventory.people[Job::Armorer] + inventory.people[Job::Builder]
+                            + inventory.people[Job::Geologist] + inventory.goods[GoodType::Hammer] + 1;
+
+            buildingsWanted[BuildingType::Armory] =
+              std::max<unsigned>(GetNumBuildings(BuildingType::Ironsmelter) - GetNumBuildings(BuildingType::Metalworks), 0);
+        }
         if(aijh.ggs.isEnabled(AddonId::HALF_COST_MIL_EQUIP))
             buildingsWanted[BuildingType::Armory] *= 2;
         // brewery count = 1+(armory/5) if there is at least 1 armory or armory /6 for exhaustible mines
@@ -291,14 +297,55 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         resourcelimit = inventory.people[Job::Baker] + inventory.goods[GoodType::Rollingpin] + 1;
         buildingsWanted[BuildingType::Bakery] = std::min<unsigned>(GetNumBuildings(BuildingType::Mill), resourcelimit);
 
-        buildingsWanted[BuildingType::PigFarm] = (GetNumBuildings(BuildingType::Farm) < 8) ?
-                                                   GetNumBuildings(BuildingType::Farm) / 4 :
-                                                   (GetNumBuildings(BuildingType::Farm) - 2) / 4;
-        if(buildingsWanted[BuildingType::PigFarm] > GetNumBuildings(BuildingType::Slaughterhouse) + 1)
-            buildingsWanted[BuildingType::PigFarm] = GetNumBuildings(BuildingType::Slaughterhouse) + 1;
-        buildingsWanted[BuildingType::Slaughterhouse] =
-          std::min(inventory.goods[GoodType::Cleaver] + inventory[Job::Butcher],
-                   GetNumBuildings(BuildingType::PigFarm));
+
+        freeFarms =
+          std::max(int(GetNumBuildings(BuildingType::Farm) - (foodusers - GetNumBuildings(BuildingType::PigFarm))), 0);
+
+        unsigned numPigUsers = GetNumBuildings(BuildingType::Slaughterhouse) + GetNumBuildings(BuildingType::Skinner);
+
+        if(GetNumBuildings(BuildingType::Farm) >= foodusers - GetNumBuildings(BuildingType::PigFarm))
+            buildingsWanted[BuildingType::PigFarm] = std::min(freeFarms, numPigUsers + 1);
+
+        else
+            buildingsWanted[BuildingType::PigFarm] = numPigUsers;
+
+        resourcelimit =
+          inventory.people[Job::Butcher] + inventory.people[Job::Skinner] + inventory.goods[GoodType::Cleaver] + 1;
+
+        unsigned freePigFarms =
+          std::max(int(GetNumBuildings(BuildingType::PigFarm) - (numPigUsers - GetNumBuildings(BuildingType::Slaughterhouse))), 0);
+
+        unsigned numHamUsers = numMines + GetNumBuildings(BuildingType::Temple);
+
+        if((GetNumBuildings(BuildingType::PigFarm) >= numPigUsers - GetNumBuildings(BuildingType::Slaughterhouse)) && (1 > GetNumBuildingSites(BuildingType::Slaughterhouse)))
+
+            buildingsWanted[BuildingType::Slaughterhouse] = std::min(freePigFarms, numHamUsers + 1);
+
+        else
+            buildingsWanted[BuildingType::Slaughterhouse] = GetNumBuildings(BuildingType::Slaughterhouse);
+        
+        if(aijh.ggs.isEnabled(AddonId::LEATHER))
+        {
+            if((GetNumBuildings(BuildingType::PigFarm) >= numPigUsers - GetNumBuildings(BuildingType::Skinner)) && (1 > GetNumBuildingSites(BuildingType::Skinner)))
+
+                buildingsWanted[BuildingType::Skinner] =
+                  std::min(freePigFarms, buildingsWanted[BuildingType::Tannery] + 1);
+
+            else
+                buildingsWanted[BuildingType::Skinner] = GetNumBuildings(BuildingType::Skinner);
+
+            buildingsWanted[BuildingType::Skinner] = 1;
+            resourcelimit =
+              inventory.people[Job::Carpenter] + inventory.people[Job::Tanner] + inventory.goods[GoodType::Saw] + 1;
+            buildingsWanted[BuildingType::Tannery] =
+              std::min<unsigned>(resourcelimit, GetNumBuildings(BuildingType::Skinner));
+
+            resourcelimit =
+              inventory.people[Job::Metalworker] + inventory.people[Job::LeatherWorker] + inventory.goods[GoodType::Tongs] + 1;
+            buildingsWanted[BuildingType::LeatherWorks] =
+              std::min<unsigned>(resourcelimit, GetNumBuildings(BuildingType::Tannery));
+
+        }
 
         buildingsWanted[BuildingType::Well] =
           buildingsWanted[BuildingType::Bakery] + buildingsWanted[BuildingType::PigFarm]
@@ -427,10 +474,12 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
             } else
                 buildingsWanted[BuildingType::GraniteMine] = 0;
         }
+        
+
 
         // Only build catapults if we have more than 5 military blds and 50 stones. Then reserve 4 stones per catapult
         // but do not build more than 4 additions catapults Note: This is a max amount. A catapult is only placed if
-        // reasonable
+        // reasonable I hate catapults, thats why they are deactivated
         buildingsWanted[BuildingType::Catapult] =
           numMilitaryBlds <= 5 || inventory.goods[GoodType::Stones] < 50 ?
             0 :
