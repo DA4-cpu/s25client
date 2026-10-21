@@ -27,8 +27,6 @@ public:
     void OnChange(unsigned changeId) override;
 
 protected:
-    /// Update displayed overlay (e.g. stop symbol) for the item at the current page
-    void UpdateOverlay(unsigned i);
     /// Update displayed overlay (e.g. stop symbol) for the item of the given type
     void UpdateOverlay(unsigned i, bool isWare);
     void UpdateOverlays();

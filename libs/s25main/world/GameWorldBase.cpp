@@ -36,7 +36,11 @@ GameWorldBase::GameWorldBase(std::vector<GamePlayer> players, const GlobalGameSe
       gameSettings(gameSettings), em(em), soundManager(std::make_unique<SoundManager>()), lua(nullptr), gi(nullptr)
 {}
 
-GameWorldBase::~GameWorldBase() = default;
+GameWorldBase::~GameWorldBase()
+{
+    if(techTree_)
+        civ::resetActiveContent(techTree_->GetContentPtr().get());
+}
 
 const civ::TechTree& GameWorldBase::GetTechTree() const
 {
@@ -50,13 +54,19 @@ const civ::TechTree& GameWorldBase::GetTechTree() const
             LOG.write(_("Error: Failed to load the tech tree of the civilization mode: %1%\n")) % e.what();
             techTree_ = std::make_unique<civ::TechTree>(WorldDescription());
         }
+        // Wares and buildings defined in lua are used by global lookups (names, graphics ...)
+        civ::setActiveContent(techTree_->GetContentPtr());
     }
     return *techTree_;
 }
 
 void GameWorldBase::SetTechTree(std::unique_ptr<civ::TechTree> techTree)
 {
+    if(techTree_)
+        civ::resetActiveContent(techTree_->GetContentPtr().get());
     techTree_ = std::move(techTree);
+    if(techTree_)
+        civ::setActiveContent(techTree_->GetContentPtr());
 }
 
 void GameWorldBase::Init(const MapExtent& mapSize, DescIdx<LandscapeDesc> lt)

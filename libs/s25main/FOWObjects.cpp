@@ -6,6 +6,7 @@
 #include "Loader.h"
 #include "SerializedGameData.h"
 #include "buildings/noBaseBuilding.h"
+#include "civ/Content.h"
 #include "ogl/glArchivItem_Bitmap.h"
 #include "gameData/BuildingConsts.h"
 #include "s25util/colors.h"
@@ -96,10 +97,10 @@ void fowBuildingSite::Draw(DrawPoint drawPt) const
         progressRaw = std::min<unsigned>(build_progress, maxProgressRaw);
         progressBld = ((build_progress > maxProgressRaw) ? (build_progress - maxProgressRaw) : 0);
 
-        LOADER.building_cache[nation][type].skeleton.drawPercent(drawPt, progressRaw * 100 / maxProgressRaw,
-                                                                 FOW_DRAW_COLOR);
-        LOADER.building_cache[nation][type].building.drawPercent(drawPt, progressBld * 100 / maxProgressBld,
-                                                                 FOW_DRAW_COLOR);
+        LOADER.building_cache[nation][civ::getLook(type)].skeleton.drawPercent(
+          drawPt, progressRaw * 100 / maxProgressRaw, FOW_DRAW_COLOR);
+        LOADER.building_cache[nation][civ::getLook(type)].building.drawPercent(
+          drawPt, progressBld * 100 / maxProgressBld, FOW_DRAW_COLOR);
     }
 }
 

@@ -13,6 +13,7 @@
 #include "buildings/noBuildingSite.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "figures/nofAttacker.h"
 #include "figures/nofPassiveSoldier.h"
 #include "figures/nofScout_Free.h"
@@ -129,6 +130,9 @@ void GameWorld::SetPointRoad(MapPoint pt, const Direction dir, const PointRoad t
 void GameWorld::SetBuildingSite(const BuildingType type, const MapPoint pt, const unsigned char player)
 {
     if(!GetPlayer(player).IsBuildingEnabled(type))
+        return;
+    // Slots for buildings defined in lua (civilization mode) which are not used in this game
+    if(!civ::getActiveContent().IsUsed(type))
         return;
 
     // Gucken, ob das Gebäude hier überhaupt noch gebaut wrden kann

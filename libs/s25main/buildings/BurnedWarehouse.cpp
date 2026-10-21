@@ -13,6 +13,8 @@
 #include "random/Random.h"
 #include "world/GameWorld.h"
 #include <boost/container/static_vector.hpp>
+#include <algorithm>
+#include <vector>
 
 /// Number of "waves" of workers leaving
 constexpr unsigned GO_OUT_PHASES = 10;
@@ -29,7 +31,15 @@ BurnedWarehouse::BurnedWarehouse(const MapPoint pos, const unsigned char player,
 BurnedWarehouse::BurnedWarehouse(SerializedGameData& sgd, const unsigned obj_id)
     : noCoordBase(sgd, obj_id), player(sgd.PopUnsignedChar()), go_out_phase(sgd.PopUnsignedInt())
 {
-    helpers::popContainer(sgd, people.people);
+    if(sgd.GetGameDataVersion() < 18)
+    {
+        // No slots for workers of buildings defined in lua (civilization mode) yet
+        std::vector<unsigned> builtinPeople(NUM_BUILTIN_JOBS);
+        helpers::popContainer(sgd, builtinPeople, true);
+        std::fill(people.people.begin(), people.people.end(), 0);
+        std::copy(builtinPeople.begin(), builtinPeople.end(), people.people.begin());
+    } else
+        helpers::popContainer(sgd, people.people);
     if(sgd.GetGameDataVersion() >= 12)
         helpers::popContainer(sgd, people.armoredSoldiers);
     else

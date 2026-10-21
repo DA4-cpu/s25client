@@ -87,8 +87,19 @@ void startGame(GameWorld& world)
 {
     if(!isEnabled(world))
         return;
+    const Content& content = world.GetTechTree().GetContent();
     for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
-        applyBuildingAvailability(world.GetPlayer(i));
+    {
+        GamePlayer& player = world.GetPlayer(i);
+        applyBuildingAvailability(player);
+        // Workshops defined in lua consume their input wares
+        for(unsigned bldIdx = 0; bldIdx < content.GetNumBuildings(); ++bldIdx)
+        {
+            const BuildingType bld = getCustomBuilding(bldIdx);
+            for(const GoodType input : content.GetBuilding(bld)->workDesc.waresNeeded)
+                player.AddWareClient(input, bld);
+        }
+    }
 }
 
 bool setResearch(GameWorld& world, unsigned playerId, std::optional<TechIdx> tech)

@@ -11,6 +11,7 @@
 #include "WindowManager.h"
 #include "addons/const_addons.h"
 #include "buildings/nobMilitary.h"
+#include "civ/Content.h"
 #include "controls/ctrlBuildingIcon.h"
 #include "controls/ctrlGroup.h"
 #include "controls/ctrlOptionGroup.h"
@@ -100,7 +101,7 @@ iwAction::iwAction(GameInterface& gi, GameWorldView& gwv, const Tabs& tabs, MapP
         }
 
         // add building icons to TabCtrl. Note: None for BuildTab::Harbor (last)
-        const helpers::EnumArray<std::vector<BuildingType>, BuildTab> building_icons = {
+        helpers::EnumArray<std::vector<BuildingType>, BuildTab> building_icons = {
           // Linebreak
           {{BuildingType::Woodcutter, BuildingType::Forester, BuildingType::Quarry, BuildingType::Fishery,
             BuildingType::Hunter, BuildingType::Barracks, BuildingType::Guardhouse, BuildingType::LookoutTower,
@@ -112,13 +113,25 @@ iwAction::iwAction(GameInterface& gi, GameWorldView& gwv, const Tabs& tabs, MapP
            {BuildingType::Farm, BuildingType::PigFarm, BuildingType::DonkeyBreeder, BuildingType::Charburner,
             BuildingType::Vineyard, BuildingType::Temple, BuildingType::Fortress, BuildingType::HarborBuilding},
            {BuildingType::GoldMine, BuildingType::IronMine, BuildingType::CoalMine, BuildingType::GraniteMine}}};
+        // Workshops defined in lua (civilization mode) according to their size
+        for(unsigned i = 0; i < civ::getActiveContent().GetNumBuildings(); ++i)
+        {
+            const BuildingType bld = getCustomBuilding(i);
+            switch(BUILDING_SIZE[bld])
+            {
+                case BuildingQuality::Hut: building_icons[BuildTab::Hut].push_back(bld); break;
+                case BuildingQuality::House: building_icons[BuildTab::House].push_back(bld); break;
+                case BuildingQuality::Castle: building_icons[BuildTab::Castle].push_back(bld); break;
+                default: break;
+            }
+        }
 
         /// Flexible what-buildings-are-available handling
         helpers::EnumArray<bool, BuildingType> building_available;
 
         // First enable all buildings
         for(const auto bld : helpers::enumRange<BuildingType>())
-            building_available[bld] = player.IsBuildingEnabled(bld);
+            building_available[bld] = player.IsBuildingEnabled(bld) && civ::getActiveContent().IsUsed(bld);
 
         // Now deactivate those we don't want
 

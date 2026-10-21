@@ -318,7 +318,10 @@ public:
 
     /// Get a military setting. TODO: Use named type instead of index
     unsigned char GetMilitarySetting(unsigned type) const { return militarySettings_[type]; }
-    unsigned char GetTransportPriority(GoodType ware) const { return transportPrio[ware]; }
+    /// Register a building type as a consumer of the ware (if it isn't already). Used for workshops defined in lua
+    void AddWareClient(GoodType ware, BuildingType bld);
+    /// Custom wares (civilization mode) have the priority of their "transport" ware
+    unsigned char GetTransportPriority(GoodType ware) const;
 
     //////////////////////////////////////////////////////////////////////////
     // Statistik-Sachen

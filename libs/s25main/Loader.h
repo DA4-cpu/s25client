@@ -6,6 +6,7 @@
 
 #include "Rect.h"
 #include "WineLoader.h"
+#include "civ/Looks.h"
 #include "enum_cast.hpp"
 #include "helpers/MultiArray.h"
 #include "ogl/glSmartBitmap.h"
@@ -179,7 +180,7 @@ public:
     helpers::MultiEnumArray<AnimationSprites, Nation, Direction> fat_carrier_cache;
     glSmartBitmap& getBobSprite(Nation nat, Job job, Direction dir, unsigned aniFrame)
     {
-        return bob_jobs_cache[nat][job][dir][aniFrame];
+        return bob_jobs_cache[nat][civ::getLook(job)][dir][aniFrame];
     }
     glSmartBitmap& getCarrierBobSprite(Nation nat, bool fat, Direction dir, unsigned aniFrame)
     {
@@ -193,7 +194,7 @@ public:
     std::array<helpers::MultiEnumArray<AnimationSprites, GoodType, Direction>, 2> carrier_cache;
     glSmartBitmap& getCarrierSprite(GoodType ware, bool fat, Direction dir, unsigned aniFrame)
     {
-        return carrier_cache[fat][ware][dir][aniFrame];
+        return carrier_cache[fat][civ::getLook(ware)][dir][aniFrame];
     }
     /// Boundary stones: Nation
     helpers::EnumArray<glSmartBitmap, Nation> boundary_stone_cache;

@@ -52,11 +52,33 @@ enum class GoodType : uint8_t
     /* 37 */ Skins,
     /* 38 */ Leather,
     /* 39 */ Armor,
-    /* 40 */ Nothing // Nothing. Is not counted as a good. TODO: Remove
+    // Wares defined in lua by the civilization mode (see civ/Content.h). Unused unless defined.
+    /* 40 */ Custom0,
+    /* 103 */ CustomLast = Custom0 + 63,
+    /* 104 */ Nothing // Nothing. Is not counted as a good. TODO: Remove
 };
 constexpr auto maxEnumValue(GoodType)
 {
-    return GoodType::Armor;
+    return GoodType::CustomLast;
+}
+
+/// Number of ware slots which can be defined in lua (civilization mode)
+constexpr unsigned NUM_CUSTOM_GOODS =
+  static_cast<unsigned>(GoodType::CustomLast) - static_cast<unsigned>(GoodType::Custom0) + 1u;
+/// Number of built-in wares (before the custom slots). Used e.g. for loading older savegames
+constexpr unsigned NUM_BUILTIN_GOODS = static_cast<unsigned>(GoodType::Custom0);
+constexpr bool isCustomGood(GoodType good)
+{
+    return good >= GoodType::Custom0 && good <= GoodType::CustomLast;
+}
+/// Index of a custom ware slot (0..NUM_CUSTOM_GOODS-1)
+constexpr unsigned getCustomGoodIdx(GoodType good)
+{
+    return static_cast<unsigned>(good) - static_cast<unsigned>(GoodType::Custom0);
+}
+constexpr GoodType getCustomGood(unsigned idx)
+{
+    return GoodType(static_cast<unsigned>(GoodType::Custom0) + idx);
 }
 
 /// List of all tools (correspond to buttons at IO:140-163)

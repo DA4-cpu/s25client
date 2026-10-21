@@ -31,28 +31,40 @@ using civ::KnowledgeType;
 
 BOOST_AUTO_TEST_CASE(IdentifiersRoundTrip)
 {
-    for(const auto bld : helpers::enumRange<BuildingType>())
+    for(unsigned i = 0; i < NUM_BUILTIN_BUILDINGS; ++i)
     {
-        BOOST_TEST_REQUIRE(civ::getIdentifier(bld));
+        const auto bld = BuildingType(i);
+        BOOST_TEST_REQUIRE(!civ::getIdentifier(bld).empty());
         if(bld == BuildingType::Headquarters || bld == BuildingType::Nothing9)
             BOOST_TEST(!civ::buildingFromIdentifier(civ::getIdentifier(bld)));
         else
             BOOST_TEST((civ::buildingFromIdentifier(civ::getIdentifier(bld)) == bld));
     }
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(unsigned i = 0; i < NUM_BUILTIN_GOODS; ++i)
     {
-        BOOST_TEST_REQUIRE(civ::getIdentifier(good));
+        const auto good = GoodType(i);
+        BOOST_TEST_REQUIRE(!civ::getIdentifier(good).empty());
         const auto parsed = civ::goodFromIdentifier(civ::getIdentifier(good));
         if(good == GoodType::WaterEmpty)
             BOOST_TEST(!parsed);
         else
             BOOST_TEST((parsed == ConvertShields(good)));
     }
+    for(unsigned i = 0; i < NUM_BUILTIN_JOBS; ++i)
+    {
+        const auto job = Job(i);
+        BOOST_TEST((civ::jobFromIdentifier(civ::getIdentifier(job)) == job));
+    }
     BOOST_TEST((civ::goodFromIdentifier("Shield") == GoodType::ShieldRomans));
     BOOST_TEST(!civ::buildingFromIdentifier("NotABuilding"));
     BOOST_TEST((civ::buildingFromIdentifier("Headquarters", true) == BuildingType::Headquarters));
     BOOST_TEST(!civ::buildingFromIdentifier("Nothing9", true));
     BOOST_TEST(!civ::goodFromIdentifier("NotAGood"));
+    BOOST_TEST(!civ::jobFromIdentifier("NotAJob"));
+    // Unused custom slots
+    BOOST_TEST(civ::getIdentifier(GoodType::Custom0) == "Custom0");
+    BOOST_TEST(civ::getIdentifier(getCustomBuilding(3)) == "Custom3");
+    BOOST_TEST(!civ::goodFromIdentifier("Custom0"));
 }
 
 BOOST_AUTO_TEST_CASE(KnowledgeNamesAndFormatting)
@@ -127,9 +139,10 @@ BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
     for(const auto mine :
         {BuildingType::GraniteMine, BuildingType::CoalMine, BuildingType::IronMine, BuildingType::GoldMine})
         BOOST_TEST(knowledge(mine, KnowledgeType::Industry) == 1);
-    // Every building except the placeholder has some knowledge points
-    for(const auto bld : helpers::enumRange<BuildingType>())
+    // Every built-in building except the placeholder has some knowledge points
+    for(unsigned i = 0; i < NUM_BUILTIN_BUILDINGS; ++i)
     {
+        const auto bld = BuildingType(i);
         if(bld == BuildingType::Nothing9)
             continue;
         const civ::KnowledgePoints& points = techTree.GetBuildingKnowledge(bld);

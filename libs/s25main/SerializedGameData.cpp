@@ -21,6 +21,8 @@
 #include "buildings/nobShipYard.h"
 #include "buildings/nobStorehouse.h"
 #include "buildings/nobTemple.h"
+#include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "figures/nofAggressiveDefender.h"
 #include "figures/nofArmorer.h"
 #include "figures/nofAttacker.h"
@@ -32,6 +34,7 @@
 #include "figures/nofCarrier.h"
 #include "figures/nofCatapultMan.h"
 #include "figures/nofCharburner.h"
+#include "figures/nofCustomWorker.h"
 #include "figures/nofDefender.h"
 #include "figures/nofDonkeybreeder.h"
 #include "figures/nofFarmer.h"
@@ -111,7 +114,9 @@
 /// 15: Add sea to HarborPos::Neighbor
 /// 16: Civilization mode: research state of players
 /// 17: Civilization mode: spent knowledge points
-static const unsigned currentGameDataVersion = 17;
+/// 18: Civilization mode: Slots for wares, buildings and jobs defined in lua (GoodType::Nothing moved),
+///     signature of the lua content
+static const unsigned currentGameDataVersion = 18;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)
@@ -192,6 +197,7 @@ std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type 
         RTTR_CREATE_GO(GO_Type::NofSkinner, nofSkinner);
         RTTR_CREATE_GO(GO_Type::NofTanner, nofTanner);
         RTTR_CREATE_GO(GO_Type::NofLeatherWorker, nofLeatherWorker);
+        RTTR_CREATE_GO(GO_Type::NofCustomWorker, nofCustomWorker);
 
         case GO_Type::Nothing: RTTR_Assert(false); break;
 #undef RTTR_CREATE_GO
@@ -294,6 +300,10 @@ void SerializedGameData::ReadSnapshot(Game& game, ILocalGameState& localGameStat
     em = &gw.GetEvMgr();
 
     expectedNumObjects = PopUnsignedInt();
+
+    // Civilization mode: Wares and buildings defined in lua must be known before objects using them are loaded
+    if(civ::isEnabled(gw))
+        gw.GetTechTree();
 
     MapSerializer::Deserialize(gw, *this, game, localGameState);
     em->Deserialize(*this);

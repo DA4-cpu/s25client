@@ -155,6 +155,12 @@ public:
             case GoodType::WaterEmpty: return ("GoodType::WaterEmpty");
             case GoodType::Wine: return ("GoodType::Wine");
             case GoodType::Wood: return ("GoodType::Wood");
+            case GoodType::Custom0:
+            case GoodType::CustomLast:
+            default:
+                if(isCustomGood(value))
+                    return "GoodType::Custom" + std::to_string(getCustomGoodIdx(value));
+                break;
         }
         RTTR_Assert(false);
         return ("unknown");

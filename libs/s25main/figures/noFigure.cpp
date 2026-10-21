@@ -14,6 +14,7 @@
 #include "addons/const_addons.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobHarborBuilding.h"
+#include "civ/Content.h"
 #include "helpers/containerUtils.h"
 #include "network/GameClient.h"
 #include "nofCarrier.h"
@@ -787,7 +788,8 @@ void noFigure::DrawWalking(DrawPoint drawPt, const ResourceId& file, unsigned id
 
 void noFigure::DrawWalking(DrawPoint drawPt)
 {
-    switch(job_)
+    // Workers of buildings defined in lua (civilization mode) look like a built-in job
+    switch(civ::getLook(job_))
     {
         case Job::PackDonkey:
         {

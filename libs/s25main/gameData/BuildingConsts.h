@@ -11,15 +11,40 @@
 #include "gameTypes/BuildingTypes.h"
 #include "gameTypes/Nation.h"
 
-extern const helpers::EnumArray<const char*, BuildingType> BUILDING_NAMES;
+#include <array>
 
-constexpr helpers::EnumArray<BuildingCost, BuildingType> SUPPRESS_UNUSED BUILDING_COSTS = {
+// The tables below are indexed by BuildingType. The custom building slots of the civilization mode (see civ/Content.h)
+// take their values from the lua definitions of the running game; unused slots return empty values.
+
+/// Lookup of a building table with values for the built-in buildings and the custom slots
+#define RTTR_BUILDING_TABLE(Name, ReturnType)          \
+    struct Name                                        \
+    {                                                  \
+        ReturnType operator[](BuildingType bld) const; \
+    }
+
+RTTR_BUILDING_TABLE(BuildingNamesTable, const char*);
+RTTR_BUILDING_TABLE(BuildingHelpTable, const char*);
+RTTR_BUILDING_TABLE(BuildingCostTable, BuildingCost);
+RTTR_BUILDING_TABLE(BuildingSizeTable, BuildingQuality);
+RTTR_BUILDING_TABLE(BuildingWorkDescTable, const BldWorkDescription&);
+#undef RTTR_BUILDING_TABLE
+
+extern const BuildingNamesTable BUILDING_NAMES;
+/// Hilfetexte für Gebäude
+extern const BuildingHelpTable BUILDING_HELP_STRINGS;
+extern const BuildingCostTable BUILDING_COSTS;
+extern const BuildingSizeTable BUILDING_SIZE;
+/// Describes the work the building does
+extern const BuildingWorkDescTable BLD_WORK_DESC;
+
+constexpr std::array<BuildingCost, NUM_BUILTIN_BUILDINGS> SUPPRESS_UNUSED BUILTIN_BUILDING_COSTS = {
   {{0, 0}, {2, 0}, {2, 3}, {2, 0}, {3, 5}, {4, 4}, {2, 3}, {4, 7}, {2, 2}, {4, 7}, {4, 0}, {4, 0}, {4, 0}, {4, 0},
    {4, 0}, {2, 2}, {4, 2}, {2, 0}, {2, 0}, {2, 0}, {2, 0}, {2, 2}, {2, 0}, {2, 2}, {2, 2}, {2, 2}, {2, 2}, {4, 3},
    {3, 3}, {4, 3}, {0, 0}, {2, 2}, {2, 2}, {2, 2}, {2, 2}, {2, 0}, {2, 3}, {3, 3}, {3, 3}, {4, 6}}};
 
 // Bauqualitäten der Gebäude
-constexpr helpers::EnumArray<BuildingQuality, BuildingType> SUPPRESS_UNUSED BUILDING_SIZE = {
+constexpr std::array<BuildingQuality, NUM_BUILTIN_BUILDINGS> SUPPRESS_UNUSED BUILTIN_BUILDING_SIZE = {
   {BuildingQuality::Castle, BuildingQuality::Hut,    BuildingQuality::Hut,     BuildingQuality::Hut,
    BuildingQuality::House,  BuildingQuality::Castle, BuildingQuality::House,   BuildingQuality::Castle,
    BuildingQuality::House,  BuildingQuality::Castle, BuildingQuality::Mine,    BuildingQuality::Mine,
@@ -31,7 +56,7 @@ constexpr helpers::EnumArray<BuildingQuality, BuildingType> SUPPRESS_UNUSED BUIL
    BuildingQuality::House,  BuildingQuality::House,  BuildingQuality::House,   BuildingQuality::Hut,
    BuildingQuality::House,  BuildingQuality::Castle, BuildingQuality::Castle,  BuildingQuality::Harbor}};
 
-const helpers::EnumArray<BldWorkDescription, BuildingType> SUPPRESS_UNUSED BLD_WORK_DESC = {{
+const std::array<BldWorkDescription, NUM_BUILTIN_BUILDINGS> SUPPRESS_UNUSED BUILTIN_BLD_WORK_DESC = {{
   {}, // HQ
   {Job::Private, std::nullopt, WaresNeeded(GoodType::Coins), 1},
   {Job::Private, std::nullopt, WaresNeeded(GoodType::Coins), 2},
@@ -116,6 +141,3 @@ constexpr std::array<DrawPoint, 4> SUPPRESS_UNUSED NUBIAN_MINE_FIRE = {{
   {30, -11},
   {32, -10},
 }};
-
-/// Hilfetexte für Gebäude
-extern const helpers::EnumArray<const char*, BuildingType> BUILDING_HELP_STRINGS;

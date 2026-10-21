@@ -48,11 +48,33 @@ enum class BuildingType : uint8_t
     Farm,           // 37
     DonkeyBreeder,  // 38
     HarborBuilding, // 39
+    // Buildings defined in lua by the civilization mode (see civ/Content.h). Unused unless defined.
+    Custom0,                   // 40
+    CustomLast = Custom0 + 31, // 71
 };
 
 constexpr auto maxEnumValue(BuildingType)
 {
-    return BuildingType::HarborBuilding;
+    return BuildingType::CustomLast;
+}
+
+/// Number of building slots which can be defined in lua (civilization mode)
+constexpr unsigned NUM_CUSTOM_BUILDINGS =
+  static_cast<unsigned>(BuildingType::CustomLast) - static_cast<unsigned>(BuildingType::Custom0) + 1u;
+/// Number of built-in building types (before the custom slots). Used e.g. for loading older savegames
+constexpr unsigned NUM_BUILTIN_BUILDINGS = static_cast<unsigned>(BuildingType::Custom0);
+constexpr bool isCustomBuilding(BuildingType bld)
+{
+    return bld >= BuildingType::Custom0 && bld <= BuildingType::CustomLast;
+}
+/// Index of a custom building slot (0..NUM_CUSTOM_BUILDINGS-1)
+constexpr unsigned getCustomBuildingIdx(BuildingType bld)
+{
+    return static_cast<unsigned>(bld) - static_cast<unsigned>(BuildingType::Custom0);
+}
+constexpr BuildingType getCustomBuilding(unsigned idx)
+{
+    return BuildingType(static_cast<unsigned>(BuildingType::Custom0) + idx);
 }
 
 /// Number of NOTHING entries (currently unused buildings)

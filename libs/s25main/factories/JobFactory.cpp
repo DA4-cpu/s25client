@@ -21,6 +21,7 @@
 #include "figures/nofCarrier.h"
 #include "figures/nofCatapultMan.h"
 #include "figures/nofCharburner.h"
+#include "figures/nofCustomWorker.h"
 #include "figures/nofDonkeybreeder.h"
 #include "figures/nofFarmer.h"
 #include "figures/nofFisher.h"
@@ -57,6 +58,9 @@ std::unique_ptr<noFigure> JobFactory::CreateJob(const Job job_id, const MapPoint
 {
     if(nobBaseWarehouse::isStorehouseGOT(goal.GetGOT()))
         return std::make_unique<nofPassiveWorker>(job_id, pt, player, &goal);
+    // Workers of workshops defined in lua (civilization mode)
+    if(isCustomJob(job_id))
+        return std::make_unique<nofCustomWorker>(job_id, pt, player, &checkedCast<nobUsual>(goal));
     switch(job_id)
     {
         case Job::Builder:
@@ -124,6 +128,9 @@ std::unique_ptr<noFigure> JobFactory::CreateJob(const Job job_id, const MapPoint
         case Job::BoatCarrier:
             throw std::logic_error("Cannot create a boat carrier job (try creating Job::Helper).");
             break;
+        case Job::Custom0:
+        case Job::CustomLast:
+        default: break; // Handled above
     }
     throw std::logic_error("Invalid job type " + helpers::toString(job_id));
 }

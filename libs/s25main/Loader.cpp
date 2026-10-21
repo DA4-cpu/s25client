@@ -151,6 +151,7 @@ glArchivItem_Bitmap* Loader::GetNationImage(Nation nation, unsigned nr)
 
 glArchivItem_Bitmap* Loader::GetNationIcon(Nation nation, BuildingType bld)
 {
+    bld = civ::getLook(bld);
     if(bld == BuildingType::Charburner)
         return LOADER.GetImageN("charburner", rttr::enum_cast(nation) * 8 + 8);
     else
@@ -159,6 +160,7 @@ glArchivItem_Bitmap* Loader::GetNationIcon(Nation nation, BuildingType bld)
 
 ITexture* Loader::GetBuildingTex(Nation nation, BuildingType bld)
 {
+    bld = civ::getLook(bld);
     if(bld == BuildingType::Charburner)
     {
         unsigned id = rttr::enum_cast(nation) * 8;
@@ -185,6 +187,7 @@ ITexture* Loader::GetMapTexture(unsigned nr)
 
 ITexture* Loader::GetWareTex(GoodType ware)
 {
+    ware = civ::getLook(ware);
     if(wineaddon::isWineAddonGoodType(ware))
         return wineaddon::GetWareTex(ware);
     else if(leatheraddon::isLeatherAddonGoodType(ware))
@@ -195,6 +198,7 @@ ITexture* Loader::GetWareTex(GoodType ware)
 
 ITexture* Loader::GetWareStackTex(GoodType ware)
 {
+    ware = civ::getLook(ware);
     if(wineaddon::isWineAddonGoodType(ware))
         return wineaddon::GetWareStackTex(ware);
     else if(leatheraddon::isLeatherAddonGoodType(ware))
@@ -205,6 +209,7 @@ ITexture* Loader::GetWareStackTex(GoodType ware)
 
 ITexture* Loader::GetWareDonkeyTex(GoodType ware)
 {
+    ware = civ::getLook(ware);
     if(wineaddon::isWineAddonGoodType(ware))
         return wineaddon::GetWareDonkeyTex(ware);
     if(leatheraddon::isLeatherAddonGoodType(ware))
@@ -215,6 +220,7 @@ ITexture* Loader::GetWareDonkeyTex(GoodType ware)
 
 ITexture* Loader::GetJobTex(Job job)
 {
+    job = civ::getLook(job);
     if(wineaddon::isWineAddonJobType(job))
         return wineaddon::GetJobTex(job);
     else if(leatheraddon::isLeatherAddonJobType(job))
@@ -636,6 +642,9 @@ void Loader::fillCaches()
         // BUILDINGS
         for(const auto type : helpers::enumRange<BuildingType>())
         {
+            // Custom buildings (civilization mode) use the sprites of their "look" building
+            if(isCustomBuilding(type))
+                continue;
             BuildingSprites& sprites = building_cache[nation][type];
 
             sprites.building.reset();
@@ -697,6 +706,9 @@ void Loader::fillCaches()
         // Bobs from jobs.bob.
         for(const auto job : helpers::enumRange<Job>())
         {
+            // Custom jobs (civilization mode) use the sprites of their "look" job
+            if(isCustomJob(job))
+                continue;
             for(Direction dir : helpers::EnumRange<Direction>{})
             {
                 for(const auto ani_step : helpers::range(8u))
@@ -903,11 +915,14 @@ void Loader::fillCaches()
     {
         for(const auto ware : helpers::EnumRange<GoodType>{})
         {
+            // Custom wares (civilization mode) use the sprites of their "look" ware
+            if(isCustomGood(ware))
+                continue;
             for(Direction dir : helpers::EnumRange<Direction>{})
             {
                 for(const auto ani_step : helpers::range(8u))
                 {
-                    glSmartBitmap& bmp = getCarrierSprite(ware, fat, dir, ani_step);
+                    glSmartBitmap& bmp = carrier_cache[fat][ware][dir][ani_step];
                     bmp.reset();
 
                     // Japanese shield is missing

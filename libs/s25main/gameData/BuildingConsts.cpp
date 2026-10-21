@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "BuildingConsts.h"
+#include "civ/Content.h"
 #include "mygettext/mygettext.h"
 #include <type_traits>
 
-const helpers::EnumArray<const char*, BuildingType> BUILDING_NAMES = {
+namespace {
+const std::array<const char*, NUM_BUILTIN_BUILDINGS> builtinBuildingNames = {{
   gettext_noop("Headquarters"),
   gettext_noop("Barracks"),
   gettext_noop("Guardhouse"),
@@ -47,9 +49,9 @@ const helpers::EnumArray<const char*, BuildingType> BUILDING_NAMES = {
   gettext_noop("Farm"),
   gettext_noop("Donkey breeding"),
   gettext_noop("Harbor building"),
-};
+}};
 
-const helpers::EnumArray<const char*, BuildingType> BUILDING_HELP_STRINGS = {{
+const std::array<const char*, NUM_BUILTIN_BUILDINGS> builtinBuildingHelp = {{
   // Headquarters
   gettext_noop("The headquarters represents the "
                "center of your realm. The large "
@@ -321,6 +323,54 @@ const helpers::EnumArray<const char*, BuildingType> BUILDING_HELP_STRINGS = {{
                "icon followed by the desired "
                "merchandise or job symbol."),
 }};
+} // namespace
+
+const BuildingNamesTable BUILDING_NAMES{};
+const BuildingHelpTable BUILDING_HELP_STRINGS{};
+const BuildingCostTable BUILDING_COSTS{};
+const BuildingSizeTable BUILDING_SIZE{};
+const BuildingWorkDescTable BLD_WORK_DESC{};
+
+const char* BuildingNamesTable::operator[](BuildingType bld) const
+{
+    if(!isCustomBuilding(bld))
+        return builtinBuildingNames[static_cast<unsigned>(bld)];
+    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
+    return custom ? custom->title.c_str() : "";
+}
+
+const char* BuildingHelpTable::operator[](BuildingType bld) const
+{
+    if(!isCustomBuilding(bld))
+        return builtinBuildingHelp[static_cast<unsigned>(bld)];
+    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
+    return custom ? custom->description.c_str() : "";
+}
+
+BuildingCost BuildingCostTable::operator[](BuildingType bld) const
+{
+    if(!isCustomBuilding(bld))
+        return BUILTIN_BUILDING_COSTS[static_cast<unsigned>(bld)];
+    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
+    return custom ? custom->cost : BuildingCost{0, 0};
+}
+
+BuildingQuality BuildingSizeTable::operator[](BuildingType bld) const
+{
+    if(!isCustomBuilding(bld))
+        return BUILTIN_BUILDING_SIZE[static_cast<unsigned>(bld)];
+    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
+    return custom ? custom->size : BuildingQuality::Nothing;
+}
+
+const BldWorkDescription& BuildingWorkDescTable::operator[](BuildingType bld) const
+{
+    static const BldWorkDescription noWork{};
+    if(!isCustomBuilding(bld))
+        return BUILTIN_BLD_WORK_DESC[static_cast<unsigned>(bld)];
+    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
+    return custom ? custom->workDesc : noWork;
+}
 
 const helpers::MultiEnumArray<SmokeConst, Nation, BuildingType> BUILDING_SMOKE_CONSTS = []() {
     std::remove_const_t<decltype(BUILDING_SMOKE_CONSTS)> result{};

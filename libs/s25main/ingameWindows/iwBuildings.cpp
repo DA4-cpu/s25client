@@ -17,6 +17,7 @@
 #include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "controls/ctrlComboBox.h"
 #include "controls/ctrlImageButton.h"
 #include "files.h"
@@ -56,6 +57,9 @@ void iwBuildings::setBuildingOrder()
     };
 
     helpers::erase_if(bts, makeIsUnusedBuilding(gwv.GetWorld().GetGGS()));
+    // Workshops defined in lua (civilization mode)
+    for(unsigned i = 0; i < civ::getActiveContent().GetNumBuildings(); ++i)
+        bts.push_back(getCustomBuilding(i));
 }
 
 // Abstand des ersten Icons vom linken oberen Fensterrand

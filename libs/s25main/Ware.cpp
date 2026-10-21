@@ -90,6 +90,11 @@ Ware::Ware(SerializedGameData& sgd, const unsigned obj_id)
               // The old GoodType::Nothing is now GoodType::Skins
               if(ware == GoodType::Skins)
                   ware = GoodType::Nothing;
+          } else if(sgd.GetGameDataVersion() < 18)
+          {
+              // The old GoodType::Nothing is now the first custom ware slot (civilization mode)
+              if(ware == GoodType::Custom0)
+                  ware = GoodType::Nothing;
           }
           return ware;
       }()),

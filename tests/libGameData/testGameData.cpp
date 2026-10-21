@@ -9,6 +9,7 @@
 #include "helpers/containerUtils.h"
 #include "legacy/TerrainData.h"
 #include "lua/GameDataLoader.h"
+#include "gameData/CivContentDesc.h"
 #include "gameData/EdgeDesc.h"
 #include "gameData/TechnologyDesc.h"
 #include "gameData/TerrainDesc.h"
@@ -215,6 +216,116 @@ rttr:AddTechnology{ name = "a" })");
     // Defined twice
     expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
 rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 3 } })");
+}
+
+BOOST_AUTO_TEST_CASE(LoadWaresAndWorkshops)
+{
+    rttr::test::TmpFolder tmp;
+    {
+        bnw::ofstream file(tmp / "default.lua");
+        file << R"(
+rttr:AddWare{ name = "Raw", title = "Rohstoff", kind = "RawKind", properties = { "A", "B" }, look = "Stones",
+              transport = "Stones", knowledge = { LWP = 1 } }
+rttr:AddWare{ name = "Product", look = "Boards", transport = "Boards" }
+rttr:SetWareTags{ Boards = { kind = "Bretter", properties = { "Nadelholz" } } }
+rttr:AddWorkshop{ name = "Shop", title = "Werkstatt", description = "Desc", size = "medium",
+                  cost = { Boards = 2, Stones = 1 }, look = "Sawmill",
+                  worker = { title = "Arbeiter", tool = "none", look = "Carpenter" },
+                  inputs = { "Raw", { "Bretter", "Nadelholz" } }, consume = "any", output = "Product",
+                  inheritProperties = true, storage = 4, workTime = 20, waitTime = 5 }
+rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = { "Product" }, workTime = 1,
+                  worker = { tool = "Hammer", look = "Helper" } }
+)";
+    }
+    WorldDescription desc;
+    GameDataLoader loader(desc, tmp);
+    BOOST_TEST_REQUIRE(loader.Load());
+    BOOST_TEST_REQUIRE(desc.wares.size() == 2u);
+    const WareDesc& raw = desc.wares[0];
+    BOOST_TEST(raw.name == "Raw");
+    BOOST_TEST(raw.title == "Rohstoff");
+    BOOST_TEST(raw.kind == "RawKind");
+    BOOST_TEST((raw.properties == std::vector<std::string>{"A", "B"}));
+    BOOST_TEST(raw.look == "Stones");
+    BOOST_TEST(raw.transport == "Stones");
+    BOOST_TEST((raw.knowledge == KnowledgeValues{1, 0, 0}));
+    BOOST_TEST(desc.wares[1].title == "Product"); // Default: name
+    BOOST_TEST_REQUIRE(desc.wareTags.count("Boards") == 1u);
+    BOOST_TEST(desc.wareTags.at("Boards").kind == "Bretter");
+    BOOST_TEST((desc.wareTags.at("Boards").properties == std::vector<std::string>{"Nadelholz"}));
+
+    BOOST_TEST_REQUIRE(desc.workshops.size() == 2u);
+    const WorkshopDesc& shop = desc.workshops[0];
+    BOOST_TEST(shop.name == "Shop");
+    BOOST_TEST(shop.title == "Werkstatt");
+    BOOST_TEST(shop.description == "Desc");
+    BOOST_TEST(shop.size == "medium");
+    BOOST_TEST(shop.cost.at("Boards") == 2u);
+    BOOST_TEST(shop.look == "Sawmill");
+    BOOST_TEST(shop.worker.title == "Arbeiter");
+    BOOST_TEST(shop.worker.tool == "none");
+    BOOST_TEST(shop.worker.look == "Carpenter");
+    BOOST_TEST_REQUIRE(shop.inputs.size() == 2u);
+    BOOST_TEST((shop.inputs[0] == TagQuery{"Raw"}));
+    BOOST_TEST((shop.inputs[1] == TagQuery{"Bretter", "Nadelholz"}));
+    BOOST_TEST(!shop.consumeEach);
+    BOOST_TEST((shop.output == TagQuery{"Product"}));
+    BOOST_TEST(shop.inheritProperties);
+    BOOST_TEST(shop.storage == 4u);
+    BOOST_TEST(shop.workTime == 20u);
+    BOOST_TEST(shop.waitTime == 5u);
+    const WorkshopDesc& shop2 = desc.workshops[1];
+    BOOST_TEST(shop2.inputs.empty());
+    BOOST_TEST(shop2.consumeEach);
+    BOOST_TEST(shop2.worker.title == "Shop2");
+    BOOST_TEST(shop2.storage == 6u);
+}
+
+BOOST_AUTO_TEST_CASE(DetectInvalidWaresAndWorkshops)
+{
+    const auto expectLoadFailure = [](const std::string& content) {
+        rttr::test::TmpFolder tmp;
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << content;
+        }
+        WorldDescription desc;
+        GameDataLoader loader(desc, tmp);
+        rttr::test::LogAccessor logAcc;
+        BOOST_TEST(!loader.Load());
+    };
+    const std::string worker = R"(worker = { tool = "none", look = "Helper" })";
+    // Invalid characters in the name
+    expectLoadFailure(R"(rttr:AddWare{ name = "Kno chen", look = "Stones", transport = "Stones" })");
+    expectLoadFailure(R"(rttr:AddWare{ name = "Bäume", look = "Stones", transport = "Stones" })");
+    // Missing look or transport
+    expectLoadFailure(R"(rttr:AddWare{ name = "Bones", transport = "Stones" })");
+    expectLoadFailure(R"(rttr:AddWare{ name = "Bones", look = "Stones" })");
+    // Typo
+    expectLoadFailure(R"(rttr:AddWare{ name = "Bones", look = "Stones", transport = "Stones", kinf = "X" })");
+    // Tags must be tables
+    expectLoadFailure(R"(rttr:SetWareTags{ Boards = "Bretter" })");
+    // Workshops
+    expectLoadFailure(
+      R"(rttr:AddWorkshop{ name = "W", size = "huge", look = "Sawmill", output = "Boards", workTime = 1, )" + worker
+      + " }");
+    expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", workTime = 1, )" + worker
+                      + " }");
+    expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", )" + worker
+                      + " }");
+    expectLoadFailure(
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1 })");
+    expectLoadFailure(
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1,
+                      inputs = { "A", "B", "C", "D" }, )"
+      + worker + " }");
+    expectLoadFailure(
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1,
+                      consume = "all", )"
+      + worker + " }");
+    expectLoadFailure(
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = { 1 }, workTime = 1, )" + worker
+      + " }");
 }
 
 BOOST_AUTO_TEST_CASE(DetectRecursion)

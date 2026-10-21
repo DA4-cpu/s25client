@@ -10,6 +10,7 @@
 #include "Loader.h"
 #include "WineLoader.h"
 #include "addons/const_addons.h"
+#include "civ/Content.h"
 #include "files.h"
 #include "helpers/mathFuncs.h"
 #include "world/GameWorld.h"
@@ -41,6 +42,9 @@ void iwBuildingProductivities::setBuildingOrder()
 {
     usedIcons.assign(allIcons.begin(), allIcons.end());
     helpers::erase_if(usedIcons, makeIsUnusedBuilding(player.GetGameWorld().GetGGS()));
+    // Workshops defined in lua (civilization mode)
+    for(unsigned i = 0; i < civ::getActiveContent().GetNumBuildings(); ++i)
+        usedIcons.push_back(getCustomBuilding(i));
 }
 
 /// Abstand vom linken, oberen Fensterrand

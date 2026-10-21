@@ -49,7 +49,10 @@ void GameDataLoader::Register(kaguya::State& state)
                                      .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
                                      .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
                                      .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
-                                     .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge));
+                                     .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
+                                     .addFunction("AddWare", &GameDataLoader::AddWare)
+                                     .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
+                                     .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop));
 }
 
 class LuaIncludeError : public std::runtime_error
@@ -117,6 +120,33 @@ void GameDataLoader::AddTerrain(const kaguya::LuaTable& data)
 void GameDataLoader::AddTechnology(const kaguya::LuaTable& data)
 {
     worldDesc_.technologies.add(TechnologyDesc(data, worldDesc_));
+}
+
+void GameDataLoader::AddWare(const kaguya::LuaTable& data)
+{
+    worldDesc_.wares.emplace_back(data);
+}
+
+void GameDataLoader::SetWareTags(const kaguya::LuaTable& data)
+{
+    for(const std::string& ware : data.keys<std::string>())
+    {
+        const kaguya::LuaRef value = data[ware];
+        if(value.type() != kaguya::LuaRef::TYPE_TABLE)
+            throw GameDataError("Tags of ware '" + ware + "' must be a table like { kind = \"Bretter\" }");
+        CheckedLuaTable tagData(value.get<kaguya::LuaTable>());
+        WareTagsDesc tags;
+        tags.kind = tagData.getOrDefault("kind", std::string());
+        tags.properties = tagData.getOrDefault("properties", std::vector<std::string>());
+        tagData.checkUnused();
+        if(!worldDesc_.wareTags.emplace(ware, tags).second)
+            throw GameDataError("Tags of ware '" + ware + "' are defined twice");
+    }
+}
+
+void GameDataLoader::AddWorkshop(const kaguya::LuaTable& data)
+{
+    worldDesc_.workshops.emplace_back(data);
 }
 
 void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)

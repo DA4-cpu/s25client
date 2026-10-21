@@ -4,8 +4,12 @@
 
 #pragma once
 
-#include "helpers/EnumArray.h"
 #include "gameTypes/GoodTypes.h"
 #include <string>
 
-extern const helpers::EnumArray<std::string, GoodType> WARE_NAMES;
+/// Names of the wares. Custom wares (civilization mode): Title from lua, empty if the slot is unused
+struct WareNamesTable
+{
+    const std::string& operator[](GoodType good) const;
+};
+extern const WareNamesTable WARE_NAMES;

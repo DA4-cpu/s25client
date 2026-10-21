@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "helpers/OptionalEnum.h"
 #include "noBuilding.h"
 #include "gameTypes/GoodTypes.h"
 #include <array>
@@ -45,6 +46,9 @@ protected:
     unsigned sinceNotWorking;
     /// Did we notify the player that we are out of resources?
     bool outOfRessourcesMsgSent;
+    /// Ware consumed by the last call to ConsumeWares (first one if several). Not serialized, read right after
+    /// consuming
+    helpers::OptionalEnum<GoodType> lastConsumedWare_;
 
     friend class SerializedGameData;
     friend class BuildingFactory;
@@ -89,6 +93,8 @@ public:
     bool WaresAvailable();
     /// Verbraucht Waren
     void ConsumeWares();
+    /// Ware consumed by the last call to ConsumeWares (first one if several) or nothing if nothing was consumed
+    helpers::OptionalEnum<GoodType> GetLastConsumedWare() const { return lastConsumedWare_; }
 
     /// Berechnet Punktewertung für Ware type
     unsigned CalcDistributionPoints(GoodType type);

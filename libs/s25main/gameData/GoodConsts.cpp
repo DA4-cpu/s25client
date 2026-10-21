@@ -3,9 +3,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "GoodConsts.h"
+#include "civ/Content.h"
 #include "mygettext/mygettext.h"
+#include <array>
 
-const helpers::EnumArray<std::string, GoodType> WARE_NAMES = {{
+namespace {
+const std::array<std::string, NUM_BUILTIN_GOODS> builtinWareNames = {{
   /*  0 */ gettext_noop("Beer"),         // Bier
   /*  1 */ gettext_noop("Tongs"),        // Zange
   /*  2 */ gettext_noop("Hammer"),       // Hammer
@@ -47,3 +50,19 @@ const helpers::EnumArray<std::string, GoodType> WARE_NAMES = {{
   /* 38 */ gettext_noop("Leather"),
   /* 39 */ gettext_noop("Armor"),
 }};
+} // namespace
+
+const WareNamesTable WARE_NAMES{};
+
+const std::string& WareNamesTable::operator[](GoodType good) const
+{
+    static const std::string empty;
+    if(isCustomGood(good))
+    {
+        const civ::CustomWare* ware = civ::getActiveContent().GetWare(good);
+        return ware ? ware->title : empty;
+    }
+    if(good == GoodType::Nothing)
+        return empty;
+    return builtinWareNames[static_cast<unsigned>(good)];
+}

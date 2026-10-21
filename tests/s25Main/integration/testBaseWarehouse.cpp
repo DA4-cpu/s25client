@@ -230,13 +230,13 @@ BOOST_FIXTURE_TEST_CASE(CollectGoodsAndFigures, WorldWithGCExecution1P)
     GoodsAndPeopleCounts inv;
     for(const auto job : helpers::enumRange<Job>())
     {
-        if(job == Job::BoatCarrier)
+        if(job == Job::BoatCarrier || isCustomJob(job)) // Custom slots are only used by the civilization mode
             continue;
         inv[job] = 1;
     }
     for(const auto good : helpers::enumRange<GoodType>())
     {
-        if(ConvertShields(good) != good)
+        if(ConvertShields(good) != good || isCustomGood(good)) // Custom slots: see above
             continue;
         inv[good] = 1;
     }
@@ -244,13 +244,13 @@ BOOST_FIXTURE_TEST_CASE(CollectGoodsAndFigures, WorldWithGCExecution1P)
 
     for(const auto job : helpers::enumRange<Job>())
     {
-        if(job == Job::BoatCarrier)
+        if(job == Job::BoatCarrier || isCustomJob(job)) // Custom slots are only used by the civilization mode
             continue;
         SetInventorySetting(wh2Pos, job, EInventorySetting::Collect);
     }
     for(const auto good : helpers::enumRange<GoodType>())
     {
-        if(ConvertShields(good) != good)
+        if(ConvertShields(good) != good || isCustomGood(good)) // Custom slots: see above
             continue;
         SetInventorySetting(wh2Pos, good, EInventorySetting::Collect);
     }
@@ -258,11 +258,11 @@ BOOST_FIXTURE_TEST_CASE(CollectGoodsAndFigures, WorldWithGCExecution1P)
     RTTR_EXEC_TILL(500, wh2->GetNumVisualFigures(Job::Helper) > 2);
     SetInventorySetting(wh2Pos, Job::Helper, EInventorySetting::Stop);
 
-    RTTR_EXEC_TILL(5000, wh2->GetNumVisualWares(maxEnumValue(GoodType{})) > 0);
-    RTTR_EXEC_TILL(5000, wh2->GetNumVisualFigures(maxEnumValue(Job{})) > 0);
+    RTTR_EXEC_TILL(5000, wh2->GetNumVisualWares(GoodType(NUM_BUILTIN_GOODS - 1)) > 0);
+    RTTR_EXEC_TILL(5000, wh2->GetNumVisualFigures(Job(NUM_BUILTIN_JOBS - 1)) > 0);
     for(const auto job : helpers::enumRange<Job>())
     {
-        if(job == Job::BoatCarrier)
+        if(job == Job::BoatCarrier || isCustomJob(job)) // Custom slots are only used by the civilization mode
             continue;
         BOOST_TEST_INFO_SCOPE("Job: " << rttr::enum_cast(job));
         if(job == Job::Helper) // Helpers get recruited continuously
@@ -277,7 +277,7 @@ BOOST_FIXTURE_TEST_CASE(CollectGoodsAndFigures, WorldWithGCExecution1P)
     }
     for(const auto good : helpers::enumRange<GoodType>())
     {
-        if(ConvertShields(good) != good)
+        if(ConvertShields(good) != good || isCustomGood(good)) // Custom slots: see above
             continue;
         BOOST_TEST_INFO_SCOPE("Good: " << rttr::enum_cast(good));
         BOOST_TEST(wh2->GetNumVisualWares(good) == 1u);

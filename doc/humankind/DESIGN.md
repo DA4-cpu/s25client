@@ -136,9 +136,10 @@ null. `ai-battle` zeigt die WP jedes Spielers als „verfügbar/gesamt“ an.
 | Forschungs-Logik | `libs/s25main/civ/Research.*` (aufgerufen aus `Game::RunGF`) |
 | Spielbefehl | `gc::SetResearch` (`GameCommands.h`) |
 | Fenster | `libs/s25main/ingameWindows/iwResearch.*` (Hauptauswahl → „Forschung“) |
-| Tests | `tests/s25Main/integration/testResearch.cpp`, `tests/libGameData/testGameData.cpp` |
+| Tests | `tests/s25Main/integration/testResearch.cpp`, `testCivContent.cpp`, `tests/libGameData/testGameData.cpp` |
 | Wissenspunkte (Arten, Berechnung) | `libs/s25main/civ/Knowledge.*` |
-| Inhalte | `data/RTTR/gamedata/civ/techtree.lua`, `data/RTTR/gamedata/civ/knowledge.lua` |
+| Waren, Werkstätten, Tags aus Lua | `libs/libGamedata/gameData/CivContentDesc.*`, `libs/s25main/civ/Content.*`, `civ/Looks.h`, `figures/nofCustomWorker.*` |
+| Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua`, `knowledge.lua`, `techtree.lua`) |
 
 ## Wissenspunkte
 
@@ -179,6 +180,54 @@ Spähturm 1, Brauerei 1, Katapult −5, Waffenschmiede 1, Lederei 3.
 
 Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Werte legt ab jetzt der Nutzer fest.
 
+## Datenschicht: Waren, Werkstätten und Tags aus Lua
+
+### Prinzip
+
+- Die Enums `GoodType`, `BuildingType` und `Job` haben **freie Plätze** (Slots) hinter den eingebauten Werten:
+  64 Waren (`GoodType::Custom0` …), 32 Gebäude (`BuildingType::Custom0` …) und 32 Berufe (`Job::Custom0` …, einer pro
+  Werkstatt). Lua belegt sie in der Reihenfolge der Definition. Unbenutzte Plätze sind überall ausgeblendet.
+- `civ::Content` (`libs/s25main/civ/Content.*`) löst die Lua-Definitionen auf. Der `TechTree` besitzt den Content; im
+  laufenden Spiel ist er „aktiv“ (`civ::getActiveContent()`), damit globale Tabellen ohne Zugriff auf die Welt die
+  neuen Einträge kennen: `WARE_NAMES`, `BUILDING_NAMES`, `BUILDING_COSTS`, `BUILDING_SIZE`, `BLD_WORK_DESC`,
+  `JOB_NAMES`, `JOB_CONSTS`, `JOB_SPRITE_CONSTS`, `STD_TRANSPORT_PRIO` liefern für die Slots die Werte aus Lua.
+- **Platzhaltergrafik:** Jede neue Ware, Werkstatt und jeder Arbeiter nennt ein eingebautes Vorbild (`look`), dessen
+  Grafiken verwendet werden (`civ::getLook`). Eigene Grafiken folgen später.
+- **Werkstätten** sind normale Produktionsgebäude (`nobUsual`) mit dem Arbeiter `nofCustomWorker`: Er holt die
+  Eingangswaren, arbeitet `workTime` Sekunden im Gebäude und trägt das Produkt heraus. Die Werkstatt wird
+  automatisch als Abnehmer ihrer Eingangswaren eingetragen.
+- **Tags:** Jede Ware hat ihren Bezeichner als Name-Tag, dazu optional Warenart (`kind`) und Eigenschaften
+  (`properties`). Eine Tag-Abfrage trifft alle Waren, die alle genannten Tags haben. Mit `inheritProperties` bekommt
+  das Produkt die Eigenschaften der verbrauchten Ware (Nadelholz → Nadelholzbretter).
+- Bisherige Grenzen: höchstens 3 Eingangswaren pro Werkstatt (bei `consume = "each"` trifft jeder Eingang genau eine
+  Ware, bei `"any"` wird wie bei Minen eine Ware des größten Vorrats verbraucht); Baukosten nur Bretter und Steine;
+  Arbeiter ohne eigene Arbeitsanimation.
+- **Spielstände:** Version 18. Gespeichert wird die Liste der belegten Slots; ein Spielstand lädt nur, wenn die
+  Lua-Definitionen dazu passen. Neue Waren und Werkstätten dürfen hinten angefügt werden, bestehende dürfen nicht
+  gelöscht, umbenannt oder umsortiert werden. Ältere Spielstände (ohne Slots) laden weiter.
+- In der Lager- und Warenübersicht stehen neue Waren und Arbeiter auf eigenen Seiten. Neue Werkstätten erscheinen im
+  Baumenü (nach Größe), in der Gebäudestatistik, der Produktivitätsübersicht und der Baureihenfolge.
+
+### Datenformat
+
+Dateien: `data/RTTR/gamedata/civ/wares.lua` und `civ/workshops.lua` (dort ausführlich erklärt, mit Beispiel).
+
+```lua
+rttr:AddWare{ name = "NeedleWood", title = "Nadelholz", kind = "Holz", properties = { "Nadelholz" },
+              look = "Wood", transport = "Wood" }
+rttr:AddWare{ name = "NeedleBoards", title = "Nadelholzbretter", kind = "Bretter", properties = { "Nadelholz" },
+              look = "Boards", transport = "Boards" }
+rttr:SetWareTags{ Fish = { kind = "Nahrung" } }   -- Tags für eingebaute Waren
+
+rttr:AddWorkshop{
+    name = "Sawmill2", title = "Sägewerk", size = "medium", cost = { Boards = 2, Stones = 2 }, look = "Sawmill",
+    worker = { title = "Säger", tool = "Saw", look = "Carpenter" },
+    inputs = { "Holz" }, consume = "any", output = "Bretter", inheritProperties = true, workTime = 20,
+}
+```
+
+Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt der Nutzer fest.
+
 ## Phasen (Roadmap)
 
 1. **Fundament** – Addon, Lua-Technologiebaum, Forschung mit Warenkosten, Freischalten von S2-Gebäuden, Exklusivität,
@@ -186,6 +235,7 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
 2. **Wissen**
    1. Wissenspunkte aus Gebäuden, Technologiekosten in WP, Anzeige im Forschungsfenster, KI. *(fertig, siehe oben)*
    2. Datenschicht: neue Waren, einfache Werkstätten (Eingang → Ausgang) und Tags in Lua, Platzhaltergrafik.
+      *(fertig, siehe oben)*
    3. Knochen-Kette als erster Durchstich: Knochen von Jäger und Fleischerei, Knochenschnitzer, geritzte Knochen
       (LWP/IWP/MWP) über den Regler „Wissen“, Medien-WP in Lagern und Bibliothek (Ära 2).
 3. **Neue Rohstoffe und Warenketten** – Lehm (Kartenobjekt, Lehmgrube), Ton, Tontafeln, Ziegel, Vasen; Lehm und Ziegel

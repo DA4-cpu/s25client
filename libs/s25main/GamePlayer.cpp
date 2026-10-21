@@ -21,6 +21,7 @@
 #include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "civ/Research.h"
 #include "figures/nofCarrier.h"
 #include "figures/nofFlagWorker.h"
@@ -59,7 +60,7 @@ GamePlayer::GamePlayer(unsigned playerId, const PlayerInfo& playerInfo, GameWorl
     LoadStandardDistribution();
     useCustomBuildOrder_ = false;
     build_order = GetStandardBuildOrder();
-    transportPrio = STD_TRANSPORT_PRIO;
+    transportPrio = BUILTIN_STD_TRANSPORT_PRIO;
     LoadStandardMilitarySettings();
     LoadStandardToolSettings();
 
@@ -237,8 +238,29 @@ void GamePlayer::Serialize(SerializedGameData& sgd) const
     const bool hasResearch = civ::isEnabled(world);
     sgd.PushBool(hasResearch);
     if(hasResearch)
+    {
         research_.Serialize(sgd, world.GetTechTree());
+        // Wares and buildings defined in lua use slots in order of definition -> remember them to detect changes
+        const std::vector<std::string> signature = world.GetTechTree().GetContent().GetSignature();
+        sgd.PushVarSize(signature.size());
+        for(const std::string& entry : signature)
+            sgd.PushString(entry);
+    }
 }
+
+namespace {
+/// Version 18 added slots for wares, buildings and jobs defined in lua (civilization mode) after the built-in ones.
+/// Read only the built-in part of a container saved by an older version (the rest keeps its value)
+template<class T_Container>
+void popBuiltinPart(SerializedGameData& sgd, T_Container& container, size_t numBuiltin)
+{
+    std::vector<typename T_Container::value_type> raw(numBuiltin);
+    helpers::popContainer(sgd, raw, true);
+    std::copy(raw.begin(), raw.end(), container.begin());
+}
+/// Build orders contain all building types except the HQ and the unused one
+constexpr size_t NUM_BUILTIN_BUILD_ORDER_ENTRIES = NUM_BUILTIN_BUILDINGS - NUM_UNUSED_BLD_TYPES - 1;
+} // namespace
 
 void GamePlayer::Deserialize(SerializedGameData& sgd)
 {
@@ -281,8 +303,14 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
         if(sgd.GetGameDataVersion() < 12 && leatheraddon::isLeatherAddonGoodType(i))
             continue;
 
+        if(sgd.GetGameDataVersion() < 18 && isCustomGood(i))
+            continue;
+
         Distribution& dist = distribution[i];
-        helpers::popContainer(sgd, dist.percent_buildings);
+        if(sgd.GetGameDataVersion() < 18)
+            popBuiltinPart(sgd, dist.percent_buildings, NUM_BUILTIN_BUILDINGS);
+        else
+            helpers::popContainer(sgd, dist.percent_buildings);
         // Set standard value otherwise its zero and Slaughterhouse never gets ham
         // because the ham distribution was not there in earlier versions
         if(sgd.GetGameDataVersion() < 12 && i == GoodType::Ham)
@@ -308,7 +336,8 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
     {
         auto countOfNotAvailableBuildingsInSaveGame =
           sgd.GetGameDataVersion() < 11 ? numWineAndLeatherAddonBuildings : numLeatherAddonBuildings;
-        std::vector<BuildingType> build_order_raw(build_order.size() - countOfNotAvailableBuildingsInSaveGame);
+        std::vector<BuildingType> build_order_raw(NUM_BUILTIN_BUILD_ORDER_ENTRIES
+                                                  - countOfNotAvailableBuildingsInSaveGame);
         helpers::popContainer(sgd, build_order_raw, true);
 
         if(sgd.GetGameDataVersion() < 11)
@@ -327,16 +356,26 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
 
         auto countOfNotAvailableGoodsInSaveGame =
           sgd.GetGameDataVersion() < 11 ? numWineAndLeatherAddonGoods : numLeatherAddonGoods;
-        std::vector<uint8_t> transportPrio_raw(transportPrio.size() - countOfNotAvailableGoodsInSaveGame);
+        std::vector<uint8_t> transportPrio_raw(NUM_BUILTIN_GOODS - countOfNotAvailableGoodsInSaveGame);
         helpers::popContainer(sgd, transportPrio_raw, true);
         std::copy(transportPrio_raw.begin(), transportPrio_raw.end(), transportPrio.begin());
-        std::transform(transportPrio.begin(), transportPrio.end() - countOfNotAvailableGoodsInSaveGame,
-                       transportPrio.begin(),
-                       [](uint8_t& prio) { return prio < transportPrioOfLeatherworks ? prio : prio + 1; });
+        std::transform(
+          transportPrio.begin(), transportPrio.begin() + (NUM_BUILTIN_GOODS - countOfNotAvailableGoodsInSaveGame),
+          transportPrio.begin(), [](uint8_t& prio) { return prio < transportPrioOfLeatherworks ? prio : prio + 1; });
+    } else if(sgd.GetGameDataVersion() < 18)
+    {
+        popBuiltinPart(sgd, build_order, NUM_BUILTIN_BUILD_ORDER_ENTRIES);
+        popBuiltinPart(sgd, transportPrio, NUM_BUILTIN_GOODS);
     } else
     {
         helpers::popContainer(sgd, build_order);
         helpers::popContainer(sgd, transportPrio);
+    }
+    if(sgd.GetGameDataVersion() < 18)
+    {
+        // The custom building slots are not part of older build orders -> append them
+        for(unsigned i = 0; i < NUM_CUSTOM_BUILDINGS; ++i)
+            build_order[NUM_BUILTIN_BUILD_ORDER_ENTRIES + i] = getCustomBuilding(i);
     }
 
     helpers::popContainer(sgd, militarySettings_);
@@ -350,20 +389,23 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
     {
         auto countOfNotAvailableGoodsInSaveGame =
           sgd.GetGameDataVersion() < 11 ? numWineAndLeatherAddonGoods : numLeatherAddonGoods;
-        std::vector<unsigned int> global_inventory_good_raw(global_inventory.goods.size()
-                                                            - countOfNotAvailableGoodsInSaveGame);
+        std::vector<unsigned int> global_inventory_good_raw(NUM_BUILTIN_GOODS - countOfNotAvailableGoodsInSaveGame);
         helpers::popContainer(sgd, global_inventory_good_raw, true);
         std::copy(global_inventory_good_raw.begin(), global_inventory_good_raw.end(), global_inventory.goods.begin());
 
         auto countOfNotAvailableJobsInSaveGame =
           sgd.GetGameDataVersion() < 11 ? numWineAndLeatherAddonJobs : numLeatherAddonJobs;
-        std::vector<unsigned int> global_inventory_people_raw(global_inventory.people.size()
-                                                              - countOfNotAvailableJobsInSaveGame);
+        std::vector<unsigned int> global_inventory_people_raw(NUM_BUILTIN_JOBS - countOfNotAvailableJobsInSaveGame);
         helpers::popContainer(sgd, global_inventory_people_raw, true);
         std::copy(global_inventory_people_raw.begin(), global_inventory_people_raw.end(),
                   global_inventory.people.begin());
 
         std::fill(global_inventory.armoredSoldiers.begin(), global_inventory.armoredSoldiers.end(), 0);
+    } else if(sgd.GetGameDataVersion() < 18)
+    {
+        popBuiltinPart(sgd, global_inventory.goods, NUM_BUILTIN_GOODS);
+        popBuiltinPart(sgd, global_inventory.people, NUM_BUILTIN_JOBS);
+        helpers::popContainer(sgd, global_inventory.armoredSoldiers);
     } else
     {
         helpers::popContainer(sgd, global_inventory.goods);
@@ -401,7 +443,22 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
 
     research_ = civ::PlayerResearch();
     if(sgd.GetGameDataVersion() >= 16 && sgd.PopBool())
+    {
         research_.Deserialize(sgd, world.GetTechTree());
+        if(sgd.GetGameDataVersion() >= 18)
+        {
+            std::vector<std::string> savedSignature(sgd.PopVarSize());
+            for(std::string& entry : savedSignature)
+                entry = sgd.PopString();
+            // New definitions may be appended, but existing ones must stay in place
+            if(!world.GetTechTree().GetContent().IsCompatibleTo(savedSignature))
+            {
+                throw SerializedGameData::Error(
+                  "The wares/workshops defined in lua (civilization mode) do not match this savegame. "
+                  "New definitions may only be added at the end, existing ones must not be removed or reordered.");
+            }
+        }
+    }
 }
 
 template<class T_IsWarehouseGood>
@@ -1289,6 +1346,21 @@ unsigned GamePlayer::GetBuidingSitePriority(const noBuildingSite* building_site)
     RTTR_Assert(false);
     // We may want to multiply this value so don't return the absolute max value
     return std::numeric_limits<unsigned>::max() / 1000;
+}
+
+void GamePlayer::AddWareClient(GoodType ware, BuildingType bld)
+{
+    // All food is considered fish in the distribution table (see FindClientForWare)
+    if(ware == GoodType::Bread || ware == GoodType::Meat)
+        ware = GoodType::Fish;
+    std::vector<BuildingType>& clients = distribution[ware].client_buildings;
+    if(!helpers::contains(clients, bld))
+        clients.push_back(bld);
+}
+
+unsigned char GamePlayer::GetTransportPriority(GoodType ware) const
+{
+    return transportPrio[civ::getTransportLike(ware)];
 }
 
 void GamePlayer::ConvertTransportData(const TransportOrders& transport_data)

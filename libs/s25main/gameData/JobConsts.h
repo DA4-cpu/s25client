@@ -13,8 +13,6 @@
 #include <array>
 #include <optional>
 
-extern const helpers::EnumArray<std::string, Job> JOB_NAMES;
-
 /// Game data for each job
 struct JobConst
 {
@@ -42,8 +40,24 @@ public:
 };
 
 /// Data for each job
-extern const helpers::EnumArray<JobConst, Job> JOB_CONSTS;
-extern const helpers::EnumArray<JobSpriteData, Job> JOB_SPRITE_CONSTS;
+// The tables below are indexed by Job. The custom job slots of the civilization mode (workers of workshops defined
+// in lua, see civ/Content.h) take their values from the running game; unused slots return empty values.
+struct JobNamesTable
+{
+    const std::string& operator[](Job job) const;
+};
+struct JobConstsTable
+{
+    JobConst operator[](Job job) const;
+};
+struct JobSpriteConstsTable
+{
+    /// Custom jobs use the sprites of their "look" job
+    const JobSpriteData& operator[](Job job) const;
+};
+extern const JobNamesTable JOB_NAMES;
+extern const JobConstsTable JOB_CONSTS;
+extern const JobSpriteConstsTable JOB_SPRITE_CONSTS;
 
 /// Katapultmann-Wartezeit
 const unsigned CATAPULT_WAIT1_LENGTH = 1300; // eigenlich 310 - aber hochgestellt wegen zu schneller Warenverteilung

@@ -6,6 +6,7 @@
 #include "GamePlayer.h"
 #include "Loader.h"
 #include "buildings/nobBaseWarehouse.h"
+#include "civ/Content.h"
 #include "controls/ctrlComboBox.h"
 #include "controls/ctrlEdit.h"
 #include "controls/ctrlImage.h"
@@ -53,12 +54,17 @@ iwTrade::iwTrade(const nobBaseWarehouse& wh, const GameWorldViewer& gwv, GameCom
         // Don't add empty water
         if(i == GoodType::WaterEmpty)
             continue;
+        // Unused custom slots (civilization mode)
+        if(!civ::getActiveContent().IsUsed(i))
+            continue;
         wares.push_back(i);
     }
     for(const auto i : helpers::enumRange<Job>())
     {
         // Can't trade boat carriers
         if(i == Job::BoatCarrier)
+            continue;
+        if(!civ::getActiveContent().IsUsed(i))
             continue;
         jobs.push_back(i);
     }

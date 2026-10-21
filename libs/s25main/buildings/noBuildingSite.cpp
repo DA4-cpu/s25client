@@ -8,6 +8,7 @@
 #include "Loader.h"
 #include "SerializedGameData.h"
 #include "Ware.h"
+#include "civ/Content.h"
 #include "figures/nofBuilder.h"
 #include "figures/nofPlaner.h"
 #include "helpers/containerUtils.h"
@@ -222,8 +223,10 @@ void noBuildingSite::Draw(DrawPoint drawPt)
         progressRaw = std::min<unsigned>(build_progress, maxProgressRaw);
         progressBld = ((build_progress > maxProgressRaw) ? (build_progress - maxProgressRaw) : 0);
 
-        LOADER.building_cache[nation][bldType_].skeleton.drawPercent(drawPt, progressRaw * 100 / maxProgressRaw);
-        LOADER.building_cache[nation][bldType_].building.drawPercent(drawPt, progressBld * 100 / maxProgressBld);
+        LOADER.building_cache[nation][civ::getLook(bldType_)].skeleton.drawPercent(drawPt,
+                                                                                   progressRaw * 100 / maxProgressRaw);
+        LOADER.building_cache[nation][civ::getLook(bldType_)].building.drawPercent(drawPt,
+                                                                                   progressBld * 100 / maxProgressBld);
     }
 }
 

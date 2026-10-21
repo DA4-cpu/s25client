@@ -5,6 +5,9 @@
 #pragma once
 
 #include "IngameWindow.h"
+#include <optional>
+#include <utility>
+#include <vector>
 
 class glFont;
 struct Inventory;
@@ -18,6 +21,22 @@ protected:
     const Inventory* inventory; /// Warenbestand des aktuell angezeigten Spielers
     const GamePlayer* player;   /// aktuell angezeigter Spieler
     unsigned warePageID, peoplePageID;
+
+    /// Page showing wares or jobs (built-in ones or custom ones of the civilization mode)
+    struct InventoryPage
+    {
+        unsigned id;
+        bool isWare;
+        /// Enum value of the element with offset 0. Element controls have IDs 100*k + (value - firstValue)
+        unsigned firstValue;
+        /// Enum values shown on this page
+        std::vector<unsigned> values;
+    };
+    std::vector<InventoryPage> inventoryPages_;
+    /// The inventory page with the given ID or nullptr if it is another page
+    const InventoryPage* GetInventoryPage(unsigned pageId) const;
+    /// Page ID and element offset of the ware or job
+    std::optional<std::pair<unsigned, unsigned>> FindInventoryElement(bool isWare, unsigned value) const;
 
 public:
     iwWares(unsigned id, const DrawPoint& pos, unsigned additionalYSpace, const std::string& title,

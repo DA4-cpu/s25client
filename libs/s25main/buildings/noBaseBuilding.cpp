@@ -10,6 +10,7 @@
 #include "SerializedGameData.h"
 #include "Ware.h"
 #include "addons/const_addons.h"
+#include "civ/Content.h"
 #include "nobBaseWarehouse.h"
 #include "notifications/BuildingNote.h"
 #include "world/GameWorld.h"
@@ -23,7 +24,7 @@
 noBaseBuilding::noBaseBuilding(const NodalObjectType nop, const BuildingType type, const MapPoint pos,
                                const unsigned char player)
     : noRoadNode(nop, pos, player), bldType_(type), nation(world->GetPlayer(player).nation), door_point_x(1000000),
-      door_point_y(DOOR_CONSTS[world->GetPlayer(player).nation][type])
+      door_point_y(DOOR_CONSTS[world->GetPlayer(player).nation][civ::getLook(type)])
 {
     MapPoint flagPt = GetFlagPos();
     // Evtl Flagge setzen, wenn noch keine da ist
@@ -274,11 +275,11 @@ ITexture& noBaseBuilding::GetBuildingImage() const
 
 ITexture& noBaseBuilding::GetBuildingImage(BuildingType type, Nation nation) //-V688
 {
-    return LOADER.building_cache[nation][type].building;
+    return LOADER.building_cache[nation][civ::getLook(type)].building;
 }
 
 /// Gibt ein Bild zurück für die Tür des Gebäudes
 ITexture& noBaseBuilding::GetDoorImage() const
 {
-    return LOADER.building_cache[nation][bldType_].door;
+    return LOADER.building_cache[nation][civ::getLook(bldType_)].door;
 }

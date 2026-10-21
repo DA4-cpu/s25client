@@ -1,6 +1,25 @@
 Zivilisationsmodus (Humankind-Schicht) - Branch "humankind" einspielen
 ======================================================================
 
+UPDATE 2026-10-21 (2): Neue Waren und Werkstätten aus Lua
+----------------------------------------------------------
+Holen wie unten (git pull origin humankind), dann bauen. Neue Dateien unter libs/s25main/civ, libs/libGamedata/gameData
+und libs/s25main/figures -> falls Visual Studio sie nicht findet: CMake neu konfigurieren.
+
+Neu:
+- data/RTTR/gamedata/civ/wares.lua:     rttr:AddWare{...} für neue Waren, rttr:SetWareTags{...} für Tags
+- data/RTTR/gamedata/civ/workshops.lua: rttr:AddWorkshop{...} für Werkstätten (Eingangswaren -> Produkt)
+  Beide Dateien erklären alle Felder und enthalten ein auskommentiertes Beispiel zum Ausprobieren.
+- Tags: Name, Warenart (kind) und Eigenschaften (properties). Eingänge und Produkt einer Werkstatt sind Tag-Abfragen;
+  mit inheritProperties = true übernimmt das Produkt die Eigenschaften der Eingangsware.
+- Grafik: Alles Neue sieht vorerst aus wie ein eingebautes Vorbild (Feld "look").
+- Neue Waren und Arbeiter stehen in der Lager-/Warenübersicht auf eigenen Seiten ("Nächste Seite"),
+  neue Werkstätten im Baumenü nach Größe und in der Gebäudestatistik.
+- Freischalten über techtree.lua (unlocks = { buildings = { "Name" } }), WP über knowledge.lua - wie bei S2-Gebäuden.
+- Spielstände: Version 18. Neue Waren/Werkstätten nur hinten anfügen, nie löschen/umsortieren, sonst lädt ein
+  Spielstand mit einer Fehlermeldung nicht.
+- Die Computer-KI baut die neuen Werkstätten (noch) nicht.
+
 UPDATE 2026-10-21: Wissenspunkte (LWP / IWP / MWP)
 --------------------------------------------------
 Holen (Git Bash im s25client-Ordner, Branch humankind ausgecheckt):
@@ -81,7 +100,7 @@ Wichtig: den "name" einer Technologie nicht nachträglich ändern (Spielstände 
 
 SPIELSTÄNDE
 -----------
-Die Savegame-Version ist jetzt 17. Alte Spielstände lassen sich weiter laden,
+Die Savegame-Version ist jetzt 18. Alte Spielstände lassen sich weiter laden,
 neue Spielstände aber nicht mit älteren Programmversionen.
 
 

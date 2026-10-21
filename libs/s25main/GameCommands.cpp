@@ -145,15 +145,24 @@ void ChangeDistribution::Execute(GameWorld& world, uint8_t playerId)
 ChangeBuildOrder::ChangeBuildOrder(Deserializer& ser)
     : GameCommand(GCType::ChangeBuildOrder), useCustomBuildOrder(ser.PopBool())
 {
-    if(ser.getDataVersion() >= 2)
+    if(ser.getDataVersion() >= 3)
     {
         for(BuildingType& i : data)
             i = helpers::popEnum<BuildingType>(ser);
+    } else if(ser.getDataVersion() == 2)
+    {
+        // No custom building slots (civilization mode) yet -> append them
+        constexpr unsigned numBuiltin = NUM_BUILTIN_BUILDINGS - NUM_UNUSED_BLD_TYPES - 1;
+        for(unsigned i = 0; i < numBuiltin; ++i)
+            data[i] = helpers::popEnum<BuildingType>(ser);
+        for(unsigned i = 0; i < NUM_CUSTOM_BUILDINGS; ++i)
+            data[numBuiltin + i] = getCustomBuilding(i);
     } else
     {
         auto countOfNotAvailableBuildingsInSaveGame =
           ser.getDataVersion() < 1 ? numWineAndLeatherAddonBuildings : numLeatherAddonBuildings;
-        std::vector<BuildingType> buildOrder(data.size() - countOfNotAvailableBuildingsInSaveGame);
+        std::vector<BuildingType> buildOrder(NUM_BUILTIN_BUILDINGS - NUM_UNUSED_BLD_TYPES - 1
+                                             - countOfNotAvailableBuildingsInSaveGame);
 
         if(ser.getDataVersion() < 1)
             buildOrder.insert(buildOrder.end(), {BuildingType::Vineyard, BuildingType::Winery, BuildingType::Temple});
@@ -168,6 +177,8 @@ ChangeBuildOrder::ChangeBuildOrder(Deserializer& ser)
                       [&]() { return helpers::popEnum<BuildingType>(ser); });
 
         std::copy(buildOrder.begin(), buildOrder.end(), data.begin());
+        for(unsigned i = 0; i < NUM_CUSTOM_BUILDINGS; ++i)
+            data[buildOrder.size() + i] = getCustomBuilding(i);
     }
 }
 
@@ -291,10 +302,17 @@ SetAllInventorySettings::SetAllInventorySettings(Deserializer& ser)
     : Coords(GCType::SetAllInventorySettings, ser), isJob(ser.PopBool())
 {
     const uint32_t numStates = (isJob ? helpers::NumEnumValues_v<Job> : helpers::NumEnumValues_v<GoodType>);
-    if(ser.getDataVersion() >= 2)
+    if(ser.getDataVersion() >= 3)
     {
         for(unsigned i = 0; i < numStates; i++)
             states.push_back(InventorySetting(ser.PopUnsignedChar()));
+    } else if(ser.getDataVersion() == 2)
+    {
+        // No custom slots (civilization mode) yet
+        const unsigned numBuiltin = isJob ? NUM_BUILTIN_JOBS : NUM_BUILTIN_GOODS;
+        states.resize(numStates);
+        for(unsigned i = 0; i < numBuiltin; i++)
+            states[i] = InventorySetting(ser.PopUnsignedChar());
     } else
     {
         states.resize(numStates);
@@ -302,7 +320,7 @@ SetAllInventorySettings::SetAllInventorySettings(Deserializer& ser)
         {
             auto isJobSkipped = [&](Job const& job) {
                 return (ser.getDataVersion() < 1 && wineaddon::isWineAddonJobType(job))
-                       || leatheraddon::isLeatherAddonJobType(job);
+                       || leatheraddon::isLeatherAddonJobType(job) || isCustomJob(job);
             };
 
             size_t tgtIdx = 0;
@@ -317,7 +335,7 @@ SetAllInventorySettings::SetAllInventorySettings(Deserializer& ser)
         {
             auto isWareSkipped = [&](GoodType const& ware) {
                 return (ser.getDataVersion() < 1 && wineaddon::isWineAddonGoodType(ware))
-                       || leatheraddon::isLeatherAddonGoodType(ware);
+                       || leatheraddon::isLeatherAddonGoodType(ware) || isCustomGood(ware);
             };
 
             size_t tgtIdx = 0;

@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "gameData/JobConsts.h"
+#include "civ/Content.h"
 #include "mygettext/mygettext.h"
 #include "gameData/NationConsts.h"
+#include <algorithm>
 
 namespace {
 struct FullJobData
@@ -14,7 +16,7 @@ struct FullJobData
     const char* name;
 };
 
-const std::array<FullJobData, helpers::NumEnumValues_v<Job>> fullJobData = {{
+const std::array<FullJobData, NUM_BUILTIN_JOBS> fullJobData = {{
   // Start data
   {{GoodType::Nothing, 385, 190, 5}, {false, 0}, gettext_noop("Helper")},
   {{GoodType::Axe, 148, 789, 5}, {false, 5}, gettext_noop("Woodchopper")},
@@ -60,25 +62,46 @@ const std::array<FullJobData, helpers::NumEnumValues_v<Job>> fullJobData = {{
   // End data
 }};
 
-template<typename T, std::size_t... I>
-constexpr auto makeJobArrayImpl(T&& getter, std::index_sequence<I...>)
-{
-    using Type = decltype(getter(std::declval<FullJobData>()));
-    return helpers::EnumArray<Type, Job>{getter(fullJobData[I])...};
-}
-
-template<typename T>
-constexpr auto makeJobArray(T&& getter)
-{
-    return makeJobArrayImpl(getter, std::make_index_sequence<helpers::NumEnumValues_v<Job>>());
-}
+const std::array<std::string, NUM_BUILTIN_JOBS> builtinJobNames = []() {
+    std::array<std::string, NUM_BUILTIN_JOBS> result;
+    for(unsigned i = 0; i < NUM_BUILTIN_JOBS; ++i)
+        result[i] = fullJobData[i].name;
+    return result;
+}();
 } // namespace
 
-const helpers::EnumArray<std::string, Job> JOB_NAMES =
-  makeJobArray([](const FullJobData& data) { return std::string(data.name); });
-const helpers::EnumArray<JobConst, Job> JOB_CONSTS = makeJobArray([](const FullJobData& data) { return data.data; });
-const helpers::EnumArray<JobSpriteData, Job> JOB_SPRITE_CONSTS =
-  makeJobArray([](const FullJobData& data) { return data.spriteData; });
+const JobNamesTable JOB_NAMES{};
+const JobConstsTable JOB_CONSTS{};
+const JobSpriteConstsTable JOB_SPRITE_CONSTS{};
+
+const std::string& JobNamesTable::operator[](Job job) const
+{
+    static const std::string empty;
+    if(!isCustomJob(job))
+        return builtinJobNames[static_cast<unsigned>(job)];
+    const civ::CustomWorker* worker = civ::getActiveContent().GetWorker(job);
+    return worker ? worker->title : empty;
+}
+
+JobConst JobConstsTable::operator[](Job job) const
+{
+    if(!isCustomJob(job))
+        return fullJobData[static_cast<unsigned>(job)].data;
+    const civ::Content& content = civ::getActiveContent();
+    const civ::CustomWorker* worker = content.GetWorker(job);
+    if(!worker)
+        return JobConst{std::nullopt, 0, 0, 0}; // Unused: Can't be recruited
+    const civ::CustomBuilding* building = content.GetBuilding(getCustomBuilding(getCustomJobIdx(job)));
+    RTTR_Assert(building);
+    const auto toShort = [](unsigned gfs) { return static_cast<unsigned short>(std::min(gfs, 65535u)); };
+    return JobConst{worker->tool, toShort(std::max(building->workGFs, 1u)), toShort(std::max(building->waitGFs, 1u)),
+                    5};
+}
+
+const JobSpriteData& JobSpriteConstsTable::operator[](Job job) const
+{
+    return fullJobData[static_cast<unsigned>(civ::getLook(job))].spriteData;
+}
 
 unsigned short JobSpriteData::getBobId(Nation nation) const
 {

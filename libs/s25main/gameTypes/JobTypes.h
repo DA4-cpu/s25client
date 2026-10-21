@@ -49,11 +49,32 @@ enum class Job : uint8_t
     Skinner,           // 35
     Tanner,            // 36
     LeatherWorker,     // 37
+    // Workers of buildings defined in lua by the civilization mode (see civ/Content.h). Unused unless defined.
+    Custom0,                   // 38
+    CustomLast = Custom0 + 31, // 69
 };
 
 constexpr auto maxEnumValue(Job)
 {
-    return Job::LeatherWorker;
+    return Job::CustomLast;
+}
+
+/// Number of job slots which can be defined in lua (civilization mode), one per custom building
+constexpr unsigned NUM_CUSTOM_JOBS = static_cast<unsigned>(Job::CustomLast) - static_cast<unsigned>(Job::Custom0) + 1u;
+/// Number of built-in jobs (before the custom slots). Used e.g. for loading older savegames
+constexpr unsigned NUM_BUILTIN_JOBS = static_cast<unsigned>(Job::Custom0);
+constexpr bool isCustomJob(Job job)
+{
+    return job >= Job::Custom0 && job <= Job::CustomLast;
+}
+/// Index of a custom job slot (0..NUM_CUSTOM_JOBS-1)
+constexpr unsigned getCustomJobIdx(Job job)
+{
+    return static_cast<unsigned>(job) - static_cast<unsigned>(Job::Custom0);
+}
+constexpr Job getCustomJob(unsigned idx)
+{
+    return Job(static_cast<unsigned>(Job::Custom0) + idx);
 }
 
 /// Job types of soldiers, weak ones first

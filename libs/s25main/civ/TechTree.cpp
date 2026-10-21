@@ -44,11 +44,12 @@ std::optional<unsigned> Technology::GetCostIdx(GoodType good) const
 
 TechTree::TechTree(const WorldDescription& desc)
 {
+    content_ = std::make_shared<const Content>(desc);
     std::fill(lockedAtStart_.begin(), lockedAtStart_.end(), false);
     std::fill(buildingKnowledge_.begin(), buildingKnowledge_.end(), KnowledgePoints{});
     for(const auto& entry : desc.buildingKnowledge)
     {
-        const auto bld = buildingFromIdentifier(entry.first, true);
+        const auto bld = content_->FindBuilding(entry.first, true);
         if(!bld)
             throw GameDataError("Knowledge points defined for an invalid building '" + entry.first + "'");
         for(const auto type : helpers::enumRange<KnowledgeType>())
@@ -72,7 +73,7 @@ TechTree::TechTree(const WorldDescription& desc)
         }
         for(const auto& entry : techDesc.cost)
         {
-            const auto good = goodFromIdentifier(entry.first);
+            const auto good = content_->FindGood(entry.first);
             if(!good)
                 throw GameDataError("Technology '" + tech.name + "' has an invalid cost good '" + entry.first + "'");
             tech.cost.push_back(TechCost{*good, entry.second});
@@ -84,7 +85,7 @@ TechTree::TechTree(const WorldDescription& desc)
         tech.minResearchGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(techDesc.time)));
         for(const std::string& bldName : techDesc.unlockedBuildings)
         {
-            const auto bld = buildingFromIdentifier(bldName);
+            const auto bld = content_->FindBuilding(bldName);
             if(!bld)
                 throw GameDataError("Technology '" + tech.name + "' unlocks an invalid building '" + bldName + "'");
             if(!helpers::contains(tech.unlockedBuildings, *bld))

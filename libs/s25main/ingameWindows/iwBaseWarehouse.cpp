@@ -100,13 +100,14 @@ iwBaseWarehouse::~iwBaseWarehouse()
 
 void iwBaseWarehouse::Msg_Group_ButtonClick(const unsigned group_id, const unsigned ctrl_id)
 {
-    if(group_id != warePageID && group_id != peoplePageID)
+    const InventoryPage* page = GetInventoryPage(group_id);
+    if(!page)
         iwWares::Msg_Group_ButtonClick(group_id, ctrl_id);
     else
     {
         if(GAMECLIENT.IsReplayModeOn())
             return;
-        RTTR_Assert(GetCurPage() == peoplePageID || GetCurPage() == warePageID);
+        RTTR_Assert(GetCurPage() == group_id);
         auto* optiongroup = GetCtrl<ctrlOptionGroup>(ID_STORE_SETTINGS_GROUP);
 
         EInventorySetting setting;
@@ -117,20 +118,21 @@ void iwBaseWarehouse::Msg_Group_ButtonClick(const unsigned group_id, const unsig
             case ID_STOP: setting = EInventorySetting::Stop; break;
             default: throw std::invalid_argument("iwBaseWarehouse::Optiongroup");
         }
-        auto setSetting = [this](auto what, EInventorySetting setting) {
+        auto setSetting = [this, page](auto what, EInventorySetting setting) {
             InventorySetting state = wh->GetInventorySettingVisual(what);
             state.Toggle(setting);
             if(gcFactory.SetInventorySetting(wh->GetPos(), what, state))
             {
                 // optisch schonmal setzen
                 wh->SetInventorySettingVisual(what, state);
-                UpdateOverlay(rttr::enum_cast(what));
+                UpdateOverlay(rttr::enum_cast(what), page->isWare);
             }
         };
-        if(GetCurPage() == warePageID)
-            setSetting(GoodType(ctrl_id - 100), setting);
+        const unsigned value = page->firstValue + ctrl_id - 100;
+        if(page->isWare)
+            setSetting(GoodType(value), setting);
         else
-            setSetting(Job(ctrl_id - 100), setting);
+            setSetting(Job(value), setting);
     }
 }
 
@@ -149,7 +151,8 @@ void iwBaseWarehouse::Msg_ButtonClick(const unsigned ctrl_id)
         {
             if(GAMECLIENT.IsReplayModeOn())
                 return;
-            if(GetCurPage() != warePageID && GetCurPage() != peoplePageID)
+            const InventoryPage* page = GetInventoryPage(GetCurPage());
+            if(!page)
                 return;
             auto* optiongroup = GetCtrl<ctrlOptionGroup>(ID_STORE_SETTINGS_GROUP);
             EInventorySetting data;
@@ -160,11 +163,11 @@ void iwBaseWarehouse::Msg_ButtonClick(const unsigned ctrl_id)
                 case ID_STOP: data = EInventorySetting::Stop; break;
                 default: throw std::invalid_argument("iwBaseWarehouse::Optiongroup");
             }
-            const unsigned count =
-              (GetCurPage() == warePageID) ? helpers::NumEnumValues_v<GoodType> : helpers::NumEnumValues_v<Job>;
+            const bool isWare = page->isWare;
+            const unsigned count = isWare ? helpers::NumEnumValues_v<GoodType> : helpers::NumEnumValues_v<Job>;
             std::vector<InventorySetting> states;
             states.reserve(count);
-            if(GetCurPage() == warePageID)
+            if(isWare)
             {
                 for(const auto i : helpers::enumRange<GoodType>())
                     states.push_back(wh->GetInventorySettingVisual(i == GoodType::WaterEmpty ? GoodType::Water : i));
@@ -173,10 +176,19 @@ void iwBaseWarehouse::Msg_ButtonClick(const unsigned ctrl_id)
                 for(const auto i : helpers::enumRange<Job>())
                     states.push_back(wh->GetInventorySettingVisual(i));
             }
+            // Only the elements of the current page are changed. Built-in pages: all built-in wares/jobs as before
+            std::vector<unsigned> affected;
+            if(GetCurPage() == warePageID || GetCurPage() == peoplePageID)
+            {
+                const unsigned numBuiltin = isWare ? NUM_BUILTIN_GOODS : NUM_BUILTIN_JOBS;
+                for(unsigned i = 0; i < numBuiltin; i++)
+                    affected.push_back(i);
+            } else
+                affected = page->values;
             // Check if we need to enable all or disable all
             // If at least 1 disabled is found, enable all
             bool enable = false;
-            for(unsigned i = 0; i < count; i++)
+            for(const unsigned i : affected)
             {
                 if(!states[i].IsSet(data))
                 {
@@ -184,16 +196,16 @@ void iwBaseWarehouse::Msg_ButtonClick(const unsigned ctrl_id)
                     break;
                 }
             }
-            for(unsigned i = 0; i < count; i++)
+            for(const unsigned i : affected)
             {
                 if(states[i].IsSet(data) != enable)
                     states[i].Toggle(data);
             }
 
-            if(gcFactory.SetAllInventorySettings(wh->GetPos(), GetCurPage() == peoplePageID, states))
+            if(gcFactory.SetAllInventorySettings(wh->GetPos(), !isWare, states))
             {
                 // optisch setzen
-                if(GetCurPage() == warePageID)
+                if(isWare)
                 {
                     for(const auto i : helpers::enumRange<GoodType>())
                         wh->SetInventorySettingVisual(i, states[rttr::enum_cast(i)]);
@@ -264,35 +276,34 @@ void iwBaseWarehouse::Msg_ButtonClick(const unsigned ctrl_id)
 void iwBaseWarehouse::SetPage(unsigned page)
 {
     iwWares::SetPage(page);
-    const bool showStorageSettings = GetCurPage() == warePageID || GetCurPage() == peoplePageID;
+    const bool showStorageSettings = GetInventoryPage(GetCurPage()) != nullptr;
     GetCtrl<ctrlOptionGroup>(ID_STORE_SETTINGS_GROUP)->GetButton(ID_COLLECT)->SetEnabled(showStorageSettings);
     GetCtrl<ctrlOptionGroup>(ID_STORE_SETTINGS_GROUP)->GetButton(ID_STOP)->SetEnabled(showStorageSettings);
     GetCtrl<ctrlOptionGroup>(ID_STORE_SETTINGS_GROUP)->GetButton(ID_TAKEOUT)->SetEnabled(showStorageSettings);
     GetCtrl<ctrlButton>(ID_SELECT_ALL)->SetEnabled(showStorageSettings);
 }
 
-void iwBaseWarehouse::UpdateOverlay(unsigned i)
-{
-    UpdateOverlay(i, GetCurPage() == warePageID);
-}
-
 void iwBaseWarehouse::UpdateOverlay(unsigned i, bool isWare)
 {
-    auto* group = GetCtrl<ctrlGroup>(isWare ? warePageID : peoplePageID);
+    const auto element = FindInventoryElement(isWare, i);
+    if(!element)
+        return; // Not shown
+    auto* group = GetCtrl<ctrlGroup>(element->first);
+    const unsigned offset = element->second;
     // Einlagern verbieten-Bild (de)aktivieren
-    auto* image = group->GetCtrl<ctrlImage>(400 + i);
+    auto* image = group->GetCtrl<ctrlImage>(400 + offset);
     if(image)
         image->SetVisible(isWare ? wh->IsInventorySettingVisual(GoodType(i), EInventorySetting::Stop) :
                                    wh->IsInventorySettingVisual(Job(i), EInventorySetting::Stop));
 
     // Auslagern-Bild (de)aktivieren
-    image = group->GetCtrl<ctrlImage>(500 + i);
+    image = group->GetCtrl<ctrlImage>(500 + offset);
     if(image)
         image->SetVisible(isWare ? wh->IsInventorySettingVisual(GoodType(i), EInventorySetting::Send) :
                                    wh->IsInventorySettingVisual(Job(i), EInventorySetting::Send));
 
     // Einlagern-Bild (de)aktivieren
-    image = group->GetCtrl<ctrlImage>(700 + i);
+    image = group->GetCtrl<ctrlImage>(700 + offset);
     if(image)
         image->SetVisible(isWare ? wh->IsInventorySettingVisual(GoodType(i), EInventorySetting::Collect) :
                                    wh->IsInventorySettingVisual(Job(i), EInventorySetting::Collect));
@@ -301,13 +312,10 @@ void iwBaseWarehouse::UpdateOverlay(unsigned i, bool isWare)
 void iwBaseWarehouse::UpdateOverlays()
 {
     // Ein/Auslager Overlays entsprechend setzen
-    for(unsigned char category = 0; category < 2; ++category)
+    for(const InventoryPage& page : inventoryPages_)
     {
-        unsigned count = (category == 0) ? helpers::NumEnumValues_v<GoodType> : helpers::NumEnumValues_v<Job>;
-        for(unsigned i = 0; i < count; ++i)
-        {
-            UpdateOverlay(i, category == 0);
-        }
+        for(const unsigned value : page.values)
+            UpdateOverlay(value, page.isWare);
     }
 }
 

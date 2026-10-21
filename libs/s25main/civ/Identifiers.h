@@ -6,21 +6,23 @@
 
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
+#include "gameTypes/JobTypes.h"
 #include <optional>
 #include <string>
 
-/// Mapping between enum values and the identifiers used in the Lua game data of the civilization mode
 namespace civ {
 
-/// Identifier of a building type as used in Lua (name of the enum value, e.g. "Farm")
-const char* getIdentifier(BuildingType bld);
-/// Identifier of a good as used in Lua (name of the enum value, e.g. "Boards"). Shields use "Shield"
-const char* getIdentifier(GoodType good);
+/// Identifier as used in lua. Custom slots return the name from the active content (or "Custom<n>" if unused)
+std::string getIdentifier(BuildingType bld);
+std::string getIdentifier(GoodType good);
+std::string getIdentifier(Job job);
 
-/// Building type for the identifier or nullopt if there is none (or it cannot be used, like the HQ).
+/// Built-in building type for the identifier or nullopt if there is none (or it cannot be used, like the HQ).
 /// The HQ can't be unlocked by technologies but has knowledge points -> allowHeadquarters
 std::optional<BuildingType> buildingFromIdentifier(const std::string& identifier, bool allowHeadquarters = false);
-/// Good type for the identifier or nullopt if there is none or it cannot be stored (e.g. empty water buckets)
+/// Built-in ware for the identifier (nation specific shields are all "Shield", empty water is not usable)
 std::optional<GoodType> goodFromIdentifier(const std::string& identifier);
+/// Built-in job for the identifier
+std::optional<Job> jobFromIdentifier(const std::string& identifier);
 
 } // namespace civ

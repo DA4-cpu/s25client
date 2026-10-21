@@ -11,10 +11,12 @@
 #include "WindowManager.h"
 #include "WineLoader.h"
 #include "addons/const_addons.h"
+#include "civ/Content.h"
 #include "controls/ctrlButton.h"
 #include "controls/ctrlGroup.h"
 #include "controls/ctrlImage.h"
 #include "controls/ctrlText.h"
+#include "helpers/containerUtils.h"
 #include "iwHelp.h"
 #include "ogl/FontStyle.h"
 #include "world/GameWorld.h"
@@ -79,6 +81,7 @@ iwWares::iwWares(unsigned id, const DrawPoint& pos, unsigned additionalYSpace, c
         font = SmallFont;
 
     // Zuordnungs-IDs
+    // Note: Custom wares and jobs of the civilization mode get their own pages below
     std::vector<GoodType> WARE_DISPLAY_ORDER{
       GoodType::Wood,    GoodType::Boards,   GoodType::Stones,
       GoodType::Ham,     GoodType::Grain,    GoodType::Flour,
@@ -123,6 +126,16 @@ iwWares::iwWares(unsigned id, const DrawPoint& pos, unsigned additionalYSpace, c
     // Figurenseite hinzufügen
     ctrlGroup& figuresPage = AddPage();
     peoplePageID = figuresPage.GetID();
+    {
+        InventoryPage wareInfo{warePageID, true, 0, {}};
+        for(const GoodType ware : WARE_DISPLAY_ORDER)
+            wareInfo.values.push_back(rttr::enum_cast(ware));
+        inventoryPages_.push_back(std::move(wareInfo));
+        InventoryPage jobInfo{peoplePageID, false, 0, {}};
+        for(const Job job : JOB_DISPLAY_ORDER)
+            jobInfo.values.push_back(rttr::enum_cast(job));
+        inventoryPages_.push_back(std::move(jobInfo));
+    }
 
     bool isRowWithFourElemens = true;
     const unsigned numElements = std::max(WARE_DISPLAY_ORDER.size(), JOB_DISPLAY_ORDER.size());
@@ -155,6 +168,59 @@ iwWares::iwWares(unsigned id, const DrawPoint& pos, unsigned additionalYSpace, c
             addElement(figuresPage, font, btPos, btSize, rttr::enum_cast(job), _(JOB_NAMES[job]), LOADER.GetJobTex(job),
                        allow_outhousing);
         }
+    }
+
+    // Custom wares and their workers (civilization mode): Own pages with at most as many elements as the first page
+    const unsigned maxPerPage = static_cast<unsigned>(WARE_DISPLAY_ORDER.size());
+    const auto addCustomPages = [&](bool isWare, unsigned firstValue, const std::vector<unsigned>& values) {
+        for(unsigned start = 0; start < values.size(); start += maxPerPage)
+        {
+            ctrlGroup& page = AddPage();
+            InventoryPage info{page.GetID(), isWare, firstValue, {}};
+            bool fourElements = true;
+            unsigned row = 0;
+            for(unsigned idx = start, col = 0; idx < values.size() && idx < start + maxPerPage; ++col, ++idx)
+            {
+                if(col >= (fourElements ? 4u : 5u))
+                {
+                    col = 0;
+                    ++row;
+                    fourElements = !fourElements;
+                }
+                const Extent btSize(26, 26);
+                const DrawPoint btPos((fourElements ? btSize.x + 1 : btSize.x / 2) + col * 28,
+                                      topMargin + row * rowHeight);
+                const unsigned value = values[idx];
+                const unsigned offset = value - firstValue;
+                if(isWare)
+                {
+                    addElement(page, font, btPos, btSize, offset, _(WARE_NAMES[GoodType(value)]),
+                               LOADER.GetWareTex(GoodType(value)), allow_outhousing);
+                } else
+                {
+                    addElement(page, font, btPos, btSize, offset, _(JOB_NAMES[Job(value)]),
+                               LOADER.GetJobTex(Job(value)), allow_outhousing);
+                }
+                info.values.push_back(value);
+            }
+            inventoryPages_.push_back(std::move(info));
+        }
+    };
+    {
+        const civ::Content& content = civ::getActiveContent();
+        std::vector<unsigned> customWares, customJobs;
+        for(unsigned i = 0; i < NUM_CUSTOM_GOODS; ++i)
+        {
+            if(content.IsUsed(getCustomGood(i)))
+                customWares.push_back(rttr::enum_cast(getCustomGood(i)));
+        }
+        for(unsigned i = 0; i < NUM_CUSTOM_JOBS; ++i)
+        {
+            if(content.IsUsed(getCustomJob(i)))
+                customJobs.push_back(rttr::enum_cast(getCustomJob(i)));
+        }
+        addCustomPages(true, rttr::enum_cast(GoodType::Custom0), customWares);
+        addCustomPages(false, rttr::enum_cast(Job::Custom0), customJobs);
     }
 
     // compute the final window size
@@ -193,12 +259,29 @@ void iwWares::Msg_PaintBefore()
 
     // Farben ggf. aktualisieren
 
-    if(curPage_ != peoplePageID && curPage_ != warePageID)
+    const InventoryPage* pageInfo = GetInventoryPage(curPage_);
+    if(!pageInfo)
         return;
 
     auto* group = GetCtrl<ctrlGroup>(curPage_);
+    if(group && (curPage_ != peoplePageID && curPage_ != warePageID))
+    {
+        // Custom wares/jobs (civilization mode)
+        for(const unsigned value : pageInfo->values)
+        {
+            auto* text = group->GetCtrl<ctrlText>(600 + value - pageInfo->firstValue);
+            if(!text)
+                continue;
+            const unsigned amount =
+              pageInfo->isWare ? (*inventory)[static_cast<GoodType>(value)] : (*inventory)[static_cast<Job>(value)];
+            text->SetText(std::to_string(amount));
+            text->SetTextColor((amount == 0) ? COLOR_RED : COLOR_YELLOW);
+        }
+        return;
+    }
     if(group)
     {
+        // Built-in wares/jobs: Element offset = enum value
         const unsigned count =
           (curPage_ == warePageID) ? helpers::NumEnumValues_v<GoodType> : helpers::NumEnumValues_v<Job>;
 
@@ -260,6 +343,26 @@ void iwWares::SetPage(unsigned page)
     group = GetCtrl<ctrlGroup>(curPage_);
     if(group)
         group->SetVisible(true);
+}
+
+const iwWares::InventoryPage* iwWares::GetInventoryPage(unsigned pageId) const
+{
+    for(const InventoryPage& page : inventoryPages_)
+    {
+        if(page.id == pageId)
+            return &page;
+    }
+    return nullptr;
+}
+
+std::optional<std::pair<unsigned, unsigned>> iwWares::FindInventoryElement(bool isWare, unsigned value) const
+{
+    for(const InventoryPage& page : inventoryPages_)
+    {
+        if(page.isWare == isWare && helpers::contains(page.values, value))
+            return std::make_pair(page.id, value - page.firstValue);
+    }
+    return std::nullopt;
 }
 
 ctrlGroup& iwWares::AddPage()

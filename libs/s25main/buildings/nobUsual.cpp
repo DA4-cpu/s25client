@@ -10,6 +10,7 @@
 #include "SerializedGameData.h"
 #include "Ware.h"
 #include "addons/const_addons.h"
+#include "civ/Content.h"
 #include "figures/nofBuildingWorker.h"
 #include "figures/nofPigbreeder.h"
 #include "helpers/containerUtils.h"
@@ -125,18 +126,18 @@ void nobUsual::Draw(DrawPoint drawPt)
 
     // Wenn Produktion gestoppt ist, Schild außen am Gebäude zeichnen zeichnen
     if(disableProductionVirtual)
-        LOADER.GetMapTexture(46)->DrawFull(drawPt + BUILDING_SIGN_CONSTS[nation][bldType_]);
+        LOADER.GetMapTexture(46)->DrawFull(drawPt + BUILDING_SIGN_CONSTS[nation][civ::getLook(bldType_)]);
 
     // Rauch zeichnen
 
     // Raucht dieses Gebäude und ist es in Betrieb? (nur arbeitende Gebäude rauchen schließlich)
-    if(is_working && BUILDING_SMOKE_CONSTS[nation][bldType_].type)
+    if(is_working && BUILDING_SMOKE_CONSTS[nation][civ::getLook(bldType_)].type)
     {
         // Dann Qualm zeichnen (damit Qualm nicht synchron ist, x- und y- Koordinate als Unterscheidung
         LOADER
-          .GetMapTexture(692 + BUILDING_SMOKE_CONSTS[nation][bldType_].type * 8
+          .GetMapTexture(692 + BUILDING_SMOKE_CONSTS[nation][civ::getLook(bldType_)].type * 8
                          + GAMECLIENT.GetGlobalAnimation(8, 5, 2, (GetX() + GetY()) * 100))
-          ->DrawFull(drawPt + BUILDING_SMOKE_CONSTS[nation][bldType_].offset, 0x99EEEEEE);
+          ->DrawFull(drawPt + BUILDING_SMOKE_CONSTS[nation][civ::getLook(bldType_)].offset, 0x99EEEEEE);
     }
 
     // TODO: zusätzliche Dinge wie Mühlenräder, Schweinchen etc bei bestimmten Gebäuden zeichnen
@@ -387,6 +388,7 @@ void nobUsual::ConsumeWares()
 {
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
     unsigned numWaresNeeded = workDesc.waresNeeded.size();
+    lastConsumedWare_.reset();
     if(numWaresNeeded == 0)
         return;
 
@@ -414,6 +416,8 @@ void nobUsual::ConsumeWares()
         RTTR_Assert(numWares[wareIdxToUse] != 0);
         // Bestand verringern
         --numWares[wareIdxToUse];
+        if(!lastConsumedWare_)
+            lastConsumedWare_ = workDesc.waresNeeded[wareIdxToUse];
         // Inventur entsprechend verringern
         owner.DecreaseInventoryWare(workDesc.waresNeeded[wareIdxToUse], 1);
 

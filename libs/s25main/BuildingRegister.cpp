@@ -45,6 +45,10 @@ void BuildingRegister::Deserialize(SerializedGameData& sgd)
             if(sgd.GetGameDataVersion() < 12 && leatheraddon::isLeatherAddonBuildingType(bld))
                 continue;
 
+            // Slots for buildings defined in lua (civilization mode) were added in version 18
+            if(sgd.GetGameDataVersion() < 18 && isCustomBuilding(bld))
+                continue;
+
             if(BuildingProperties::IsUsual(bld))
                 sgd.PopObjectContainer(buildings[bld], GO_Type::NobUsual);
         }
@@ -57,7 +61,7 @@ void BuildingRegister::Deserialize(SerializedGameData& sgd)
 void BuildingRegister::Deserialize2(SerializedGameData& sgd)
 {
     // Pop all buildings starting at the first usual building
-    for(unsigned i = static_cast<uint8_t>(BuildingType::GraniteMine); i < helpers::NumEnumValues_v<BuildingType>; ++i)
+    for(unsigned i = static_cast<uint8_t>(BuildingType::GraniteMine); i < NUM_BUILTIN_BUILDINGS; ++i)
         sgd.PopObjectContainer(buildings[BuildingType(i)], GO_Type::NobUsual);
     sgd.PopObjectContainer(building_sites, GO_Type::Buildingsite);
     sgd.PopObjectContainer(military_buildings, GO_Type::NobMilitary);

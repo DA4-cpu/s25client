@@ -187,6 +187,10 @@ nobBaseWarehouse::nobBaseWarehouse(SerializedGameData& sgd, const unsigned obj_i
         if(sgd.GetGameDataVersion() < 12 && leatheraddon::isLeatherAddonGoodType(i))
             continue;
 
+        // Slots for wares defined in lua (civilization mode) were added in version 18
+        if(sgd.GetGameDataVersion() < 18 && isCustomGood(i))
+            continue;
+
         inventory.visual.Add(i, sgd.PopUnsignedInt());
         inventory.real.Add(i, sgd.PopUnsignedInt());
         inventorySettings[i] = inventorySettingsVisual[i] = static_cast<InventorySetting>(sgd.PopUnsignedChar());
@@ -197,6 +201,10 @@ nobBaseWarehouse::nobBaseWarehouse(SerializedGameData& sgd, const unsigned obj_i
             continue;
 
         if(sgd.GetGameDataVersion() < 12 && leatheraddon::isLeatherAddonJobType(i))
+            continue;
+
+        // Slots for workers of buildings defined in lua (civilization mode) were added in version 18
+        if(sgd.GetGameDataVersion() < 18 && isCustomJob(i))
             continue;
 
         inventory.visual.Add(i, sgd.PopUnsignedInt());

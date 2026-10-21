@@ -4,6 +4,7 @@
 
 #include "AddonHelperFunctions.h"
 #include "GlobalGameSettings.h"
+#include "civ/Content.h"
 #include <LeatherLoader.h>
 #include <WineLoader.h>
 #include <addons/Addon.h>
@@ -21,6 +22,9 @@ std::function<bool(const BuildingType type)> makeIsUnusedBuilding(const GlobalGa
             return true;
         if(!leatherAddonActive && leatheraddon::isLeatherAddonBuildingType(bld))
             return true;
+        // Custom buildings of the civilization mode which are not defined in this game
+        if(isCustomBuilding(bld) && !civ::getActiveContent().IsUsed(bld))
+            return true;
         return false;
     };
 }
@@ -34,6 +38,9 @@ std::function<bool(const GoodType type)> makeIsUnusedWare(const GlobalGameSettin
         if(!wineAddonActive && wineaddon::isWineAddonGoodType(type))
             return true;
         if(!leatherAddonActive && leatheraddon::isLeatherAddonGoodType(type))
+            return true;
+        // Custom wares of the civilization mode which are not defined in this game
+        if(isCustomGood(type) && !civ::getActiveContent().IsUsed(type))
             return true;
         return false;
     };
@@ -51,6 +58,9 @@ std::function<bool(const Job job)> makeIsUnusedJob(const GlobalGameSettings& ggs
         if(!charburnerAddonActive && job == Job::CharBurner)
             return true;
         if(!leatherAddonActive && leatheraddon::isLeatherAddonJobType(job))
+            return true;
+        // Workers of custom buildings of the civilization mode which are not defined in this game
+        if(isCustomJob(job) && !civ::getActiveContent().IsUsed(job))
             return true;
         return false;
     };

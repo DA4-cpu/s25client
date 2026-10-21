@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "CivContentDesc.h"
 #include "DescriptionContainer.h"
 #include "EdgeDesc.h"
 #include "LandscapeDesc.h"
@@ -32,6 +33,12 @@ struct WorldDescription
     DescriptionContainer<TechnologyDesc> technologies;
     /// Knowledge points of a finished building in the civilization mode: Building identifier -> points
     std::map<std::string, KnowledgeValues> buildingKnowledge;
+    /// New wares of the civilization mode in order of definition
+    std::vector<WareDesc> wares;
+    /// Additional tags of built-in wares: Ware identifier -> tags
+    std::map<std::string, WareTagsDesc> wareTags;
+    /// Workshops (simple production buildings) of the civilization mode in order of definition
+    std::vector<WorkshopDesc> workshops;
     // Convenience accessors
     template<class T>
     const T& get(DescIdx<T> idx) const

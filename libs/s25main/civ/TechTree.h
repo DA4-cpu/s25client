@@ -5,11 +5,13 @@
 #pragma once
 
 #include "addons/const_addons.h"
+#include "civ/Content.h"
 #include "civ/Knowledge.h"
 #include "helpers/EnumArray.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
 #include <boost/filesystem/path.hpp>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -73,8 +75,12 @@ public:
     std::vector<TechIdx> GetTechsUnlocking(BuildingType bld) const;
     /// Knowledge points (whole points) of a finished building of this type
     const KnowledgePoints& GetBuildingKnowledge(BuildingType bld) const { return buildingKnowledge_[bld]; }
+    /// Wares, workshops and tags defined in lua
+    const Content& GetContent() const { return *content_; }
+    const std::shared_ptr<const Content>& GetContentPtr() const { return content_; }
 
 private:
+    std::shared_ptr<const Content> content_;
     std::vector<Technology> techs_;
     helpers::EnumArray<bool, BuildingType> lockedAtStart_;
     helpers::EnumArray<KnowledgePoints, BuildingType> buildingKnowledge_;
