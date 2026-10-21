@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "civ/TechTree.h"
-#include "civ/Identifiers.h"
 #include "RttrConfig.h"
+#include "civ/Identifiers.h"
 #include "files.h"
+#include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
+#include "lua/GameDataLoader.h"
 #include "gameData/GameConsts.h"
 #include "gameData/WorldDescription.h"
-#include "lua/GameDataLoader.h"
 #include <algorithm>
 #include <chrono>
 
@@ -20,6 +21,14 @@ unsigned Technology::GetTotalCost() const
     unsigned result = 0;
     for(const TechCost& c : cost)
         result += c.amount;
+    return result;
+}
+
+unsigned Technology::GetTotalKnowledgeCost() const
+{
+    unsigned result = 0;
+    for(const int points : knowledgeCost)
+        result += static_cast<unsigned>(points);
     return result;
 }
 
@@ -36,6 +45,15 @@ std::optional<unsigned> Technology::GetCostIdx(GoodType good) const
 TechTree::TechTree(const WorldDescription& desc)
 {
     std::fill(lockedAtStart_.begin(), lockedAtStart_.end(), false);
+    std::fill(buildingKnowledge_.begin(), buildingKnowledge_.end(), KnowledgePoints{});
+    for(const auto& entry : desc.buildingKnowledge)
+    {
+        const auto bld = buildingFromIdentifier(entry.first, true);
+        if(!bld)
+            throw GameDataError("Knowledge points defined for an invalid building '" + entry.first + "'");
+        for(const auto type : helpers::enumRange<KnowledgeType>())
+            buildingKnowledge_[*bld][type] = entry.second[static_cast<unsigned>(type)];
+    }
     techs_.reserve(desc.technologies.size());
     for(const TechnologyDesc& techDesc : desc.technologies)
     {
@@ -59,6 +77,8 @@ TechTree::TechTree(const WorldDescription& desc)
                 throw GameDataError("Technology '" + tech.name + "' has an invalid cost good '" + entry.first + "'");
             tech.cost.push_back(TechCost{*good, entry.second});
         }
+        for(const auto type : helpers::enumRange<KnowledgeType>())
+            tech.knowledgeCost[type] = techDesc.knowledge[static_cast<unsigned>(type)];
         std::sort(tech.cost.begin(), tech.cost.end(),
                   [](const TechCost& lhs, const TechCost& rhs) { return lhs.good < rhs.good; });
         tech.minResearchGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(techDesc.time)));

@@ -4,4 +4,5 @@
 
 -- Game data of the civilization mode (addon "Zivilisationsmodus").
 -- Loaded only when the addon is enabled.
+include "knowledge.lua"
 include "techtree.lua"

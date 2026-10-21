@@ -8,11 +8,13 @@
 #include "addons/const_addons.h"
 #include "buildings/noBaseBuilding.h"
 #include "buildings/nobBaseWarehouse.h"
+#include "buildings/nobHQ.h"
 #include "civ/Identifiers.h"
+#include "civ/Knowledge.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
-#include "buildings/nobHQ.h"
+#include "factories/BuildingFactory.h"
 #include "helpers/EnumRange.h"
 #include "helpers/OptionalIO.h"
 #include "worldFixtures/MockLocalGameState.h"
@@ -20,9 +22,12 @@
 #include "gameData/ShieldConsts.h"
 #include "gameData/WorldDescription.h"
 #include <boost/test/unit_test.hpp>
+#include <algorithm>
 #include <memory>
 
 BOOST_AUTO_TEST_SUITE(ResearchSuite)
+
+using civ::KnowledgeType;
 
 BOOST_AUTO_TEST_CASE(IdentifiersRoundTrip)
 {
@@ -45,7 +50,26 @@ BOOST_AUTO_TEST_CASE(IdentifiersRoundTrip)
     }
     BOOST_TEST((civ::goodFromIdentifier("Shield") == GoodType::ShieldRomans));
     BOOST_TEST(!civ::buildingFromIdentifier("NotABuilding"));
+    BOOST_TEST((civ::buildingFromIdentifier("Headquarters", true) == BuildingType::Headquarters));
+    BOOST_TEST(!civ::buildingFromIdentifier("Nothing9", true));
     BOOST_TEST(!civ::goodFromIdentifier("NotAGood"));
+}
+
+BOOST_AUTO_TEST_CASE(KnowledgeNamesAndFormatting)
+{
+    for(const auto type : helpers::enumRange<KnowledgeType>())
+    {
+        // Same order as in the lua loader
+        BOOST_TEST(std::string(civ::getShortName(type)) == KNOWLEDGE_LUA_NAMES[static_cast<unsigned>(type)]);
+        BOOST_TEST((civ::knowledgeTypeFromShortName(civ::getShortName(type)) == type));
+    }
+    BOOST_TEST(!civ::knowledgeTypeFromShortName("XWP"));
+    BOOST_TEST(civ::formatKnowledge(0) == "0");
+    BOOST_TEST(civ::formatKnowledge(70) == "7");
+    BOOST_TEST(civ::formatKnowledge(75) == "7,5");
+    BOOST_TEST(civ::formatKnowledge(-50) == "-5");
+    BOOST_TEST(civ::formatKnowledge(-5) == "-0,5");
+    BOOST_TEST(civ::formatKnowledge(1234) == "123,4");
 }
 
 BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
@@ -74,6 +98,44 @@ BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
     }
     const auto agriculture = techTree.find("agriculture");
     BOOST_TEST_REQUIRE(agriculture);
+    // Every technology costs knowledge points
+    for(civ::TechIdx i = 0; i < techTree.size(); ++i)
+    {
+        BOOST_TEST_INFO(techTree.get(i).name);
+        BOOST_TEST(techTree.get(i).HasKnowledgeCost());
+    }
+    // Knowledge points of buildings (values from the design document)
+    const auto knowledge = [&techTree](BuildingType bld, KnowledgeType type) {
+        return techTree.GetBuildingKnowledge(bld)[type];
+    };
+    for(const auto type : helpers::enumRange<KnowledgeType>())
+    {
+        BOOST_TEST(knowledge(BuildingType::Headquarters, type) == 5);
+        BOOST_TEST(knowledge(BuildingType::Storehouse, type) == 1);
+        BOOST_TEST(knowledge(BuildingType::HarborBuilding, type) == 1);
+    }
+    BOOST_TEST(knowledge(BuildingType::Woodcutter, KnowledgeType::Industry) == 2);
+    BOOST_TEST(knowledge(BuildingType::Woodcutter, KnowledgeType::Agriculture) == 0);
+    BOOST_TEST(knowledge(BuildingType::Forester, KnowledgeType::Agriculture) == 1);
+    BOOST_TEST(knowledge(BuildingType::Forester, KnowledgeType::Industry) == 1);
+    BOOST_TEST(knowledge(BuildingType::Farm, KnowledgeType::Agriculture) == 3);
+    BOOST_TEST(knowledge(BuildingType::Farm, KnowledgeType::Industry) == 1);
+    BOOST_TEST(knowledge(BuildingType::Armory, KnowledgeType::Industry) == 2);
+    BOOST_TEST(knowledge(BuildingType::Armory, KnowledgeType::Military) == 1);
+    BOOST_TEST(knowledge(BuildingType::Fortress, KnowledgeType::Military) == 5);
+    BOOST_TEST(knowledge(BuildingType::Catapult, KnowledgeType::Military) == -5);
+    for(const auto mine :
+        {BuildingType::GraniteMine, BuildingType::CoalMine, BuildingType::IronMine, BuildingType::GoldMine})
+        BOOST_TEST(knowledge(mine, KnowledgeType::Industry) == 1);
+    // Every building except the placeholder has some knowledge points
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        if(bld == BuildingType::Nothing9)
+            continue;
+        const civ::KnowledgePoints& points = techTree.GetBuildingKnowledge(bld);
+        BOOST_TEST_INFO(civ::getIdentifier(bld));
+        BOOST_TEST(std::any_of(points.begin(), points.end(), [](int p) { return p != 0; }));
+    }
     BOOST_TEST(techTree.IsLockedAtStart(BuildingType::Farm));
     BOOST_TEST((techTree.GetTechsUnlocking(BuildingType::Farm) == std::vector<civ::TechIdx>{*agriculture}));
 }
@@ -96,7 +158,7 @@ TechnologyDesc makeTech(const std::string& name, std::map<std::string, unsigned>
 
 struct ResearchFixture : public WorldWithGCExecution2P
 {
-    civ::TechIdx agriculture = 0, milling = 1, slowTech = 2, culture = 3, wineTech = 4;
+    civ::TechIdx agriculture = 0, milling = 1, slowTech = 2, culture = 3, wineTech = 4, writing = 5, drill = 6;
 
     ResearchFixture()
     {
@@ -109,6 +171,14 @@ struct ResearchFixture : public WorldWithGCExecution2P
         auto wine = makeTech("wine", {{"Boards", 1}}, {"Vineyard"});
         wine.requiredAddon = "WINE";
         desc.technologies.add(wine);
+        auto writingDesc = makeTech("writing", {}, {"Brewery"});
+        writingDesc.knowledge = {8, 0, 0};
+        desc.technologies.add(writingDesc);
+        auto drillDesc = makeTech("drill", {}, {"Armory"});
+        drillDesc.knowledge = {0, 0, 3};
+        desc.technologies.add(drillDesc);
+        desc.buildingKnowledge = {
+          {"Headquarters", {5, 5, 5}}, {"Fishery", {2, 0, 0}}, {"Woodcutter", {0, 2, 0}}, {"Catapult", {0, 0, -5}}};
         world.SetTechTree(std::make_unique<civ::TechTree>(desc));
         civ::startGame(world);
     }
@@ -119,6 +189,16 @@ struct ResearchFixture : public WorldWithGCExecution2P
         getHQ(playerId).AddToInventory(GoodCounts::make(good, amount), true);
     }
     civ::PlayerResearch& research(unsigned playerId) { return world.GetPlayer(playerId).GetResearch(); }
+    /// Place a finished building of player 0 at the given offset to the HQ
+    MapPoint addBuilding(BuildingType bld, Position offset)
+    {
+        const MapPoint pos = world.MakeMapPoint(hqPos + offset);
+        BuildingFactory::CreateBuilding(world, bld, pos, 0, Nation::Romans);
+        BOOST_TEST_REQUIRE(world.GetSpecObj<noBaseBuilding>(pos));
+        return pos;
+    }
+    civ::KnowledgePoints total(unsigned playerId) { return civ::calcTotalKnowledge(world.GetPlayer(playerId)); }
+    civ::KnowledgePoints available(unsigned playerId) { return civ::calcAvailableKnowledge(world.GetPlayer(playerId)); }
 };
 } // namespace
 
@@ -292,10 +372,126 @@ BOOST_FIXTURE_TEST_CASE(AIChoosesResearch, ResearchFixture)
     // All have priority 0 -> cheapest first ("slow" has no costs)
     BOOST_TEST((civ::chooseResearchForAI(world, 0) == slowTech));
     research(0).SetResearched(slowTech);
-    // agriculture (2) vs culture (1)
+    // drill is the only one which can be paid right now (no boards in stock, enough MWP)
+    BOOST_TEST((civ::chooseResearchForAI(world, 0) == drill));
+    research(0).SetResearched(drill);
+    // agriculture (2) vs culture (1) vs writing (8 LWP)
     BOOST_TEST((civ::chooseResearchForAI(world, 0) == culture));
     research(1).SetResearched(culture); // Taken by other player
     BOOST_TEST((civ::chooseResearchForAI(world, 0) == agriculture));
+}
+
+BOOST_FIXTURE_TEST_CASE(KnowledgeFromBuildings, ResearchFixture)
+{
+    // HQ: 5 of each kind (calculated in tenths)
+    for(const auto type : helpers::enumRange<KnowledgeType>())
+    {
+        BOOST_TEST(total(0)[type] == 50);
+        BOOST_TEST(available(0)[type] == 50);
+    }
+    const MapPoint fisheryPos = addBuilding(BuildingType::Fishery, Position(4, 0));
+    addBuilding(BuildingType::Woodcutter, Position(6, 0));
+    BOOST_TEST(total(0)[KnowledgeType::Agriculture] == 70);
+    BOOST_TEST(total(0)[KnowledgeType::Industry] == 70);
+    BOOST_TEST(total(0)[KnowledgeType::Military] == 50);
+    // Negative values are possible
+    addBuilding(BuildingType::Catapult, Position(8, 0));
+    BOOST_TEST(total(0)[KnowledgeType::Military] == 0);
+    // Buildings without values don't count, neither do building sites
+    addBuilding(BuildingType::Sawmill, Position(2, 4));
+    this->SetBuildingSite(world.MakeMapPoint(hqPos + Position(4, 4)), BuildingType::Woodcutter);
+    BOOST_TEST_REQUIRE(world.GetSpecObj<noBaseBuilding>(world.MakeMapPoint(hqPos + Position(4, 4))));
+    BOOST_TEST(total(0)[KnowledgeType::Industry] == 70);
+    // Other players are not affected
+    BOOST_TEST(total(1)[KnowledgeType::Agriculture] == 50);
+    // Destroyed buildings lose their points
+    world.DestroyNO(fisheryPos);
+    BOOST_TEST(total(0)[KnowledgeType::Agriculture] == 50);
+}
+
+BOOST_FIXTURE_TEST_CASE(ResearchWaitsForKnowledge, ResearchFixture)
+{
+    // Writing needs 8 LWP, the HQ gives 5
+    this->SetResearch(writing);
+    BOOST_TEST_REQUIRE((research(0).GetCurrent() == writing));
+    BOOST_TEST(!civ::hasEnoughKnowledge(world, 0, writing));
+    BOOST_TEST(!civ::isAffordable(world, 0, writing));
+    BOOST_TEST(civ::getMissingKnowledge(world, 0, writing)[KnowledgeType::Agriculture] == 30);
+    BOOST_TEST(civ::getMissingKnowledge(world, 0, writing)[KnowledgeType::Industry] == 0);
+    for(unsigned i = 0; i < 5; i++)
+        civ::update(world);
+    BOOST_TEST(!research(0).IsResearched(writing));
+    BOOST_TEST((research(0).GetCurrent() == writing));
+    BOOST_TEST(research(0).GetSpentKnowledge()[KnowledgeType::Agriculture] == 0);
+
+    // 1 fishery -> 7 LWP: Still not enough
+    addBuilding(BuildingType::Fishery, Position(4, 0));
+    civ::update(world);
+    BOOST_TEST(!research(0).IsResearched(writing));
+    BOOST_TEST(civ::getMissingKnowledge(world, 0, writing)[KnowledgeType::Agriculture] == 10);
+    // 2 fisheries -> 9 LWP
+    addBuilding(BuildingType::Fishery, Position(6, 0));
+    BOOST_TEST(civ::hasEnoughKnowledge(world, 0, writing));
+    BOOST_TEST(civ::isAffordable(world, 0, writing));
+    civ::update(world);
+    BOOST_TEST(research(0).IsResearched(writing));
+    BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Brewery));
+    // Spent on completion: 9 - 8 = 1 available
+    BOOST_TEST(research(0).GetSpentKnowledge()[KnowledgeType::Agriculture] == 80);
+    BOOST_TEST(total(0)[KnowledgeType::Agriculture] == 90);
+    BOOST_TEST(available(0)[KnowledgeType::Agriculture] == 10);
+    BOOST_TEST(available(0)[KnowledgeType::Military] == 50);
+    // Other player unaffected
+    BOOST_TEST(research(1).GetSpentKnowledge()[KnowledgeType::Agriculture] == 0);
+}
+
+BOOST_FIXTURE_TEST_CASE(NegativeKnowledgeKeepsTechnologies, ResearchFixture)
+{
+    const MapPoint fishery1 = addBuilding(BuildingType::Fishery, Position(4, 0));
+    const MapPoint fishery2 = addBuilding(BuildingType::Fishery, Position(6, 0));
+    this->SetResearch(writing);
+    civ::update(world);
+    BOOST_TEST_REQUIRE(research(0).IsResearched(writing));
+
+    // Losing the fisheries: 5 total, 8 spent
+    world.DestroyNO(fishery1);
+    world.DestroyNO(fishery2);
+    BOOST_TEST(total(0)[KnowledgeType::Agriculture] == 50);
+    BOOST_TEST(available(0)[KnowledgeType::Agriculture] == -30);
+    // Technology and its buildings stay
+    BOOST_TEST(research(0).IsResearched(writing));
+    BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Brewery));
+    // Technologies with other kinds of knowledge can still be completed
+    this->SetResearch(drill);
+    civ::update(world);
+    BOOST_TEST(research(0).IsResearched(drill));
+    BOOST_TEST(available(0)[KnowledgeType::Military] == 20);
+}
+
+BOOST_FIXTURE_TEST_CASE(NegativeBuildingKnowledgeBlocksResearch, ResearchFixture)
+{
+    // Catapult: -5 MWP -> 0 available, drill needs 3
+    const MapPoint catapultPos = addBuilding(BuildingType::Catapult, Position(8, 0));
+    BOOST_TEST(available(0)[KnowledgeType::Military] == 0);
+    this->SetResearch(drill);
+    civ::update(world);
+    BOOST_TEST(!research(0).IsResearched(drill));
+    world.DestroyNO(catapultPos);
+    civ::update(world);
+    BOOST_TEST(research(0).IsResearched(drill));
+}
+
+BOOST_FIXTURE_TEST_CASE(AIPrefersTechnologiesWithEnoughKnowledge, ResearchFixture)
+{
+    ggs.setSelection(AddonId::WINE, 0);
+    for(const civ::TechIdx tech : {agriculture, slowTech, culture})
+        research(0).SetResearched(tech);
+    research(0).SetResearched(milling);
+    // Left: writing (8 LWP, only 5 available) and drill (3 MWP)
+    BOOST_TEST((civ::chooseResearchForAI(world, 0) == drill));
+    research(0).SetResearched(drill);
+    // Writing is the only one left, even if not affordable yet
+    BOOST_TEST((civ::chooseResearchForAI(world, 0) == writing));
 }
 
 BOOST_FIXTURE_TEST_CASE(SerializeResearch, ResearchFixture)
@@ -305,7 +501,9 @@ BOOST_FIXTURE_TEST_CASE(SerializeResearch, ResearchFixture)
     this->SetResearch(milling);
     civ::update(world);
     research(1).SetResearched(culture);
+    civ::completeResearch(world, 1, drill);
     BOOST_TEST_REQUIRE(research(0).GetProgress(milling));
+    BOOST_TEST_REQUIRE(research(1).GetSpentKnowledge()[KnowledgeType::Military] == 30);
 
     SerializedGameData sgd;
     sgd.MakeSnapshot(*game);
@@ -322,6 +520,10 @@ BOOST_FIXTURE_TEST_CASE(SerializeResearch, ResearchFixture)
     BOOST_TEST_REQUIRE(progress);
     BOOST_TEST((progress->paid == std::vector<unsigned>{0, 2}));
     BOOST_TEST(research(1).IsResearched(culture));
+    BOOST_TEST(research(1).IsResearched(drill));
+    BOOST_TEST(research(1).GetSpentKnowledge()[KnowledgeType::Military] == 30);
+    BOOST_TEST(research(0).GetSpentKnowledge()[KnowledgeType::Military] == 0);
+    BOOST_TEST(available(1)[KnowledgeType::Military] == 20);
     // Building availability restored
     BOOST_TEST(world.GetPlayer(0).IsBuildingEnabled(BuildingType::Farm));
     BOOST_TEST(!world.GetPlayer(0).IsBuildingEnabled(BuildingType::Mill));

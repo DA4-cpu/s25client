@@ -30,6 +30,8 @@ struct WorldDescription
     DescriptionContainer<TerrainDesc> terrain;
     /// Tech tree of the civilization mode
     DescriptionContainer<TechnologyDesc> technologies;
+    /// Knowledge points of a finished building in the civilization mode: Building identifier -> points
+    std::map<std::string, KnowledgeValues> buildingKnowledge;
     // Convenience accessors
     template<class T>
     const T& get(DescIdx<T> idx) const

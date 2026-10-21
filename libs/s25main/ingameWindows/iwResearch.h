@@ -5,6 +5,7 @@
 #pragma once
 
 #include "IngameWindow.h"
+#include "civ/Knowledge.h"
 #include "civ/TechTree.h"
 #include <optional>
 #include <string>
@@ -25,6 +26,9 @@ private:
     unsigned short currentProgress_;
     /// Signature of the research state of all players to detect when the table needs to be refreshed
     std::string lastStateSignature_;
+    /// Total and available knowledge (tenths) as last displayed
+    civ::KnowledgePoints lastTotalKnowledge_{}, lastAvailableKnowledge_{};
+    bool knowledgeShown_ = false;
 
     void Msg_PaintBefore() override;
     void Msg_ButtonClick(unsigned ctrl_id) override;
@@ -34,6 +38,8 @@ private:
     void RefreshTable();
     /// Update the area of the current research
     void RefreshCurrentResearch();
+    /// Update the display of the knowledge points. Returns true if they changed since the last call
+    bool RefreshKnowledge();
     /// Update the description and buttons for the selected technology
     void RefreshSelection();
     std::optional<civ::TechIdx> GetSelectedTech() const;

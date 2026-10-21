@@ -110,7 +110,8 @@
 /// 14: Remove "age" field in nobBaseMilitary
 /// 15: Add sea to HarborPos::Neighbor
 /// 16: Civilization mode: research state of players
-static const unsigned currentGameDataVersion = 16;
+/// 17: Civilization mode: spent knowledge points
+static const unsigned currentGameDataVersion = 17;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

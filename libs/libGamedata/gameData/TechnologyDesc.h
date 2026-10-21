@@ -5,6 +5,7 @@
 #pragma once
 
 #include "DescIdx.h"
+#include <array>
 #include <map>
 #include <string>
 #include <vector>
@@ -12,6 +13,17 @@
 struct WorldDescription;
 class CheckedLuaTable;
 struct TechnologyDesc;
+namespace kaguya {
+class LuaTable;
+}
+
+/// Knowledge points of the civilization mode per kind in the order agriculture (LWP), industry (IWP), military (MWP)
+using KnowledgeValues = std::array<int, 3>;
+/// Names of the knowledge kinds in lua, in the order of KnowledgeValues
+extern const std::array<const char*, 3> KNOWLEDGE_LUA_NAMES;
+/// Read knowledge points from a lua table like { LWP = 2, IWP = 1 } (missing kinds are 0).
+/// Throws GameDataError for unknown kinds or (if not allowed) negative values. `context` is used in error messages.
+KnowledgeValues parseKnowledge(const kaguya::LuaTable& table, bool allowNegative, const std::string& context);
 
 /// The tech tree may become large (technologies + cultures + wonders) so allow more than 254 entries
 template<>
@@ -34,6 +46,8 @@ struct TechnologyDesc
     std::vector<std::string> requirements;
     /// Costs: Good identifier -> amount
     std::map<std::string, unsigned> cost;
+    /// Knowledge points required (and spent on completion), never negative
+    KnowledgeValues knowledge{};
     /// Minimum research duration in seconds (counted from the start of the research)
     unsigned time = 0;
     /// Buildings (identifiers) enabled by this technology

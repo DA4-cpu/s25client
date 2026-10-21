@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "civ/Knowledge.h"
 #include "civ/TechTree.h"
 #include <map>
 #include <optional>
@@ -40,6 +41,11 @@ public:
     /// Mark the technology as researched. Removes its progress and resets current research if it was this tech
     void SetResearched(TechIdx tech);
 
+    /// Knowledge spent on finished research (tenths of points)
+    const KnowledgePoints& GetSpentKnowledge() const { return spentKnowledge_; }
+    /// Book knowledge (tenths of points) spent on finished research
+    void AddSpentKnowledge(const KnowledgePoints& tenths);
+
     void Serialize(SerializedGameData& sgd, const TechTree& techTree) const;
     void Deserialize(SerializedGameData& sgd, const TechTree& techTree);
 
@@ -47,6 +53,7 @@ private:
     std::vector<bool> researched_;
     std::optional<TechIdx> current_;
     std::map<TechIdx, Progress> progress_;
+    KnowledgePoints spentKnowledge_{};
 };
 
 } // namespace civ

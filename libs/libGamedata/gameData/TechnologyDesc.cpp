@@ -4,8 +4,33 @@
 
 #include "TechnologyDesc.h"
 #include "WorldDescription.h"
+#include "helpers/containerUtils.h"
 #include "lua/CheckedLuaTable.h"
 #include <set>
+
+const std::array<const char*, 3> KNOWLEDGE_LUA_NAMES = {"LWP", "IWP", "MWP"};
+
+KnowledgeValues parseKnowledge(const kaguya::LuaTable& table, bool allowNegative, const std::string& context)
+{
+    for(const std::string& key : table.keys<std::string>())
+    {
+        if(!helpers::contains(KNOWLEDGE_LUA_NAMES, key))
+            throw GameDataError(context + ": unknown kind of knowledge '" + key + "' (allowed: LWP, IWP, MWP)");
+    }
+    KnowledgeValues result{};
+    for(unsigned i = 0; i < result.size(); ++i)
+    {
+        const kaguya::LuaRef value = table[KNOWLEDGE_LUA_NAMES[i]];
+        if(value.isNilref())
+            continue;
+        if(!value.isType<int>())
+            throw GameDataError(context + ": " + KNOWLEDGE_LUA_NAMES[i] + " must be a whole number");
+        result[i] = value.get<int>();
+        if(!allowNegative && result[i] < 0)
+            throw GameDataError(context + ": " + KNOWLEDGE_LUA_NAMES[i] + " must not be negative");
+    }
+    return result;
+}
 
 TechnologyDesc::TechnologyDesc(CheckedLuaTable luaData, const WorldDescription& worldDesc)
 {
@@ -36,6 +61,8 @@ TechnologyDesc::TechnologyDesc(CheckedLuaTable luaData, const WorldDescription& 
         if(entry.second == 0)
             throw GameDataError("Technology '" + name + "': cost of '" + entry.first + "' must be > 0");
     }
+    if(const auto knowledgeTable = luaData.getOptional<kaguya::LuaTable>("knowledge"))
+        knowledge = parseKnowledge(*knowledgeTable, false, "Technology '" + name + "'");
     time = luaData.getOrDefault("time", 0u);
 
     if(auto unlocks = luaData.getOptional<CheckedLuaTable>("unlocks"))

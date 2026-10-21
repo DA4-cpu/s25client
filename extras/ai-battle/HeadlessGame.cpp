@@ -7,9 +7,11 @@
 #include "GlobalGameSettings.h"
 #include "PlayerInfo.h"
 #include "Savegame.h"
+#include "civ/Knowledge.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "factories/AIFactory.h"
+#include "helpers/EnumRange.h"
 #include "network/PlayerGameCommands.h"
 #include "world/GameWorld.h"
 #include "world/MapLoader.h"
@@ -243,11 +245,21 @@ void HeadlessGame::PrintState()
         printConsole("Forschung (von %u Technologien):\x1b[K\n", world_.GetTechTree().size());
         for(unsigned playerId = 0; playerId < world_.GetNumPlayers(); ++playerId)
         {
-            const civ::PlayerResearch& research = world_.GetPlayer(playerId).GetResearch();
+            const GamePlayer& player = world_.GetPlayer(playerId);
+            const civ::PlayerResearch& research = player.GetResearch();
             const auto& current = research.GetCurrent();
-            printConsole("  %-22s %3u erforscht, aktuell: %s\x1b[K\n", world_.GetPlayer(playerId).name.c_str(),
-                         research.GetNumResearched(),
-                         current ? world_.GetTechTree().get(*current).name.c_str() : "-");
+            // Knowledge points: available/total per kind
+            const civ::KnowledgePoints total = civ::calcTotalKnowledge(player);
+            const civ::KnowledgePoints available = civ::calcAvailableKnowledge(player);
+            std::string knowledge;
+            for(const auto type : helpers::enumRange<civ::KnowledgeType>())
+            {
+                knowledge += " " + std::string(civ::getShortName(type)) + " " + civ::formatKnowledge(available[type])
+                             + "/" + civ::formatKnowledge(total[type]);
+            }
+            printConsole("  %-22s %3u erforscht, aktuell: %-16s WP:%s\x1b[K\n", player.name.c_str(),
+                         research.GetNumResearched(), current ? world_.GetTechTree().get(*current).name.c_str() : "-",
+                         knowledge.c_str());
         }
     }
 

@@ -4,6 +4,7 @@
 
 #include "civ/PlayerResearch.h"
 #include "SerializedGameData.h"
+#include "helpers/EnumRange.h"
 #include "helpers/serializeEnums.h"
 #include "s25util/Log.h"
 #include <algorithm>
@@ -50,6 +51,12 @@ void PlayerResearch::SetResearched(TechIdx tech)
 
 // Technologies are stored by name and costs by good type so that changes of the (Lua) tech tree
 // don't break existing savegames. Unknown technologies are dropped when loading.
+void PlayerResearch::AddSpentKnowledge(const KnowledgePoints& tenths)
+{
+    for(const auto type : helpers::enumRange<KnowledgeType>())
+        spentKnowledge_[type] += tenths[type];
+}
+
 void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree) const
 {
     std::vector<TechIdx> researchedTechs;
@@ -77,6 +84,9 @@ void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree
             sgd.PushUnsignedInt(entry.second.paid.at(i));
         }
     }
+
+    for(const int spent : spentKnowledge_)
+        sgd.PushSignedInt(spent);
 }
 
 void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTree)
@@ -84,6 +94,7 @@ void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTr
     researched_.clear();
     current_.reset();
     progress_.clear();
+    spentKnowledge_ = KnowledgePoints{};
 
     const unsigned numResearched = sgd.PopUnsignedInt();
     for(unsigned i = 0; i < numResearched; ++i)
@@ -125,6 +136,20 @@ void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTr
     }
     if(current_ && IsResearched(*current_))
         current_.reset();
+
+    if(sgd.GetGameDataVersion() >= 17)
+    {
+        for(int& spent : spentKnowledge_)
+            spent = sgd.PopSignedInt();
+    } else
+    {
+        // Savegames from before knowledge points: Act as if the current costs were paid
+        for(TechIdx tech = 0; tech < researched_.size(); ++tech)
+        {
+            if(researched_[tech])
+                AddSpentKnowledge(toTenths(techTree.get(tech).knowledgeCost));
+        }
+    }
 }
 
 } // namespace civ

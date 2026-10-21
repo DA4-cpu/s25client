@@ -48,7 +48,8 @@ void GameDataLoader::Register(kaguya::State& state)
                                      .addFunction("AddLandscape", &GameDataLoader::AddLandscape)
                                      .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
                                      .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
-                                     .addFunction("AddTechnology", &GameDataLoader::AddTechnology));
+                                     .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
+                                     .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge));
 }
 
 class LuaIncludeError : public std::runtime_error
@@ -116,6 +117,20 @@ void GameDataLoader::AddTerrain(const kaguya::LuaTable& data)
 void GameDataLoader::AddTechnology(const kaguya::LuaTable& data)
 {
     worldDesc_.technologies.add(TechnologyDesc(data, worldDesc_));
+}
+
+void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)
+{
+    for(const std::string& building : data.keys<std::string>())
+    {
+        const kaguya::LuaRef value = data[building];
+        if(value.type() != kaguya::LuaRef::TYPE_TABLE)
+            throw GameDataError("Knowledge of building '" + building + "' must be a table like { LWP = 1 }");
+        const KnowledgeValues knowledge =
+          parseKnowledge(value.get<kaguya::LuaTable>(), true, "Knowledge of building '" + building + "'");
+        if(!worldDesc_.buildingKnowledge.emplace(building, knowledge).second)
+            throw GameDataError("Knowledge of building '" + building + "' is defined twice");
+    }
 }
 
 void loadGameData(WorldDescription& worldDesc)

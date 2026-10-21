@@ -5,6 +5,7 @@
 #pragma once
 
 #include "addons/const_addons.h"
+#include "civ/Knowledge.h"
 #include "helpers/EnumArray.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
@@ -35,6 +36,8 @@ struct Technology
     std::vector<TechIdx> requirements;
     /// Costs, sorted by good type
     std::vector<TechCost> cost;
+    /// Knowledge points (whole points) required and spent on completion
+    KnowledgePoints knowledgeCost{};
     /// Minimum research time in game frames
     unsigned minResearchGFs = 0;
     std::vector<BuildingType> unlockedBuildings;
@@ -44,6 +47,9 @@ struct Technology
     int aiPriority = 0;
 
     unsigned GetTotalCost() const;
+    /// Sum of all knowledge costs (whole points)
+    unsigned GetTotalKnowledgeCost() const;
+    bool HasKnowledgeCost() const { return GetTotalKnowledgeCost() > 0u; }
     /// Index of the cost entry for the good or nullopt if the technology doesn't cost this good
     std::optional<unsigned> GetCostIdx(GoodType good) const;
 };
@@ -65,10 +71,13 @@ public:
     bool IsLockedAtStart(BuildingType bld) const { return lockedAtStart_[bld]; }
     /// Technologies which unlock the given building
     std::vector<TechIdx> GetTechsUnlocking(BuildingType bld) const;
+    /// Knowledge points (whole points) of a finished building of this type
+    const KnowledgePoints& GetBuildingKnowledge(BuildingType bld) const { return buildingKnowledge_[bld]; }
 
 private:
     std::vector<Technology> techs_;
     helpers::EnumArray<bool, BuildingType> lockedAtStart_;
+    helpers::EnumArray<KnowledgePoints, BuildingType> buildingKnowledge_;
 };
 
 /// Load the tech tree from the Lua file `default.lua` in the given folder. Throws on error

@@ -1,6 +1,27 @@
 Zivilisationsmodus (Humankind-Schicht) - Branch "humankind" einspielen
 ======================================================================
 
+UPDATE 2026-10-21: Wissenspunkte (LWP / IWP / MWP)
+--------------------------------------------------
+Holen (Git Bash im s25client-Ordner, Branch humankind ausgecheckt):
+
+  git pull origin humankind
+
+Neu:
+- Jedes fertige Gebäude bringt Wissenspunkte (Werte aus deinem Konzept), das Hauptquartier 5/5/5.
+- Jede Technologie kostet zusätzlich zu den Waren Wissenspunkte. Abgebucht wird erst beim Abschluss.
+  Verfügbare Punkte dürfen negativ werden, Erforschtes bleibt.
+- Forschungsfenster: oben "Wissen (verfügbar/gesamt)" je Art; bei der aktuellen Forschung steht in Rot
+  "Wartet auf Wissenspunkte", wenn nur noch Punkte fehlen.
+- Werte ändern ohne Neukompilieren:
+    Gebäude:      data/RTTR/gamedata/civ/knowledge.lua
+    Technologien: data/RTTR/gamedata/civ/techtree.lua  (Feld "knowledge")
+  Die WP-Kosten der Technologien sind ein erster Vorschlag von mir.
+- Spielstände: Version 17. Alte Spielstände laden weiter (bereits erforschte Technologien gelten als bezahlt).
+Danach wie gewohnt bauen (neue Dateien: libs/s25main/civ/Knowledge.*). Falls Visual Studio die neuen
+Dateien nicht findet: CMake neu konfigurieren.
+
+
 Inhalt: 2 Commits auf deinem master (40aa9a2)
   1. Reparatur des UI-Tests IwMapGenerator (kompilierte seit dem Klimazonen-Umbau nicht mehr)
   2. Zivilisationsmodus: Fundament mit Technologiebaum und Forschung
@@ -41,7 +62,8 @@ AUSPROBIEREN
    -> "Zivilisationsmodus (Technologiebaum)" aktivieren (steht u. a. in der Gruppe Wirtschaft).
 2. Im Spiel: Hauptauswahl -> grüner Button "Forschung".
 3. Technologie in der Liste auswählen -> "Erforschen".
-   Die Kosten werden alle 2 Sekunden aus dem freien Lagerbestand genommen.
+   Die Waren werden alle 2 Sekunden aus dem freien Lagerbestand genommen,
+   die Wissenspunkte beim Abschluss abgebucht.
 4. Gesperrte Gebäude erscheinen im Baumenü erst, wenn sie erforscht sind.
    Ohne Forschung gibt es nur: Holzfäller, Förster, Steinbruch, Sägewerk, Fischer, Jäger,
    Brunnen, Baracke, Wachstube, Spähturm.
@@ -50,7 +72,8 @@ AUSPROBIEREN
 
 TECHNOLOGIEN BEARBEITEN
 -----------------------
-Datei: data/RTTR/gamedata/civ/techtree.lua (oben in der Datei sind alle Felder erklärt).
+Datei: data/RTTR/gamedata/civ/techtree.lua (oben in der Datei sind alle Felder erklärt),
+Wissenspunkte der Gebäude: data/RTTR/gamedata/civ/knowledge.lua.
 Kein Neukompilieren nötig. Die Datei wird beim Bauen in den Ausgabeordner kopiert
 (...\RTTR\gamedata\civ\techtree.lua) - entweder neu bauen oder dort direkt ändern.
 Wichtig: den "name" einer Technologie nicht nachträglich ändern (Spielstände speichern ihn).
@@ -58,7 +81,7 @@ Wichtig: den "name" einer Technologie nicht nachträglich ändern (Spielstände 
 
 SPIELSTÄNDE
 -----------
-Die Savegame-Version ist jetzt 16. Alte Spielstände lassen sich weiter laden,
+Die Savegame-Version ist jetzt 17. Alte Spielstände lassen sich weiter laden,
 neue Spielstände aber nicht mit älteren Programmversionen.
 
 

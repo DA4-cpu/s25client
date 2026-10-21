@@ -16,6 +16,7 @@
 #include "world/GameWorld.h"
 #include "gameTypes/Inventory.h"
 #include "s25util/Log.h"
+#include <algorithm>
 #include <limits>
 #include <memory>
 
@@ -147,6 +148,7 @@ void completeResearch(GameWorld& world, unsigned playerId, TechIdx tech)
     PlayerResearch& research = player.GetResearch();
     if(research.IsResearched(tech))
         return;
+    research.AddSpentKnowledge(toTenths(technology.knowledgeCost));
     research.SetResearched(tech);
     for(const BuildingType bld : technology.unlockedBuildings)
         player.EnableBuilding(bld);
@@ -207,13 +209,37 @@ void update(GameWorld& world, unsigned numGFs)
             if(paid < tech.cost[i].amount)
                 allPaid = false;
         }
-        if(allPaid && progress.researchedGFs >= tech.minResearchGFs)
+        // Knowledge points are only checked (and spent) when everything else is done
+        if(allPaid && progress.researchedGFs >= tech.minResearchGFs && hasEnoughKnowledge(world, playerId, *current))
             completeResearch(world, playerId, *current);
     }
 }
 
+KnowledgePoints getMissingKnowledge(const GameWorldBase& world, unsigned playerId, TechIdx tech)
+{
+    const KnowledgePoints cost = toTenths(world.GetTechTree().get(tech).knowledgeCost);
+    KnowledgePoints missing{};
+    if(std::all_of(cost.begin(), cost.end(), [](int points) { return points <= 0; }))
+        return missing;
+    const KnowledgePoints available = calcAvailableKnowledge(world.GetPlayer(playerId));
+    for(const auto type : helpers::enumRange<KnowledgeType>())
+    {
+        if(cost[type] > 0 && available[type] < cost[type])
+            missing[type] = cost[type] - available[type];
+    }
+    return missing;
+}
+
+bool hasEnoughKnowledge(const GameWorldBase& world, unsigned playerId, TechIdx tech)
+{
+    const KnowledgePoints missing = getMissingKnowledge(world, playerId, tech);
+    return std::all_of(missing.begin(), missing.end(), [](int points) { return points == 0; });
+}
+
 bool isAffordable(const GameWorldBase& world, unsigned playerId, TechIdx tech)
 {
+    if(!hasEnoughKnowledge(world, playerId, tech))
+        return false;
     const Technology& technology = world.GetTechTree().get(tech);
     const GamePlayer& player = world.GetPlayer(playerId);
     const PlayerResearch::Progress* progress = player.GetResearch().GetProgress(tech);
@@ -270,8 +296,10 @@ std::optional<TechIdx> chooseResearchForAI(const GameWorldBase& world, unsigned 
             isBetter = affordable;
         else if(cur.aiPriority != bestTech.aiPriority)
             isBetter = cur.aiPriority > bestTech.aiPriority;
-        else if(cur.GetTotalCost() != bestTech.GetTotalCost())
-            isBetter = cur.GetTotalCost() < bestTech.GetTotalCost();
+        else if(cur.GetTotalCost() + cur.GetTotalKnowledgeCost()
+                != bestTech.GetTotalCost() + bestTech.GetTotalKnowledgeCost())
+            isBetter = cur.GetTotalCost() + cur.GetTotalKnowledgeCost()
+                       < bestTech.GetTotalCost() + bestTech.GetTotalKnowledgeCost();
         else
             isBetter = cur.era < bestTech.era;
         if(isBetter)

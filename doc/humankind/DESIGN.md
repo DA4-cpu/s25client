@@ -23,26 +23,36 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-18 | Humankind-Schicht auf Siedler, kein 1:1-Nachbau, keine Rundenstrategie. |
 | 2026-10-18 | Optionaler Spielmodus über ein Addon, kein harter Fork der Spiellogik. |
 | 2026-10-18 | **Kein Ruhm, keine Ära-Sterne.** Der **Technologiebaum ist das Rückgrat**: Kulturen, Gebäude, Waren, Traits, Einheiten usw. hängen alle am Baum. |
-| 2026-10-18 | Forschung kostet **Wissen als Ware** (Schriftrollen aus einem Gelehrtenhaus) **plus Warenkosten** pro Technologie. |
+| 2026-10-18 | ~~Forschung kostet **Wissen als Ware** (Schriftrollen aus einem Gelehrtenhaus) **plus Warenkosten** pro Technologie.~~ Ersetzt am 2026-10-21 durch Wissenspunkte (siehe unten). |
 | 2026-10-18 | Kulturen werden **exklusiv** erforscht: Wer eine Kultur-Technologie zuerst abschließt, bekommt sie; für alle anderen ist sie gesperrt. |
 | 2026-10-18 | Erforschte Kulturen **stapeln vollständig** (alle Traits und emblematischen Inhalte bleiben aktiv). |
 | 2026-10-18 | Spielstart mit **Grundwirtschaft**; alle weiteren S2-Gebäude werden erforscht. |
 | 2026-10-18 | Grafik: vorhandene S2/RttR-Grafiken wiederverwenden; wo das nicht passt, Platzhalter, die später (u. a. per KI, siehe [GRAFIK.md](GRAFIK.md)) ersetzt werden. |
 | 2026-10-18 | Inhalte (Technologien, Kulturen …) sind **datengetrieben in Lua** (`data/RTTR/gamedata/civ/`), damit sie ohne Neukompilieren geändert werden können. Sie werden nur geladen, wenn der Modus aktiv ist. |
 | 2026-10-18 | Texte in eigenen Worten. Mechaniken dürfen übernommen werden, Texte/Bilder/Icons von Amplitude nicht. |
+| 2026-10-20 | Grafik: Neue Grafiken erzeugt der Nutzer mit Gemini und bearbeitet sie nach. Im Code werden bis dahin Platzhalter verwendet. |
+| 2026-10-21 | Forschung kostet **Wissenspunkte (WP) plus Waren**. Es gibt drei Arten: landwirtschaftlich (LWP), industriell (IWP), militärisch (MWP). Die Mindestdauer pro Technologie bleibt. |
+| 2026-10-21 | WP kommen aus **Gebäuden** (fester Wert pro fertigem Gebäude, Liste unten) und aus **eingelagerten Wissensmedien**. Wird ein Gebäude zerstört, verfallen seine WP und die darin gelagerten Medien. |
+| 2026-10-21 | Es gibt **gesamte WP** (alles, was man gerade hat) und **verfügbare WP** (gesamt minus ausgegeben). Verfügbare WP dürfen **negativ** werden; erforschte Technologien gehen **nie** verloren. |
+| 2026-10-21 | WP werden **beim Abschluss** einer Forschung abgebucht: Fertig ist sie, wenn die Mindestdauer um ist, alle Waren bezahlt sind und genug WP verfügbar sind. |
+| 2026-10-21 | Medien gibt es je Wissensart (z. B. Tontafel LWP/IWP/MWP). Was eine Medien-Werkstatt herstellt, legt **ein gemeinsamer Regler** fest (eigener Reiter „Wissen“ im Verteilungsfenster). |
+| 2026-10-21 | Medien zählen in Lagern (Lagerhaus, Hauptquartier, Hafen) **0,5-fach**, in einer **Bibliothek** 1-fach. Lager bestellen keine Medien (sie werden nur eingelagert), Bibliotheken bestellen sie per Träger. Die Bibliothek gibt es ab **Ära 2**. |
+| 2026-10-21 | Erster neuer Rohstoff im Spiel: **Knochen** (Jäger, Fleischerei) → geritzte Knochen als Medium. Die Knochen-Technologie ist ab **Ära 0** erforschbar. |
+| 2026-10-21 | Neue Waren, einfache Werkstätten, Tags und alle Zahlenwerte werden in **Lua** definiert; C++ liefert das allgemeine Verhalten. |
+| 2026-10-21 | **Tag-System:** Jede Ware hat Tags für Name (z. B. „Nadelholzbretter“), Warenart („Bretter“) und Eigenschaft („Nadelholz“). Gebäude und Baustellen bestellen nach einer Tag-Kombination oder nach dem genauen Namen. Verarbeitete Waren übernehmen die Eigenschaft der Eingangsware. |
 
 ## Zuordnung Humankind → Siedler
 
 | Humankind | Umsetzung im Zivilisationsmodus | Status |
 |-----------|----------------------------------|--------|
-| Technologiebaum | Lua-definierter Baum, Forschung kostet Waren, schaltet Gebäude frei | **Fundament fertig** |
-| Wissenschaft | Ware „Schriftrolle“ aus Gelehrtenhaus, wird von Technologien verbraucht | geplant (Phase 2) |
+| Technologiebaum | Lua-definierter Baum, Forschung kostet Wissenspunkte und Waren, schaltet Gebäude frei | **Fundament fertig** |
+| Wissenschaft | Wissenspunkte (LWP/IWP/MWP) aus Gebäuden und eingelagerten Medien | WP aus Gebäuden fertig, Medien geplant (Phase 2) |
 | Kulturen (exklusiv) | Exklusive Technologien (`exclusive = true`); wer zuerst fertig ist, bekommt sie | Exklusivität fertig, Kultur-Inhalte geplant |
 | Legacy-Traits | Modifikatoren (Produktionstempo, Kampfkraft, Baukosten …), stapeln | geplant (Phase 3) |
 | Emblematische Quartiere | Besondere Gebäude pro Kultur (Grafik der RttR-Völker wiederverwenden) | geplant |
 | Emblematische Einheiten | Soldaten mit Kultur-Boni (Stärke, Tempo); echte Einheitentypen später | geplant |
 | Zeitalter | Ebenen des Baums (`era = 0…6`), keine eigene Aufstiegsmechanik | fertig (als Datenfeld) |
-| Strategische Ressourcen | Neue Bodenschätze/Warenketten pro Ära (Pferde, Salpeter, Öl …) | geplant (braucht Grafik) |
+| Strategische Ressourcen | Neue Rohstoffe und Warenketten (Lehm, Ton, Papyrus, Baumwolle …, später Pferde, Salpeter …), verteilt nach Klimazonen | geplant (Phase 3/4) |
 | Wunder | Großbaustellen mit hohen Warenkosten, exklusiv | geplant |
 | Civics, Stabilität, Einfluss | Später; Stabilität z. B. über Versorgung mit Luxuswaren (Wein …) | später |
 | Religion | Tempel-Addon als Ausgangspunkt | später |
@@ -66,6 +76,7 @@ rttr:AddTechnology{
     description = "…",               -- Beschreibungstext
     era = 0,                         -- Zeitalter/Ebene 0…6
     requires = { "toolmaking" },     -- Voraussetzungen; müssen VORHER definiert sein (verhindert Zyklen)
+    knowledge = { LWP = 4 },         -- Kosten in Wissenspunkten (LWP, IWP, MWP)
     cost = { Boards = 4, Stones = 2 }, -- Warenkosten (Bezeichner wie im Enum GoodType)
     time = 60,                       -- Mindestdauer in Sekunden ab Forschungsbeginn (optional)
     unlocks = { buildings = { "Farm", "Mill" } }, -- Bezeichner wie im Enum BuildingType
@@ -82,16 +93,17 @@ rttr:AddTechnology{
 - Ein Spieler forscht immer an höchstens einer Technologie. Bereits bezahlte Waren bleiben pro Technologie gespeichert,
   ein Wechsel kostet also nichts.
 - Alle 2 Sekunden werden fehlende Kosten aus dem freien Bestand der Lagerhäuser entnommen (nur Waren, die nicht schon
-  bestellt sind). Sind alle Kosten bezahlt und ist die Mindestdauer um, ist die Technologie erforscht.
+  bestellt sind). Sind alle Waren bezahlt, ist die Mindestdauer um und sind genug Wissenspunkte verfügbar, ist die
+  Technologie erforscht; erst dann werden die WP abgebucht.
 - Exklusive Technologien: Sobald ein Spieler sie abschließt, sind sie für alle anderen gesperrt;
-  deren bereits bezahlte Waren gehen zurück in ihr erstes Lagerhaus.
+  deren bereits bezahlte Waren gehen zurück in ihr erstes Lagerhaus (WP waren noch nicht abgebucht).
 - Savegames speichern die Technologien **namentlich**, damit Änderungen am Lua-Baum alte Spielstände nicht zerstören.
 - Die Computer-KI (AIJH) wählt selbstständig Forschungen: zuerst, was sie sofort bezahlen kann, dann nach `aiPriority`,
   dann die günstigste. Hängt eine Forschung länger als ca. 2,5 Minuten mangels Waren, wechselt sie zu einer bezahlbaren
   (der Fortschritt bleibt erhalten). Gesperrte Gebäude plant sie nicht.
 - Bekannte Schwäche des Lagerhaus-Modells: Zwischenprodukte (Getreide, Eisen, Münzen …) gehen meist direkt an
-  verarbeitende Gebäude und liegen selten im Lager. Solche Kosten werden dann langsam bezahlt. In Phase 2 soll eine
-  Akademie die Waren wie ein normales Gebäude **bestellen** (Transportsystem + Verteilung), dann ist das gelöst.
+  verarbeitende Gebäude und liegen selten im Lager. Solche Kosten werden dann langsam bezahlt. Eine Möglichkeit wäre ein
+  Gebäude, das die Waren wie ein normales Gebäude **bestellt** (siehe offene Fragen).
 
 ### Testen ohne Grafik
 
@@ -106,6 +118,12 @@ Stand 2026-10-18 (Karte GreenPlains, 2 Stunden Spielzeit): Ohne Wein/Leder/Köhl
 fast alle der 16 verfügbaren Technologien; mit allen Addons erforschen drei AIJH 17–18 von 20.
 Am längsten hängen Technologien, die Zwischenprodukte kosten (Burgenbau: Münzen, Gerberei: Schinken).
 
+Stand 2026-10-21 mit Wissenspunkten (gleiche Karte, 2 Stunden): ohne Addons 16 von 16, mit allen Addons 17–18 von 20.
+Die WP bremsen die KI also nicht. Ihre Gesamt-WP liegen nach 15 Minuten bei etwa LWP 30 / IWP 50 / MWP 25, nach einer
+Stunde bei 90–135 je Art und nach zwei Stunden bei 80–210, die Summe aller WP-Kosten dagegen nur bei 41–50 je Art.
+Testweise verdreifachte WP-Kosten: Die KI erforscht trotzdem 16–19 von 20, die verfügbaren WP sinken dabei teils unter
+null. `ai-battle` zeigt die WP jedes Spielers als „verfügbar/gesamt“ an.
+
 ### Code-Überblick
 
 | Teil | Ort |
@@ -118,19 +136,66 @@ Am längsten hängen Technologien, die Zwischenprodukte kosten (Burgenbau: Münz
 | Spielbefehl | `gc::SetResearch` (`GameCommands.h`) |
 | Fenster | `libs/s25main/ingameWindows/iwResearch.*` (Hauptauswahl → „Forschung“) |
 | Tests | `tests/s25Main/integration/testResearch.cpp`, `tests/libGameData/testGameData.cpp` |
-| Inhalte | `data/RTTR/gamedata/civ/techtree.lua` |
+| Wissenspunkte (Arten, Berechnung) | `libs/s25main/civ/Knowledge.*` |
+| Inhalte | `data/RTTR/gamedata/civ/techtree.lua`, `data/RTTR/gamedata/civ/knowledge.lua` |
+
+## Wissenspunkte
+
+### Regeln
+
+- Drei Arten: **LWP** (Landwirtschaft), **IWP** (Industrie), **MWP** (Militär).
+- **Gesamt-WP** = WP aller fertigen Gebäude (+ später WP der eingelagerten Medien). Baustellen zählen nicht,
+  Militärgebäude zählen ab Fertigstellung (auch unbesetzt). Ein Gebäude kann negative WP haben (Katapult −5 MWP).
+- **Verfügbare WP** = Gesamt-WP minus die WP, die für abgeschlossene Forschungen ausgegeben wurden. Sie dürfen negativ
+  werden (Gebäude zerstört, Katapult gebaut); dann schließt keine Forschung mit Kosten in dieser Art mehr ab, bis wieder
+  genug da ist. Erforschte Technologien bleiben immer erhalten.
+- Die Kosten werden erst beim Abschluss abgebucht; eine Forschung darf also auch ohne genug WP begonnen werden
+  (Waren und Mindestdauer laufen schon). Folge: Die Summe der WP-Kosten aller erforschten Technologien kann die
+  Gesamt-WP nur übersteigen, wenn danach Gebäude verloren gingen.
+- Intern wird in Zehntel-WP gerechnet (für die 0,5-fache Wertung der Medien in Lagern), angezeigt mit einer
+  Nachkommastelle.
+- Medien (Phase 2): zählen in Lagerhaus, Hauptquartier und Hafen 0,5-fach, in einer Bibliothek 1-fach.
+
+### Datenformat
+
+Datei: `data/RTTR/gamedata/civ/knowledge.lua`. Jede Zeile gibt die WP eines fertigen Gebäudes an; nicht genannte
+Gebäude und Arten zählen 0. Die Kosten einer Technologie stehen in `techtree.lua` unter `knowledge`.
+
+```lua
+rttr:SetBuildingKnowledge{
+    Headquarters = { LWP = 5, IWP = 5, MWP = 5 },
+    Woodcutter   = { IWP = 2 },
+    Catapult     = { MWP = -5 },
+}
+```
+
+Werte des Nutzers (2026-10-20): LWP – Fischer 2, Jäger 2, Brauerei 1, Brunnen 1, Bauernhof 3, Bäcker 3, Mühle 3,
+Schweinezucht 4, Eselzucht 4, Fleischerei 3, Förster 1, Lagerhaus 1, Hafen 1, Hauptquartier 5, Weinberg 4, Winzerei 3.
+IWP – Holzfäller 2, Sägewerk 3, Förster 1, Steinbruch 2, jede Mine 1, Köhler 4, Bauernhof 1, Lagerhaus 1,
+Waffenschmiede 2, Eisenschmelze 3, Schlosserei 3, Werft 3, Münzprägerei 3, Hauptquartier 5, Hafen 1, Abdecker 2,
+Gerberei 3, Tempel 3. MWP – Lagerhaus 1, Hafen 1, Hauptquartier 5, Baracke 2, Wachstube 3, Wachturm 4, Festung 5,
+Spähturm 1, Brauerei 1, Katapult −5, Waffenschmiede 1, Lederei 3.
+
+Die WP-Kosten der Technologien sind ein erster Vorschlag von Claude (2026-10-21) zum Ausprobieren und Anpassen.
 
 ## Phasen (Roadmap)
 
 1. **Fundament** – Addon, Lua-Technologiebaum, Forschung mit Warenkosten, Freischalten von S2-Gebäuden, Exklusivität,
    Savegames, KI-Grundverhalten, Forschungsfenster. *(fertig, siehe oben)*
-2. **Wissen** – Ware „Schriftrolle“ + Gelehrtenhaus (Platzhaltergrafik), Schriftrollen als Kostenbestandteil.
-3. **Modifikatoren & Kulturen** – generisches Modifikatorsystem (Produktionstempo, Kampfkraft, Baukosten, Reichweiten …),
-   Kulturen als exklusive Technologien mit stapelnden Traits.
-4. **Emblematische Inhalte** – Kulturgebäude und -soldaten (Grafik der RttR-Völker wiederverwenden).
-5. **Neue Warenketten pro Ära** – z. B. Pferde, Salpeter; Grafik-Pipeline aus [GRAFIK.md](GRAFIK.md).
-6. **Gesellschaft** – Civics, Stabilität, Einfluss; Wunder.
-7. **Militär, Religion, Diplomatie, Ereignisse**; die KI wird in jeder Phase mitgezogen.
+2. **Wissen**
+   1. Wissenspunkte aus Gebäuden, Technologiekosten in WP, Anzeige im Forschungsfenster, KI. *(fertig, siehe oben)*
+   2. Datenschicht: neue Waren, einfache Werkstätten (Eingang → Ausgang) und Tags in Lua, Platzhaltergrafik.
+   3. Knochen-Kette als erster Durchstich: Knochen von Jäger und Fleischerei, Knochenschnitzer, geritzte Knochen
+      (LWP/IWP/MWP) über den Regler „Wissen“, Medien-WP in Lagern und Bibliothek (Ära 2).
+3. **Neue Rohstoffe und Warenketten** – Lehm (Kartenobjekt, Lehmgrube), Ton, Tontafeln, Ziegel, Vasen; Lehm und Ziegel
+   als Baustoff (Baukosten über Tags); Papyrus, Baumwolle/Knotenschnüre, Steintafeln. Später Pferde, Salpeter …
+4. **Welt** – Kartengenerator mit Klimazonen (Temperatur, Feuchtigkeit, Höhe) und 7 geographischen Zonen mit eigener
+   Flora und Fauna; Rohstoffe wie Lehm nach Klima verteilt.
+5. **Modifikatoren & Kulturen** – generisches Modifikatorsystem (Produktionstempo, Kampfkraft, Baukosten, Reichweiten,
+   WP-Werte …), Kulturen als exklusive Technologien mit stapelnden Traits.
+6. **Emblematische Inhalte** – Kulturgebäude und -soldaten (Grafik der RttR-Völker wiederverwenden).
+7. **Gesellschaft** – Civics, Stabilität, Einfluss; Wunder.
+8. **Militär, Religion, Diplomatie, Ereignisse**; die KI wird in jeder Phase mitgezogen.
 
 ## Offene Fragen
 
@@ -139,6 +204,9 @@ Am längsten hängen Technologien, die Zwischenprodukte kosten (Burgenbau: Münz
   oder reichen die Voraussetzungen im Baum?
 - Sollen Gegner sehen können, was man erforscht hat (Spionage/Statistik)?
 - Wie viele Kulturen pro Ära (Humankind hat 10+)? Vorschlag: anfangs 3–4 pro Ära, weil jede Grafik/Balancing braucht.
+- Warenkosten der Forschung: weiter aus dem Lagerbestand nehmen oder von einem Gebäude per Träger bestellen lassen?
+- Warenlimit für Lager (Idee des Nutzers, noch nicht ausgearbeitet).
+- Welt: Gelten Klimazonen und Rohstoffverteilung nur für generierte Karten oder auch für Originalkarten?
 
 ## Bekannte Probleme im Fork (Stand 40aa9a2, nicht durch den Zivilisationsmodus verursacht)
 

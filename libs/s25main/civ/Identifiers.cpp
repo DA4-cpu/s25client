@@ -47,11 +47,12 @@ const char* getIdentifier(GoodType good)
     return goodIdentifiers[ConvertShields(good)];
 }
 
-std::optional<BuildingType> buildingFromIdentifier(const std::string& identifier)
+std::optional<BuildingType> buildingFromIdentifier(const std::string& identifier, bool allowHeadquarters)
 {
     for(const auto bld : helpers::enumRange<BuildingType>())
     {
-        if(isUsableBuilding(bld) && identifier == buildingIdentifiers[bld])
+        const bool usable = isUsableBuilding(bld) || (allowHeadquarters && bld == BuildingType::Headquarters);
+        if(usable && identifier == buildingIdentifiers[bld])
             return bld;
     }
     return std::nullopt;

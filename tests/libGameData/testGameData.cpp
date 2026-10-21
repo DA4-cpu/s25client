@@ -146,9 +146,11 @@ BOOST_AUTO_TEST_CASE(LoadTechnologies)
         bnw::ofstream file(tmp / "default.lua");
         file << R"(
 rttr:AddTechnology{ name = "a", title = "A", era = 0, cost = { Boards = 2, Stones = 1 },
-                    unlocks = { buildings = { "Farm" } } }
+                    knowledge = { LWP = 3, MWP = 1 }, unlocks = { buildings = { "Farm" } } }
 rttr:AddTechnology{ name = "b", title = "B", description = "Desc", era = 2, requires = { "a" }, time = 30,
                     exclusive = true, addon = "WINE", aiPriority = 5 }
+rttr:SetBuildingKnowledge{ Headquarters = { LWP = 5, IWP = 5, MWP = 5 }, Catapult = { MWP = -5 } }
+rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
 )";
     }
     WorldDescription desc;
@@ -161,6 +163,7 @@ rttr:AddTechnology{ name = "b", title = "B", description = "Desc", era = 2, requ
     BOOST_TEST(a.cost.at("Boards") == 2u);
     BOOST_TEST((a.unlockedBuildings == std::vector<std::string>{"Farm"}));
     BOOST_TEST(!a.exclusive);
+    BOOST_TEST((a.knowledge == KnowledgeValues{3, 0, 1}));
     const TechnologyDesc& b = *desc.technologies.tryGet("b");
     BOOST_TEST(b.description == "Desc");
     BOOST_TEST(b.era == 2u);
@@ -169,6 +172,12 @@ rttr:AddTechnology{ name = "b", title = "B", description = "Desc", era = 2, requ
     BOOST_TEST(b.exclusive);
     BOOST_TEST(b.requiredAddon == "WINE");
     BOOST_TEST(b.aiPriority == 5);
+    BOOST_TEST((b.knowledge == KnowledgeValues{0, 0, 0}));
+
+    BOOST_TEST_REQUIRE(desc.buildingKnowledge.size() == 3u);
+    BOOST_TEST((desc.buildingKnowledge.at("Headquarters") == KnowledgeValues{5, 5, 5}));
+    BOOST_TEST((desc.buildingKnowledge.at("Catapult") == KnowledgeValues{0, 0, -5}));
+    BOOST_TEST((desc.buildingKnowledge.at("Woodcutter") == KnowledgeValues{0, 2, 0}));
 }
 
 BOOST_AUTO_TEST_CASE(DetectInvalidTechnologies)
@@ -196,6 +205,16 @@ rttr:AddTechnology{ name = "a" })");
     expectLoadFailure(R"(rttr:AddTechnology{ name = "a", cost = { Boards = 0 } })");
     // Invalid era
     expectLoadFailure(R"(rttr:AddTechnology{ name = "a", era = 7 })");
+    // Unknown kind of knowledge
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", knowledge = { XWP = 1 } })");
+    // Negative knowledge costs
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a", knowledge = { LWP = -1 } })");
+    // Building knowledge must be a table per building
+    expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = 2 })");
+    expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = { Iwp = 2 } })");
+    // Defined twice
+    expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
+rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 3 } })");
 }
 
 BOOST_AUTO_TEST_CASE(DetectRecursion)

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "civ/Knowledge.h"
 #include "civ/TechTree.h"
 #include <optional>
 
@@ -51,6 +52,12 @@ void update(GameWorld& world, unsigned numGFs = RESEARCH_UPDATE_INTERVAL);
 void completeResearch(GameWorld& world, unsigned playerId, TechIdx tech);
 
 /// True if the remaining costs of the technology can be paid from the current stock of the warehouses
+/// Knowledge (tenths) still missing to complete the technology: cost minus available, at least 0 per kind
+KnowledgePoints getMissingKnowledge(const GameWorldBase& world, unsigned playerId, TechIdx tech);
+/// True if the player has enough available knowledge points to complete the technology
+bool hasEnoughKnowledge(const GameWorldBase& world, unsigned playerId, TechIdx tech);
+
+/// True if all remaining ware costs are in stock and enough knowledge points are available
 bool isAffordable(const GameWorldBase& world, unsigned playerId, TechIdx tech);
 /// Sum of all wares already paid for the technology
 unsigned getAmountPaid(const GameWorldBase& world, unsigned playerId, TechIdx tech);

@@ -6,6 +6,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 # Grafiken für den Zivilisationsmodus (Recherche, Stand 2026-10-18)
 
+> **Stand 2026-10-20:** Neue Grafiken erzeugt der Nutzer mit Gemini und bearbeitet sie nach. Der Weg über ein eigenes
+> LoRA ist eingestellt. Der Abschnitt „Was S2/RttR technisch verlangt“ gilt weiterhin (welche Bilder eine neue Ware,
+> ein Gebäude oder ein Beruf braucht); bis Grafiken da sind, verwendet der Code Platzhalter.
+
 ## Was S2/RttR technisch verlangt
 
 - **Palette:** 256 Farben (`PAL5.BBM`). Alles muss am Ende auf diese Palette reduziert werden.
