@@ -2753,25 +2753,36 @@ void AIPlayerJH::AdjustSettings()
         for(const Tool tool : {Tool::Axe, Tool::Saw, Tool::PickAxe, Tool::Crucible})
             toolsettings[tool] = calcToolPriority(tool);
         // Set some minima
-        if(inventory[GoodType::Saw] < 1)
-            toolsettings[Tool::Saw] = 1;
+        if(inventory[GoodType::Saw] < 2)
+            toolsettings[Tool::Saw] = 2;
         if(inventory[GoodType::Axe] < 2)
             toolsettings[Tool::Axe] = 2;
         if(inventory[GoodType::PickAxe] < 2)
             toolsettings[Tool::PickAxe] = 2;
-        if(inventory[GoodType::Shovel] < 1)
-            toolsettings[Tool::Shovel] = 1;
-        if(inventory[GoodType::Scythe] < 1)
-            toolsettings[Tool::Scythe] = 1;
+        if(inventory[GoodType::Shovel] < 2)
+            toolsettings[Tool::Shovel] = 2;
+        if(inventory[GoodType::Scythe] < 2)
+            toolsettings[Tool::Scythe] = 2;
         if(inventory[GoodType::Crucible] < 1)
             toolsettings[Tool::Crucible] = 1;
-        // Only if we haven't ordered any basic tool, we may order other tools
-        if(toolsettings[Tool::Axe] == 0 && toolsettings[Tool::PickAxe] == 0 && toolsettings[Tool::Saw] == 0
-           && toolsettings[Tool::Crucible] == 0)
+        if(inventory[GoodType::Tongs] < 1)
+            toolsettings[Tool::Tongs] = 1;
+        if(inventory[GoodType::Hammer] < 1)
+            toolsettings[Tool::Hammer] = 1;
+        if(inventory[GoodType::Rollingpin] < 1)
+            toolsettings[Tool::Rollingpin] = 1;
+        if(inventory[GoodType::Cleaver] < 1)
+            toolsettings[Tool::Cleaver] = 1;
+        if(inventory[GoodType::RodAndLine] < 1)
+            toolsettings[Tool::RodAndLine] = 1;
+        if(inventory[GoodType::Bow] < 1)
+            toolsettings[Tool::Bow] = 1;
+        /* Only if we haven't ordered any basic tool, we may order other tools
+        if(toolsettings[Tool::Axe] == 0 && toolsettings[Tool::PickAxe] == 0 && toolsettings[Tool::Saw] == 0 && toolsettings[Tool::Crucible] == 
+            0 && toolsettings[Tool::Tongs] == 0 && toolsettings[Tool::Shovel] == 0 && toolsettings[Tool::Scythe] == 0)
         {
             // Order those as required for existing and planned buildings
-            for(const Tool tool : {Tool::Hammer, Tool::Rollingpin, Tool::Tongs,
-                                   Tool::Cleaver, Tool::RodAndLine, Tool::Bow})
+            for(const Tool tool : {Tool::Hammer, Tool::Rollingpin, Tool::Cleaver, Tool::RodAndLine, Tool::Bow})
             {
                 toolsettings[tool] = calcToolPriority(tool);
             }
@@ -2788,7 +2799,7 @@ void AIPlayerJH::AdjustSettings()
                 // Higher priority if we can't meet the building requirements as calculated above
                 toolsettings[Tool::Axe] = (toolsettings[Tool::Axe] == 0) ? 4 : 7;
             }
-        }
+        }*/
 
         for(const auto tool : helpers::enumRange<Tool>())
         {

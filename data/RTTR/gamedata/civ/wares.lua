@@ -43,3 +43,20 @@ rttr:AddWare{
     transport = "Boards",
 }
 ]]
+
+rttr:AddWare{
+    name = "Loam",
+    title = "Lehm",
+    properties = { "muddy" },
+    look = "Leather",
+    transport = "Boards",
+}
+
+rttr:AddWare{
+    name = "Clay",
+    title = "Ton",
+    look = "Wood",
+    transport = "Boards",
+}
+
+-- Funkitoniert einwandtfrei!

@@ -46,3 +46,28 @@ rttr:AddWorkshop{
     workTime = 20,
 }
 ]]
+
+rttr:AddWorkshop{
+    name = "ExampleWorkshop",
+    title = "Beispiel-Werkstatt",
+    size = "small",
+    cost = { Boards = 2 },
+    look = "Woodcutter",
+    worker = { title = "Beispiel-Arbeiter", tool = "none", look = "Carpenter" },
+    output = "Loam",
+    workTime = 20,
+}
+
+rttr:AddWorkshop{
+    name = "LoamProcessor",
+    title = "Lehmverarbeiter",
+    size = "medium",
+    cost = { Boards = 2, Stones = 2 },
+    look = "Woodcutter",
+    worker = { title = "Lehmverarbeiter", tool = "none", look = "Miner" },
+    inputs = { "muddy", "Stones" },
+    consume = "any",
+    output = "Clay",
+    workTime = 40,
+}
+

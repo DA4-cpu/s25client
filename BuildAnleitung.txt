@@ -38,7 +38,7 @@ builden:
 im Ordner "E:\Github\Settlers-2-Return-To-The-Roots\s25client" den alten Ordner "build" löschen und einen neuen Ordner "build" erstellen. 
 
 
-Boost bauen im developer Command prompt:
+Boost bauen im Developer Command Prompt Visual Studio 2022:
 
 cd E:\Programming\boost_1_91_0
 b2 --with-filesystem --with-iostreams --with-locale --with-program_options --with-test address-model=64 architecture=x86 link=static runtime-link=shared

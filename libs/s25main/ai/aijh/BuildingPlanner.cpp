@@ -244,28 +244,28 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                                  static_cast<unsigned>(available_mines));
          if(2 > GetNumBuildings(BuildingType::Ironsmelter) && 1 > GetNumBuildingSites(BuildingType::Ironsmelter))
             buildingsWanted[BuildingType::Ironsmelter] = 2;
-        if(1 > GetNumBuildings(BuildingType::Ironsmelter))
+        if(1 > GetNumBuildings(BuildingType::Ironsmelter)) 
             buildingsWanted[BuildingType::Ironsmelter] = 1;
 
 
         available_mines = static_cast<int>(GetNumBuildings(BuildingType::GoldMine) - GetNumBuildingSites(BuildingType::GoldMine))
                               - static_cast<int>(GetNumBuildingSites(BuildingType::GoldMine)) - 1;
         available_mines = std::max(0, available_mines);
-        buildingsWanted[BuildingType::Mint] =
-          std::min<unsigned>(inventory.goods[GoodType::Crucible] + inventory.people[Job::Minter],
-                             static_cast<unsigned>(available_mines));
-        if(1 > GetNumBuildings(BuildingType::Mint))
+        buildingsWanted[BuildingType::Mint] = std::min<unsigned>(inventory.goods[GoodType::Crucible] + inventory.people[Job::Minter], static_cast<unsigned>(available_mines));
+
+        if(1 > GetNumBuildings(BuildingType::Mint)) 
             buildingsWanted[BuildingType::Mint] = 1;
 
-        buildingsWanted[BuildingType::Metalworks] =
-          ((GetNumBuildings(BuildingType::Ironsmelter) > 0) ? 1 : 0);
+        buildingsWanted[BuildingType::Metalworks] = ((GetNumBuildings(BuildingType::Ironsmelter) > 0) ? 1 : 0);
+
+        if(GetNumBuildings(BuildingType::Metalworks) > 0)
+            buildingsWanted[BuildingType::Metalworks] =
+              (static_cast<double>(GetNumBuildings(BuildingType::Ironsmelter)) / 5.0 + 1.3);
 
         // armory count = smelter -metalworks if there is more than 1 smelter or 1 if there is just 1.
-        if (GetNumBuildings(BuildingType::Metalworks)
-            > 0)
+        if (GetNumBuildings(BuildingType::Metalworks) > 0)
         {
-            resourcelimit = inventory.people[Job::Armorer] + inventory.people[Job::Builder]
-                            + inventory.people[Job::Geologist] + inventory.goods[GoodType::Hammer] + 1;
+            resourcelimit = inventory.people[Job::Armorer] + inventory.goods[GoodType::Hammer];
 
             buildingsWanted[BuildingType::Armory] =
               std::max<unsigned>(GetNumBuildings(BuildingType::Ironsmelter) - GetNumBuildings(BuildingType::Metalworks), 0);
@@ -295,7 +295,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         else buildingsWanted[BuildingType::Mill] = GetNumBuildings(BuildingType::Mill);
 
-        resourcelimit = inventory.people[Job::Baker] + inventory.goods[GoodType::Rollingpin] + 1;
+        resourcelimit = inventory.people[Job::Baker] + inventory.goods[GoodType::Rollingpin];
         buildingsWanted[BuildingType::Bakery] = std::min<unsigned>(GetNumBuildings(BuildingType::Mill), resourcelimit);
 
 
@@ -310,8 +310,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         else
             buildingsWanted[BuildingType::PigFarm] = numPigUsers;
 
-        resourcelimit =
-          inventory.people[Job::Butcher] + inventory.people[Job::Skinner] + inventory.goods[GoodType::Cleaver] + 1;
+        resourcelimit = inventory.people[Job::Butcher] + inventory.goods[GoodType::Cleaver];
 
         unsigned freePigFarms =
           std::max(int(GetNumBuildings(BuildingType::PigFarm) - (numPigUsers - GetNumBuildings(BuildingType::Slaughterhouse))), 0);
@@ -324,11 +323,14 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         else
             buildingsWanted[BuildingType::Slaughterhouse] = GetNumBuildings(BuildingType::Slaughterhouse);
+
         buildingsWanted[BuildingType::Slaughterhouse] =
           std::min<unsigned>(resourcelimit, buildingsWanted[BuildingType::Slaughterhouse]);
         
         if(aijh.ggs.isEnabled(AddonId::LEATHER))
         {
+            resourcelimit = inventory.people[Job::Skinner] + inventory.goods[GoodType::Cleaver];
+
             if((GetNumBuildings(BuildingType::PigFarm) >= numPigUsers - GetNumBuildings(BuildingType::Skinner)) && (1 > GetNumBuildingSites(BuildingType::Skinner)))
 
                 buildingsWanted[BuildingType::Skinner] =
@@ -339,13 +341,11 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
             buildingsWanted[BuildingType::Skinner] =
               std::min<unsigned>(resourcelimit, buildingsWanted[BuildingType::Skinner]);
 
-            resourcelimit =
-              inventory.people[Job::Carpenter] + inventory.people[Job::Tanner] + inventory.goods[GoodType::Saw] + 1;
+            resourcelimit = inventory.people[Job::Tanner] + inventory.goods[GoodType::Saw];
             buildingsWanted[BuildingType::Tannery] =
               std::min<unsigned>(resourcelimit, GetNumBuildings(BuildingType::Skinner));
 
-            resourcelimit =
-              inventory.people[Job::Metalworker] + inventory.people[Job::LeatherWorker] + inventory.goods[GoodType::Tongs] + 1;
+            resourcelimit = inventory.people[Job::LeatherWorker] + inventory.goods[GoodType::Tongs];
             buildingsWanted[BuildingType::LeatherWorks] =
               std::min<unsigned>(resourcelimit, GetNumBuildings(BuildingType::Tannery));
 
@@ -440,16 +440,12 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                 buildingsWanted[BuildingType::IronMine] =
                   (inventory.people[Job::Miner] + inventory.goods[GoodType::PickAxe]
                      > GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::GoldMine) + 1
-                   && numFoodProducers > 4) ?
-                    2 :
-                    1;
-                //buildingsWanted[BuildingType::IronMine]++;
+                   && numFoodProducers > 4) ? 2 : 1;
+
                 buildingsWanted[BuildingType::GoldMine] = (inventory.people[Job::Miner] > 2) ? 1 : 0;
-                //buildingsWanted[BuildingType::GoldMine]++;
-                resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel];
                 if(aijh.ggs.isEnabled(AddonId::CHARBURNER) && GetNumBuildings(BuildingType::Farm) > 2)
                 {
-                    resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel] + 1;
+                    resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel];
                     if(aijh.AmountInStorage(GoodType::IronOre) * 2 + aijh.AmountInStorage(GoodType::Gold) > 16)
                     {
                         if(aijh.AmountInStorage(GoodType::IronOre) * 2 + aijh.AmountInStorage(GoodType::Gold)
