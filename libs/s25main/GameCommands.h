@@ -19,6 +19,7 @@
 #include "gameTypes/TempleProductionMode.h"
 #include "gameData/MilitaryConsts.h"
 #include "s25util/Serializer.h"
+#include <array>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -603,6 +604,40 @@ public:
     {
         GameCommand::Serialize(ser);
         ser.PushUnsignedShort(techIdx);
+    }
+};
+
+/// Civilization mode: Set the regulator "Wissen" (weight 0..10 for LWP, IWP, MWP)
+class SetKnowledgeDistribution : public GameCommand
+{
+    GC_FRIEND_DECL;
+
+public:
+    using Values = std::array<uint8_t, 3>;
+
+private:
+    const Values values;
+
+protected:
+    SetKnowledgeDistribution(const Values& values) : GameCommand(GCType::SetKnowledgeDistribution), values(values) {}
+    SetKnowledgeDistribution(Serializer& ser) : GameCommand(GCType::SetKnowledgeDistribution), values(popValues(ser)) {}
+
+public:
+    void Execute(GameWorld& world, uint8_t playerId) override;
+    void Serialize(Serializer& ser) const override
+    {
+        GameCommand::Serialize(ser);
+        for(const uint8_t value : values)
+            ser.PushUnsignedChar(value);
+    }
+
+private:
+    static Values popValues(Serializer& ser)
+    {
+        Values result;
+        for(uint8_t& value : result)
+            value = ser.PopUnsignedChar();
+        return result;
     }
 };
 

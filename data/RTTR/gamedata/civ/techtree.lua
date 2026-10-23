@@ -339,6 +339,19 @@ rttr:AddTechnology{
     aiPriority = 30,
 }
 
+rttr:AddTechnology{
+    name = "libraries",
+    title = "Bibliotheken", -- PLATZHALTER: Anzeigename
+    description = "Wissensmedien werden in eigenen Häusern gesammelt und gepflegt. Dort zählen sie voll statt nur halb.", -- PLATZHALTER
+    era = 2,
+    requires = { "bone_carving" }, -- PLATZHALTER: Voraussetzungen noch offen
+    knowledge = { LWP = 1 },      -- PLATZHALTER: WP-Kosten noch offen
+    -- PLATZHALTER: Warenkosten und Dauer noch offen, z.B.
+    -- cost = { ... },
+    -- time = ?,
+    unlocks = { buildings = { "Library" } },
+}
+
 -------------------------------------------------------------------------------
 -- 3: Mittelalter
 -------------------------------------------------------------------------------

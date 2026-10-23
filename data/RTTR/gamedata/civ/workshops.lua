@@ -26,6 +26,10 @@ rttr:AddWorkshop{...}:
               (z.B. Nadelholz -> Nadelholzbretter). Zu jeder möglichen Eingangsware muss es genau ein passendes Produkt
               geben.
   storage     optional (Standard 6): Lagerplätze je Eingang
+  library     optional: macht die Werkstatt zur Bibliothek, z.B. library = { capacity = 20 }.
+              Eine Bibliothek bestellt alle Wissensmedien (Waren mit knowledge in wares.lua) per Träger, bis capacity
+              erreicht ist, und stellt nichts her. Darin zählen die WP der Medien voll (in Lagern nur halb). Wird sie
+              zerstört, sind die Medien verloren. Ohne inputs, output und workTime.
   workTime    Arbeitszeit pro Produkt in Sekunden
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
 
@@ -90,4 +94,19 @@ rttr:AddWorkshop{
     output = "GeritzterKnochen",
     outputChoice = "knowledge",
     workTime = 120,         
+}
+
+-------------------------------------------------------------------------------
+-- Bibliothek (Schritt 4c). Entschieden: mittelgroß, fasst 20 Medien, Arbeiter "Bibliothekar" ohne Werkzeug, erst ab
+-- Ära 2 (Technologie "libraries" in techtree.lua).
+-------------------------------------------------------------------------------
+
+rttr:AddWorkshop{
+    name = "Library",
+    title = "Bibliothek",
+    size = "medium",
+    cost = { Boards = 3, Stones = 3 }, -- PLATZHALTER: Baukosten noch offen
+    look = "Bakery",                   -- PLATZHALTER: Grafik-Vorbild
+    worker = { title = "Bibliothekar", tool = "none", look = "Helper" }, -- look = PLATZHALTER
+    library = { capacity = 20 },
 }

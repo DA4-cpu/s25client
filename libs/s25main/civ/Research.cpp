@@ -109,12 +109,18 @@ void startGame(GameWorld& world)
     {
         GamePlayer& player = world.GetPlayer(i);
         applyBuildingAvailability(player);
-        // Workshops defined in lua consume their input wares
+        // Workshops defined in lua consume their input wares, libraries take all knowledge media
         for(unsigned bldIdx = 0; bldIdx < content.GetNumBuildings(); ++bldIdx)
         {
             const BuildingType bld = getCustomBuilding(bldIdx);
-            for(const GoodType input : content.GetBuilding(bld)->workDesc.waresNeeded)
+            const CustomBuilding& building = *content.GetBuilding(bld);
+            for(const GoodType input : building.workDesc.waresNeeded)
                 player.AddWareClient(input, bld);
+            if(building.IsLibrary())
+            {
+                for(const GoodType medium : content.GetKnowledgeMedia())
+                    player.AddWareClient(medium, bld);
+            }
         }
     }
 }

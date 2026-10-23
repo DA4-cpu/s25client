@@ -11,12 +11,17 @@
 #include "WindowManager.h"
 #include "WineLoader.h"
 #include "addons/const_addons.h"
+#include "civ/Content.h"
+#include "civ/PlayerResearch.h"
+#include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "controls/ctrlGroup.h"
 #include "controls/ctrlProgress.h"
 #include "controls/ctrlTab.h"
 #include "iwHelp.h"
 #include "network/GameClient.h"
 #include "ogl/FontStyle.h"
+#include "ogl/glArchivItem_Bitmap.h"
 #include "world/GameWorldBase.h"
 #include "world/GameWorldViewer.h"
 #include "gameData/BuildingConsts.h"
@@ -34,11 +39,14 @@ iwDistribution::iwDistribution(const GameWorldViewer& gwv, GameCommandFactory& g
       gwv(gwv), gcFactory(gcFactory)
 {
     CreateGroups();
+    // Civilization mode: Tab "Wissen" for the regulator of knowledge media (only if there are media)
+    hasKnowledgeTab = civ::isEnabled(gwv.GetWorld()) && !civ::getActiveContent().GetKnowledgeMedia().empty();
+    const unsigned numTabs = groups.size() + (hasKnowledgeTab ? 1u : 0u);
 
-    Resize(Extent(groups.size() * TAB_ICON_SIZE + TAB_ICON_SIZE / 2 + 20, 312));
+    Resize(Extent(numTabs * TAB_ICON_SIZE + TAB_ICON_SIZE / 2 + 20, 312));
 
     // Tab Control
-    ctrlTab* tab = AddTabCtrl(0, DrawPoint(10, 20), groups.size() * TAB_ICON_SIZE + TAB_ICON_SIZE / 2);
+    ctrlTab* tab = AddTabCtrl(0, DrawPoint(10, 20), numTabs * TAB_ICON_SIZE + TAB_ICON_SIZE / 2);
     DrawPoint txtPos(GetSize().x / 2, 60);
     DrawPoint progPos(PROGRESS_BORDER_DISTANCE - tab->GetPos().x, txtPos.y);
     const Extent progSize(GetSize().x - 2 * PROGRESS_BORDER_DISTANCE, 20);
@@ -59,6 +67,30 @@ iwDistribution::iwDistribution(const GameWorldViewer& gwv, GameCommandFactory& g
         }
     }
 
+    if(hasKnowledgeTab)
+    {
+        // Icon: ware symbol of the first knowledge medium (placeholder graphics)
+        glArchivItem_Bitmap* img = nullptr;
+        if(LOADER.HasMapGraphics())
+            img = dynamic_cast<glArchivItem_Bitmap*>(
+              LOADER.GetWareTex(civ::getActiveContent().GetKnowledgeMedia().front()));
+        if(!img)
+            img = LOADER.GetImageN("io", 225);
+        ctrlGroup* tabGrp = tab->AddTab(img, _("Wissen: Art der Wissensmedien"), GetKnowledgeTabId());
+        txtPos.y = progPos.y = 60;
+        const std::array<std::string, 3> names = {_("Landwirtschaft (LWP)"), _("Industrie (IWP)"), _("Militär (MWP)")};
+        for(unsigned i = 0; i < names.size(); ++i)
+        {
+            tabGrp->AddText(names.size() + i, txtPos, names[i], COLOR_YELLOW, FontStyle::CENTER | FontStyle::BOTTOM,
+                            SmallFont);
+            tabGrp->AddProgress(i, progPos, progSize, TextureColor::Grey, 139, 138, 10);
+            txtPos.y = progPos.y += progSize.y * 2;
+        }
+        tabGrp->AddText(2 * names.size(), DrawPoint(txtPos.x, txtPos.y + 10),
+                        _("Welches Wissensmedium Werkstätten herstellen"), COLOR_YELLOW,
+                        FontStyle::CENTER | FontStyle::BOTTOM, SmallFont);
+    }
+
     // Gruppe auswählen
     tab->SetSelection(0);
 
@@ -77,6 +109,15 @@ void iwDistribution::TransmitSettings()
 {
     if(GAMECLIENT.IsReplayModeOn())
         return;
+    if(hasKnowledgeTab && knowledgeChanged)
+    {
+        ctrlGroup* tab = GetCtrl<ctrlTab>(0)->GetGroup(GetKnowledgeTabId());
+        std::array<uint8_t, 3> values{};
+        for(unsigned i = 0; i < values.size(); ++i)
+            values[i] = static_cast<uint8_t>(tab->GetCtrl<ctrlProgress>(i)->GetPosition());
+        if(gcFactory.SetKnowledgeDistribution(values))
+            knowledgeChanged = false;
+    }
     if(settings_changed)
     {
         // Read values from the progress ctrls to the struct
@@ -109,7 +150,20 @@ void iwDistribution::TransmitSettings()
 void iwDistribution::Msg_Group_ProgressChange(const unsigned /*group_id*/, const unsigned /*ctrl_id*/,
                                               const unsigned short /*position*/)
 {
-    settings_changed = true;
+    // Note: The tab control reports its own id as group id, so check which tab is shown (only that one can be changed)
+    if(hasKnowledgeTab && GetCtrl<ctrlTab>(0)->GetCurrentTab() == GetKnowledgeTabId())
+        knowledgeChanged = true;
+    else
+        settings_changed = true;
+}
+
+void iwDistribution::SetKnowledgeValues(const std::array<uint8_t, 3>& values)
+{
+    if(!hasKnowledgeTab)
+        return;
+    ctrlGroup* tab = GetCtrl<ctrlTab>(0)->GetGroup(GetKnowledgeTabId());
+    for(unsigned i = 0; i < values.size(); ++i)
+        tab->GetCtrl<ctrlProgress>(i)->SetPosition(values[i]);
 }
 
 void iwDistribution::UpdateSettings(const Distributions& distribution)
@@ -131,6 +185,12 @@ void iwDistribution::UpdateSettings(const Distributions& distribution)
 void iwDistribution::UpdateSettings()
 {
     UpdateSettings(GAMECLIENT.visual_settings.distribution);
+    if(hasKnowledgeTab && !knowledgeChanged)
+    {
+        const auto distribution = gwv.GetPlayer().GetResearch().GetKnowledgeDistribution(gwv.GetWorld().GetTechTree());
+        SetKnowledgeValues({distribution[civ::KnowledgeType::Agriculture], distribution[civ::KnowledgeType::Industry],
+                            distribution[civ::KnowledgeType::Military]});
+    }
 }
 
 void iwDistribution::Msg_ButtonClick(const unsigned ctrl_id)
@@ -154,6 +214,13 @@ void iwDistribution::Msg_ButtonClick(const unsigned ctrl_id)
         {
             UpdateSettings(GAMECLIENT.default_settings.distribution);
             settings_changed = true;
+            if(hasKnowledgeTab)
+            {
+                const auto& defaults = civ::getActiveContent().GetDefaultKnowledgeDistribution();
+                SetKnowledgeValues({defaults[civ::KnowledgeType::Agriculture], defaults[civ::KnowledgeType::Industry],
+                                    defaults[civ::KnowledgeType::Military]});
+                knowledgeChanged = true;
+            }
         }
         break;
     }

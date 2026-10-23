@@ -118,10 +118,29 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context + ": consume must be \"each\" or \"any\"");
     consumeEach = consume == "each";
 
+    if(auto libraryTable = luaData.getOptional<kaguya::LuaTable>("library"))
+    {
+        CheckedLuaTable libraryData(*libraryTable);
+        libraryData.getOrThrow(libraryCapacity, "capacity");
+        libraryData.checkUnused();
+        if(libraryCapacity == 0 || libraryCapacity > 255)
+            throw GameDataError(context + ": library capacity must be in [1, 255]");
+    }
+    const bool isLibrary = libraryCapacity > 0;
+    if(isLibrary && !inputs.empty())
+    {
+        throw GameDataError(context
+                            + ": a library has no inputs, it takes all wares with knowledge points (knowledge media)");
+    }
     const auto outputValue = luaData.getOptional<kaguya::LuaRef>("output");
-    if(!outputValue)
+    if(isLibrary)
+    {
+        if(outputValue)
+            throw GameDataError(context + ": a library produces nothing (no output)");
+    } else if(!outputValue)
         throw GameDataError(context + ": output is missing");
-    output = parseTagQuery(*outputValue, context + ", output");
+    else
+        output = parseTagQuery(*outputValue, context + ", output");
     inheritProperties = luaData.getOrDefault("inheritProperties", false);
     outputChoice = luaData.getOrDefault("outputChoice", std::string());
     if(!outputChoice.empty() && outputChoice != "knowledge")
@@ -131,9 +150,16 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     storage = luaData.getOrDefault("storage", 6u);
     if(storage == 0 || storage > 99)
         throw GameDataError(context + ": storage must be in [1, 99]");
-    luaData.getOrThrow(workTime, "workTime");
-    if(workTime == 0)
-        throw GameDataError(context + ": workTime must be > 0");
+    if(isLibrary)
+    {
+        if(luaData.getOptional<unsigned>("workTime"))
+            throw GameDataError(context + ": a library has no workTime");
+    } else
+    {
+        luaData.getOrThrow(workTime, "workTime");
+        if(workTime == 0)
+            throw GameDataError(context + ": workTime must be > 0");
+    }
     waitTime = luaData.getOrDefault("waitTime", 0u);
     luaData.checkUnused();
 }

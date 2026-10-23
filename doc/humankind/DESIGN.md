@@ -43,6 +43,8 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-21 | **Tag-System:** Jede Ware hat Tags für Name (z. B. „Nadelholzbretter“), Warenart („Bretter“) und Eigenschaft („Nadelholz“). Gebäude und Baustellen bestellen nach einer Tag-Kombination oder nach dem genauen Namen. Verarbeitete Waren übernehmen die Eigenschaft der Eingangsware. |
 | 2026-10-23 | **Geritzte Knochen sind drei Waren** (LWP, IWP, MWP) mit gemeinsamer Warenart `GeritzterKnochen` und der Wissensart als Eigenschaft. Eine Ware mit drei Arten gibt es technisch nicht, weil jede Ware ein eigener Lagerplatz ist; über die Tags lassen sie sich trotzdem gemeinsam bestellen. |
 | 2026-10-23 | Der Knochenschnitzer braucht ein **Beil** (Cleaver). Elfenbein kommt später (mit den Tieren der Zonen). |
+| 2026-10-23 | Umsetzung Regler „Wissen“ (technische Auslegung, vom Nutzer änderbar): drei Regler 0–10 je Wissensart, gewichtete Zufallswahl pro Produkt (wie Werkzeug-Prioritäten der Schlosserei); stehen alle möglichen Medien einer Werkstatt auf 0, wird gleich verteilt. Startwerte in `knowledge.lua`. |
+| 2026-10-23 | Medien-WP zählen aus dem **echten Bestand**: in Lagerhaus/HQ/Hafen 0,5-fach, in der Bibliothek 1-fach. Medien unterwegs oder an Flaggen zählen nicht. Die Bibliothek nimmt **alle** Waren mit `knowledge` an (keine Grenze von 3 Eingängen) und bestellt erst, wenn der Bibliothekar da ist. |
 
 ## Zuordnung Humankind → Siedler
 
@@ -142,6 +144,8 @@ null. `ai-battle` zeigt die WP jedes Spielers als „verfügbar/gesamt“ an.
 | Wissenspunkte (Arten, Berechnung) | `libs/s25main/civ/Knowledge.*` |
 | Waren, Werkstätten, Tags aus Lua | `libs/libGamedata/gameData/CivContentDesc.*`, `libs/s25main/civ/Content.*`, `civ/Looks.h`, `figures/nofCustomWorker.*` |
 | Nebenprodukte | `ByproductDesc` (`CivContentDesc.*`), `civ::Byproduct` (`TechTree.*`), `civ::getByproducts` (`Research.*`), `nofBuildingWorker::WorkingReady` |
+| Regler „Wissen“ | `PlayerResearch::Get/SetKnowledgeDistribution`, `gc::SetKnowledgeDistribution`, `iwDistribution` (Reiter), `nofCustomWorker::ProduceWare` |
+| Medien-WP, Bibliothek | `civ::calcTotalKnowledge` (`Knowledge.cpp`), `nobUsual` (Bibliotheks-Modus), `iwBuilding`, KI: `BuildingPlanner::UpdateCustomBuildingsWanted` |
 | Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua`, `knowledge.lua`, `techtree.lua`, `byproducts.lua`) |
 
 ## Wissenspunkte
@@ -227,6 +231,19 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   braucht `knowledge` in `wares.lua`. Welche hergestellt wird, entscheidet später der Regler „Wissen“ (Schritt 4b);
   bis dahin wählt der Arbeiter mit dem synchronen Spiel-Zufall gleich verteilt.
 
+### Regler „Wissen“ und Bibliothek (Schritte 4b, 4c)
+
+- Reiter „Wissen“ im Verteilungsfenster (nur im Zivilisationsmodus und wenn es Wissensmedien gibt): drei Regler
+  LWP/IWP/MWP. Eigener Spielbefehl `gc::SetKnowledgeDistribution`, gespeichert in `civ::PlayerResearch`
+  (Spielstand-Version 19). Das normale Verteilungssystem bleibt unverändert.
+- Startwerte: `rttr:SetKnowledgeDistribution{ LWP = 5, IWP = 5, MWP = 5 }` in `knowledge.lua` (ohne Angabe 5/5/5).
+- Bibliothek: Werkstatt mit `library = { capacity = 20 }` (ohne inputs/output/workTime). Sie ist Abnehmer aller
+  Wissensmedien, bestellt sie alle 10 Sekunden aus den Lagern (eins pro Durchlauf), solange Platz ist. „Produktion
+  stoppen“ stoppt die Annahme. Das Gebäudefenster zeigt den Bestand. Wird sie zerstört, sind die Medien verloren.
+- KI: Lua-Werkstätten mit Eingängen baut sie, sobald Eingangswaren im Lager liegen (1 + 1 je 10 Waren, höchstens 3),
+  Werkstätten ohne Eingang einmal, Bibliotheken, wenn mehr Medien in Lagern warten als die vorhandenen noch aufnehmen
+  (höchstens 5). Werkzeuge bestellt sie über die vorhandene Werkzeug-Logik. Den Regler verstellt sie nicht.
+
 ### Datenformat
 
 Dateien: `data/RTTR/gamedata/civ/wares.lua` und `civ/workshops.lua` (dort ausführlich erklärt, mit Beispiel).
@@ -259,12 +276,16 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
       - 4a: Nebenprodukte aus Lua (Knochen von Jäger und Fleischerei nach der Technologie `bone_carving`),
         Knochenschnitzer, drei geritzte Knochen, Werkstätten mit mehreren Produkten. *(fertig, Zahlenwerte sind
         Platzhalter)*
-      - 4b: Regler „Wissen“ im Verteilungsfenster, Medien-WP in Lagern (0,5-fach).
-      - 4c: Bibliothek (Ära 2, 1-fach, bestellt Medien per Träger), einfache KI-Regel für Werkstätten.
+      - 4b: Regler „Wissen“ im Verteilungsfenster, Medien-WP in Lagern (0,5-fach). *(fertig)*
+      - 4c: Bibliothek (Ära 2, 1-fach, bestellt Medien per Träger), einfache KI-Regel für Werkstätten. *(fertig,
+        Zahlenwerte sind Platzhalter)*
 3. **Neue Rohstoffe und Warenketten** – Lehm (Kartenobjekt, Lehmgrube), Ton, Tontafeln, Ziegel, Vasen; Lehm und Ziegel
    als Baustoff (Baukosten über Tags); Papyrus, Baumwolle/Knotenschnüre, Steintafeln. Später Pferde, Salpeter …
 4. **Welt** – Kartengenerator mit Klimazonen (Temperatur, Feuchtigkeit, Höhe) und 7 geographischen Zonen mit eigener
-   Flora und Fauna; Rohstoffe wie Lehm nach Klima verteilt.
+   Flora und Fauna; Rohstoffe wie Lehm nach Klima verteilt. Nach Wunsch des Nutzers (Konzept 2026-10-23): Umbau mit
+   dem Online-Kartengenerator der RttR-Seite als Vorbild (Beispielkarten in `MAPS/`), neue Terraingrafiken
+   (`TEX_RUSTY_POLAR_RC2_neue_Landschaftsgrafiken.zip`), Ressourcenverteilung per Lua (Höhe/Temperatur/Feuchte,
+   optional Zone, Terrain wie Süß-/Salzwasser, Land, Gebirge, Fluss- und Ufernähe), Gesamtmenge per Regler im UI.
 5. **Modifikatoren & Kulturen** – generisches Modifikatorsystem (Produktionstempo, Kampfkraft, Baukosten, Reichweiten,
    WP-Werte …), Kulturen als exklusive Technologien mit stapelnden Traits.
 6. **Emblematische Inhalte** – Kulturgebäude und -soldaten (Grafik der RttR-Völker wiederverwenden).

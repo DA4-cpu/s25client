@@ -14,6 +14,7 @@
 #include "figures/nofBuildingWorker.h"
 #include "figures/nofPigbreeder.h"
 #include "helpers/containerUtils.h"
+#include "helpers/serializeEnums.h"
 #include "network/GameClient.h"
 #include "notifications/BuildingNote.h"
 #include "ogl/glArchivItem_Bitmap.h"
@@ -63,6 +64,18 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
     for(std::list<Ware*>& orderedWare : orderedWares)
         sgd.PopObjectContainer(orderedWare, GO_Type::Ware);
     helpers::popContainer(sgd, lastProductivities);
+
+    // Civilization mode: library
+    if(sgd.GetGameDataVersion() >= 19 && sgd.PopBool())
+    {
+        const unsigned numEntries = sgd.PopUnsignedInt();
+        for(unsigned i = 0; i < numEntries; ++i)
+        {
+            const auto good = helpers::popEnum<GoodType>(sgd);
+            libraryMedia_[good] = sgd.PopUnsignedInt();
+        }
+        sgd.PopObjectContainer(libraryOrderedMedia_, GO_Type::Ware);
+    }
 }
 
 void nobUsual::Serialize(SerializedGameData& sgd) const
@@ -84,6 +97,20 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
     for(const std::list<Ware*>& orderedWare : orderedWares)
         sgd.PushObjectContainer(orderedWare, true);
     helpers::pushContainer(sgd, lastProductivities);
+
+    // Civilization mode: library
+    const bool hasLibraryData = !libraryMedia_.empty() || !libraryOrderedMedia_.empty();
+    sgd.PushBool(hasLibraryData);
+    if(hasLibraryData)
+    {
+        sgd.PushUnsignedInt(static_cast<unsigned>(libraryMedia_.size()));
+        for(const auto& entry : libraryMedia_)
+        {
+            helpers::pushEnum<uint8_t>(sgd, entry.first);
+            sgd.PushUnsignedInt(entry.second);
+        }
+        sgd.PushObjectContainer(libraryOrderedMedia_, true);
+    }
 }
 
 nobUsual::~nobUsual() = default;
@@ -105,6 +132,9 @@ void nobUsual::DestroyBuilding()
             WareNotNeeded(ware);
         orderedWare.clear();
     }
+    for(Ware* ware : libraryOrderedMedia_)
+        WareNotNeeded(ware);
+    libraryOrderedMedia_.clear();
 
     // Events löschen
     GetEvMgr().RemoveEvent(orderware_ev);
@@ -117,6 +147,10 @@ void nobUsual::DestroyBuilding()
         RTTR_Assert(ware != GoodType::Nothing);
         world->GetPlayer(player).DecreaseInventoryWare(ware, numWares[i]);
     }
+    // Media in a library are lost with the building (and so are their knowledge points)
+    for(const auto& entry : libraryMedia_)
+        world->GetPlayer(player).DecreaseInventoryWare(entry.first, entry.second);
+    libraryMedia_.clear();
 }
 
 void nobUsual::Draw(DrawPoint drawPt)
@@ -254,6 +288,10 @@ void nobUsual::HandleEvent(const unsigned id)
 
         // Add next event
         productivity_ev = GetEvMgr().AddEvent(this, numProductivityGFs, 1);
+    } else if(IsLibrary())
+    {
+        OrderLibraryMedium();
+        orderware_ev = GetEvMgr().AddEvent(this, 210);
     } else
     {
         // Ware bestellen (falls noch Platz ist) und nicht an Betriebe, die stillgelegt wurden!
@@ -283,6 +321,16 @@ void nobUsual::HandleEvent(const unsigned id)
 
 void nobUsual::AddWare(std::unique_ptr<Ware> ware)
 {
+    if(IsLibrary())
+    {
+        // Knowledge medium arrived: store it (it stays in the inventory of the player)
+        ++libraryMedia_[ware->type];
+        RTTR_Assert(helpers::contains(libraryOrderedMedia_, ware.get()));
+        libraryOrderedMedia_.remove(ware.get());
+        world->GetPlayer(player).RemoveWare(*ware);
+        return;
+    }
+
     // Gucken, um was für einen Warentyp es sich handelt und dann dort hinzufügen
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
     for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
@@ -315,6 +363,13 @@ bool nobUsual::FreePlaceAtFlag()
 
 void nobUsual::WareLost(Ware& ware)
 {
+    if(IsLibrary())
+    {
+        RTTR_Assert(helpers::contains(libraryOrderedMedia_, &ware));
+        libraryOrderedMedia_.remove(&ware);
+        return;
+    }
+
     // Ware konnte nicht kommen --> raus damit
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
     for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
@@ -332,7 +387,7 @@ void nobUsual::GotWorker(Job /*job*/, noFigure& worker)
 {
     this->worker = checkedCast<nofBuildingWorker*>(&worker);
 
-    if(!BLD_WORK_DESC[bldType_].waresNeeded.empty())
+    if(!BLD_WORK_DESC[bldType_].waresNeeded.empty() || IsLibrary())
         // erste Ware bestellen
         HandleEvent(0);
 }
@@ -439,6 +494,18 @@ unsigned nobUsual::CalcDistributionPoints(const GoodType type)
     if(disableProduction)
         return 0;
 
+    if(IsLibrary())
+    {
+        // A library takes every knowledge medium while there is space. No worker -> no orders yet
+        if(!worker || !IsKnowledgeMedium(type))
+            return 0;
+        const unsigned numMedia = GetNumLibraryMedia() + GetNumOrderedLibraryMedia();
+        if(numMedia >= GetLibraryCapacity())
+            return 0;
+        // Same rating as for other buildings: 10000 minus 30 per ware stored or on the way (capacity <= 255)
+        return 10000 - numMedia * 30;
+    }
+
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
     // Warentyp ermitteln
     unsigned id;
@@ -471,6 +538,13 @@ unsigned nobUsual::CalcDistributionPoints(const GoodType type)
 
 void nobUsual::TakeWare(Ware* ware)
 {
+    if(IsLibrary())
+    {
+        RTTR_Assert(!helpers::contains(libraryOrderedMedia_, ware));
+        libraryOrderedMedia_.push_back(ware);
+        return;
+    }
+
     // Ware in die Bestellliste aufnehmen
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
     for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
@@ -486,7 +560,49 @@ void nobUsual::TakeWare(Ware* ware)
 
 bool nobUsual::AreThereAnyOrderedWares() const
 {
-    return helpers::contains_if(orderedWares, [](const auto& wareList) { return !wareList.empty(); });
+    return !libraryOrderedMedia_.empty()
+           || helpers::contains_if(orderedWares, [](const auto& wareList) { return !wareList.empty(); });
+}
+
+bool nobUsual::IsLibrary() const
+{
+    return GetLibraryCapacity() > 0u;
+}
+
+unsigned nobUsual::GetLibraryCapacity() const
+{
+    const civ::CustomBuilding* building = civ::getActiveContent().GetBuilding(bldType_);
+    return building ? building->libraryCapacity : 0u;
+}
+
+unsigned nobUsual::GetNumLibraryMedia() const
+{
+    unsigned result = 0;
+    for(const auto& entry : libraryMedia_)
+        result += entry.second;
+    return result;
+}
+
+bool nobUsual::IsKnowledgeMedium(const GoodType good)
+{
+    return helpers::contains(civ::getActiveContent().GetKnowledgeMedia(), good);
+}
+
+void nobUsual::OrderLibraryMedium()
+{
+    if(disableProduction || GetNumLibraryMedia() + GetNumOrderedLibraryMedia() >= GetLibraryCapacity())
+        return;
+    // Try the media in turn, starting after the last one ordered, until one is available in a warehouse
+    const std::vector<GoodType>& media = civ::getActiveContent().GetKnowledgeMedia();
+    for(unsigned i = 0; i < media.size(); ++i)
+    {
+        const unsigned idx = (lastOrderedWare + i) % media.size();
+        if(world->GetPlayer(player).OrderWare(media[idx], *this))
+        {
+            lastOrderedWare = static_cast<unsigned char>((idx + 1) % media.size());
+            return;
+        }
+    }
 }
 
 void nobUsual::WorkerArrived()

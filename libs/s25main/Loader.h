@@ -124,6 +124,8 @@ public:
     ITexture* GetMapTexture(unsigned nr);
     /// Return the more specialized map image. Note: Prefer GetMapTexture which also handles (pseudo) player bitmaps
     glArchivItem_Bitmap* GetMapImage(unsigned nr);
+    /// True if the map graphics (incl. ware symbols) are loaded (not the case in GUI-only tests)
+    bool HasMapGraphics() const { return map_gfx != nullptr; }
     /// Get the ware symbol texture
     ITexture* GetWareTex(GoodType ware);
     /// Get the ware stack texture (lying on ground)

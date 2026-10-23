@@ -10,6 +10,7 @@
 #include "LandscapeDesc.h"
 #include "TechnologyDesc.h"
 #include "TerrainDesc.h"
+#include <optional>
 #include <stdexcept>
 
 struct GameDataError : public std::runtime_error
@@ -41,6 +42,8 @@ struct WorldDescription
     std::vector<WorkshopDesc> workshops;
     /// Byproducts of buildings in the civilization mode in order of definition
     std::vector<ByproductDesc> byproducts;
+    /// Default setting of the regulator "Wissen" (weights 0..10 for LWP, IWP, MWP). Not set: all equal
+    std::optional<KnowledgeValues> knowledgeDistribution;
     // Convenience accessors
     template<class T>
     const T& get(DescIdx<T> idx) const

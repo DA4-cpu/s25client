@@ -69,8 +69,14 @@ struct CustomBuilding
     /// Product if properties are not passed on
     GoodType product = GoodType::Nothing;
     /// Possible products if the product is chosen by knowledge type (outputChoice = "knowledge"). Otherwise empty.
-    /// The worker picks one of them for each product (evenly until the regulator "Wissen" exists)
+    /// The worker picks one of them for each product, weighted by the regulator "Wissen" of the player
     std::vector<GoodType> productChoices;
+    /// Knowledge type of each entry of productChoices
+    std::vector<KnowledgeType> productChoiceTypes;
+    /// Library: stores up to this many knowledge media and produces nothing. 0: normal workshop
+    unsigned libraryCapacity = 0;
+
+    bool IsLibrary() const { return libraryCapacity > 0; }
 };
 
 /// Wares, workshops and tags of the civilization mode which are defined in lua.
@@ -101,6 +107,15 @@ public:
     const std::vector<std::string>& GetProperties(GoodType good) const { return properties_[good]; }
     /// True if the ware has all tags of the query
     bool Matches(GoodType good, const TagQuery& query) const;
+    /// Knowledge points (whole points) of a ware stored as knowledge medium. All 0 if it is no medium
+    KnowledgePoints GetKnowledgeOf(GoodType good) const;
+    /// All wares with knowledge points (knowledge media), in order of definition
+    const std::vector<GoodType>& GetKnowledgeMedia() const { return knowledgeMedia_; }
+    /// Default setting of the regulator "Wissen" (weight 0..10 per knowledge type)
+    const helpers::EnumArray<uint8_t, KnowledgeType>& GetDefaultKnowledgeDistribution() const
+    {
+        return defaultKnowledgeDistribution_;
+    }
     /// All usable wares which match the query
     std::vector<GoodType> FindWares(const TagQuery& query) const;
 
@@ -124,6 +139,8 @@ private:
     std::vector<CustomBuilding> buildings_;
     std::vector<CustomWorker> workers_;
     helpers::EnumArray<std::vector<std::string>, GoodType> tags_, properties_;
+    std::vector<GoodType> knowledgeMedia_;
+    helpers::EnumArray<uint8_t, KnowledgeType> defaultKnowledgeDistribution_;
 };
 
 /// Content of the running game. Empty unless a game in the civilization mode is running.

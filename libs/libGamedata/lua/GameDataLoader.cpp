@@ -44,16 +44,18 @@ bool GameDataLoader::Load()
 
 void GameDataLoader::Register(kaguya::State& state)
 {
-    state["RTTRGameData"].setClass(kaguya::UserdataMetatable<GameDataLoader, LuaInterfaceBase>()
-                                     .addFunction("AddLandscape", &GameDataLoader::AddLandscape)
-                                     .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
-                                     .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
-                                     .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
-                                     .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
-                                     .addFunction("AddWare", &GameDataLoader::AddWare)
-                                     .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
-                                     .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
-                                     .addFunction("AddByproduct", &GameDataLoader::AddByproduct));
+    state["RTTRGameData"].setClass(
+      kaguya::UserdataMetatable<GameDataLoader, LuaInterfaceBase>()
+        .addFunction("AddLandscape", &GameDataLoader::AddLandscape)
+        .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
+        .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
+        .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
+        .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
+        .addFunction("AddWare", &GameDataLoader::AddWare)
+        .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
+        .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
+        .addFunction("AddByproduct", &GameDataLoader::AddByproduct)
+        .addFunction("SetKnowledgeDistribution", &GameDataLoader::SetKnowledgeDistribution));
 }
 
 class LuaIncludeError : public std::runtime_error
@@ -153,6 +155,20 @@ void GameDataLoader::AddWorkshop(const kaguya::LuaTable& data)
 void GameDataLoader::AddByproduct(const kaguya::LuaTable& data)
 {
     worldDesc_.byproducts.emplace_back(data);
+}
+
+void GameDataLoader::SetKnowledgeDistribution(const kaguya::LuaTable& data)
+{
+    const std::string context = "Knowledge distribution (regulator \"Wissen\")";
+    if(worldDesc_.knowledgeDistribution)
+        throw GameDataError(context + " is defined twice");
+    const KnowledgeValues values = parseKnowledge(data, false, context);
+    for(const int value : values)
+    {
+        if(value > 10)
+            throw GameDataError(context + ": values must be in [0, 10]");
+    }
+    worldDesc_.knowledgeDistribution = values;
 }
 
 void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)

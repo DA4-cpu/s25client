@@ -21,6 +21,8 @@ class nofCustomWorker : public nofWorkman
     unsigned short GetCarryID() const override;
     helpers::OptionalEnum<GoodType> ProduceWare() override;
     bool StartWorking() override;
+    /// A librarian never "works": the library only stores media
+    bool AreWaresAvailable() const override;
 
 public:
     nofCustomWorker(Job job, MapPoint pos, unsigned char player, nobUsual* workplace);

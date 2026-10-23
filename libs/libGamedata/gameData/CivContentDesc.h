@@ -80,8 +80,11 @@ struct WorkshopDesc
     /// True: the product gets the properties of the consumed input ware
     bool inheritProperties = false;
     /// How the product is chosen if the output matches several wares. Empty: the output must match exactly one
-    /// ware. "knowledge": by knowledge type of the products (regulator "Wissen", until then evenly distributed)
+    /// ware. "knowledge": by knowledge type of the products (regulator "Wissen" in the distribution window)
     std::string outputChoice;
+    /// Library: Orders and stores up to this many knowledge media (all wares with knowledge points) and produces
+    /// nothing. 0: normal workshop
+    unsigned libraryCapacity = 0;
     /// Number of wares stored per input
     unsigned storage = 6;
     /// Seconds of work per product and seconds of waiting before

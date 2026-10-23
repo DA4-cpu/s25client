@@ -116,7 +116,8 @@
 /// 17: Civilization mode: spent knowledge points
 /// 18: Civilization mode: Slots for wares, buildings and jobs defined in lua (GoodType::Nothing moved),
 ///     signature of the lua content
-static const unsigned currentGameDataVersion = 18;
+/// 19: Civilization mode: Regulator "Wissen" of players, knowledge media stored in libraries
+static const unsigned currentGameDataVersion = 19;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

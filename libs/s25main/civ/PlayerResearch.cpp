@@ -57,6 +57,19 @@ void PlayerResearch::AddSpentKnowledge(const KnowledgePoints& tenths)
         spentKnowledge_[type] += tenths[type];
 }
 
+PlayerResearch::KnowledgeDistribution PlayerResearch::GetKnowledgeDistribution(const TechTree& techTree) const
+{
+    return knowledgeDistribution_ ? *knowledgeDistribution_ : techTree.GetContent().GetDefaultKnowledgeDistribution();
+}
+
+void PlayerResearch::SetKnowledgeDistribution(const KnowledgeDistribution& distribution)
+{
+    KnowledgeDistribution clamped = distribution;
+    for(uint8_t& value : clamped)
+        value = std::min(value, static_cast<uint8_t>(10));
+    knowledgeDistribution_ = clamped;
+}
+
 void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree) const
 {
     std::vector<TechIdx> researchedTechs;
@@ -87,6 +100,13 @@ void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree
 
     for(const int spent : spentKnowledge_)
         sgd.PushSignedInt(spent);
+
+    sgd.PushBool(knowledgeDistribution_.has_value());
+    if(knowledgeDistribution_)
+    {
+        for(const uint8_t value : *knowledgeDistribution_)
+            sgd.PushUnsignedChar(value);
+    }
 }
 
 void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTree)
@@ -95,6 +115,7 @@ void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTr
     current_.reset();
     progress_.clear();
     spentKnowledge_ = KnowledgePoints{};
+    knowledgeDistribution_.reset();
 
     const unsigned numResearched = sgd.PopUnsignedInt();
     for(unsigned i = 0; i < numResearched; ++i)
@@ -149,6 +170,15 @@ void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTr
             if(researched_[tech])
                 AddSpentKnowledge(toTenths(techTree.get(tech).knowledgeCost));
         }
+    }
+
+    // Regulator "Wissen" (older savegames: default)
+    if(sgd.GetGameDataVersion() >= 19 && sgd.PopBool())
+    {
+        KnowledgeDistribution distribution;
+        for(uint8_t& value : distribution)
+            value = sgd.PopUnsignedChar();
+        SetKnowledgeDistribution(distribution);
     }
 }
 

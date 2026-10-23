@@ -9,6 +9,7 @@
 #include "gameTypes/GoodTypes.h"
 #include <array>
 #include <list>
+#include <map>
 #include <vector>
 
 class Ware;
@@ -49,6 +50,9 @@ protected:
     /// Ware consumed by the last call to ConsumeWares (first one if several). Not serialized, read right after
     /// consuming
     helpers::OptionalEnum<GoodType> lastConsumedWare_;
+    /// Civilization mode, library: stored knowledge media (count per ware) and ordered media
+    std::map<GoodType, unsigned> libraryMedia_;
+    std::list<Ware*> libraryOrderedMedia_;
 
     friend class SerializedGameData;
     friend class BuildingFactory;
@@ -105,6 +109,17 @@ public:
     /// Bestellte Waren
     bool AreThereAnyOrderedWares() const;
 
+    /// Civilization mode: True if this is a library (workshop from lua storing knowledge media)
+    bool IsLibrary() const;
+    /// Library: Maximum number of stored media (0 if no library)
+    unsigned GetLibraryCapacity() const;
+    /// Library: Stored media per ware
+    const std::map<GoodType, unsigned>& GetLibraryMedia() const { return libraryMedia_; }
+    /// Library: Number of stored media
+    unsigned GetNumLibraryMedia() const;
+    /// Library: Number of media on the way to the library
+    unsigned GetNumOrderedLibraryMedia() const { return static_cast<unsigned>(libraryOrderedMedia_.size()); }
+
     /// Gibt Pointer auf Produktivität zurück
     const unsigned short* GetProductivityPointer() const { return &productivity; }
     unsigned short GetProductivity() const { return productivity; }
@@ -128,4 +143,8 @@ public:
 private:
     /// Calculates the productivity and resets the counter
     unsigned short CalcCurrentProductivity();
+    /// Library: Order a knowledge medium from a warehouse if there is space left
+    void OrderLibraryMedium();
+    /// Library: True if the ware is a knowledge medium
+    static bool IsKnowledgeMedium(GoodType good);
 };

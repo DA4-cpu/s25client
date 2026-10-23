@@ -62,3 +62,11 @@ rttr:SetBuildingKnowledge{
     LookoutTower   = { MWP = 1 },                   -- Spähturm
     Catapult       = { MWP = -5 },                  -- Katapult (absichtlich negativ)
 }
+
+--[[
+Startwerte des Reglers "Wissen" im Verteilungsfenster (je 0 bis 10): Welches Wissensmedium Werkstätten mit
+outputChoice = "knowledge" herstellen (z.B. der Knochenschnitzer). Jeder Spieler kann sie im Spiel ändern.
+Beispiel: LWP = 10, IWP = 5, MWP = 0 -> doppelt so viele LWP- wie IWP-Medien, keine MWP-Medien.
+Stehen alle möglichen Medien einer Werkstatt auf 0, wird gleich verteilt.
+]]
+rttr:SetKnowledgeDistribution{ LWP = 5, IWP = 5, MWP = 5 } -- PLATZHALTER: Startwerte noch offen

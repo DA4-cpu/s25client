@@ -15,6 +15,7 @@
 #include "gameTypes/SettingsTypes.h"
 #include "gameTypes/ShipDirection.h"
 #include "gameTypes/TempleProductionMode.h"
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -75,6 +76,8 @@ public:
     bool SetTempleProductionMode(MapPoint pt, ProductionMode mode);
     /// Civilization mode: Research the technology with the given index (nullopt: stop researching)
     bool SetResearch(std::optional<unsigned> techIdx);
+    /// Civilization mode: Regulator "Wissen", weights 0..10 for LWP, IWP, MWP
+    bool SetKnowledgeDistribution(const std::array<uint8_t, 3>& values);
     /// Starts Preparation of an sea expedition in a habor
     bool StartStopExpedition(MapPoint pt, bool start);
     /// Lets a ship found a colony

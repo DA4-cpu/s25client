@@ -12,8 +12,10 @@
 #include "buildings/nobMilitary.h"
 #include "buildings/nobShipYard.h"
 #include "buildings/nobTemple.h"
+#include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "enum_cast.hpp"
+#include "helpers/EnumRange.h"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/format.hpp"
 #include "world/GameWorld.h"
@@ -268,6 +270,16 @@ void SetResearch::Execute(GameWorld& world, uint8_t playerId)
     if(techIdx != STOP_RESEARCH)
         tech = techIdx;
     civ::setResearch(world, playerId, tech);
+}
+
+void SetKnowledgeDistribution::Execute(GameWorld& world, uint8_t playerId)
+{
+    if(!civ::isEnabled(world))
+        return;
+    civ::PlayerResearch::KnowledgeDistribution distribution;
+    for(const auto type : helpers::enumRange<civ::KnowledgeType>())
+        distribution[type] = values[static_cast<unsigned>(type)];
+    world.GetPlayer(playerId).GetResearch().SetKnowledgeDistribution(distribution);
 }
 
 void SetArmorAllowed::Execute(GameWorld& world, uint8_t playerId)

@@ -6,6 +6,8 @@
 
 #include "TransmitSettingsIgwAdapter.h"
 #include "gameTypes/SettingsTypes.h"
+#include <array>
+#include <cstdint>
 #include <vector>
 
 class GameCommandFactory;
@@ -41,4 +43,10 @@ private:
     std::vector<DistributionGroup> groups;
     /// Initialize the groups structure
     void CreateGroups();
+
+    /// Civilization mode: Tab "Wissen" (regulator for the knowledge type of media) after the groups
+    bool hasKnowledgeTab = false;
+    bool knowledgeChanged = false;
+    unsigned GetKnowledgeTabId() const { return static_cast<unsigned>(groups.size()); }
+    void SetKnowledgeValues(const std::array<uint8_t, 3>& values);
 };

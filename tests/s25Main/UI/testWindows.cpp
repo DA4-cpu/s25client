@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "GameCommands.h"
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
 #include "WindowManager.h"
@@ -15,18 +16,22 @@
 #include "controls/ctrlGroup.h"
 #include "controls/ctrlImage.h"
 #include "controls/ctrlMultiline.h"
+#include "controls/ctrlProgress.h"
+#include "controls/ctrlTab.h"
 #include "controls/ctrlText.h"
 #include "controls/ctrlTextButton.h"
 #include "desktops/Desktop.h"
 #include "factories/GameCommandFactory.h"
 #include "helpers/containerUtils.h"
 #include "ingameWindows/iwAddons.h"
+#include "ingameWindows/iwDistribution.h"
 #include "ingameWindows/iwResearch.h"
 #include "ingameWindows/iwSkipGFs.h"
 #include "ingameWindows/iwVictory.h"
 #include "uiHelper/uiHelpers.hpp"
 #include "worldFixtures/CreateEmptyWorld.h"
 #include "worldFixtures/WorldFixture.h"
+#include "world/GameWorld.h"
 #include "world/GameWorldView.h"
 #include "world/GameWorldViewer.h"
 #include "gameData/WorldDescription.h"
@@ -122,6 +127,85 @@ struct NoGCFactory : GameCommandFactory
     }
 };
 } // namespace
+
+namespace {
+struct RecordingGCFactory : GameCommandFactory
+{
+    std::vector<gc::GameCommandPtr> gcs;
+    bool AddGC(gc::GameCommandPtr gc) override
+    {
+        gcs.push_back(gc);
+        return true;
+    }
+};
+/// Number of tabs and the id of the last tab of the distribution window
+std::pair<unsigned, unsigned> getTabs(ctrlTab& tab)
+{
+    unsigned numTabs = 0;
+    for(unsigned nr = 0; nr < 20; ++nr)
+    {
+        const unsigned before = tab.GetCurrentTab();
+        tab.SetSelection(static_cast<unsigned short>(nr));
+        if(nr > 0 && tab.GetCurrentTab() == before)
+            break;
+        ++numTabs;
+    }
+    tab.SetSelection(static_cast<unsigned short>(numTabs - 1));
+    return {numTabs, tab.GetCurrentTab()};
+}
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(DistributionWindowHasKnowledgeTab, TwoPlayerWorldFixture)
+{
+    uiHelper::Fixture f;
+    GameWorldViewer gwv(0, world);
+    unsigned numTabsWithoutCiv;
+    {
+        RecordingGCFactory gcFactory;
+        iwDistribution wnd(gwv, gcFactory);
+        numTabsWithoutCiv = getTabs(*wnd.GetCtrl<ctrlTab>(0)).first;
+    }
+
+    ggs.setSelection(AddonId::CIVILIZATION, 1);
+    WorldDescription desc;
+    WareDesc medium;
+    medium.name = "Medium";
+    medium.look = medium.transport = "Stones";
+    medium.knowledge = {1, 0, 0};
+    desc.wares.push_back(medium);
+    desc.knowledgeDistribution = KnowledgeValues{7, 3, 0};
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
+    civ::startGame(world);
+
+    RecordingGCFactory gcFactory;
+    iwDistribution wnd(gwv, gcFactory);
+    auto& tab = *wnd.GetCtrl<ctrlTab>(0);
+    const std::pair<unsigned, unsigned> tabs = getTabs(tab);
+    const unsigned numTabs = tabs.first, knowledgeTabId = tabs.second;
+    BOOST_TEST(numTabs == numTabsWithoutCiv + 1u);
+    // The last tab shows the regulator with the defaults from lua
+    ctrlGroup* group = tab.GetGroup(knowledgeTabId);
+    BOOST_TEST_REQUIRE(group);
+    const auto progresses = group->GetCtrls<ctrlProgress>();
+    BOOST_TEST_REQUIRE(progresses.size() == 3u);
+    BOOST_TEST(group->GetCtrl<ctrlProgress>(0)->GetPosition() == 7u);
+    BOOST_TEST(group->GetCtrl<ctrlProgress>(1)->GetPosition() == 3u);
+    BOOST_TEST(group->GetCtrl<ctrlProgress>(2)->GetPosition() == 0u);
+
+    // Change a slider like the user does (the tab control reports its own id as group id) -> 1 command on transmit
+    group->GetCtrl<ctrlProgress>(2)->SetPosition(9);
+    static_cast<Window&>(wnd).Msg_Group_ProgressChange(0, 2, 9);
+    static_cast<Window&>(wnd).Msg_Timer(0);
+    BOOST_TEST_REQUIRE(gcFactory.gcs.size() == 1u);
+    BOOST_TEST(dynamic_cast<gc::SetKnowledgeDistribution*>(gcFactory.gcs[0].get()));
+    gcFactory.gcs[0]->Execute(world, 0);
+    const auto distribution = world.GetPlayer(0).GetResearch().GetKnowledgeDistribution(world.GetTechTree());
+    BOOST_TEST(distribution[civ::KnowledgeType::Agriculture] == 7u);
+    BOOST_TEST(distribution[civ::KnowledgeType::Military] == 9u);
+    // Nothing changed anymore -> nothing sent
+    static_cast<Window&>(wnd).Msg_Timer(0);
+    BOOST_TEST(gcFactory.gcs.size() == 1u);
+}
 
 BOOST_FIXTURE_TEST_CASE(ResearchWindowShowsOtherPlayers, TwoPlayerWorldFixture)
 {

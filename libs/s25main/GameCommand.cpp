@@ -42,6 +42,7 @@ GameCommandPtr GameCommand::Deserialize(Deserializer& ser)
         case GCType::SetCoinsAllowed: gc = new SetCoinsAllowed(ser); break;
         case GCType::SetArmorAllowed: gc = new SetArmorAllowed(ser); break;
         case GCType::SetResearch: gc = new SetResearch(ser); break;
+        case GCType::SetKnowledgeDistribution: gc = new SetKnowledgeDistribution(ser); break;
         case GCType::SetProductionEnabled: gc = new SetProductionEnabled(ser); break;
         case GCType::SetInventorySetting: gc = new SetInventorySetting(ser); break;
         case GCType::SetAllInventorySettings: gc = new SetAllInventorySettings(ser); break;

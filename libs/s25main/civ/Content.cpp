@@ -82,6 +82,8 @@ GoodType CustomBuilding::GetProduct(std::optional<GoodType> consumedInput) const
 
 Content::Content()
 {
+    // Regulator "Wissen": all knowledge types equal unless set in lua
+    std::fill(defaultKnowledgeDistribution_.begin(), defaultKnowledgeDistribution_.end(), static_cast<uint8_t>(5));
     for(const auto good : helpers::enumRange<GoodType>())
     {
         if(isUsableBuiltinGood(good))
@@ -118,6 +120,19 @@ Content::Content(const WorldDescription& desc) : Content()
         wares_.push_back(ware);
         tags_[getCustomGood(i)] = {ware.name};
         SetTags(getCustomGood(i), wareDesc.kind, wareDesc.properties);
+    }
+    for(unsigned i = 0; i < wares_.size(); ++i)
+    {
+        if(std::any_of(wares_[i].knowledge.begin(), wares_[i].knowledge.end(), [](int points) { return points != 0; }))
+            knowledgeMedia_.push_back(getCustomGood(i));
+    }
+    if(desc.knowledgeDistribution)
+    {
+        for(const auto type : helpers::enumRange<KnowledgeType>())
+        {
+            defaultKnowledgeDistribution_[type] =
+              static_cast<uint8_t>((*desc.knowledgeDistribution)[static_cast<unsigned>(type)]);
+        }
     }
     for(const auto& entry : desc.wareTags)
     {
@@ -196,6 +211,20 @@ Content::Content(const WorldDescription& desc) : Content()
                                 + wsDesc.worker.look + "'");
         worker.look = *workerLook;
 
+        if(wsDesc.libraryCapacity > 0)
+        {
+            // Library: takes all knowledge media, produces nothing
+            bld.libraryCapacity = wsDesc.libraryCapacity;
+            if(knowledgeMedia_.empty())
+                throw GameDataError(context + ": a library needs knowledge media (wares with knowledge in wares.lua)");
+            bld.workDesc.job = getCustomJob(i);
+            bld.workDesc.producedWare = std::nullopt;
+            bld.workDesc.numSpacesPerWare = 0;
+            buildings_.push_back(std::move(bld));
+            workers_.push_back(std::move(worker));
+            continue;
+        }
+
         // Inputs
         std::vector<GoodType> inputWares;
         for(const TagQuery& input : wsDesc.inputs)
@@ -248,17 +277,21 @@ Content::Content(const WorldDescription& desc) : Content()
             // One product per knowledge type, e.g. carved bones for LWP, IWP and MWP
             for(const GoodType candidate : outputMatches)
             {
-                const CustomWare* candidateWare = GetWare(candidate);
-                const bool hasKnowledge =
-                  candidateWare
-                  && std::any_of(candidateWare->knowledge.begin(), candidateWare->knowledge.end(),
-                                 [](int points) { return points != 0; });
-                if(!hasKnowledge)
+                const KnowledgePoints knowledge = GetKnowledgeOf(candidate);
+                std::vector<KnowledgeType> types;
+                for(const auto type : helpers::enumRange<KnowledgeType>())
+                {
+                    if(knowledge[type] != 0)
+                        types.push_back(type);
+                }
+                if(types.size() != 1u)
                 {
                     throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of the output "
-                                        + joinTags(wsDesc.output) + " needs knowledge points, but '"
-                                        + getIdentifierOf(candidate) + "' has none");
+                                        + joinTags(wsDesc.output)
+                                        + " needs knowledge points of exactly one type (LWP, IWP or MWP), but '"
+                                        + getIdentifierOf(candidate) + "' has " + std::to_string(types.size()));
                 }
+                bld.productChoiceTypes.push_back(types.front());
             }
             bld.productChoices = outputMatches;
             bld.product = outputMatches.front();
@@ -344,6 +377,12 @@ bool Content::IsUsed(BuildingType bld) const
 bool Content::IsUsed(Job job) const
 {
     return !isCustomJob(job) || GetWorker(job) != nullptr;
+}
+
+KnowledgePoints Content::GetKnowledgeOf(GoodType good) const
+{
+    const CustomWare* ware = GetWare(good);
+    return ware ? ware->knowledge : KnowledgePoints{};
 }
 
 bool Content::Matches(GoodType good, const TagQuery& query) const

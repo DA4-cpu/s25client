@@ -23,6 +23,7 @@
 #include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
 #include "gameData/const_gui_ids.h"
+#include <algorithm>
 #include <sstream>
 
 /// IDs in der IO_DAT von Boot und Schiffs-Bild für den Umschaltebutton beim Schiffsbauer
@@ -86,7 +87,7 @@ iwBuilding::iwBuilding(GameWorldView& gwv, GameCommandFactory& gcFactory, nobUsu
     Window* productivity = AddPercent(9, DrawPoint(59, 31), Extent(106, 16), TextureColor::Grey, 0xFFFFFF00, SmallFont,
                                       building->GetProductivityPointer());
     if(building->GetBuildingType() == BuildingType::Catapult
-       || building->GetBuildingType() == BuildingType::LookoutTower)
+       || building->GetBuildingType() == BuildingType::LookoutTower || building->IsLibrary())
         productivity->SetVisible(false);
 
     AddText(10, DrawPoint(113, 50), _("(House unoccupied)"), COLOR_RED, FontStyle::CENTER, NormalFont);
@@ -123,6 +124,29 @@ void iwBuilding::Msg_PaintAfter()
                   ->DrawFull(curPos, (z < building->GetNumWares(i) ? 0xFFFFFFFF : 0xFF404040));
                 curPos.x += 24;
             }
+        }
+    } else if(building->IsLibrary())
+    {
+        // Civilization mode, library: stored knowledge media
+        DrawPoint curPos = GetDrawPos() + DrawPoint(GetSize().x / 2, 40);
+        std::stringstream text;
+        text << _("Wissensmedien") << ": " << building->GetNumLibraryMedia() << "/" << building->GetLibraryCapacity();
+        NormalFont->Draw(curPos, text.str(), FontStyle::CENTER | FontStyle::VCENTER);
+        // One symbol with the count per medium, up to 6 per row
+        const auto& media = building->GetLibraryMedia();
+        constexpr unsigned perRow = 6;
+        unsigned idx = 0;
+        for(const auto& entry : media)
+        {
+            const unsigned row = idx / perRow, col = idx % perRow;
+            const unsigned numInRow = std::min<unsigned>(perRow, static_cast<unsigned>(media.size()) - row * perRow);
+            const DrawPoint pos = curPos
+                                  + DrawPoint(static_cast<int>(col * 32) - static_cast<int>(numInRow * 32) / 2 + 16,
+                                              24 + static_cast<int>(row) * 36);
+            LOADER.GetWareTex(entry.first)->DrawFull(pos);
+            NormalFont->Draw(pos + DrawPoint(0, 16), std::to_string(entry.second),
+                             FontStyle::CENTER | FontStyle::VCENTER);
+            ++idx;
         }
     } else
     {

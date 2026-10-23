@@ -3,21 +3,28 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "AddonHelperFunctions.h"
+#include "BuildingRegister.h"
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
 #include "RttrConfig.h"
 #include "SerializedGameData.h"
 #include "addons/const_addons.h"
+#include "ai/AIPlayer.h"
+#include "buildings/noBuildingSite.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobHQ.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
+#include "civ/Knowledge.h"
+#include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
+#include "factories/AIFactory.h"
 #include "factories/BuildingFactory.h"
 #include "figures/nofBuildingWorker.h"
 #include "files.h"
 #include "helpers/EnumRange.h"
+#include "helpers/containerUtils.h"
 #include "lua/GameDataLoader.h"
 #include "worldFixtures/MockLocalGameState.h"
 #include "worldFixtures/WorldWithGCExecution.h"
@@ -139,6 +146,24 @@ WorldDescription makeKnowledgeChoiceDesc()
     auto carver = makeWorkshop("Carver", {{"Bones"}}, {"Carved"});
     carver.outputChoice = "knowledge";
     desc.workshops.push_back(carver);
+    return desc;
+}
+
+/// Knowledge choice workshop plus a library with the given capacity
+WorldDescription makeLibraryDesc(unsigned capacity = 20)
+{
+    WorldDescription desc = makeKnowledgeChoiceDesc();
+    WorkshopDesc library;
+    library.name = "Library";
+    library.title = "LibraryTitle";
+    library.size = "medium";
+    library.cost = {{"Boards", 2}};
+    library.look = "Bakery";
+    library.worker.title = "Librarian";
+    library.worker.tool = "none";
+    library.worker.look = "Helper";
+    library.libraryCapacity = capacity;
+    desc.workshops.push_back(library);
     return desc;
 }
 
@@ -578,6 +603,95 @@ rttr:AddByproduct{ building = "Slaughterhouse", ware = "Bones" }
     }
 }
 
+BOOST_AUTO_TEST_CASE(KnowledgeMediaAndLibrary)
+{
+    WorldDescription desc = makeLibraryDesc(20);
+    desc.knowledgeDistribution = KnowledgeValues{10, 3, 0};
+    const civ::Content content(desc);
+    const std::vector<GoodType> media{getCustomGood(1), getCustomGood(2), getCustomGood(3)};
+    BOOST_TEST((content.GetKnowledgeMedia() == media));
+    BOOST_TEST(content.GetKnowledgeOf(getCustomGood(2))[civ::KnowledgeType::Industry] == 1);
+    BOOST_TEST(content.GetKnowledgeOf(GoodType::Custom0)[civ::KnowledgeType::Industry] == 0);
+    BOOST_TEST(content.GetKnowledgeOf(GoodType::Boards)[civ::KnowledgeType::Agriculture] == 0);
+    BOOST_TEST(content.GetDefaultKnowledgeDistribution()[civ::KnowledgeType::Agriculture] == 10u);
+    BOOST_TEST(content.GetDefaultKnowledgeDistribution()[civ::KnowledgeType::Industry] == 3u);
+    BOOST_TEST(content.GetDefaultKnowledgeDistribution()[civ::KnowledgeType::Military] == 0u);
+    // Product choices know their knowledge type
+    const civ::CustomBuilding& carver = *content.GetBuilding(BuildingType::Custom0);
+    BOOST_TEST((carver.productChoiceTypes
+                == std::vector<civ::KnowledgeType>{civ::KnowledgeType::Agriculture, civ::KnowledgeType::Industry,
+                                                   civ::KnowledgeType::Military}));
+    // The library takes nothing as input and produces nothing
+    const civ::CustomBuilding& library = *content.GetBuilding(getCustomBuilding(1));
+    BOOST_TEST(library.IsLibrary());
+    BOOST_TEST(library.libraryCapacity == 20u);
+    BOOST_TEST(library.workDesc.waresNeeded.empty());
+    BOOST_TEST(!carver.IsLibrary());
+    // Without lua setting: all equal
+    BOOST_TEST(civ::Content(makeLibraryDesc()).GetDefaultKnowledgeDistribution()[civ::KnowledgeType::Military] == 5u);
+    {
+        // A library needs media
+        WorldDescription noMedia = makeSimpleDesc();
+        noMedia.workshops.push_back(makeLibraryDesc().workshops.back());
+        BOOST_CHECK_THROW(civ::Content{noMedia}, GameDataError);
+    }
+    {
+        // Products chosen by knowledge must have exactly one knowledge type
+        WorldDescription twoTypes = makeKnowledgeChoiceDesc();
+        twoTypes.wares[1].knowledge = {1, 1, 0};
+        BOOST_CHECK_THROW(civ::Content{twoTypes}, GameDataError);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(LibraryAndRegulatorFromLua)
+{
+    rttr::test::TmpFolder tmp;
+    const auto load = [&tmp](const std::string& script, WorldDescription& desc) {
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << script;
+        }
+        GameDataLoader loader(desc, tmp);
+        return loader.Load();
+    };
+    const std::string wares = R"(
+rttr:AddWare{ name = "CarvedL", kind = "Carved", properties = { "LWP" }, look = "Stones", transport = "Stones",
+              knowledge = { LWP = 1 } }
+)";
+    const std::string library = R"(
+rttr:AddWorkshop{ name = "Library", size = "medium", cost = { Boards = 2 }, look = "Bakery",
+                  worker = { tool = "none", look = "Helper" }, library = { capacity = 20 } }
+)";
+    {
+        WorldDescription desc;
+        BOOST_TEST_REQUIRE(load(wares + library + "rttr:SetKnowledgeDistribution{ LWP = 10, MWP = 2 }", desc));
+        BOOST_TEST_REQUIRE(desc.workshops.size() == 1u);
+        BOOST_TEST(desc.workshops[0].libraryCapacity == 20u);
+        BOOST_TEST_REQUIRE(desc.knowledgeDistribution.has_value());
+        BOOST_TEST(((*desc.knowledgeDistribution) == KnowledgeValues{10, 0, 2}));
+        BOOST_TEST(civ::Content(desc).GetBuilding(BuildingType::Custom0)->IsLibrary());
+    }
+    const auto replaced = [&library](const std::string& search, const std::string& replacement) {
+        std::string result = library;
+        result.replace(result.find(search), search.size(), replacement);
+        return result;
+    };
+    for(const std::string invalid :
+        {wares + library + "rttr:SetKnowledgeDistribution{ LWP = 11 }",
+         wares + library + "rttr:SetKnowledgeDistribution{ LWP = 1 }\nrttr:SetKnowledgeDistribution{ LWP = 1 }",
+         wares + library + "rttr:SetKnowledgeDistribution{ XWP = 1 }",
+         wares + replaced("capacity = 20", "capacity = 0"),
+         wares + replaced("capacity = 20", "capacity = 20, typo = 1"),
+         wares + replaced("library =", "inputs = { \"CarvedL\" }, library ="),
+         wares + replaced("library =", "output = \"CarvedL\", library ="),
+         wares + replaced("library =", "workTime = 10, library =")})
+    {
+        WorldDescription desc;
+        BOOST_TEST_INFO(invalid);
+        BOOST_TEST(!load(invalid, desc));
+    }
+}
+
 namespace {
 struct ContentWorldFixture : public WorldWithGCExecution1P
 {
@@ -800,6 +914,207 @@ BOOST_FIXTURE_TEST_CASE(WorkshopChoosesProductByKnowledge, ContentWorldFixture)
     // RNG is seeded the same in every test run)
     for(unsigned i = 1; i <= 3; ++i)
         BOOST_TEST(countInHQ(getCustomGood(i)) > 0u);
+}
+
+namespace {
+struct LibraryWorldFixture : public ContentWorldFixture
+{
+    LibraryWorldFixture() : ContentWorldFixture(makeLibraryDesc(20)) {}
+    const GoodType mediumL = getCustomGood(1), mediumI = getCustomGood(2), mediumM = getCustomGood(3);
+    const BuildingType carver = BuildingType::Custom0, library = getCustomBuilding(1);
+    civ::KnowledgePoints total() { return civ::calcTotalKnowledge(world.GetPlayer(0)); }
+    civ::PlayerResearch& research() { return world.GetPlayer(0).GetResearch(); }
+    unsigned inInventory(GoodType good) { return world.GetPlayer(0).GetInventory()[good]; }
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(RegulatorCommandAndDefaults, LibraryWorldFixture)
+{
+    // Default from the tech tree (lua), here all equal
+    auto distribution = research().GetKnowledgeDistribution(world.GetTechTree());
+    BOOST_TEST(distribution[civ::KnowledgeType::Agriculture] == 5u);
+    this->SetKnowledgeDistribution({10, 2, 0});
+    distribution = research().GetKnowledgeDistribution(world.GetTechTree());
+    BOOST_TEST(distribution[civ::KnowledgeType::Agriculture] == 10u);
+    BOOST_TEST(distribution[civ::KnowledgeType::Industry] == 2u);
+    BOOST_TEST(distribution[civ::KnowledgeType::Military] == 0u);
+    // Values above 10 are limited
+    this->SetKnowledgeDistribution({200, 2, 0});
+    BOOST_TEST(research().GetKnowledgeDistribution(world.GetTechTree())[civ::KnowledgeType::Agriculture] == 10u);
+}
+
+BOOST_FIXTURE_TEST_CASE(RegulatorIgnoredWithoutCivMode, LibraryWorldFixture)
+{
+    ggs.setSelection(AddonId::CIVILIZATION, 0);
+    this->SetKnowledgeDistribution({10, 0, 0});
+    ggs.setSelection(AddonId::CIVILIZATION, 1);
+    BOOST_TEST(research().GetKnowledgeDistribution(world.GetTechTree())[civ::KnowledgeType::Military] == 5u);
+}
+
+BOOST_FIXTURE_TEST_CASE(RegulatorChoosesMedium, LibraryWorldFixture)
+{
+    // Only LWP media
+    this->SetKnowledgeDistribution({10, 0, 0});
+    constexpr unsigned numBones = 6;
+    hq().AddToInventory(GoodCounts::make(GoodType::Custom0, numBones), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 1), true);
+    placeConnectedBuilding(carver);
+    RTTR_EXEC_TILL(20000, countInHQ(mediumL) == numBones);
+    BOOST_TEST(inInventory(mediumI) == 0u);
+    BOOST_TEST(inInventory(mediumM) == 0u);
+}
+
+BOOST_FIXTURE_TEST_CASE(MediaCountHalfInWarehouses, LibraryWorldFixture)
+{
+    const civ::KnowledgePoints before = total();
+    hq().AddToInventory(GoodCounts::make(mediumL, 3), true);
+    hq().AddToInventory(GoodCounts::make(mediumM, 2), true);
+    const civ::KnowledgePoints after = total();
+    // Tenths: 3 x 1 WP x 0.5 = 1.5 WP, 2 x 1 WP x 0.5 = 1 WP
+    BOOST_TEST(after[civ::KnowledgeType::Agriculture] - before[civ::KnowledgeType::Agriculture] == 15);
+    BOOST_TEST(after[civ::KnowledgeType::Industry] - before[civ::KnowledgeType::Industry] == 0);
+    BOOST_TEST(after[civ::KnowledgeType::Military] - before[civ::KnowledgeType::Military] == 10);
+    // Other wares do not count
+    hq().AddToInventory(GoodCounts::make(GoodType::Custom0, 5), true);
+    BOOST_TEST(total()[civ::KnowledgeType::Agriculture] == after[civ::KnowledgeType::Agriculture]);
+}
+
+BOOST_FIXTURE_TEST_CASE(LibraryOrdersAndStoresMedia, LibraryWorldFixture)
+{
+    hq().AddToInventory(GoodCounts::make(mediumL, 15), true);
+    hq().AddToInventory(GoodCounts::make(mediumI, 10), true);
+    const civ::KnowledgePoints before = total();
+    const MapPoint bldPos = placeConnectedBuilding(library);
+    const auto& lib = *world.GetSpecObj<nobUsual>(bldPos);
+    BOOST_TEST_REQUIRE(lib.IsLibrary());
+    BOOST_TEST(lib.GetLibraryCapacity() == 20u);
+    // Librarian (helper, no tool) arrives, the library fetches media by carriers up to its capacity
+    RTTR_EXEC_TILL(20000, lib.GetNumLibraryMedia() == 20u);
+    for(unsigned i = 0; i < 2000; ++i)
+        em.ExecuteNextGF();
+    BOOST_TEST(lib.GetNumLibraryMedia() == 20u);
+    BOOST_TEST(lib.GetNumOrderedLibraryMedia() == 0u);
+    BOOST_TEST(countInHQ(mediumL) + countInHQ(mediumI) == 5u);
+    // Both kinds were taken
+    BOOST_TEST(lib.GetLibraryMedia().count(mediumL) == 1u);
+    BOOST_TEST(lib.GetLibraryMedia().count(mediumI) == 1u);
+    // Media still belong to the player
+    BOOST_TEST(inInventory(mediumL) == 15u);
+    BOOST_TEST(inInventory(mediumI) == 10u);
+    // In the library they count full instead of half: +0.5 WP per moved medium
+    const civ::KnowledgePoints after = total();
+    const unsigned movedL = lib.GetLibraryMedia().at(mediumL), movedI = lib.GetLibraryMedia().at(mediumI);
+    BOOST_TEST(after[civ::KnowledgeType::Agriculture] - before[civ::KnowledgeType::Agriculture]
+               == static_cast<int>(movedL) * 5);
+    BOOST_TEST(after[civ::KnowledgeType::Industry] - before[civ::KnowledgeType::Industry]
+               == static_cast<int>(movedI) * 5);
+
+    // Destroyed library: media are lost, so are their points
+    this->DestroyBuilding(bldPos);
+    BOOST_TEST(inInventory(mediumL) + inInventory(mediumI) == 5u);
+    const civ::KnowledgePoints destroyed = total();
+    BOOST_TEST(destroyed[civ::KnowledgeType::Agriculture]
+               == after[civ::KnowledgeType::Agriculture] - static_cast<int>(movedL) * 10);
+}
+
+BOOST_FIXTURE_TEST_CASE(LibraryStopsWhenProductionDisabled, LibraryWorldFixture)
+{
+    hq().AddToInventory(GoodCounts::make(mediumL, 10), true);
+    const MapPoint bldPos = placeConnectedBuilding(library);
+    const auto& lib = *world.GetSpecObj<nobUsual>(bldPos);
+    RTTR_EXEC_TILL(20000, lib.GetNumLibraryMedia() >= 2u);
+    this->SetProductionEnabled(bldPos, false);
+    RTTR_EXEC_TILL(4000, lib.GetNumOrderedLibraryMedia() == 0u);
+    const unsigned numStored = lib.GetNumLibraryMedia();
+    for(unsigned i = 0; i < 4000; ++i)
+        em.ExecuteNextGF();
+    BOOST_TEST(lib.GetNumLibraryMedia() == numStored);
+    BOOST_TEST(numStored < 10u);
+}
+
+BOOST_FIXTURE_TEST_CASE(ProducedMediaGoToLibrary, LibraryWorldFixture)
+{
+    hq().AddToInventory(GoodCounts::make(GoodType::Custom0, 4), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 1), true);
+    const MapPoint libPos = world.MakeMapPoint(hqPos + Position(-4, 2));
+    BuildingFactory::CreateBuilding(world, library, libPos, 0, Nation::Romans);
+    this->BuildRoadForBlds(libPos, hqPos);
+    const auto& lib = *world.GetSpecObj<nobUsual>(libPos);
+    RTTR_EXEC_TILL(4000, lib.HasWorker() && lib.GetWorker()->GetState() != nofBuildingWorker::State::FigureWork);
+    placeConnectedBuilding(carver);
+    // Media made by the carver are delivered to the library directly
+    RTTR_EXEC_TILL(30000, lib.GetNumLibraryMedia() == 4u);
+    BOOST_TEST(countInHQ(mediumL) + countInHQ(mediumI) + countInHQ(mediumM) == 0u);
+}
+
+BOOST_FIXTURE_TEST_CASE(SerializeLibraryAndRegulator, LibraryWorldFixture)
+{
+    this->SetKnowledgeDistribution({7, 1, 3});
+    hq().AddToInventory(GoodCounts::make(mediumL, 8), true);
+    const MapPoint bldPos = placeConnectedBuilding(library);
+    RTTR_EXEC_TILL(20000, world.GetSpecObj<nobUsual>(bldPos)->GetNumLibraryMedia() >= 3u);
+    // Save while media are still on the way
+    BOOST_TEST_REQUIRE(world.GetSpecObj<nobUsual>(bldPos)->GetNumOrderedLibraryMedia() > 0u);
+    const unsigned numStored = world.GetSpecObj<nobUsual>(bldPos)->GetNumLibraryMedia();
+    const civ::KnowledgePoints knowledgeBefore = total();
+
+    SerializedGameData sgd;
+    sgd.MakeSnapshot(*game);
+    MockLocalGameState lgs;
+    em.Clear();
+    world.Unload();
+    sgd.ReadSnapshot(*game, lgs);
+    civ::startGame(world);
+
+    const auto* lib = world.GetSpecObj<nobUsual>(bldPos);
+    BOOST_TEST_REQUIRE(lib);
+    BOOST_TEST(lib->GetNumLibraryMedia() == numStored);
+    const civ::KnowledgePoints knowledgeAfter = total();
+    for(const auto type : helpers::enumRange<civ::KnowledgeType>())
+        BOOST_TEST(knowledgeAfter[type] == knowledgeBefore[type]);
+    const auto distribution = research().GetKnowledgeDistribution(world.GetTechTree());
+    BOOST_TEST(distribution[civ::KnowledgeType::Agriculture] == 7u);
+    BOOST_TEST(distribution[civ::KnowledgeType::Industry] == 1u);
+    BOOST_TEST(distribution[civ::KnowledgeType::Military] == 3u);
+    // Media on the way arrive after loading
+    RTTR_EXEC_TILL(20000, lib->GetNumLibraryMedia() == 8u);
+}
+
+namespace {
+using BiggerCivWorldFixture = WorldWithGCExecution<1, 24, 22>;
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(AIBuildsWorkshopsAndLibraries, BiggerCivWorldFixture)
+{
+    ggs.setSelection(AddonId::CIVILIZATION, 1);
+    world.SetTechTree(std::make_unique<civ::TechTree>(makeLibraryDesc(20)));
+    civ::startGame(world);
+    addStartResources();
+    auto& hqBld = *world.GetPlayer(curPlayer).GetHQ();
+    // Bones and some media in stock -> the AI should build a carver and a library
+    hqBld.AddToInventory(GoodCounts::make(GoodType::Custom0, 15), true);
+    hqBld.AddToInventory(GoodCounts::make(getCustomGood(1), 5), true);
+    world.InitAfterLoad();
+    const BuildingRegister& buildings = world.GetPlayer(curPlayer).GetBuildingRegister();
+    const auto hasBld = [&buildings](BuildingType bld) {
+        return !buildings.GetBuildings(bld).empty()
+               || helpers::contains_if(buildings.GetBuildingSites(),
+                                       [bld](const noBuildingSite* site) { return site->GetBuildingType() == bld; });
+    };
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    for(unsigned gf = 0; gf < 12000 && !(hasBld(BuildingType::Custom0) && hasBld(getCustomBuilding(1)));)
+    {
+        std::vector<gc::GameCommandPtr> aiGcs = ai->FetchGameCommands();
+        for(unsigned i = 0; i < 5; i++, gf++)
+        {
+            em.ExecuteNextGF();
+            ai->RunGF(em.GetCurrentGF(), i == 0);
+        }
+        for(gc::GameCommandPtr& gc : aiGcs)
+            gc->Execute(world, curPlayer);
+    }
+    BOOST_TEST(hasBld(BuildingType::Custom0));
+    BOOST_TEST(hasBld(getCustomBuilding(1)));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

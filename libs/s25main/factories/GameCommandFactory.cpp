@@ -159,6 +159,11 @@ bool GameCommandFactory::SetShipYardMode(const MapPoint pt, bool buildShips)
     return AddGC(new gc::SetShipYardMode(pt, buildShips));
 }
 
+bool GameCommandFactory::SetKnowledgeDistribution(const std::array<uint8_t, 3>& values)
+{
+    return AddGC(new gc::SetKnowledgeDistribution(values));
+}
+
 bool GameCommandFactory::SetResearch(std::optional<unsigned> techIdx)
 {
     RTTR_Assert(!techIdx || *techIdx < gc::SetResearch::STOP_RESEARCH);

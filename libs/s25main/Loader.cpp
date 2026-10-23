@@ -386,6 +386,16 @@ void Loader::LoadDummyGUIFiles()
         bmp->create(buffer);
         io_new.push(std::move(bmp));
     }
+    // Leather addon symbols (e.g. pigs tab of the distribution window)
+    libsiedler2::Archiv& leatherBobs = files_["leather_bobs"].archive;
+    for([[maybe_unused]] const auto id :
+        helpers::range(leatheraddon::bobIndex[maxEnumValue(leatheraddon::BobType{})] + 1u))
+    {
+        auto bmp = std::make_unique<glArchivItem_Bitmap_Raw>();
+        libsiedler2::PixelBufferBGRA buffer(1, 1);
+        bmp->create(buffer);
+        leatherBobs.push(std::move(bmp));
+    }
     // Fonts
     auto* palette = GetPaletteN("colors");
     libsiedler2::PixelBufferBGRA buffer(15, 16);

@@ -46,6 +46,12 @@ public:
     /// Book knowledge (tenths of points) spent on finished research
     void AddSpentKnowledge(const KnowledgePoints& tenths);
 
+    /// Weights 0..10 per knowledge type of the regulator "Wissen": Which medium a workshop with
+    /// outputChoice = "knowledge" makes. Default (from lua) until the player changes it
+    using KnowledgeDistribution = helpers::EnumArray<uint8_t, KnowledgeType>;
+    KnowledgeDistribution GetKnowledgeDistribution(const TechTree& techTree) const;
+    void SetKnowledgeDistribution(const KnowledgeDistribution& distribution);
+
     void Serialize(SerializedGameData& sgd, const TechTree& techTree) const;
     void Deserialize(SerializedGameData& sgd, const TechTree& techTree);
 
@@ -54,6 +60,8 @@ private:
     std::optional<TechIdx> current_;
     std::map<TechIdx, Progress> progress_;
     KnowledgePoints spentKnowledge_{};
+    /// Set by the player, otherwise the default of the tech tree is used
+    std::optional<KnowledgeDistribution> knowledgeDistribution_;
 };
 
 } // namespace civ

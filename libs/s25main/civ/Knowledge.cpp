@@ -3,7 +3,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "civ/Knowledge.h"
+#include "BuildingRegister.h"
 #include "GamePlayer.h"
+#include "buildings/nobBaseWarehouse.h"
+#include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "civ/PlayerResearch.h"
 #include "civ/TechTree.h"
 #include "helpers/EnumRange.h"
@@ -63,6 +67,30 @@ KnowledgePoints calcTotalKnowledge(const GamePlayer& player)
         const KnowledgePoints& bldKnowledge = techTree.GetBuildingKnowledge(bld);
         for(const auto type : helpers::enumRange<KnowledgeType>())
             result[type] += static_cast<int>(numBuildings) * bldKnowledge[type] * KNOWLEDGE_SCALE;
+    }
+
+    // Knowledge media: Half in warehouses (storehouse, HQ, harbor), full in libraries
+    const Content& content = techTree.GetContent();
+    const auto addMedia = [&result, &content](GoodType medium, unsigned count, int tenthsPerPoint) {
+        const KnowledgePoints mediumKnowledge = content.GetKnowledgeOf(medium);
+        for(const auto type : helpers::enumRange<KnowledgeType>())
+            result[type] += static_cast<int>(count) * mediumKnowledge[type] * tenthsPerPoint;
+    };
+    for(const GoodType medium : content.GetKnowledgeMedia())
+    {
+        for(const nobBaseWarehouse* wh : player.GetBuildingRegister().GetStorehouses())
+            addMedia(medium, wh->GetNumRealWares(medium), MEDIA_IN_WAREHOUSE_TENTHS);
+    }
+    for(unsigned bldIdx = 0; bldIdx < content.GetNumBuildings(); ++bldIdx)
+    {
+        const BuildingType bld = getCustomBuilding(bldIdx);
+        if(!content.GetBuilding(bld)->IsLibrary())
+            continue;
+        for(const nobUsual* library : player.GetBuildingRegister().GetBuildings(bld))
+        {
+            for(const auto& entry : library->GetLibraryMedia())
+                addMedia(entry.first, entry.second, MEDIA_IN_LIBRARY_TENTHS);
+        }
     }
     return result;
 }

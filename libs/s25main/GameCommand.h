@@ -64,10 +64,11 @@ enum class GCType : uint8_t
     SetTempleProductionMode,
     SetArmorAllowed,
     SetResearch,
+    SetKnowledgeDistribution,
 };
 constexpr auto maxEnumValue(GCType)
 {
-    return GCType::SetResearch;
+    return GCType::SetKnowledgeDistribution;
 }
 
 class GameCommand
