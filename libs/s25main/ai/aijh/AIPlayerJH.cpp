@@ -14,11 +14,13 @@
 #include "ai/random.h"
 #include "boost/filesystem/fstream.hpp"
 #include "buildings/noBuildingSite.h"
-#include "buildings/nobHarborBuilding.h"
 #include "buildings/nobBaseWarehouse.h"
+#include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "civ/Research.h"
+#include "figures/nofPassiveSoldier.h"
 #include "helpers/IdRange.h"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/containerUtils.h"
@@ -38,6 +40,7 @@
 #include "gameData/BuildingProperties.h"
 #include "gameData/GameConsts.h"
 #include "gameData/JobConsts.h"
+#include "gameData/MilitaryConsts.h"
 #include "gameData/TerrainDesc.h"
 #include "gameData/ToolConsts.h"
 #include <algorithm>
@@ -45,8 +48,6 @@
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
-#include "figures/nofPassiveSoldier.h"
-#include "gameData/MilitaryConsts.h"
 
 namespace {
 /// Exact number of dedicated woodcutters a single forester should end up with.
@@ -405,6 +406,17 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
             if(construction->Wanted(i))
             {
                 AddBuildJobAroundEveryWarehouse(i); // add a buildorder for the picked buildingtype at every warehouse
+            }
+        }
+        // Civilization mode: workshops and libraries defined in lua (near warehouses like processing buildings)
+        if(civ::isEnabled(gwb))
+        {
+            const civ::Content& content = civ::getActiveContent();
+            for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
+            {
+                const BuildingType bld = getCustomBuilding(i);
+                if(construction->Wanted(bld))
+                    AddBuildJobAroundEveryWarehouse(bld);
             }
         }
         if(gf > 1500 || aii.GetInventory().goods[GoodType::Boards] > 11)

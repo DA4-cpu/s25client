@@ -8,6 +8,9 @@
 #include "addons/const_addons.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobMilitary.h"
+#include "buildings/nobUsual.h"
+#include "civ/Content.h"
+#include "civ/Research.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
 #include "gameData/BuildingProperties.h"
@@ -490,6 +493,54 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
     if(aijh.ggs.GetMaxMilitaryRank() == 0)
     {
         buildingsWanted[BuildingType::GoldMine] = 0; // max rank is 0 = private / recruit ==> gold is useless!
+    }
+
+    UpdateCustomBuildingsWanted(aijh);
+}
+
+void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
+{
+    if(!civ::isEnabled(aijh.GetWorld()))
+        return;
+    // Simple generic rules for workshops defined in lua (the AI knows nothing about their purpose):
+    // - Workshop with inputs: 1 as soon as an input ware is in stock, 1 more per 10 input wares in stock, at most 3
+    // - Workshop without inputs: 1
+    // - Library: 1 more if more knowledge media wait in warehouses than the existing libraries can still take
+    // Whether it can be built at all (technology) is checked by AIConstruction::Wanted
+    constexpr unsigned maxWorkshopsPerType = 3;
+    constexpr unsigned maxLibraries = 5;
+    const civ::Content& content = civ::getActiveContent();
+    for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
+    {
+        const BuildingType bld = getCustomBuilding(i);
+        const civ::CustomBuilding& building = *content.GetBuilding(bld);
+        const unsigned numExisting = GetNumBuildings(bld);
+        if(building.IsLibrary())
+        {
+            unsigned numWaiting = 0;
+            for(const GoodType medium : content.GetKnowledgeMedia())
+                numWaiting += aijh.AmountInStorage(medium);
+            unsigned freeSpace = 0;
+            for(const nobUsual* library : aijh.player.GetBuildingRegister().GetBuildings(bld))
+            {
+                const unsigned used = library->GetNumLibraryMedia() + library->GetNumOrderedLibraryMedia();
+                freeSpace += building.libraryCapacity > used ? building.libraryCapacity - used : 0u;
+            }
+            // Building sites will take media soon, too
+            freeSpace += GetNumBuildingSites(bld) * building.libraryCapacity;
+            const bool needMore = numWaiting > freeSpace;
+            buildingsWanted[bld] = std::min(numExisting + (needMore ? 1u : 0u), maxLibraries);
+        } else if(building.workDesc.waresNeeded.empty())
+            buildingsWanted[bld] = 1;
+        else
+        {
+            unsigned numInputs = 0;
+            for(const GoodType input : building.workDesc.waresNeeded)
+                numInputs += aijh.AmountInStorage(input);
+            const unsigned wanted = numInputs == 0 ? 0u : std::min(1u + numInputs / 10u, maxWorkshopsPerType);
+            // Never plan less than existing (would not destroy them anyway)
+            buildingsWanted[bld] = std::max(wanted, std::min(numExisting, maxWorkshopsPerType));
+        }
     }
 }
 

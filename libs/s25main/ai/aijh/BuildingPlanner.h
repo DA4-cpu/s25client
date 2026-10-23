@@ -45,6 +45,8 @@ private:
     bool expansionRequired;
 
     void RefreshBuildingNums(const AIPlayerJH& aijh);
+    /// Civilization mode: Workshops and libraries defined in lua
+    void UpdateCustomBuildingsWanted(const AIPlayerJH& aijh);
     bool CalcIsExpansionRequired(AIPlayerJH& aijh, bool recalc) const;
 };
 } // namespace AIJH
