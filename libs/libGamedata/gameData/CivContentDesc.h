@@ -79,6 +79,9 @@ struct WorkshopDesc
     TagQuery output;
     /// True: the product gets the properties of the consumed input ware
     bool inheritProperties = false;
+    /// How the product is chosen if the output matches several wares. Empty: the output must match exactly one
+    /// ware. "knowledge": by knowledge type of the products (regulator "Wissen", until then evenly distributed)
+    std::string outputChoice;
     /// Number of wares stored per input
     unsigned storage = 6;
     /// Seconds of work per product and seconds of waiting before
@@ -86,6 +89,25 @@ struct WorkshopDesc
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);
+};
+
+/// Byproduct of a building as read from lua (rttr:AddByproduct):
+/// Whenever the worker of the building carries out a product, he also brings the byproduct to the flag
+struct ByproductDesc
+{
+    /// Identifier of the building (built-in or workshop)
+    std::string building;
+    /// Tag query of the byproduct, must match exactly one ware
+    TagQuery ware;
+    /// Number of byproducts per product
+    unsigned amount = 1;
+    /// Only for these products (tag query). Empty: for every product of the building
+    TagQuery per;
+    /// Name of the technology after which the byproduct is produced. Empty: always
+    std::string technology;
+
+    ByproductDesc() = default;
+    explicit ByproductDesc(const kaguya::LuaTable& luaData);
 };
 
 /// Read a tag query from lua: Either a single string or a list of strings

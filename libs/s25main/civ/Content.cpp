@@ -243,12 +243,32 @@ Content::Content(const WorldDescription& desc) : Content()
                 }
                 bld.productByInput.emplace_back(input, products.front());
             }
+        } else if(wsDesc.outputChoice == "knowledge")
+        {
+            // One product per knowledge type, e.g. carved bones for LWP, IWP and MWP
+            for(const GoodType candidate : outputMatches)
+            {
+                const CustomWare* candidateWare = GetWare(candidate);
+                const bool hasKnowledge =
+                  candidateWare
+                  && std::any_of(candidateWare->knowledge.begin(), candidateWare->knowledge.end(),
+                                 [](int points) { return points != 0; });
+                if(!hasKnowledge)
+                {
+                    throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of the output "
+                                        + joinTags(wsDesc.output) + " needs knowledge points, but '"
+                                        + getIdentifierOf(candidate) + "' has none");
+                }
+            }
+            bld.productChoices = outputMatches;
+            bld.product = outputMatches.front();
         } else
         {
             if(outputMatches.size() != 1u)
             {
                 throw GameDataError(context + ": output " + joinTags(wsDesc.output) + " matches "
-                                    + std::to_string(outputMatches.size()) + " wares (expected exactly 1)");
+                                    + std::to_string(outputMatches.size())
+                                    + " wares (expected exactly 1, or use outputChoice = \"knowledge\")");
             }
             bld.product = outputMatches.front();
         }

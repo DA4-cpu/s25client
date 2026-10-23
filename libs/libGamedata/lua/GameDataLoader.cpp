@@ -52,7 +52,8 @@ void GameDataLoader::Register(kaguya::State& state)
                                      .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
                                      .addFunction("AddWare", &GameDataLoader::AddWare)
                                      .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
-                                     .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop));
+                                     .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
+                                     .addFunction("AddByproduct", &GameDataLoader::AddByproduct));
 }
 
 class LuaIncludeError : public std::runtime_error
@@ -147,6 +148,11 @@ void GameDataLoader::SetWareTags(const kaguya::LuaTable& data)
 void GameDataLoader::AddWorkshop(const kaguya::LuaTable& data)
 {
     worldDesc_.workshops.emplace_back(data);
+}
+
+void GameDataLoader::AddByproduct(const kaguya::LuaTable& data)
+{
+    worldDesc_.byproducts.emplace_back(data);
 }
 
 void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)

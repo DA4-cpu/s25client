@@ -27,6 +27,23 @@ bool isEnabled(const GameWorldBase& world)
     return world.GetGGS().isEnabled(AddonId::CIVILIZATION);
 }
 
+std::vector<GoodType> getByproducts(const GameWorldBase& world, unsigned playerId, BuildingType bld, GoodType product)
+{
+    std::vector<GoodType> result;
+    if(!isEnabled(world))
+        return result;
+    const PlayerResearch& research = world.GetPlayer(playerId).GetResearch();
+    for(const Byproduct& byproduct : world.GetTechTree().GetByproducts(bld))
+    {
+        if(!byproduct.AppliesTo(product))
+            continue;
+        if(byproduct.technology && !research.IsResearched(*byproduct.technology))
+            continue;
+        result.insert(result.end(), byproduct.amount, byproduct.ware);
+    }
+    return result;
+}
+
 std::optional<unsigned> getExclusiveOwner(const GameWorldBase& world, TechIdx tech)
 {
     if(!world.GetTechTree().get(tech).exclusive)

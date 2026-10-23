@@ -34,6 +34,7 @@ private:
     void AddWare(const kaguya::LuaTable& data);
     void SetWareTags(const kaguya::LuaTable& data);
     void AddWorkshop(const kaguya::LuaTable& data);
+    void AddByproduct(const kaguya::LuaTable& data);
 
     WorldDescription& worldDesc_;
     boost::filesystem::path basePath_, curFile_;

@@ -68,6 +68,9 @@ struct CustomBuilding
     std::vector<std::pair<GoodType, GoodType>> productByInput;
     /// Product if properties are not passed on
     GoodType product = GoodType::Nothing;
+    /// Possible products if the product is chosen by knowledge type (outputChoice = "knowledge"). Otherwise empty.
+    /// The worker picks one of them for each product (evenly until the regulator "Wissen" exists)
+    std::vector<GoodType> productChoices;
 };
 
 /// Wares, workshops and tags of the civilization mode which are defined in lua.

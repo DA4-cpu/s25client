@@ -105,6 +105,19 @@ rttr:AddTechnology{
     aiPriority = 80,
 }
 
+rttr:AddTechnology{
+    name = "bone_carving",
+    title = "Knochenschnitzerei", -- PLATZHALTER: Anzeigename
+    description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
+    era = 0,
+    knowledge = { LWP = 1 }, -- PLATZHALTER: jede Technologie braucht WP-Kosten, Wert noch offen
+    -- PLATZHALTER: Voraussetzungen, Warenkosten und Dauer sind noch nicht festgelegt, z.B.
+    -- requires = { ... },
+    -- cost = { ... },
+    -- time = ?,
+    unlocks = { buildings = { "BoneCarver" } },
+}
+
 
 -------------------------------------------------------------------------------
 -- 1: Antike

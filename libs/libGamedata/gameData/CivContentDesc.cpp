@@ -123,6 +123,11 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context + ": output is missing");
     output = parseTagQuery(*outputValue, context + ", output");
     inheritProperties = luaData.getOrDefault("inheritProperties", false);
+    outputChoice = luaData.getOrDefault("outputChoice", std::string());
+    if(!outputChoice.empty() && outputChoice != "knowledge")
+        throw GameDataError(context + ": outputChoice must be \"knowledge\" (or be left out)");
+    if(!outputChoice.empty() && inheritProperties)
+        throw GameDataError(context + ": outputChoice and inheritProperties can not be combined");
     storage = luaData.getOrDefault("storage", 6u);
     if(storage == 0 || storage > 99)
         throw GameDataError(context + ": storage must be in [1, 99]");
@@ -130,5 +135,23 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     if(workTime == 0)
         throw GameDataError(context + ": workTime must be > 0");
     waitTime = luaData.getOrDefault("waitTime", 0u);
+    luaData.checkUnused();
+}
+
+ByproductDesc::ByproductDesc(const kaguya::LuaTable& luaTable)
+{
+    CheckedLuaTable luaData(luaTable);
+    luaData.getOrThrow(building, "building");
+    const std::string context = "Byproduct of '" + building + "'";
+    const auto wareValue = luaData.getOptional<kaguya::LuaRef>("ware");
+    if(!wareValue)
+        throw GameDataError(context + ": ware is missing");
+    ware = parseTagQuery(*wareValue, context + ", ware");
+    amount = luaData.getOrDefault("amount", 1u);
+    if(amount == 0 || amount > 7)
+        throw GameDataError(context + ": amount must be in [1, 7] (a flag holds at most 8 wares)");
+    if(const auto perValue = luaData.getOptional<kaguya::LuaRef>("per"))
+        per = parseTagQuery(*perValue, context + ", per");
+    technology = luaData.getOrDefault("technology", std::string());
     luaData.checkUnused();
 }

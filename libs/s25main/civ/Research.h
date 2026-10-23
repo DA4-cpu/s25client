@@ -7,6 +7,7 @@
 #include "civ/Knowledge.h"
 #include "civ/TechTree.h"
 #include <optional>
+#include <vector>
 
 class GamePlayer;
 class GameWorld;
@@ -61,6 +62,10 @@ bool hasEnoughKnowledge(const GameWorldBase& world, unsigned playerId, TechIdx t
 bool isAffordable(const GameWorldBase& world, unsigned playerId, TechIdx tech);
 /// Sum of all wares already paid for the technology
 unsigned getAmountPaid(const GameWorldBase& world, unsigned playerId, TechIdx tech);
+
+/// Byproducts which the worker of a building of type `bld` brings to the flag together with `product`
+/// (rttr:AddByproduct), each byproduct once per piece. Empty if the civilization mode is off
+std::vector<GoodType> getByproducts(const GameWorldBase& world, unsigned playerId, BuildingType bld, GoodType product);
 
 /// Choose a technology for the AI to research (ignoring `exclude`):
 /// Affordable ones first, then highest priority, then cheapest, then lowest era

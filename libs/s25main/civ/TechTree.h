@@ -56,6 +56,21 @@ struct Technology
     std::optional<unsigned> GetCostIdx(GoodType good) const;
 };
 
+/// Byproduct of a building (rttr:AddByproduct) with all identifiers resolved
+struct Byproduct
+{
+    GoodType ware;
+    /// Number of byproducts per product
+    unsigned amount = 1;
+    /// Only for these products of the building. Empty: for every product
+    std::vector<GoodType> perProducts;
+    /// Produced only after this technology was researched. Empty: always
+    std::optional<TechIdx> technology;
+
+    /// True if a product of this type yields the byproduct
+    bool AppliesTo(GoodType product) const;
+};
+
 /// The tech tree of the civilization mode. Created from the WorldDescription (Lua game data)
 class TechTree
 {
@@ -75,6 +90,8 @@ public:
     std::vector<TechIdx> GetTechsUnlocking(BuildingType bld) const;
     /// Knowledge points (whole points) of a finished building of this type
     const KnowledgePoints& GetBuildingKnowledge(BuildingType bld) const { return buildingKnowledge_[bld]; }
+    /// Byproducts of the building (in order of definition)
+    const std::vector<Byproduct>& GetByproducts(BuildingType bld) const { return byproducts_[bld]; }
     /// Wares, workshops and tags defined in lua
     const Content& GetContent() const { return *content_; }
     const std::shared_ptr<const Content>& GetContentPtr() const { return content_; }
@@ -84,6 +101,7 @@ private:
     std::vector<Technology> techs_;
     helpers::EnumArray<bool, BuildingType> lockedAtStart_;
     helpers::EnumArray<KnowledgePoints, BuildingType> buildingKnowledge_;
+    helpers::EnumArray<std::vector<Byproduct>, BuildingType> byproducts_;
 };
 
 /// Load the tech tree from the Lua file `default.lua` in the given folder. Throws on error

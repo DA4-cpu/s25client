@@ -60,3 +60,47 @@ rttr:AddWare{
 }
 
 -- Funkitoniert einwandtfrei!
+
+-------------------------------------------------------------------------------
+-- Knochen-Kette (Schritt 4a). Entscheidungen des Nutzers: Jäger 1 Knochen pro Tier, Fleischerei 1 pro Schinken,
+-- erst nach der Knochen-Technologie (siehe byproducts.lua). Geritzte Knochen: drei Waren mit gemeinsamer Warenart,
+-- je 1 WP. Anzeigenamen (title) dürfen jederzeit geändert werden, Bezeichner (name) nicht.
+-- PLATZHALTER: look (Grafik-Vorbild) und transport (Transportpriorität) sind noch nicht festgelegt.
+-------------------------------------------------------------------------------
+
+rttr:AddWare{
+    name = "Bones",
+    title = "Knochen",
+    look = "Stones",      -- PLATZHALTER
+    transport = "Stones", -- PLATZHALTER
+}
+
+rttr:AddWare{
+    name = "CarvedBoneLWP",
+    title = "Geritzter Knochen (Landwirtschaft)",
+    kind = "GeritzterKnochen",
+    properties = { "LWP" },
+    look = "Stones",      -- PLATZHALTER
+    transport = "Stones", -- PLATZHALTER
+    knowledge = { LWP = 1 },
+}
+
+rttr:AddWare{
+    name = "CarvedBoneIWP",
+    title = "Geritzter Knochen (Industrie)",
+    kind = "GeritzterKnochen",
+    properties = { "IWP" },
+    look = "Stones",      -- PLATZHALTER
+    transport = "Stones", -- PLATZHALTER
+    knowledge = { IWP = 1 },
+}
+
+rttr:AddWare{
+    name = "CarvedBoneMWP",
+    title = "Geritzter Knochen (Militär)",
+    kind = "GeritzterKnochen",
+    properties = { "MWP" },
+    look = "Stones",      -- PLATZHALTER
+    transport = "Stones", -- PLATZHALTER
+    knowledge = { MWP = 1 },
+}

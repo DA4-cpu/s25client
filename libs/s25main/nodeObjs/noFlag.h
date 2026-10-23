@@ -30,6 +30,8 @@ public:
     FlagType GetFlagType() const { return flagtype; }
     /// Gibt Auskunft darüber, ob noch Platz für eine Ware an der Flagge ist.
     bool HasSpaceForWare() const { return wares.size() < wares.max_size(); }
+    /// Number of wares which can still be put at the flag
+    unsigned GetNumFreeSpaces() const { return static_cast<unsigned>(wares.max_size() - wares.size()); }
 
     void Draw(DrawPoint drawPt) override;
 

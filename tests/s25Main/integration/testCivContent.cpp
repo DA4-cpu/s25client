@@ -17,9 +17,12 @@
 #include "factories/BuildingFactory.h"
 #include "figures/nofBuildingWorker.h"
 #include "files.h"
+#include "helpers/EnumRange.h"
 #include "lua/GameDataLoader.h"
 #include "worldFixtures/MockLocalGameState.h"
 #include "worldFixtures/WorldWithGCExecution.h"
+#include "nodeObjs/noFlag.h"
+#include "gameTypes/MapTypes.h"
 #include "gameData/BuildingConsts.h"
 #include "gameData/GoodConsts.h"
 #include "gameData/JobConsts.h"
@@ -97,6 +100,45 @@ WorldDescription makeBuiltinInputDesc()
     WorldDescription desc;
     desc.wares.push_back(makeWare("Product", "", {}, "Boards"));
     desc.workshops.push_back(makeWorkshop("Shop", {{"Stones"}}, {"Product"}));
+    return desc;
+}
+
+/// Shop without inputs making "Product", with byproduct "Raw" (amount, after technology "tech" if requireTech)
+WorldDescription makeByproductDesc(unsigned amount, bool requireTech)
+{
+    WorldDescription desc;
+    desc.wares.push_back(makeWare("Raw", "RawKind"));
+    desc.wares.push_back(makeWare("Product", "", {}, "Boards"));
+    desc.workshops.push_back(makeWorkshop("Shop", {}, {"Product"}));
+    TechnologyDesc tech;
+    tech.name = "tech";
+    tech.title = "Tech";
+    desc.technologies.add(tech);
+    ByproductDesc byproduct;
+    byproduct.building = "Shop";
+    byproduct.ware = {"Raw"};
+    byproduct.amount = amount;
+    if(requireTech)
+        byproduct.technology = "tech";
+    desc.byproducts.push_back(byproduct);
+    return desc;
+}
+
+/// Bones -> carved bone for LWP, IWP or MWP (chosen by knowledge type)
+WorldDescription makeKnowledgeChoiceDesc()
+{
+    WorldDescription desc;
+    desc.wares.push_back(makeWare("Bones"));
+    const char* types[] = {"LWP", "IWP", "MWP"};
+    for(unsigned i = 0; i < 3; ++i)
+    {
+        WareDesc medium = makeWare(std::string("Carved") + types[i], "Carved", {types[i]});
+        medium.knowledge[i] = 1;
+        desc.wares.push_back(medium);
+    }
+    auto carver = makeWorkshop("Carver", {{"Bones"}}, {"Carved"});
+    carver.outputChoice = "knowledge";
+    desc.workshops.push_back(carver);
     return desc;
 }
 
@@ -378,6 +420,164 @@ BOOST_AUTO_TEST_CASE(TechTreeUsesCustomNames)
     BOOST_TEST(tree.GetContent().GetNumBuildings() == 1u);
 }
 
+BOOST_AUTO_TEST_CASE(ByproductsAreResolved)
+{
+    WorldDescription desc = makeByproductDesc(2, true);
+    ByproductDesc hunter;
+    hunter.building = "Hunter";
+    hunter.ware = {"RawKind"};
+    hunter.per = {"Meat"};
+    desc.byproducts.push_back(hunter);
+    const civ::TechTree tree(desc);
+    const auto& shopBps = tree.GetByproducts(BuildingType::Custom0);
+    BOOST_TEST_REQUIRE(shopBps.size() == 1u);
+    BOOST_TEST((shopBps[0].ware == GoodType::Custom0));
+    BOOST_TEST(shopBps[0].amount == 2u);
+    BOOST_TEST_REQUIRE(shopBps[0].technology.has_value());
+    BOOST_TEST(*shopBps[0].technology == 0u);
+    BOOST_TEST(shopBps[0].AppliesTo(getCustomGood(1)));
+    // Never a byproduct of itself
+    BOOST_TEST(!shopBps[0].AppliesTo(GoodType::Custom0));
+
+    const auto& hunterBps = tree.GetByproducts(BuildingType::Hunter);
+    BOOST_TEST_REQUIRE(hunterBps.size() == 1u);
+    BOOST_TEST(!hunterBps[0].technology.has_value());
+    BOOST_TEST(hunterBps[0].AppliesTo(GoodType::Meat));
+    BOOST_TEST(!hunterBps[0].AppliesTo(GoodType::Ham));
+    BOOST_TEST(tree.GetByproducts(BuildingType::Slaughterhouse).empty());
+}
+
+BOOST_AUTO_TEST_CASE(InvalidByproducts)
+{
+    const auto expectError = [](const WorldDescription& desc) {
+        BOOST_CHECK_THROW(civ::TechTree{desc}, GameDataError);
+    };
+    {
+        WorldDescription desc = makeByproductDesc(1, true);
+        desc.byproducts.front().building = "NoBuilding";
+        expectError(desc);
+    }
+    {
+        // Warehouses have no worker who carries out products
+        WorldDescription desc = makeByproductDesc(1, true);
+        desc.byproducts.front().building = "Storehouse";
+        expectError(desc);
+    }
+    {
+        WorldDescription desc = makeByproductDesc(1, true);
+        desc.byproducts.front().ware = {"Unknown"};
+        expectError(desc);
+    }
+    {
+        // Must match exactly one ware
+        WorldDescription desc = makeInheritDesc();
+        TechnologyDesc tech;
+        tech.name = "tech";
+        tech.title = "Tech";
+        desc.technologies.add(tech);
+        ByproductDesc byproduct;
+        byproduct.building = "Hunter";
+        byproduct.ware = {"Holz"};
+        desc.byproducts.push_back(byproduct);
+        expectError(desc);
+    }
+    {
+        WorldDescription desc = makeByproductDesc(1, true);
+        desc.byproducts.front().technology = "unknownTech";
+        expectError(desc);
+    }
+    {
+        WorldDescription desc = makeByproductDesc(1, true);
+        desc.byproducts.front().per = {"Unknown"};
+        expectError(desc);
+    }
+    {
+        // At most 7 per building in total (flag holds 8 wares)
+        WorldDescription desc = makeByproductDesc(4, true);
+        desc.byproducts.push_back(desc.byproducts.front());
+        expectError(desc);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(OutputChoiceByKnowledge)
+{
+    const civ::Content content(makeKnowledgeChoiceDesc());
+    const civ::CustomBuilding* carver = content.GetBuilding(BuildingType::Custom0);
+    BOOST_TEST_REQUIRE(carver);
+    BOOST_TEST((carver->productChoices == std::vector<GoodType>{getCustomGood(1), getCustomGood(2), getCustomGood(3)}));
+    BOOST_TEST((carver->product == getCustomGood(1)));
+    {
+        // Every product needs knowledge points
+        WorldDescription desc = makeKnowledgeChoiceDesc();
+        desc.wares[2].knowledge = {};
+        BOOST_CHECK_THROW(civ::Content{desc}, GameDataError);
+    }
+    {
+        // Without outputChoice the output must be unique
+        WorldDescription desc = makeKnowledgeChoiceDesc();
+        desc.workshops.front().outputChoice.clear();
+        BOOST_CHECK_THROW(civ::Content{desc}, GameDataError);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(ByproductsAndOutputChoiceFromLua)
+{
+    rttr::test::TmpFolder tmp;
+    const auto load = [&tmp](const std::string& script, WorldDescription& desc) {
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << script;
+        }
+        GameDataLoader loader(desc, tmp);
+        return loader.Load();
+    };
+    const std::string wares = R"(
+rttr:AddWare{ name = "Bones", look = "Stones", transport = "Stones" }
+rttr:AddWare{ name = "CarvedL", kind = "Carved", properties = { "LWP" }, look = "Stones", transport = "Stones",
+              knowledge = { LWP = 1 } }
+rttr:AddWare{ name = "CarvedI", kind = "Carved", properties = { "IWP" }, look = "Stones", transport = "Stones",
+              knowledge = { IWP = 1 } }
+rttr:AddWorkshop{ name = "Carver", size = "small", cost = { Boards = 2 }, look = "Hunter",
+                  worker = { tool = "Cleaver", look = "Butcher" }, inputs = { "Bones" }, output = "Carved",
+                  outputChoice = "knowledge", workTime = 30 }
+rttr:AddTechnology{ name = "bones", title = "Bones", knowledge = { LWP = 1 }, unlocks = { buildings = { "Carver" } } }
+)";
+    {
+        WorldDescription desc;
+        BOOST_TEST_REQUIRE(load(wares + R"(
+rttr:AddByproduct{ building = "Hunter", ware = "Bones", amount = 2, per = "Meat", technology = "bones" }
+rttr:AddByproduct{ building = "Slaughterhouse", ware = "Bones" }
+)",
+                                desc));
+        BOOST_TEST_REQUIRE(desc.byproducts.size() == 2u);
+        BOOST_TEST(desc.byproducts[0].amount == 2u);
+        BOOST_TEST((desc.byproducts[0].per == TagQuery{"Meat"}));
+        BOOST_TEST(desc.byproducts[0].technology == "bones");
+        BOOST_TEST(desc.byproducts[1].amount == 1u);
+        BOOST_TEST(desc.byproducts[1].technology.empty());
+        BOOST_TEST(desc.workshops.front().outputChoice == "knowledge");
+        const civ::TechTree tree(desc);
+        BOOST_TEST(tree.GetByproducts(BuildingType::Hunter).size() == 1u);
+        BOOST_TEST(tree.GetContent().GetBuilding(BuildingType::Custom0)->productChoices.size() == 2u);
+    }
+    for(const std::string invalid : {R"(rttr:AddByproduct{ building = "Hunter", ware = "Bones", amount = 0 })",
+                                     R"(rttr:AddByproduct{ building = "Hunter", ware = "Bones", amount = 8 })",
+                                     R"(rttr:AddByproduct{ building = "Hunter" })",
+                                     R"(rttr:AddByproduct{ building = "Hunter", ware = "Bones", typo = 1 })"})
+    {
+        WorldDescription desc;
+        BOOST_TEST_INFO(invalid);
+        BOOST_TEST(!load(wares + invalid, desc));
+    }
+    {
+        // outputChoice only "knowledge"
+        WorldDescription desc;
+        std::string script = wares;
+        script.replace(script.find("outputChoice = \"knowledge\""), 26, "outputChoice = \"random\"");
+        BOOST_TEST(!load(script, desc));
+    }
+}
+
 namespace {
 struct ContentWorldFixture : public WorldWithGCExecution1P
 {
@@ -501,6 +701,105 @@ BOOST_FIXTURE_TEST_CASE(SerializeCustomContent, ContentWorldFixture)
         world.Unload();
         BOOST_CHECK_THROW(sgd3.ReadSnapshot(*game, lgs), SerializedGameData::Error);
     }
+}
+
+namespace {
+struct ByproductWorldFixture : public ContentWorldFixture
+{
+    ByproductWorldFixture(unsigned amount = 1) : ContentWorldFixture(makeByproductDesc(amount, true)) {}
+    const GoodType raw = GoodType::Custom0, product = getCustomGood(1);
+    unsigned inInventory(GoodType good) { return world.GetPlayer(0).GetInventory()[good]; }
+};
+struct ByproductWorldFixture2 : public ByproductWorldFixture
+{
+    ByproductWorldFixture2() : ByproductWorldFixture(2) {}
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(ByproductOnlyAfterTechnology, ByproductWorldFixture)
+{
+    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 1), true);
+    placeConnectedBuilding(BuildingType::Custom0);
+    RTTR_EXEC_TILL(8000, countInHQ(product) >= 2u);
+    // Technology not researched yet -> no byproduct
+    BOOST_TEST(inInventory(raw) == 0u);
+
+    civ::completeResearch(world, 0, 0);
+    const unsigned productsBefore = inInventory(product);
+    RTTR_EXEC_TILL(8000, countInHQ(product) >= productsBefore + 3u);
+    // One byproduct per product put at the flag after the research (the product carried at that moment may count)
+    const unsigned newProducts = inInventory(product) - productsBefore;
+    BOOST_TEST(inInventory(raw) >= newProducts);
+    BOOST_TEST(inInventory(raw) <= newProducts + 1u);
+    RTTR_EXEC_TILL(2000, countInHQ(raw) >= 2u);
+}
+
+BOOST_FIXTURE_TEST_CASE(BuiltinBuildingGetsByproduct, ContentWorldFixture)
+{
+    // Slaughterhouse (built-in building): 1 byproduct per meat
+    {
+        WorldDescription desc = makeByproductDesc(1, false);
+        desc.byproducts.front().building = "Slaughterhouse";
+        world.SetTechTree(std::make_unique<civ::TechTree>(desc));
+        civ::startGame(world);
+    }
+    hq().AddToInventory(GoodCounts::make(GoodType::Ham, 3), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Cleaver, 1), true);
+    placeConnectedBuilding(BuildingType::Slaughterhouse);
+    RTTR_EXEC_TILL(10000, countInHQ(GoodType::Meat) >= 3u);
+    BOOST_TEST(world.GetPlayer(0).GetInventory()[GoodType::Custom0] == 3u);
+    RTTR_EXEC_TILL(2000, countInHQ(GoodType::Custom0) == 3u);
+}
+
+BOOST_FIXTURE_TEST_CASE(ByproductsWaitForSpaceAtFlag, ByproductWorldFixture2)
+{
+    civ::completeResearch(world, 0, 0);
+    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 1), true);
+    const MapPoint bldPos = placeConnectedBuilding(BuildingType::Custom0);
+    const auto& bld = *world.GetSpecObj<nobUsual>(bldPos);
+    RTTR_EXEC_TILL(4000, bld.HasWorker() && bld.GetWorker()->GetState() != nofBuildingWorker::State::FigureWork);
+    // Disconnect the building: Everything the worker brings out stays at the flag
+    const MapPoint flagPos = world.GetNeighbour(bldPos, Direction::SouthEast);
+    for(const auto dir : helpers::EnumRange<Direction>{})
+    {
+        if(dir != Direction::NorthWest && world.GetPointRoad(flagPos, dir) == PointRoad::Normal)
+        {
+            this->DestroyRoad(flagPos, dir);
+            break;
+        }
+    }
+    const noFlag& flag = *world.GetSpecObj<noFlag>(flagPos);
+    BOOST_TEST_REQUIRE(flag.GetNumWares() == 0u);
+    // Product + 2 byproducts each time: 3, 6, then only 2 places are left -> wait instead of leaving a part behind
+    RTTR_EXEC_TILL(8000, flag.GetNumWares() == 6u);
+    for(unsigned i = 0; i < 3000; ++i)
+        em.ExecuteNextGF();
+    BOOST_TEST(flag.GetNumWares() == 6u);
+    BOOST_TEST((bld.GetWorker()->GetState() == nofBuildingWorker::State::WaitForWareSpace));
+    BOOST_TEST(inInventory(raw) == 2u * inInventory(product));
+
+    // Reconnect: the wares are carried away and the worker brings out the waiting ones
+    this->BuildRoadForBlds(bldPos, hqPos);
+    RTTR_EXEC_TILL(10000, countInHQ(product) >= 4u);
+    BOOST_TEST(inInventory(raw) == 2u * inInventory(product));
+}
+
+BOOST_FIXTURE_TEST_CASE(WorkshopChoosesProductByKnowledge, ContentWorldFixture)
+{
+    world.SetTechTree(std::make_unique<civ::TechTree>(makeKnowledgeChoiceDesc()));
+    civ::startGame(world);
+    constexpr unsigned numBones = 12;
+    hq().AddToInventory(GoodCounts::make(GoodType::Custom0, numBones), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 1), true);
+    placeConnectedBuilding(BuildingType::Custom0);
+    const auto numCarved = [this]() {
+        return countInHQ(getCustomGood(1)) + countInHQ(getCustomGood(2)) + countInHQ(getCustomGood(3));
+    };
+    RTTR_EXEC_TILL(30000, numCarved() == numBones);
+    // Until the regulator exists, all types are made (12 tries: chance that one is missing is < 2.5%, but the game
+    // RNG is seeded the same in every test run)
+    for(unsigned i = 1; i <= 3; ++i)
+        BOOST_TEST(countInHQ(getCustomGood(i)) > 0u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

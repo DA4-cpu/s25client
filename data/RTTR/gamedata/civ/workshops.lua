@@ -19,6 +19,9 @@ rttr:AddWorkshop{...}:
   consume     optional: "each" (Standard): von jedem Eingang 1 Ware pro Produkt, jeder Eingang muss genau eine Ware
               treffen. "any": 1 Ware des Eingangs mit dem größten Vorrat (wie bei den Minen), höchstens 3 Waren insgesamt.
   output      Tag-Abfrage der hergestellten Ware
+  outputChoice optional: "knowledge" erlaubt, dass output mehrere Waren trifft (z.B. geritzte Knochen für LWP, IWP
+              und MWP). Welche davon hergestellt wird, legt später der Regler "Wissen" im Verteilungsfenster fest;
+              bis es ihn gibt, wird zufällig gleich verteilt. Jede dieser Waren braucht knowledge in wares.lua.
   inheritProperties  optional (Standard false): Das Produkt hat dieselben Eigenschaften wie die verbrauchte Ware
               (z.B. Nadelholz -> Nadelholzbretter). Zu jeder möglichen Eingangsware muss es genau ein passendes Produkt
               geben.
@@ -71,3 +74,20 @@ rttr:AddWorkshop{
     workTime = 40,
 }
 
+-------------------------------------------------------------------------------
+-- Knochen-Kette (Schritt 4a): 1 Knochen -> 1 geritzter Knochen (LWP, IWP oder MWP).
+-- Entschieden: kleines Gebäude, Arbeiter mit Beil. Freigeschaltet durch "bone_carving" (techtree.lua).
+-------------------------------------------------------------------------------
+
+rttr:AddWorkshop{
+    name = "BoneCarver",
+    title = "Knochenschnitzer",
+    size = "small",
+    cost = { Boards = 2 }, -- PLATZHALTER: Baukosten noch offen
+    look = "Hunter",       -- PLATZHALTER: Grafik-Vorbild
+    worker = { title = "Knochenschnitzer", tool = "Cleaver", look = "Butcher" }, -- look = PLATZHALTER
+    inputs = { "Bones" },
+    output = "GeritzterKnochen",
+    outputChoice = "knowledge",
+    workTime = 30,         -- PLATZHALTER: Arbeitszeit in Sekunden noch offen
+}

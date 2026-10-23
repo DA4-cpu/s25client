@@ -6,6 +6,7 @@
 #include "SerializedGameData.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
+#include "random/Random.h"
 
 nofCustomWorker::nofCustomWorker(const Job job, const MapPoint pos, const unsigned char player, nobUsual* workplace)
     : nofWorkman(job, pos, player, workplace)
@@ -47,8 +48,13 @@ helpers::OptionalEnum<GoodType> nofCustomWorker::ProduceWare()
     const civ::CustomBuilding* building = civ::getActiveContent().GetBuilding(workplace->GetBuildingType());
     if(!building)
         return std::nullopt;
-    const GoodType product =
-      building->GetProduct(consumedInput_ ? std::optional<GoodType>(*consumedInput_) : std::nullopt);
+    const auto consumedInput = consumedInput_;
     consumedInput_.reset();
-    return product;
+    if(!building->productChoices.empty())
+    {
+        // outputChoice = "knowledge": Until the regulator "Wissen" exists, all products are equally likely
+        // (synchronized game RNG, so all clients choose the same)
+        return building->productChoices[RANDOM_RAND(static_cast<unsigned>(building->productChoices.size()))];
+    }
+    return building->GetProduct(consumedInput ? std::optional<GoodType>(*consumedInput) : std::nullopt);
 }

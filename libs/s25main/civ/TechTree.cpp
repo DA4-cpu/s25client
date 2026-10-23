@@ -9,6 +9,7 @@
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
 #include "lua/GameDataLoader.h"
+#include "gameData/BuildingProperties.h"
 #include "gameData/GameConsts.h"
 #include "gameData/WorldDescription.h"
 #include <algorithm>
@@ -40,6 +41,14 @@ std::optional<unsigned> Technology::GetCostIdx(GoodType good) const
             return i;
     }
     return std::nullopt;
+}
+
+bool Byproduct::AppliesTo(GoodType product) const
+{
+    // A byproduct is never produced for itself (e.g. when the worker carries a waiting byproduct out)
+    if(product == ware)
+        return false;
+    return perProducts.empty() || helpers::contains(perProducts, product);
 }
 
 TechTree::TechTree(const WorldDescription& desc)
@@ -106,6 +115,44 @@ TechTree::TechTree(const WorldDescription& desc)
         }
         tech.aiPriority = techDesc.aiPriority;
         techs_.push_back(std::move(tech));
+    }
+
+    // Byproducts (after the technologies, as they refer to them)
+    for(const ByproductDesc& bpDesc : desc.byproducts)
+    {
+        const std::string context = "Byproduct of '" + bpDesc.building + "'";
+        const auto bld = content_->FindBuilding(bpDesc.building);
+        if(!bld)
+            throw GameDataError(context + ": not a building");
+        if(!BuildingProperties::IsUsual(*bld) && !isCustomBuilding(*bld))
+            throw GameDataError(context + ": only production buildings can have byproducts");
+        Byproduct byproduct;
+        const std::vector<GoodType> wares = content_->FindWares(bpDesc.ware);
+        if(wares.size() != 1u)
+        {
+            throw GameDataError(context + ": the ware must match exactly 1 ware, but matches "
+                                + std::to_string(wares.size()));
+        }
+        byproduct.ware = wares.front();
+        byproduct.amount = bpDesc.amount;
+        if(!bpDesc.per.empty())
+        {
+            byproduct.perProducts = content_->FindWares(bpDesc.per);
+            if(byproduct.perProducts.empty())
+                throw GameDataError(context + ": 'per' matches no ware");
+        }
+        if(!bpDesc.technology.empty())
+        {
+            byproduct.technology = find(bpDesc.technology);
+            if(!byproduct.technology)
+                throw GameDataError(context + ": unknown technology '" + bpDesc.technology + "'");
+        }
+        unsigned totalAmount = byproduct.amount;
+        for(const Byproduct& other : byproducts_[*bld])
+            totalAmount += other.amount;
+        if(totalAmount > 7u)
+            throw GameDataError(context + ": at most 7 byproducts per building (a flag holds at most 8 wares)");
+        byproducts_[*bld].push_back(std::move(byproduct));
     }
 }
 

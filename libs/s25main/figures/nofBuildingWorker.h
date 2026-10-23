@@ -6,6 +6,7 @@
 
 #include "figures/noFigure.h"
 #include "gameTypes/GoodTypes.h"
+#include <vector>
 
 class nobUsual;
 class nobBaseWarehouse;
@@ -67,6 +68,13 @@ protected:
     virtual bool AreWaresAvailable() const;
 
 private:
+    /// Wares to put at the flag when carrying out `ware`: the ware itself and its byproducts (civilization mode)
+    std::vector<GoodType> GetWaresToCarryOut() const;
+    /// True if the flag has space for all wares to carry out (ware + byproducts)
+    bool HasSpaceForWaresAtFlag() const;
+    /// Create the ware at the flag in front of the workplace and send it on its way
+    void PutWareAtFlag(GoodType good);
+
     /// von noFigure aufgerufen
     void Walked() override;      // wenn man gelaufen ist
     void GoalReached() override; // wenn das Ziel erreicht wurde

@@ -41,6 +41,8 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-21 | Erster neuer Rohstoff im Spiel: **Knochen** (Jäger, Fleischerei) → geritzte Knochen als Medium. Die Knochen-Technologie ist ab **Ära 0** erforschbar. |
 | 2026-10-21 | Neue Waren, einfache Werkstätten, Tags und alle Zahlenwerte werden in **Lua** definiert; C++ liefert das allgemeine Verhalten. |
 | 2026-10-21 | **Tag-System:** Jede Ware hat Tags für Name (z. B. „Nadelholzbretter“), Warenart („Bretter“) und Eigenschaft („Nadelholz“). Gebäude und Baustellen bestellen nach einer Tag-Kombination oder nach dem genauen Namen. Verarbeitete Waren übernehmen die Eigenschaft der Eingangsware. |
+| 2026-10-23 | **Geritzte Knochen sind drei Waren** (LWP, IWP, MWP) mit gemeinsamer Warenart `GeritzterKnochen` und der Wissensart als Eigenschaft. Eine Ware mit drei Arten gibt es technisch nicht, weil jede Ware ein eigener Lagerplatz ist; über die Tags lassen sie sich trotzdem gemeinsam bestellen. |
+| 2026-10-23 | Der Knochenschnitzer braucht ein **Beil** (Cleaver). Elfenbein kommt später (mit den Tieren der Zonen). |
 
 ## Zuordnung Humankind → Siedler
 
@@ -139,7 +141,8 @@ null. `ai-battle` zeigt die WP jedes Spielers als „verfügbar/gesamt“ an.
 | Tests | `tests/s25Main/integration/testResearch.cpp`, `testCivContent.cpp`, `tests/libGameData/testGameData.cpp` |
 | Wissenspunkte (Arten, Berechnung) | `libs/s25main/civ/Knowledge.*` |
 | Waren, Werkstätten, Tags aus Lua | `libs/libGamedata/gameData/CivContentDesc.*`, `libs/s25main/civ/Content.*`, `civ/Looks.h`, `figures/nofCustomWorker.*` |
-| Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua`, `knowledge.lua`, `techtree.lua`) |
+| Nebenprodukte | `ByproductDesc` (`CivContentDesc.*`), `civ::Byproduct` (`TechTree.*`), `civ::getByproducts` (`Research.*`), `nofBuildingWorker::WorkingReady` |
+| Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua`, `knowledge.lua`, `techtree.lua`, `byproducts.lua`) |
 
 ## Wissenspunkte
 
@@ -208,6 +211,22 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
 - In der Lager- und Warenübersicht stehen neue Waren und Arbeiter auf eigenen Seiten. Neue Werkstätten erscheinen im
   Baumenü (nach Größe), in der Gebäudestatistik, der Produktivitätsübersicht und der Baureihenfolge.
 
+### Nebenprodukte
+
+- `rttr:AddByproduct{ building = "Hunter", ware = "Bones", amount = 1, technology = "bone_carving" }` in
+  `civ/byproducts.lua`: Jedes Mal, wenn der Arbeiter des Gebäudes ein Produkt an die Flagge bringt, legt er das
+  Nebenprodukt mit dazu. Optional `per` (nur für bestimmte Produkte) und `technology` (erst danach). Geht für
+  eingebaute Produktionsgebäude und Werkstätten, höchstens 7 Nebenprodukte pro Gebäude.
+- Umgesetzt an einer Stelle für alle Arbeiter (`nofBuildingWorker::WorkingReady`). Ob es ein Nebenprodukt gibt, wird
+  beim Ablegen geprüft. Ist an der Flagge nicht für alles Platz, wartet der Arbeiter mit dem Produkt wie bei voller
+  Flagge, bis genug Plätze frei sind. Es wird also nichts zurückgelassen, und der Spielstand braucht keine neuen Daten.
+
+### Mehrere mögliche Produkte
+
+- `outputChoice = "knowledge"` erlaubt, dass `output` mehrere Waren trifft (geritzte Knochen LWP/IWP/MWP). Jede davon
+  braucht `knowledge` in `wares.lua`. Welche hergestellt wird, entscheidet später der Regler „Wissen“ (Schritt 4b);
+  bis dahin wählt der Arbeiter mit dem synchronen Spiel-Zufall gleich verteilt.
+
 ### Datenformat
 
 Dateien: `data/RTTR/gamedata/civ/wares.lua` und `civ/workshops.lua` (dort ausführlich erklärt, mit Beispiel).
@@ -236,8 +255,12 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
    1. Wissenspunkte aus Gebäuden, Technologiekosten in WP, Anzeige im Forschungsfenster, KI. *(fertig, siehe oben)*
    2. Datenschicht: neue Waren, einfache Werkstätten (Eingang → Ausgang) und Tags in Lua, Platzhaltergrafik.
       *(fertig, siehe oben)*
-   3. Knochen-Kette als erster Durchstich: Knochen von Jäger und Fleischerei, Knochenschnitzer, geritzte Knochen
-      (LWP/IWP/MWP) über den Regler „Wissen“, Medien-WP in Lagern und Bibliothek (Ära 2).
+   3. Knochen-Kette als erster Durchstich:
+      - 4a: Nebenprodukte aus Lua (Knochen von Jäger und Fleischerei nach der Technologie `bone_carving`),
+        Knochenschnitzer, drei geritzte Knochen, Werkstätten mit mehreren Produkten. *(fertig, Zahlenwerte sind
+        Platzhalter)*
+      - 4b: Regler „Wissen“ im Verteilungsfenster, Medien-WP in Lagern (0,5-fach).
+      - 4c: Bibliothek (Ära 2, 1-fach, bestellt Medien per Träger), einfache KI-Regel für Werkstätten.
 3. **Neue Rohstoffe und Warenketten** – Lehm (Kartenobjekt, Lehmgrube), Ton, Tontafeln, Ziegel, Vasen; Lehm und Ziegel
    als Baustoff (Baukosten über Tags); Papyrus, Baumwolle/Knotenschnüre, Steintafeln. Später Pferde, Salpeter …
 4. **Welt** – Kartengenerator mit Klimazonen (Temperatur, Feuchtigkeit, Höhe) und 7 geographischen Zonen mit eigener
@@ -265,5 +288,7 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
 - 3 KI-Tests (`AI/BuildWoodIndustry`, `AI/ExpandWhenNoSpace`, `AI/DoBuildMilitaryBuildingsOutsideComputerBarrier`)
   schlagen nach den eigenen KI-Änderungen fehl.
 - 22 Cheat-Tests (`CheatsTests/*`, `CheatCommandTrackerTests/*`) schlagen fehl.
+- `ResearchSuite/DefaultTechTreeIsValid` prüfte feste Zahlenwerte (HQ 5 WP …), die der Nutzer inzwischen in Lua
+  geändert hat. Seit 2026-10-23 prüft der Test nur noch die Struktur, keine Balancing-Werte.
 - `Test_UI/IwMapGenerator` kompilierte nicht mehr (Landschaftsauswahl entfernt) – im Branch `humankind` repariert.
 - `GamePlayer::IsBuildingEnabled` stürzte ohne GameInterface (Tests, Headless) bei gesperrten Gebäuden ab – repariert.

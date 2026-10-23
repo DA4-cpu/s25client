@@ -39,6 +39,8 @@ struct WorldDescription
     std::map<std::string, WareTagsDesc> wareTags;
     /// Workshops (simple production buildings) of the civilization mode in order of definition
     std::vector<WorkshopDesc> workshops;
+    /// Byproducts of buildings in the civilization mode in order of definition
+    std::vector<ByproductDesc> byproducts;
     // Convenience accessors
     template<class T>
     const T& get(DescIdx<T> idx) const

@@ -12,11 +12,13 @@
 #include "Ware.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobUsual.h"
+#include "civ/Research.h"
 #include "helpers/MaxEnumValue.h"
 #include "world/GameWorld.h"
 #include "nodeObjs/noFlag.h"
 #include "gameData/JobConsts.h"
 #include "gameData/ShieldConsts.h"
+#include <algorithm>
 
 nofBuildingWorker::nofBuildingWorker(const Job job, const MapPoint pos, const unsigned char player, nobUsual* workplace)
     : noFigure(job, pos, player, workplace), state(State::FigureWork), workplace(workplace), was_sounding(false)
@@ -114,7 +116,7 @@ void nofBuildingWorker::Walked()
             {
                 // dann war draußen kein Platz --> ist jetzt evtl Platz?
                 state = State::WaitForWareSpace;
-                if(workplace->GetFlag()->HasSpaceForWare())
+                if(HasSpaceForWaresAtFlag())
                     FreePlaceAtFlag();
                 // Ab jetzt warten, d.h. nicht mehr arbeiten --> schlecht für die Produktivität
                 workplace->StartNotWorking();
@@ -143,24 +145,13 @@ void nofBuildingWorker::WorkingReady()
     // Trage ich eine Ware?
     if(ware)
     {
-        noFlag* flag = workplace->GetFlag();
-        // Ist noch Platz an der Fahne?
-        if(flag->HasSpaceForWare())
+        // Ist noch Platz an der Fahne (auch für evtl. Nebenprodukte)?
+        // Sonst wird die Ware wieder mit hinein genommen und auf Platz gewartet
+        const std::vector<GoodType> waresToPut = GetWaresToCarryOut();
+        if(workplace->GetFlag()->GetNumFreeSpaces() >= waresToPut.size())
         {
-            // Ware erzeugen
-            auto real_ware = std::make_unique<Ware>(*ware, nullptr, flag);
-            real_ware->WaitAtFlag(flag);
-            // Inventur entsprechend erhöhen, dabei Schilder unterscheiden!
-            GoodType ware_type = ConvertShields(real_ware->type);
-            world->GetPlayer(player).IncreaseInventoryWare(ware_type, 1);
-            // Abnehmer für Ware finden
-            real_ware->SetGoal(world->GetPlayer(player).FindClientForWare(*real_ware));
-            // Ware soll ihren weiteren Weg berechnen
-            real_ware->RecalcRoute();
-            // Ware ablegen
-            flag->AddWare(std::move(real_ware));
-            // Warenstatistik erhöhen
-            world->GetPlayer(this->player).IncreaseMerchandiseStatistic(ware_type);
+            for(const GoodType good : waresToPut)
+                PutWareAtFlag(good);
             // Tragen nun keine Ware mehr
             ware = std::nullopt;
         }
@@ -169,6 +160,43 @@ void nofBuildingWorker::WorkingReady()
     // Wieder reingehen
     StartWalking(Direction::NorthWest);
     state = State::EnterBuilding;
+}
+
+std::vector<GoodType> nofBuildingWorker::GetWaresToCarryOut() const
+{
+    std::vector<GoodType> result;
+    if(!ware)
+        return result;
+    result.push_back(*ware);
+    // Nebenprodukte (Zivilisationsmodus, rttr:AddByproduct), z.B. Knochen beim Jäger
+    const std::vector<GoodType> byproducts = civ::getByproducts(*world, player, workplace->GetBuildingType(), *ware);
+    result.insert(result.end(), byproducts.begin(), byproducts.end());
+    return result;
+}
+
+bool nofBuildingWorker::HasSpaceForWaresAtFlag() const
+{
+    const auto numWares = std::max<std::size_t>(GetWaresToCarryOut().size(), 1u);
+    return workplace->GetFlag()->GetNumFreeSpaces() >= numWares;
+}
+
+void nofBuildingWorker::PutWareAtFlag(const GoodType good)
+{
+    noFlag* flag = workplace->GetFlag();
+    // Ware erzeugen
+    auto real_ware = std::make_unique<Ware>(good, nullptr, flag);
+    real_ware->WaitAtFlag(flag);
+    // Inventur entsprechend erhöhen, dabei Schilder unterscheiden!
+    GoodType ware_type = ConvertShields(real_ware->type);
+    world->GetPlayer(player).IncreaseInventoryWare(ware_type, 1);
+    // Abnehmer für Ware finden
+    real_ware->SetGoal(world->GetPlayer(player).FindClientForWare(*real_ware));
+    // Ware soll ihren weiteren Weg berechnen
+    real_ware->RecalcRoute();
+    // Ware ablegen
+    flag->AddWare(std::move(real_ware));
+    // Warenstatistik erhöhen
+    world->GetPlayer(this->player).IncreaseMerchandiseStatistic(ware_type);
 }
 
 void nofBuildingWorker::TryToWork()
@@ -218,7 +246,8 @@ void nofBuildingWorker::GoalReached()
 bool nofBuildingWorker::FreePlaceAtFlag()
 {
     // Hinaus gehen, um Ware abzulegen, falls wir auf einen freien Platz warten
-    if(state == State::WaitForWareSpace)
+    // (mit Nebenprodukten müssen genug Plätze für alle frei sein)
+    if(state == State::WaitForWareSpace && HasSpaceForWaresAtFlag())
     {
         StartWalking(Direction::SouthEast);
         state = State::CarryoutWare;

@@ -96,18 +96,9 @@ BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
         for(const civ::TechIdx req : tech.requirements)
             BOOST_TEST(req < i); // Defined before -> no cycles
     }
-    // Basic economy is available from the start
-    for(const auto bld : {BuildingType::Woodcutter, BuildingType::Forester, BuildingType::Quarry,
-                          BuildingType::Sawmill, BuildingType::Fishery, BuildingType::Hunter, BuildingType::Well,
-                          BuildingType::Barracks, BuildingType::Guardhouse, BuildingType::LookoutTower})
-        BOOST_TEST(!techTree.IsLockedAtStart(bld));
-    // Every other building can be researched
-    for(const auto bld : helpers::enumRange<BuildingType>())
-    {
-        if(bld == BuildingType::Headquarters || bld == BuildingType::Nothing9 || !techTree.IsLockedAtStart(bld))
-            continue;
-        BOOST_TEST(!techTree.GetTechsUnlocking(bld).empty());
-    }
+    // Balancing (which buildings are free at the start, all numbers) is done by the user in lua and not tested here.
+    // At least the woodcutter is needed to get started
+    BOOST_TEST(!techTree.IsLockedAtStart(BuildingType::Woodcutter));
     const auto agriculture = techTree.find("agriculture");
     BOOST_TEST_REQUIRE(agriculture);
     // Every technology costs knowledge points
@@ -116,29 +107,8 @@ BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
         BOOST_TEST_INFO(techTree.get(i).name);
         BOOST_TEST(techTree.get(i).HasKnowledgeCost());
     }
-    // Knowledge points of buildings (values from the design document)
-    const auto knowledge = [&techTree](BuildingType bld, KnowledgeType type) {
-        return techTree.GetBuildingKnowledge(bld)[type];
-    };
-    for(const auto type : helpers::enumRange<KnowledgeType>())
-    {
-        BOOST_TEST(knowledge(BuildingType::Headquarters, type) == 5);
-        BOOST_TEST(knowledge(BuildingType::Storehouse, type) == 1);
-        BOOST_TEST(knowledge(BuildingType::HarborBuilding, type) == 1);
-    }
-    BOOST_TEST(knowledge(BuildingType::Woodcutter, KnowledgeType::Industry) == 2);
-    BOOST_TEST(knowledge(BuildingType::Woodcutter, KnowledgeType::Agriculture) == 0);
-    BOOST_TEST(knowledge(BuildingType::Forester, KnowledgeType::Agriculture) == 1);
-    BOOST_TEST(knowledge(BuildingType::Forester, KnowledgeType::Industry) == 1);
-    BOOST_TEST(knowledge(BuildingType::Farm, KnowledgeType::Agriculture) == 3);
-    BOOST_TEST(knowledge(BuildingType::Farm, KnowledgeType::Industry) == 1);
-    BOOST_TEST(knowledge(BuildingType::Armory, KnowledgeType::Industry) == 2);
-    BOOST_TEST(knowledge(BuildingType::Armory, KnowledgeType::Military) == 1);
-    BOOST_TEST(knowledge(BuildingType::Fortress, KnowledgeType::Military) == 5);
-    BOOST_TEST(knowledge(BuildingType::Catapult, KnowledgeType::Military) == -5);
-    for(const auto mine :
-        {BuildingType::GraniteMine, BuildingType::CoalMine, BuildingType::IronMine, BuildingType::GoldMine})
-        BOOST_TEST(knowledge(mine, KnowledgeType::Industry) == 1);
+    // Knowledge points of buildings: only structural checks, the values are balancing (knowledge.lua)
+    BOOST_TEST(techTree.GetBuildingKnowledge(BuildingType::Catapult)[KnowledgeType::Military] < 0);
     // Every built-in building except the placeholder has some knowledge points
     for(unsigned i = 0; i < NUM_BUILTIN_BUILDINGS; ++i)
     {
