@@ -2525,7 +2525,8 @@ void AIPlayerJH::ExecuteLuaConstructionOrder(const MapPoint pt, BuildingType bt,
     if(forced) // fixed location - just a direct gamecommand to build buildingtype at location (no checks if this is a
                // valid & good location from the ai)
     {
-        aii.SetBuildingSite(pt, bt);
+        if(aii.SetBuildingSite(pt, bt))
+            construction->BuildingSiteOrdered(pt); // braucht bald einen Bauarbeiter
         auto j = std::make_unique<BuildJob>(*this, bt, pt);
         j->SetState(JobState::ExecutingRoad1);
         j->SetTarget(pt);
@@ -2925,7 +2926,10 @@ void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingTy
         //std::cout << "Sawmill skip: no valid pos found around " << whPos.x << "/" << whPos.y << std::endl;
         return;
     }
-    aii.SetBuildingSite(pos, bldToPlace);
+    // Wird bewusst auch ohne freien Bauarbeiter gesetzt (einmalig, wenn ein Lager/Hafen fertig wird), zählt aber
+    // ab sofort als Bedarf, damit andere Bauaufträge ihn berücksichtigen
+    if(aii.SetBuildingSite(pos, bldToPlace))
+        construction->BuildingSiteOrdered(pos);
     auto j = std::make_unique<BuildJob>(*this, bldToPlace, pos);
     j->SetState(JobState::ExecutingRoad1); // überspringt TryToBuild() -> Wanted() wird nicht geprüft
     j->SetTarget(pos);

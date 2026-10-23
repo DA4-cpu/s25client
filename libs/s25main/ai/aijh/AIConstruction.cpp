@@ -174,12 +174,31 @@ void AIConstruction::ConstructionOrdered(const BuildJob& job)
     // add new construction area to the list of active orders in the current nwf
     constructionlocations.push_back(job.GetTarget());
     constructionorders[job.GetType()]++;
+    BuildingSiteOrdered(job.GetTarget());
+}
+
+void AIConstruction::BuildingSiteOrdered(const MapPoint pt)
+{
+    pendingSites.push_back(PendingSite{pt, 0});
+}
+
+bool AIConstruction::HasSiteAt(const MapPoint pt) const
+{
+    const auto got = aii.gwb.GetNO(pt)->GetGOT();
+    return got == GO_Type::Buildingsite || aii.gwb.GetNO(pt)->GetType() == NodalObjectType::Building;
 }
 
 void AIConstruction::ConstructionsExecuted()
 {
     constructionlocations.clear();
     std::fill(constructionorders.begin(), constructionorders.end(), 0u);
+    // Orders become building sites with a delay of up to 2 NWFs. Forget them once the site exists (then it is counted
+    // via GetBuildingSites) or if it never appeared (command failed, e.g. the place was taken meanwhile)
+    constexpr unsigned MAX_PENDING_SITE_AGE = 4;
+    for(PendingSite& site : pendingSites)
+        ++site.age;
+    helpers::erase_if(
+      pendingSites, [this](const PendingSite& site) { return site.age > MAX_PENDING_SITE_AGE || HasSiteAt(site.pos); });
 }
 
 namespace {
@@ -569,16 +588,31 @@ bool AIConstruction::Wanted(BuildingType type) const
 
 bool AIConstruction::HasEnoughBuildersAvailable() const
 {
-    // Bauarbeiter, die schon ausgebildet und einsatzbereit in einem Lagerhaus/HQ liegen
-    const unsigned availableBuilders = aijh.AmountInStorage(Job::Builder);
-    // Hämmer, mit denen bei Bedarf noch ein freier Träger zum Bauarbeiter ausgebildet werden könnte
-    const unsigned availableHammers = aijh.AmountInStorage(GoodType::Hammer);
-    // Dafür wird zusätzlich ein freier Träger benötigt - ohne den nützt der Hammer nichts
-    const unsigned availableHelpers = aijh.AmountInStorage(Job::Helper);
+    // Bestand der eigenen Lager. Wichtig: der *echte* Bestand (real), nicht der angezeigte (visual). Ein Bauarbeiter,
+    // der schon für eine Baustelle losgeschickt wurde, aber noch nicht aus dem Lager heraus ist, zählt im angezeigten
+    // Bestand noch mit - dann würde die KI für ihn eine zweite Baustelle eröffnen.
+    unsigned availableBuilders = 0, availableHammers = 0, availableHelpers = 0;
+    for(const nobBaseWarehouse* wh : aii.GetStorehouses())
+    {
+        // Bauarbeiter, die schon ausgebildet und einsatzbereit in einem Lagerhaus/HQ liegen
+        availableBuilders += wh->GetNumRealFigures(Job::Builder);
+        // Hämmer, mit denen bei Bedarf noch ein freier Träger zum Bauarbeiter ausgebildet werden könnte
+        availableHammers += wh->GetNumRealWares(GoodType::Hammer);
+        // Dafür wird zusätzlich ein freier Träger benötigt - ohne den nützt der Hammer nichts
+        availableHelpers += wh->GetNumRealFigures(Job::Helper);
+    }
     const unsigned potentialBuilders = availableBuilders + std::min(availableHammers, availableHelpers);
 
-    // Baustellen, die noch auf ihren Bauarbeiter warten (schon zugewiesene zählen nicht mehr mit)
+    // Beauftragte Baustellen, die es noch nicht gibt: Die Spielbefehle werden erst bis zu 2 NWFs später ausgeführt,
+    // sie stehen also noch nicht in GetBuildingSites(), brauchen aber gleich je einen Bauarbeiter. Ohne sie bestehen
+    // mehrere Bauaufträge hintereinander dieselbe Prüfung und die KI eröffnet mehr Baustellen, als Bauarbeiter da sind.
     unsigned pendingDemand = 0;
+    for(const PendingSite& site : pendingSites)
+    {
+        if(!HasSiteAt(site.pos))
+            ++pendingDemand;
+    }
+    // Baustellen, die noch auf ihren Bauarbeiter warten (schon zugewiesene zählen nicht mehr mit)
     for(const noBuildingSite* site : aii.GetBuildingSites())
     {
         if(!site->HasBuilder())

@@ -86,6 +86,9 @@ public:
     void SetFlagsAlongRoad(const noRoadNode& roadNode, Direction dir);
     /// To be called after a new construction site was added
     void ConstructionOrdered(const BuildJob& job);
+    /// To be called after a building site was ordered (game command sent). Until the site exists it counts as pending
+    /// demand for builders (see HasEnoughBuildersAvailable)
+    void BuildingSiteOrdered(MapPoint pt);
     /// To be called when the current pending construction orders were processed (usually on NWF)
     void ConstructionsExecuted();
 
@@ -102,6 +105,17 @@ private:
     std::deque<MapPoint> constructionlocations;
     // contains the amount of buildings ordered since the last nwf
     helpers::EnumArray<uint8_t, BuildingType> constructionorders;
+    /// Building sites which were ordered but do not exist yet. Game commands of the AI are sent at the next NWF and
+    /// executed one NWF later, so for a while they are not part of aii.GetBuildingSites(), but each of them will need
+    /// a builder. Removed once the site exists or after MAX_PENDING_SITE_AGE NWFs (command failed)
+    struct PendingSite
+    {
+        MapPoint pos;
+        unsigned age; // NWFs since the order
+    };
+    std::vector<PendingSite> pendingSites;
+    /// True if there is a building site (or already a building) at the point
+    bool HasSiteAt(MapPoint pt) const;
 };
 
 } // namespace AIJH

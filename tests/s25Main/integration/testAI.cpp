@@ -23,6 +23,7 @@
 #include "gameData/MilitaryConsts.h"
 #include "rttr/test/random.hpp"
 #include <boost/test/unit_test.hpp>
+#include <algorithm>
 #include <memory>
 #include <set>
 
@@ -390,6 +391,45 @@ BOOST_FIXTURE_TEST_CASE(DoBuildMilitaryBuildingsOutsideComputerBarrier, BiggerWo
               return (type == BuildingType::Barracks || type == BuildingType::Guardhouse) && pt == bldSite->GetPos();
           },
           true));
+}
+
+BOOST_FIXTURE_TEST_CASE(DoNotOpenMoreBuildingSitesThanBuilders, BiggerWorldWithGCExecution)
+{
+    // Exactly 2 builders, no hammers -> the AI may never have more than 2 building sites at once:
+    // A new site is only started if a builder is left for it (HasEnoughBuildersAvailable)
+    constexpr unsigned numBuilders = 2;
+    auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
+    {
+        GoodsAndPeopleCounts inv;
+        inv[Job::Builder] = numBuilders;
+        inv[Job::Helper] = 30;
+        inv[GoodType::Boards] = 60;
+        inv[GoodType::Stones] = 60;
+        hq->AddToInventory(inv, true);
+    }
+    world.InitAfterLoad();
+
+    const GamePlayer& player = world.GetPlayer(curPlayer);
+    const auto& bldSites = player.GetBuildingRegister().GetBuildingSites();
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    unsigned maxSites = 0;
+    for(unsigned gf = 0; gf < 6000;)
+    {
+        // Same as over the network: Commands of the last NWF are executed at the next NWF
+        std::vector<gc::GameCommandPtr> aiGcs = ai->FetchGameCommands();
+        for(unsigned i = 0; i < 5; i++, gf++)
+        {
+            em.ExecuteNextGF();
+            ai->RunGF(em.GetCurrentGF(), i == 0);
+        }
+        for(gc::GameCommandPtr& gc : aiGcs)
+            gc->Execute(world, curPlayer);
+        maxSites = std::max<unsigned>(maxSites, bldSites.size());
+        BOOST_TEST_INFO("GF " << gf);
+        BOOST_TEST_REQUIRE(bldSites.size() <= numBuilders);
+    }
+    // The AI did build something
+    BOOST_TEST(maxSites >= 1u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
