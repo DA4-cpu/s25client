@@ -195,6 +195,8 @@ public:
     /// Civilization mode: Choose the next technology to research if there is no current research
     /// or switch to an affordable one if the current research is stuck (no wares available)
     void CheckResearch(unsigned gf);
+    /// Civilization mode: Set the regulator "Wissen" after the knowledge the current research still needs
+    void AdjustKnowledgeDistribution();
     /// Tries to attack the enemy
     void TryToAttack();
     /// sea attack

@@ -242,7 +242,12 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   stoppen“ stoppt die Annahme. Das Gebäudefenster zeigt den Bestand. Wird sie zerstört, sind die Medien verloren.
 - KI: Lua-Werkstätten mit Eingängen baut sie, sobald Eingangswaren im Lager liegen (1 + 1 je 10 Waren, höchstens 3),
   Werkstätten ohne Eingang einmal, Bibliotheken, wenn mehr Medien in Lagern warten als die vorhandenen noch aufnehmen
-  (höchstens 5). Werkzeuge bestellt sie über die vorhandene Werkzeug-Logik. Den Regler verstellt sie nicht.
+  (höchstens 5). Werkzeuge bestellt sie über die vorhandene Werkzeug-Logik.
+- KI und Regler (Wunsch des Nutzers 2026-10-23): Alle 200 GF (10 Sekunden) stellt die KI den Regler nach den WP ein,
+  die ihrer aktuellen Forschung noch fehlen: die am meisten fehlende Art 10, andere fehlende anteilig (mindestens 1),
+  nicht benötigte 0. Forscht sie nichts oder fehlen keine WP: Startwerte aus `knowledge.lua`. Einstellbar oben in
+  `libs/s25main/ai/aijh/AIPlayerJH.cpp` (`KNOWLEDGE_DISTRIBUTION_INTERVAL_GF`, `KNOWLEDGE_WEIGHT_NOT_NEEDED`,
+  `KNOWLEDGE_WEIGHT_MOST_NEEDED`), Logik in `AIPlayerJH::AdjustKnowledgeDistribution`.
 
 ### Datenformat
 

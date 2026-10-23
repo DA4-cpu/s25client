@@ -19,8 +19,12 @@
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
+#include "civ/Knowledge.h"
+#include "civ/PlayerResearch.h"
 #include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "figures/nofPassiveSoldier.h"
+#include "helpers/EnumRange.h"
 #include "helpers/IdRange.h"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/containerUtils.h"
@@ -50,6 +54,15 @@
 #include <type_traits>
 
 namespace {
+/// Civilization mode, regulator "Wissen" (see AIPlayerJH::AdjustKnowledgeDistribution):
+/// How often the AI checks the regulator, in game frames (20 GF = 1 second at normal speed -> 200 GF = 10 seconds)
+constexpr unsigned KNOWLEDGE_DISTRIBUTION_INTERVAL_GF = 200;
+/// Weight (0..10) of the knowledge types the current research does not need (0: no media of this type)
+constexpr unsigned KNOWLEDGE_WEIGHT_NOT_NEEDED = 0;
+/// Weight (0..10) of the knowledge type of which the current research misses the most. The other needed types get a
+/// weight proportional to what they miss (at least 1)
+constexpr unsigned KNOWLEDGE_WEIGHT_MOST_NEEDED = 10;
+
 /// Exact number of dedicated woodcutters a single forester should end up with.
 constexpr unsigned WOODCUTTERS_PER_FORESTER = 2;
 /// Minimum distance a "wild" woodcutter (one relying on naturally grown forest, without
@@ -272,6 +285,9 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
 
     if((gf + playerId * 7) % 200 == 0)
         CheckResearch(gf);
+
+    if((gf + playerId * 13) % KNOWLEDGE_DISTRIBUTION_INTERVAL_GF == 0)
+        AdjustKnowledgeDistribution();
 
     if((gf + playerId * 17) % attack_interval == 0)
     {
@@ -1840,6 +1856,47 @@ void AIPlayerJH::CheckResearch(const unsigned gf)
     if(alternative && civ::isAffordable(gwb, playerId, *alternative))
         aii.SetResearch(*alternative);
     lastResearchProgressGF_ = gf;
+}
+
+void AIPlayerJH::AdjustKnowledgeDistribution()
+{
+    // Civilization mode: Set the regulator "Wissen" (which knowledge medium workshops make) after what the current
+    // research still needs. Nothing researched or no knowledge points missing -> default from lua (knowledge.lua)
+    if(!civ::isEnabled(gwb))
+        return;
+    const civ::TechTree& techTree = gwb.GetTechTree();
+    const civ::Content& content = techTree.GetContent();
+    if(content.GetKnowledgeMedia().empty())
+        return; // No knowledge media -> the regulator does nothing
+    const civ::PlayerResearch& research = player.GetResearch();
+
+    civ::PlayerResearch::KnowledgeDistribution wanted = content.GetDefaultKnowledgeDistribution();
+    if(const auto current = research.GetCurrent())
+    {
+        const civ::KnowledgePoints missing = civ::getMissingKnowledge(gwb, playerId, *current);
+        const int maxMissing = *std::max_element(missing.begin(), missing.end());
+        if(maxMissing > 0)
+        {
+            for(const auto type : helpers::enumRange<civ::KnowledgeType>())
+            {
+                if(missing[type] <= 0)
+                    wanted[type] = static_cast<uint8_t>(KNOWLEDGE_WEIGHT_NOT_NEEDED);
+                else
+                {
+                    // Proportional to what is missing, rounded, at least 1
+                    const int weight =
+                      (missing[type] * static_cast<int>(KNOWLEDGE_WEIGHT_MOST_NEEDED) + maxMissing / 2) / maxMissing;
+                    wanted[type] = static_cast<uint8_t>(std::max(weight, 1));
+                }
+            }
+        }
+    }
+
+    const civ::PlayerResearch::KnowledgeDistribution currentSetting = research.GetKnowledgeDistribution(techTree);
+    if(std::equal(wanted.begin(), wanted.end(), currentSetting.begin()))
+        return;
+    aii.SetKnowledgeDistribution({wanted[civ::KnowledgeType::Agriculture], wanted[civ::KnowledgeType::Industry],
+                                  wanted[civ::KnowledgeType::Military]});
 }
 
 void AIPlayerJH::CheckGranitMine()

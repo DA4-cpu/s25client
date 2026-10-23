@@ -1117,4 +1117,51 @@ BOOST_FIXTURE_TEST_CASE(AIBuildsWorkshopsAndLibraries, BiggerCivWorldFixture)
     BOOST_TEST(hasBld(getCustomBuilding(1)));
 }
 
+BOOST_FIXTURE_TEST_CASE(AISetsRegulatorForResearch, BiggerCivWorldFixture)
+{
+    ggs.setSelection(AddonId::CIVILIZATION, 1);
+    WorldDescription desc = makeLibraryDesc(20);
+    desc.knowledgeDistribution = KnowledgeValues{4, 4, 4};
+    // Needs 10 LWP and 5 IWP, the HQ gives no points here
+    TechnologyDesc tech;
+    tech.name = "tech";
+    tech.title = "Tech";
+    tech.knowledge = {10, 5, 0};
+    desc.technologies.add(tech);
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
+    civ::startGame(world);
+    addStartResources();
+    world.InitAfterLoad();
+    civ::PlayerResearch& research = world.GetPlayer(curPlayer).GetResearch();
+    const auto setting = [&research, this]() {
+        const auto distribution = research.GetKnowledgeDistribution(world.GetTechTree());
+        return std::array<unsigned, 3>{distribution[civ::KnowledgeType::Agriculture],
+                                       distribution[civ::KnowledgeType::Industry],
+                                       distribution[civ::KnowledgeType::Military]};
+    };
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    const auto runAI = [&ai, this](unsigned numGFs) {
+        for(unsigned gf = 0; gf < numGFs;)
+        {
+            std::vector<gc::GameCommandPtr> aiGcs = ai->FetchGameCommands();
+            for(unsigned i = 0; i < 5; i++, gf++)
+            {
+                em.ExecuteNextGF();
+                ai->RunGF(em.GetCurrentGF(), i == 0);
+            }
+            for(gc::GameCommandPtr& gc : aiGcs)
+                gc->Execute(world, curPlayer);
+        }
+    };
+    // The AI researches the technology and sets the regulator after the missing points: LWP 10, IWP 5, MWP 0
+    runAI(600);
+    BOOST_TEST_REQUIRE(research.GetCurrent().has_value());
+    BOOST_TEST((setting() == std::array<unsigned, 3>{10, 5, 0}));
+    // Nothing to research anymore -> default from lua
+    research.SetResearched(0);
+    runAI(600);
+    BOOST_TEST(!research.GetCurrent().has_value());
+    BOOST_TEST((setting() == std::array<unsigned, 3>{4, 4, 4}));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
