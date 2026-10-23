@@ -194,7 +194,7 @@ void AIConstruction::ConstructionsExecuted()
     std::fill(constructionorders.begin(), constructionorders.end(), 0u);
     // Orders become building sites with a delay of up to 2 NWFs. Forget them once the site exists (then it is counted
     // via GetBuildingSites) or if it never appeared (command failed, e.g. the place was taken meanwhile)
-    constexpr unsigned MAX_PENDING_SITE_AGE = 4;
+    static constexpr unsigned MAX_PENDING_SITE_AGE = 4;
     for(PendingSite& site : pendingSites)
         ++site.age;
     helpers::erase_if(
