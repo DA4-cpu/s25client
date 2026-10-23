@@ -25,6 +25,7 @@
 #include "gameTypes/GoodTypes.h"
 #include "gameTypes/Inventory.h"
 #include "gameTypes/JobTypes.h"
+#include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
 #include "s25util/warningSuppression.h"
 #include <boost/range/adaptor/reversed.hpp>
@@ -35,6 +36,17 @@
 #include <list>
 
 namespace AIJH {
+
+namespace {
+    /// Expansion: At most this many military building sites at the same time (incl. just ordered ones)
+    constexpr unsigned MAX_MILITARY_SITES = 3;
+    /// Expansion: Soldiers that must be in the warehouses for each military building site (incl. the new one)
+    constexpr unsigned MIN_SOLDIERS_PER_MILITARY_SITE = 2;
+    /// Buildings that are handled before all others. If material is short, it is kept free for them
+    constexpr std::array<BuildingType, 7> IMPORTANT_BUILDINGS = {
+      BuildingType::Armory,   BuildingType::Metalworks, BuildingType::Ironsmelter, BuildingType::Mint,
+      BuildingType::CoalMine, BuildingType::IronMine,   BuildingType::GoldMine};
+} // namespace
 
 AIConstruction::AIConstruction(AIPlayerJH& aijh)
     : aijh(aijh), aii(aijh.GetInterface()), bldPlanner(aijh.GetBldPlanner())
@@ -54,6 +66,9 @@ void AIConstruction::AddBuildJob(std::unique_ptr<BuildJob> job, bool front)
     if(BuildingProperties::IsMilitary(
          job->GetType())) // non military buildings can only be added once to the contruction que for every location
     {
+        // Slower expansion: No new military jobs while the limit is reached (they are planned again regularly)
+        if(!CanStartMilitarySite())
+            return;
         if(front)
             buildJobs.push_front(std::move(job));
         else
@@ -90,6 +105,11 @@ void AIConstruction::AddBuildJob(std::unique_ptr<BuildJob> job, bool front)
 
 void AIConstruction::ExecuteJobs(unsigned limit)
 {
+    // Important buildings first (stable: otherwise keep the order). Material they wait for is kept free for them
+    reservedMaterial = ConstructionMaterial{};
+    std::stable_partition(buildJobs.begin(), buildJobs.end(), [](const std::unique_ptr<BuildJob>& job) {
+        return AIConstruction::IsImportantBuilding(job->GetType());
+    });
     //limit = std::min<unsigned>(limit, 10); // limit to 10 jobs per tick
     unsigned i = 0; // count up to limit
     unsigned initconjobs = std::min<unsigned>(connectJobs.size(), 5);
@@ -174,12 +194,91 @@ void AIConstruction::ConstructionOrdered(const BuildJob& job)
     // add new construction area to the list of active orders in the current nwf
     constructionlocations.push_back(job.GetTarget());
     constructionorders[job.GetType()]++;
-    BuildingSiteOrdered(job.GetTarget());
+    BuildingSiteOrdered(job.GetTarget(), job.GetType());
 }
 
-void AIConstruction::BuildingSiteOrdered(const MapPoint pt)
+void AIConstruction::BuildingSiteOrdered(const MapPoint pt, const BuildingType type)
 {
-    pendingSites.push_back(PendingSite{pt, 0});
+    pendingSites.push_back(PendingSite{pt, type, 0});
+}
+
+bool AIConstruction::IsImportantBuilding(const BuildingType type)
+{
+    return helpers::contains(IMPORTANT_BUILDINGS, type);
+}
+
+ConstructionMaterial AIConstruction::GetFreeConstructionMaterial() const
+{
+    ConstructionMaterial result;
+    // Real stock (not the displayed one): Wares ordered by building sites already left it
+    for(const nobBaseWarehouse* wh : aii.GetStorehouses())
+    {
+        result.boards += static_cast<int>(wh->GetNumRealWares(GoodType::Boards));
+        result.stones += static_cast<int>(wh->GetNumRealWares(GoodType::Stones));
+    }
+    // What existing building sites still need: costs minus used, lying at the site and on the way
+    for(const noBuildingSite* site : aii.GetBuildingSites())
+    {
+        const BuildingCost& cost = BUILDING_COSTS[site->GetBuildingType()];
+        result.boards -= std::max(0, static_cast<int>(cost.boards) - site->getUsedBoards() - site->getBoards()
+                                       - static_cast<int>(site->getNumOrderedBoards()));
+        result.stones -= std::max(0, static_cast<int>(cost.stones) - site->getUsedStones() - site->getStones()
+                                       - static_cast<int>(site->getNumOrderedStones()));
+    }
+    // Just ordered sites (not yet existing) need everything
+    for(const PendingSite& site : pendingSites)
+    {
+        if(HasSiteAt(site.pos))
+            continue;
+        result.boards -= BUILDING_COSTS[site.type].boards;
+        result.stones -= BUILDING_COSTS[site.type].stones;
+    }
+    return result;
+}
+
+bool AIConstruction::HasMaterialFor(const BuildingType type) const
+{
+    ConstructionMaterial free = GetFreeConstructionMaterial();
+    if(!IsImportantBuilding(type))
+    {
+        free.boards -= reservedMaterial.boards;
+        free.stones -= reservedMaterial.stones;
+    }
+    const BuildingCost& cost = BUILDING_COSTS[type];
+    return free.boards >= cost.boards && free.stones >= cost.stones;
+}
+
+void AIConstruction::ReserveMaterialFor(const BuildingType type)
+{
+    reservedMaterial.boards += BUILDING_COSTS[type].boards;
+    reservedMaterial.stones += BUILDING_COSTS[type].stones;
+}
+
+unsigned AIConstruction::GetNumMilitarySitesInProgress() const
+{
+    unsigned result = 0;
+    for(const noBuildingSite* site : aii.GetBuildingSites())
+    {
+        if(BuildingProperties::IsMilitary(site->GetBuildingType()))
+            ++result;
+    }
+    for(const PendingSite& site : pendingSites)
+    {
+        if(BuildingProperties::IsMilitary(site.type) && !HasSiteAt(site.pos))
+            ++result;
+    }
+    return result;
+}
+
+bool AIConstruction::CanStartMilitarySite() const
+{
+    const unsigned numSites = GetNumMilitarySitesInProgress();
+    if(numSites >= MAX_MILITARY_SITES)
+        return false;
+    unsigned numSoldiers = 0;
+    for(const nobBaseWarehouse* wh : aii.GetStorehouses())
+        numSoldiers += wh->GetNumSoldiers();
+    return numSoldiers >= MIN_SOLDIERS_PER_MILITARY_SITE * (numSites + 1);
 }
 
 bool AIConstruction::HasSiteAt(const MapPoint pt) const
