@@ -77,7 +77,7 @@ rttr:AddWare{
 
 rttr:AddWare{
     name = "CarvedBoneLWP",
-    title = "Geritzter Knochen (Landwirtschaft)",
+    title = "Geritzter Knochen (L)",
     kind = "GeritzterKnochen",
     properties = { "LWP" },
     look = "Stones",      -- PLATZHALTER
@@ -87,7 +87,7 @@ rttr:AddWare{
 
 rttr:AddWare{
     name = "CarvedBoneIWP",
-    title = "Geritzter Knochen (Industrie)",
+    title = "Geritzter Knochen (I)",
     kind = "GeritzterKnochen",
     properties = { "IWP" },
     look = "Stones",      -- PLATZHALTER
@@ -97,7 +97,7 @@ rttr:AddWare{
 
 rttr:AddWare{
     name = "CarvedBoneMWP",
-    title = "Geritzter Knochen (Militär)",
+    title = "Geritzter Knochen (M)",
     kind = "GeritzterKnochen",
     properties = { "MWP" },
     look = "Stones",      -- PLATZHALTER

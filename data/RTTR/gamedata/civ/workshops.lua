@@ -83,11 +83,11 @@ rttr:AddWorkshop{
     name = "BoneCarver",
     title = "Knochenschnitzer",
     size = "small",
-    cost = { Boards = 2 }, -- PLATZHALTER: Baukosten noch offen
-    look = "Hunter",       -- PLATZHALTER: Grafik-Vorbild
+    cost = { Boards = 2 }, 
+    look = "Hunter",      
     worker = { title = "Knochenschnitzer", tool = "Cleaver", look = "Butcher" }, -- look = PLATZHALTER
     inputs = { "Bones" },
     output = "GeritzterKnochen",
     outputChoice = "knowledge",
-    workTime = 30,         -- PLATZHALTER: Arbeitszeit in Sekunden noch offen
+    workTime = 120,         
 }

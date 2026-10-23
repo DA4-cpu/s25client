@@ -260,7 +260,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         if(GetNumBuildings(BuildingType::Metalworks) > 0)
             buildingsWanted[BuildingType::Metalworks] =
-              (static_cast<double>(GetNumBuildings(BuildingType::Ironsmelter)) / 5.0 + 1.3);
+              int(static_cast<double>(GetNumBuildings(BuildingType::Ironsmelter)) / 5.0 + 1.3);
 
         // armory count = smelter -metalworks if there is more than 1 smelter or 1 if there is just 1.
         if (GetNumBuildings(BuildingType::Metalworks) > 0)

@@ -110,11 +110,11 @@ rttr:AddTechnology{
     title = "Knochenschnitzerei", -- PLATZHALTER: Anzeigename
     description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
     era = 0,
-    knowledge = { LWP = 1 }, -- PLATZHALTER: jede Technologie braucht WP-Kosten, Wert noch offen
+    knowledge = { LWP = 1, IWP = 1 }, -- PLATZHALTER: jede Technologie braucht WP-Kosten, Wert noch offen
     -- PLATZHALTER: Voraussetzungen, Warenkosten und Dauer sind noch nicht festgelegt, z.B.
-    -- requires = { ... },
+    requires = { "storage" },
     -- cost = { ... },
-    -- time = ?,
+    time = 60,
     unlocks = { buildings = { "BoneCarver" } },
 }
 
