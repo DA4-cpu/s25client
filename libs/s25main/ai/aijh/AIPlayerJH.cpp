@@ -2595,7 +2595,7 @@ void AIPlayerJH::ExecuteLuaConstructionOrder(const MapPoint pt, BuildingType bt,
                // valid & good location from the ai)
     {
         if(aii.SetBuildingSite(pt, bt))
-            construction->BuildingSiteOrdered(pt); // braucht bald einen Bauarbeiter
+            construction->BuildingSiteOrdered(pt, bt); // braucht bald einen Bauarbeiter und Material
         auto j = std::make_unique<BuildJob>(*this, bt, pt);
         j->SetState(JobState::ExecutingRoad1);
         j->SetTarget(pt);
@@ -2989,6 +2989,13 @@ void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingTy
         return;
     }
 
+    // Material-Prüfung wie bei jedem Bauauftrag. Reicht es nicht, als normalen Bauauftrag einreihen (wird später erneut
+    // versucht, falls das Gebäude dann noch gewollt ist)
+    if(!construction->HasMaterialFor(bldToPlace))
+    {
+        AddBuildJob(bldToPlace, whPos);
+        return;
+    }
     const MapPoint pos = SimpleFindPosition(whPos, BUILDING_SIZE[bldToPlace], /*enger Radius*/ 7);
     if(!pos.isValid())
     {
@@ -2998,7 +3005,7 @@ void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingTy
     // Wird bewusst auch ohne freien Bauarbeiter gesetzt (einmalig, wenn ein Lager/Hafen fertig wird), zählt aber
     // ab sofort als Bedarf, damit andere Bauaufträge ihn berücksichtigen
     if(aii.SetBuildingSite(pos, bldToPlace))
-        construction->BuildingSiteOrdered(pos);
+        construction->BuildingSiteOrdered(pos, bldToPlace);
     auto j = std::make_unique<BuildJob>(*this, bldToPlace, pos);
     j->SetState(JobState::ExecutingRoad1); // überspringt TryToBuild() -> Wanted() wird nicht geprüft
     j->SetTarget(pos);

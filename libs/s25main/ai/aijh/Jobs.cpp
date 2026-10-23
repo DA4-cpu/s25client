@@ -61,6 +61,29 @@ void BuildJob::ExecuteJob()
     }
 }
 
+bool BuildJob::CheckLimitsAndMaterial(AIConstruction& aiConstruction)
+{
+    const bool isMilitary = BuildingProperties::IsMilitary(type);
+    // Military: at most MAX_MILITARY_SITES at the same time and enough soldiers. Military jobs are planned again
+    // regularly, so drop this one instead of letting the jobs pile up
+    if(isMilitary && !aiConstruction.CanStartMilitarySite())
+    {
+        state = JobState::Failed;
+        return false;
+    }
+    // Enough boards and stones for this building (after what other building sites still need)?
+    if(!aiConstruction.HasMaterialFor(type))
+    {
+        if(AIConstruction::IsImportantBuilding(type))
+            aiConstruction.ReserveMaterialFor(type); // Other buildings must not take the material it waits for
+        if(isMilitary)
+            state = JobState::Failed;
+        // Otherwise the job stays and is tried again later
+        return false;
+    }
+    return true;
+}
+
 void BuildJob::TryToBuild()
 {
     AIConstruction& aiConstruction = aijh.GetConstruction();
@@ -87,6 +110,10 @@ void BuildJob::TryToBuild()
 #endif*/
         return;
     }
+
+    // Slower expansion and material check before every building site (see AIConstruction.cpp for the limits)
+    if(!CheckLimitsAndMaterial(aiConstruction))
+        return;
 
     if(searchMode == SearchMode::Global)
     {
@@ -145,6 +172,10 @@ void BuildJob::TryToBuild()
         }
     } else if(searchMode == SearchMode::None)
         foundPos = around;
+
+    // A military building may have been changed to a bigger one -> check again for the final type
+    if(!CheckLimitsAndMaterial(aiConstruction))
+        return;
 
     if(!foundPos.isValid())
     {

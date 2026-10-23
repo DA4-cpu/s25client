@@ -48,6 +48,9 @@ public:
     unsigned char getUsedStones() const { return used_stones; }
     unsigned char getBoards() const { return boards; }
     unsigned char getStones() const { return stones; }
+    /// Bretter und Steine, die bestellt, aber noch nicht da sind
+    unsigned getNumOrderedBoards() const { return static_cast<unsigned>(ordered_boards.size()); }
+    unsigned getNumOrderedStones() const { return static_cast<unsigned>(ordered_stones.size()); }
     /// Ist bereits ein Bauarbeiter (oder Planierer) dieser Baustelle zugewiesen, oder wartet sie noch auf einen?
     bool HasBuilder() const { return builder != nullptr; }
 

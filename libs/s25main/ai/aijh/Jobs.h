@@ -18,6 +18,7 @@ class Base;
 
 namespace AIJH {
 
+class AIConstruction;
 class AIPlayerJH;
 class PositionSearch;
 
@@ -82,6 +83,8 @@ private:
     std::vector<Direction> route;
 
     void TryToBuild();
+    /// Military limit, soldiers and material for the current type. False: do not build now (state may be Failed)
+    bool CheckLimitsAndMaterial(AIConstruction& aiConstruction);
     void BuildMainRoad();
     void TryToBuildSecondaryRoad();
 };

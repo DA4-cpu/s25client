@@ -2,9 +2,11 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "GamePlayer.h"
 #include "PointOutput.h"
 #include "RttrForeachPt.h"
 #include "ai/AIPlayer.h"
+#include "ai/aijh/AIConstruction.h"
 #include "ai/aijh/AIPlayerJH.h"
 #include "buildings/noBuilding.h"
 #include "buildings/noBuildingSite.h"
@@ -15,10 +17,12 @@
 #include "helpers/containerUtils.h"
 #include "network/GameMessage_Chat.h"
 #include "notifications/NodeNote.h"
+#include "worldFixtures/TestEventManager.h"
 #include "worldFixtures/WorldWithGCExecution.h"
 #include "nodeObjs/noFlag.h"
 #include "nodeObjs/noTree.h"
 #include "gameTypes/GameTypesOutput.h"
+#include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
 #include "gameData/MilitaryConsts.h"
 #include "rttr/test/random.hpp"
@@ -430,6 +434,140 @@ BOOST_FIXTURE_TEST_CASE(DoNotOpenMoreBuildingSitesThanBuilders, BiggerWorldWithG
     }
     // The AI did build something
     BOOST_TEST(maxSites >= 1u);
+}
+
+namespace {
+/// Run the AI like over the network (commands of the last NWF are executed at the next NWF), calling `check` after each
+/// NWF
+template<class T_Check>
+void runAIWithNWFs(TestEventManager& em, GameWorld& world, AIPlayer& ai, unsigned playerId, unsigned numGFs,
+                   const T_Check& check)
+{
+    for(unsigned gf = 0; gf < numGFs;)
+    {
+        std::vector<gc::GameCommandPtr> aiGcs = ai.FetchGameCommands();
+        for(unsigned i = 0; i < 5; i++, gf++)
+        {
+            em.ExecuteNextGF();
+            ai.RunGF(em.GetCurrentGF(), i == 0);
+        }
+        for(gc::GameCommandPtr& gc : aiGcs)
+            gc->Execute(world, playerId);
+        check(gf);
+    }
+}
+
+unsigned countMilitarySites(const GamePlayer& player)
+{
+    unsigned result = 0;
+    for(const noBuildingSite* site : player.GetBuildingRegister().GetBuildingSites())
+    {
+        if(BuildingProperties::IsMilitary(site->GetBuildingType()))
+            ++result;
+    }
+    return result;
+}
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(AtMost3MilitarySitesAtOnce, BiggerWorldWithGCExecution)
+{
+    addStartResources();
+    auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
+    hq->AddToInventory(GoodCounts::make(GoodType::Boards, 100), true);
+    hq->AddToInventory(GoodCounts::make(GoodType::Stones, 100), true);
+    world.InitAfterLoad();
+    const GamePlayer& player = world.GetPlayer(curPlayer);
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    unsigned maxMilitarySites = 0;
+    runAIWithNWFs(em, world, *ai, curPlayer, 8000, [&](unsigned gf) {
+        const unsigned numSites = countMilitarySites(player);
+        maxMilitarySites = std::max(maxMilitarySites, numSites);
+        BOOST_TEST_INFO("GF " << gf);
+        BOOST_TEST_REQUIRE(numSites <= 3u);
+    });
+    // It still expands
+    BOOST_TEST(maxMilitarySites >= 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(MilitarySitesNeedSoldiers, BiggerWorldWithGCExecution)
+{
+    // 3 soldiers: Enough for 1 military site (2 each, incl. the new one), not for 2
+    auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
+    {
+        GoodsAndPeopleCounts inv;
+        inv[Job::Builder] = 5;
+        inv[Job::Helper] = 30;
+        inv[Job::Private] = 3;
+        inv[GoodType::Boards] = 100;
+        inv[GoodType::Stones] = 100;
+        hq->AddToInventory(inv, true);
+    }
+    world.InitAfterLoad();
+    const GamePlayer& player = world.GetPlayer(curPlayer);
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    unsigned maxMilitarySites = 0;
+    runAIWithNWFs(em, world, *ai, curPlayer, 6000, [&](unsigned gf) {
+        const unsigned numSites = countMilitarySites(player);
+        maxMilitarySites = std::max(maxMilitarySites, numSites);
+        BOOST_TEST_INFO("GF " << gf);
+        BOOST_TEST_REQUIRE(numSites <= 1u);
+    });
+    BOOST_TEST(maxMilitarySites == 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(NoBuildingSitesWithoutMaterial, BiggerWorldWithGCExecution)
+{
+    // Builders and soldiers, but no boards and stones -> nothing is started
+    auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
+    {
+        GoodsAndPeopleCounts inv;
+        inv[Job::Builder] = 5;
+        inv[Job::Helper] = 30;
+        inv[Job::Private] = 20;
+        hq->AddToInventory(inv, true);
+    }
+    world.InitAfterLoad();
+    const GamePlayer& player = world.GetPlayer(curPlayer);
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    runAIWithNWFs(em, world, *ai, curPlayer, 3000, [&](unsigned gf) {
+        BOOST_TEST_INFO("GF " << gf);
+        BOOST_TEST_REQUIRE(player.GetBuildingRegister().GetBuildingSites().empty());
+    });
+}
+
+BOOST_FIXTURE_TEST_CASE(MaterialIsReservedForImportantBuildings, BiggerWorldWithGCExecution)
+{
+    auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
+    const BuildingCost smelterCost = BUILDING_COSTS[BuildingType::Ironsmelter];
+    {
+        GoodsAndPeopleCounts inv;
+        inv[GoodType::Boards] = smelterCost.boards;
+        inv[GoodType::Stones] = smelterCost.stones;
+        hq->AddToInventory(inv, true);
+    }
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    AIJH::AIConstruction& construction = static_cast<AIJH::AIPlayerJH&>(*ai).GetConstruction();
+    BOOST_TEST(AIJH::AIConstruction::IsImportantBuilding(BuildingType::Ironsmelter));
+    BOOST_TEST(AIJH::AIConstruction::IsImportantBuilding(BuildingType::IronMine));
+    BOOST_TEST(!AIJH::AIConstruction::IsImportantBuilding(BuildingType::GraniteMine));
+    BOOST_TEST(!AIJH::AIConstruction::IsImportantBuilding(BuildingType::Woodcutter));
+    // Exactly enough for the smelter
+    BOOST_TEST(construction.GetFreeConstructionMaterial().boards == static_cast<int>(smelterCost.boards));
+    BOOST_TEST(construction.HasMaterialFor(BuildingType::Ironsmelter));
+    BOOST_TEST(construction.HasMaterialFor(BuildingType::Woodcutter));
+    // The smelter waits for material -> it is kept free: other buildings can't have it, important ones can
+    construction.ReserveMaterialFor(BuildingType::Ironsmelter);
+    BOOST_TEST(!construction.HasMaterialFor(BuildingType::Woodcutter));
+    BOOST_TEST(construction.HasMaterialFor(BuildingType::Ironsmelter));
+
+    // A building site needs its material -> less is free
+    const MapPoint sitePos = world.MakeMapPoint(hqPos + Position(4, 0));
+    world.SetBuildingSite(BuildingType::Woodcutter, sitePos, curPlayer);
+    BOOST_TEST_REQUIRE(world.GetSpecObj<noBuildingSite>(sitePos));
+    const BuildingCost woodcutterCost = BUILDING_COSTS[BuildingType::Woodcutter];
+    BOOST_TEST(construction.GetFreeConstructionMaterial().boards
+               == static_cast<int>(smelterCost.boards) - static_cast<int>(woodcutterCost.boards));
+    BOOST_TEST(!construction.HasMaterialFor(BuildingType::Ironsmelter));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

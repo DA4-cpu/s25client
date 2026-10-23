@@ -308,6 +308,23 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
 - Warenlimit für Lager (Idee des Nutzers, noch nicht ausgearbeitet).
 - Welt: Gelten Klimazonen und Rohstoffverteilung nur für generierte Karten oder auch für Originalkarten?
 
+## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
+
+- **Expansion gebremst:** höchstens `MAX_MILITARY_SITES` = 3 Militär-Baustellen gleichzeitig (auch gerade beauftragte),
+  und nur wenn mindestens `MIN_SOLDIERS_PER_MILITARY_SITE` = 2 Soldaten je Militär-Baustelle (inkl. der neuen) in den
+  Lagern sind. Sonst wird der Militärauftrag verworfen (die KI plant regelmäßig neue).
+- **Material vor jedem Bauauftrag:** Bretter und Steine im echten Lagerbestand minus das, was bestehende und gerade
+  beauftragte Baustellen noch brauchen, müssen für das Gebäude reichen. Sonst wartet der Auftrag (Militär: verworfen).
+  Gilt auch für das Sägewerk, das die KI an neuen Lagern direkt setzt (sonst normaler Bauauftrag).
+- **Wichtige Gebäude zuerst:** `IMPORTANT_BUILDINGS` (Waffenschmiede, Schlosserei, Eisenschmelze, Münzprägerei,
+  Kohle-, Eisen-, Goldmine) werden in jeder Runde vor allen anderen Aufträgen bearbeitet. Wartet eines davon auf
+  Material, bleibt dieses Material für die anderen Gebäude gesperrt.
+- Einstellbar oben in `libs/s25main/ai/aijh/AIConstruction.cpp`; Prüfung in `BuildJob::CheckLimitsAndMaterial`
+  (`Jobs.cpp`).
+- Vergleich GreenPlains, 2 KI, 2 h, gleicher Seed: Militärgebäude 23/40 statt 50/61, höchstens 3 statt bis zu 10
+  Militär-Baustellen, deutlich mehr Bretter/Steine im Lager. Die Zahl der Industriegebäude hängt weiter an den
+  Bauwünschen in `BuildingPlanner.cpp` (z. B. Minen nur mit erreichten Bergen).
+
 ## Bekannte Probleme im Fork (Stand 40aa9a2, nicht durch den Zivilisationsmodus verursacht)
 
 - `Test_gameData/LoadGameData` erwartet 14 Kanten, durch `world.lua` sind es 28.

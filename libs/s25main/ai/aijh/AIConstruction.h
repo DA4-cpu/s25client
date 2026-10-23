@@ -28,6 +28,12 @@ class BuildingPlanner;
 class BuildJob;
 class ConnectJob;
 
+/// Boards and stones (may be negative if more is needed than available)
+struct ConstructionMaterial
+{
+    int boards = 0, stones = 0;
+};
+
 class AIConstruction
 {
 public:
@@ -87,8 +93,24 @@ public:
     /// To be called after a new construction site was added
     void ConstructionOrdered(const BuildJob& job);
     /// To be called after a building site was ordered (game command sent). Until the site exists it counts as pending
-    /// demand for builders (see HasEnoughBuildersAvailable)
-    void BuildingSiteOrdered(MapPoint pt);
+    /// demand for builders and material (see HasEnoughBuildersAvailable, GetFreeConstructionMaterial)
+    void BuildingSiteOrdered(MapPoint pt, BuildingType type);
+
+    /// Buildings which are handled before all others (see IMPORTANT_BUILDINGS in AIConstruction.cpp)
+    static bool IsImportantBuilding(BuildingType type);
+    /// Boards and stones in the warehouses minus what the existing and the just ordered building sites still need
+    ConstructionMaterial GetFreeConstructionMaterial() const;
+    /// True if the free material suffices for the building. For non-important buildings the material reserved for
+    /// important buildings (which are waiting for material) is not available
+    bool HasMaterialFor(BuildingType type) const;
+    /// Keep material free for an important building which could not be built for lack of material (until the next
+    /// call of ExecuteJobs)
+    void ReserveMaterialFor(BuildingType type);
+    /// Number of military building sites, including the just ordered ones
+    unsigned GetNumMilitarySitesInProgress() const;
+    /// True if another military building site may be started: less than MAX_MILITARY_SITES in progress and enough
+    /// soldiers in the warehouses (MIN_SOLDIERS_PER_MILITARY_SITE for each military site including the new one)
+    bool CanStartMilitarySite() const;
     /// To be called when the current pending construction orders were processed (usually on NWF)
     void ConstructionsExecuted();
 
@@ -111,8 +133,11 @@ private:
     struct PendingSite
     {
         MapPoint pos;
+        BuildingType type;
         unsigned age; // NWFs since the order
     };
+    /// Material kept free for important buildings in the current ExecuteJobs call
+    ConstructionMaterial reservedMaterial;
     std::vector<PendingSite> pendingSites;
     /// True if there is a building site (or already a building) at the point
     bool HasSiteAt(MapPoint pt) const;
