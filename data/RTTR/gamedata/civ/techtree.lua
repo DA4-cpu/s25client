@@ -186,7 +186,7 @@ rttr:AddTechnology{
     knowledge = { LWP = 12+2 },
     time = 60,
     unlocks = { buildings = { "Brewery" } },
-    aiPriority = 78,
+    aiPriority = 90,
 }
 
 rttr:AddTechnology{
@@ -199,7 +199,7 @@ rttr:AddTechnology{
     cost = {},
     time = 60,
     unlocks = { buildings = { "Armory" } },
-    aiPriority = 90,
+    aiPriority = 91,
 }
 
 rttr:AddTechnology{
@@ -212,7 +212,7 @@ rttr:AddTechnology{
     cost = { },
     time = 90,
     unlocks = { buildings = { "Mint" } },
-    aiPriority = 90,
+    aiPriority = 80,
 }
 
 rttr:AddTechnology{
@@ -294,7 +294,7 @@ rttr:AddTechnology{
     cost = { Stones = 6 },
     time = 120,
     unlocks = { buildings = { "Watchtower" } },
-    aiPriority = 89,
+    aiPriority = 91,
 }
 
 rttr:AddTechnology{

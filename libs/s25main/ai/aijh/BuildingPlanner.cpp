@@ -159,7 +159,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         unsigned numMines = GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::IronMine)
                             + GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::GraniteMine);
         // foresters
-        unsigned max_available_forester = inventory[Job::Forester] + inventory[GoodType::Shovel];
+        unsigned max_available_forester = inventory[Job::Forester] + inventory[GoodType::Shovel] - 1;
         max_available_forester = std::max(0, int(max_available_forester));
 
 
@@ -240,20 +240,18 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
 
         // iron smelters limited by iron mines or crucibles
-        int available_mines = static_cast<int>(GetNumBuildings(BuildingType::IronMine) - GetNumBuildingSites(BuildingType::IronMine))
-                                  - static_cast<int>(GetNumBuildingSites(BuildingType::IronMine)) - 1;
+        int available_mines = static_cast<int>(GetNumBuildings(BuildingType::IronMine) - GetNumBuildingSites(BuildingType::IronMine));
          available_mines = std::max(0, available_mines);
          buildingsWanted[BuildingType::Ironsmelter] =
               std::min<unsigned>(inventory.goods[GoodType::Crucible] + inventory.people[Job::IronFounder],
-                                 static_cast<unsigned>(available_mines));
+                                 static_cast<unsigned>(available_mines+1));
          if(2 > GetNumBuildings(BuildingType::Ironsmelter) && 1 > GetNumBuildingSites(BuildingType::Ironsmelter))
             buildingsWanted[BuildingType::Ironsmelter] = 2;
         if(1 > GetNumBuildings(BuildingType::Ironsmelter)) 
             buildingsWanted[BuildingType::Ironsmelter] = 1;
 
 
-        available_mines = static_cast<int>(GetNumBuildings(BuildingType::GoldMine) - GetNumBuildingSites(BuildingType::GoldMine))
-                              - static_cast<int>(GetNumBuildingSites(BuildingType::GoldMine)) - 1;
+        available_mines = static_cast<int>(GetNumBuildings(BuildingType::GoldMine) - static_cast<int>(GetNumBuildingSites(BuildingType::GoldMine)));
         available_mines = std::max(0, available_mines);
         buildingsWanted[BuildingType::Mint] = std::min<unsigned>(inventory.goods[GoodType::Crucible] + inventory.people[Job::Minter], static_cast<unsigned>(available_mines));
 
@@ -264,15 +262,14 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         if(GetNumBuildings(BuildingType::Metalworks) > 0)
             buildingsWanted[BuildingType::Metalworks] =
-              int(static_cast<double>(GetNumBuildings(BuildingType::Ironsmelter)) / 5.0 + 1.4);
+              int(static_cast<double>(GetNumBuildings(BuildingType::Ironsmelter)) / 5.0 + 1.3);
 
         // armory count = smelter -metalworks if there is more than 1 smelter or 1 if there is just 1.
         if (GetNumBuildings(BuildingType::Metalworks) > 0)
         {
             resourcelimit = inventory.people[Job::Armorer] + inventory.goods[GoodType::Hammer];
-            unsigned numArmories = GetNumBuildings(BuildingType::Armory);
-            buildingsWanted[BuildingType::Armory] =
-              std::max<unsigned>(numArmories * 6/4 - GetNumBuildings(BuildingType::Metalworks) + 1, 0);
+            buildingsWanted[BuildingType::Armory] = std::max<unsigned>(
+              GetNumBuildings(BuildingType::Ironsmelter) - GetNumBuildings(BuildingType::Metalworks) + 1, 0);
             buildingsWanted[BuildingType::Armory] = std::min<unsigned>(buildingsWanted[BuildingType::Armory], resourcelimit);
         }
 
@@ -544,7 +541,7 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
             freeSpace += GetNumBuildingSites(bld) * building.libraryCapacity;
             const bool needMore = numWaiting > freeSpace;
             const unsigned wanted = numExisting + (needMore ? 1u : 0u);
-            buildingsWanted[bld] = std::min(wanted, potentialWorkers);
+            buildingsWanted[bld] = std::min(wanted, potentialWorkers, 10);
         } else if(building.workDesc.waresNeeded.empty())
             buildingsWanted[bld] = std::min(1u, potentialWorkers);
 
@@ -555,7 +552,7 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
                 numInputs += aijh.AmountInStorage(input);
             const unsigned wanted = numInputs == 0 ? 0u : 1u + numInputs / 8u;
             // Never plan less than existing (would not destroy them anyway), but not more than workers are available
-            buildingsWanted[bld] = std::min(std::max(wanted, numExisting), potentialWorkers);
+            buildingsWanted[bld] = std::min(std::max(wanted, numExisting), potentialWorkers, 10);
         }
     }
 }

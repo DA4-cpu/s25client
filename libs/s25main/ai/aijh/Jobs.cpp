@@ -76,8 +76,8 @@ bool BuildJob::CheckLimitsAndMaterial(AIConstruction& aiConstruction)
     {
         if(AIConstruction::IsImportantBuilding(type))
             aiConstruction.ReserveMaterialFor(type); // Other buildings must not take the material it waits for
-        if(isMilitary)
-            state = JobState::Failed;
+        //if(isMilitary)
+        //    state = JobState::Failed;
         // Otherwise the job stays and is tried again later
         return false;
     }
