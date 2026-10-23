@@ -33,6 +33,8 @@ rttr:AddWorkshop{...}:
   workTime    Arbeitszeit pro Produkt in Sekunden
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
 
+  Es fehlt der Wissenswert pro Gebäude!!! knowledge =  ...
+
 Freischalten: In techtree.lua unter unlocks = { buildings = { "Name" } } eintragen. Wird eine Werkstatt von keiner
 Technologie freigeschaltet, ist sie von Anfang an baubar.
 
@@ -53,17 +55,6 @@ rttr:AddWorkshop{
     workTime = 20,
 }
 ]]
-
-rttr:AddWorkshop{
-    name = "ExampleWorkshop",
-    title = "Beispiel-Werkstatt",
-    size = "small",
-    cost = { Boards = 2 },
-    look = "Woodcutter",
-    worker = { title = "Beispiel-Arbeiter", tool = "none", look = "Carpenter" },
-    output = "Loam",
-    workTime = 20,
-}
 
 rttr:AddWorkshop{
     name = "LoamProcessor",
@@ -89,7 +80,7 @@ rttr:AddWorkshop{
     size = "small",
     cost = { Boards = 2 }, 
     look = "Hunter",      
-    worker = { title = "Knochenschnitzer", tool = "Cleaver", look = "Butcher" }, -- look = PLATZHALTER
+    worker = { title = "BoneCarver", tool = "Cleaver", look = "Butcher" }, -- look = PLATZHALTER
     inputs = { "Bones" },
     output = "GeritzterKnochen",
     outputChoice = "knowledge",
@@ -104,9 +95,9 @@ rttr:AddWorkshop{
 rttr:AddWorkshop{
     name = "Library",
     title = "Bibliothek",
-    size = "medium",
-    cost = { Boards = 3, Stones = 3 }, -- PLATZHALTER: Baukosten noch offen
-    look = "Bakery",                   -- PLATZHALTER: Grafik-Vorbild
-    worker = { title = "Bibliothekar", tool = "none", look = "Helper" }, -- look = PLATZHALTER
+    size = "large",
+    cost = { Boards = 5, Stones = 5 }, 
+    look = "Temple",                   -- PLATZHALTER: Grafik-Vorbild
+    worker = { title = "Bibliothekar", tool = "none", look = "Helper" },
     library = { capacity = 20 },
 }

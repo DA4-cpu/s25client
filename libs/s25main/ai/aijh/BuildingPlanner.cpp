@@ -13,6 +13,7 @@
 #include "civ/Research.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
+#include "gameTypes/Inventory.h"
 #include "gameData/BuildingProperties.h"
 #include <algorithm>
 #include <cmath>
@@ -263,15 +264,16 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         if(GetNumBuildings(BuildingType::Metalworks) > 0)
             buildingsWanted[BuildingType::Metalworks] =
-              int(static_cast<double>(GetNumBuildings(BuildingType::Ironsmelter)) / 5.0 + 1.3);
+              int(static_cast<double>(GetNumBuildings(BuildingType::Ironsmelter)) / 5.0 + 1.4);
 
         // armory count = smelter -metalworks if there is more than 1 smelter or 1 if there is just 1.
         if (GetNumBuildings(BuildingType::Metalworks) > 0)
         {
             resourcelimit = inventory.people[Job::Armorer] + inventory.goods[GoodType::Hammer];
-
+            unsigned numArmories = GetNumBuildings(BuildingType::Armory);
             buildingsWanted[BuildingType::Armory] =
-              std::max<unsigned>(GetNumBuildings(BuildingType::Ironsmelter) - GetNumBuildings(BuildingType::Metalworks), 0);
+              std::max<unsigned>(numArmories * 6/4 - GetNumBuildings(BuildingType::Metalworks) + 1, 0);
+            buildingsWanted[BuildingType::Armory] = std::min<unsigned>(buildingsWanted[BuildingType::Armory], resourcelimit);
         }
 
         // brewery count = 1+(armory/5) if there is at least 1 armory or armory /6 for exhaustible mines
@@ -503,18 +505,30 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
     if(!civ::isEnabled(aijh.GetWorld()))
         return;
     // Simple generic rules for workshops defined in lua (the AI knows nothing about their purpose):
-    // - Workshop with inputs: 1 as soon as an input ware is in stock, 1 more per 10 input wares in stock, at most 3
+    // - Workshop with inputs: 1 as soon as an input ware is in stock, 1 more per 8 input wares in stock
     // - Workshop without inputs: 1
     // - Library: 1 more if more knowledge media wait in warehouses than the existing libraries can still take
+    // All of them limited by the workers that are available for the building (see potentialWorkers below).
     // Whether it can be built at all (technology) is checked by AIConstruction::Wanted
-    constexpr unsigned maxWorkshopsPerType = 3;
-    constexpr unsigned maxLibraries = 5;
     const civ::Content& content = civ::getActiveContent();
+    const Inventory& inventory = aijh.player.GetInventory();
     for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
     {
         const BuildingType bld = getCustomBuilding(i);
         const civ::CustomBuilding& building = *content.GetBuilding(bld);
         const unsigned numExisting = GetNumBuildings(bld);
+        if(GetNumBuildingSites(bld) > 0)
+            continue;
+        // Workers for this building: All workers of its job the player has (also those already working in a building)
+        // plus the tools in stock, as every tool can make a helper a worker. Workers without a tool can be made from
+        // any helper. Note: The tool may also be needed by other jobs (e.g. Cleaver for the butcher)
+        const Job job = getCustomJob(i); // Job i belongs to workshop i
+        const civ::CustomWorker* worker = content.GetWorker(job);
+        unsigned potentialWorkers = inventory.people[job];
+        if(worker && worker->tool != GoodType::Nothing)
+            potentialWorkers += inventory.goods[worker->tool];
+        else
+            potentialWorkers += inventory.people[Job::Helper];
         if(building.IsLibrary())
         {
             unsigned numWaiting = 0;
@@ -529,17 +543,19 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
             // Building sites will take media soon, too
             freeSpace += GetNumBuildingSites(bld) * building.libraryCapacity;
             const bool needMore = numWaiting > freeSpace;
-            buildingsWanted[bld] = std::min(numExisting + (needMore ? 1u : 0u), maxLibraries);
+            const unsigned wanted = numExisting + (needMore ? 1u : 0u);
+            buildingsWanted[bld] = std::min(wanted, potentialWorkers);
         } else if(building.workDesc.waresNeeded.empty())
-            buildingsWanted[bld] = 1;
-        else
+            buildingsWanted[bld] = std::min(1u, potentialWorkers);
+
+        else if(building.name == "BoneCarver")
         {
             unsigned numInputs = 0;
             for(const GoodType input : building.workDesc.waresNeeded)
                 numInputs += aijh.AmountInStorage(input);
-            const unsigned wanted = numInputs == 0 ? 0u : std::min(1u + numInputs / 10u, maxWorkshopsPerType);
-            // Never plan less than existing (would not destroy them anyway)
-            buildingsWanted[bld] = std::max(wanted, std::min(numExisting, maxWorkshopsPerType));
+            const unsigned wanted = numInputs == 0 ? 0u : 1u + numInputs / 8u;
+            // Never plan less than existing (would not destroy them anyway), but not more than workers are available
+            buildingsWanted[bld] = std::min(std::max(wanted, numExisting), potentialWorkers);
         }
     }
 }

@@ -12,7 +12,7 @@ Felder von rttr:AddTechnology{...}:
   era         Zeitalter 0..6 (0 Jungsteinzeit, 1 Antike, 2 Klassik, 3 Mittelalter, 4 Frühe Neuzeit,
               5 Industriezeitalter, 6 Moderne)
   requires    Liste von Voraussetzungen (Bezeichner). Müssen WEITER OBEN definiert sein.
-  knowledge   Kosten in Wissenspunkten, z.B. { LWP = 4, IWP = 2 } (LWP Landwirtschaft, IWP Industrie, MWP Militär).
+  knowledge   Kosten in Wissenspunkten, z.B. { LWP = 4, IWP = 2 } (LWP Landwirtschaft, IWP Industrie, MWP Militär). Standardwert+Wissensmedienzusatz
               Werden erst beim Abschluss abgebucht. Die WP der Gebäude stehen in knowledge.lua.
   cost        Warenkosten, z.B. { Boards = 4, Stones = 2 }. Bezeichner wie im Enum GoodType:
               Beer Tongs Hammer Axe Saw PickAxe Shovel Crucible RodAndLine Scythe Water Cleaver Rollingpin Bow
@@ -52,7 +52,7 @@ rttr:AddTechnology{
     description = "Überschüsse werden nicht mehr nur im Lager des Stammes gesammelt, sondern in eigenen Vorratshäusern. "
         .. "Das verkürzt die Wege in entlegene Gebiete.",
     era = 0,
-    knowledge = { LWP = 7, IWP = 7, MWP = 7 },
+    knowledge = { LWP = 6, IWP = 6, MWP = 6 },
     time = 30,
     unlocks = { buildings = { "Storehouse" } },
     aiPriority = 100,
@@ -99,7 +99,7 @@ rttr:AddTechnology{
     title = "Steinmauern",
     description = "Steinmauern bieten Schutz vor Feinden und verbessern die Verteidigungsfähigkeit des Dorfes.",
     era = 0,
-    knowledge = { MWP = 10 },
+    knowledge = { MWP = 9 },
     time = 60,
     unlocks = { buildings = { "Guardhouse"} },
     aiPriority = 80,
@@ -110,12 +110,13 @@ rttr:AddTechnology{
     title = "Knochenschnitzerei", -- PLATZHALTER: Anzeigename
     description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
     era = 0,
-    knowledge = { LWP = 1, IWP = 1 }, -- PLATZHALTER: jede Technologie braucht WP-Kosten, Wert noch offen
+    knowledge = { LWP = 7, IWP = 7 }, -- PLATZHALTER: jede Technologie braucht WP-Kosten, Wert noch offen
     -- PLATZHALTER: Voraussetzungen, Warenkosten und Dauer sind noch nicht festgelegt, z.B.
     requires = { "storage" },
     -- cost = { ... },
     time = 60,
     unlocks = { buildings = { "BoneCarver" } },
+    aiPriority = 80,
 }
 
 
@@ -130,7 +131,7 @@ rttr:AddTechnology{
         .. "Bergleute brauchen Nahrung.",
     era = 1,
     requires = { "agriculture", "storage" }, -- hier soll eigentlich milling oder animal_husbandry als Voraussetzung hin (mindestens 1 von den beiden muss erforscht sein), aber es gibt kein "or" bei der Abfrage glaube ich
-    knowledge = { IWP = 16 },
+    knowledge = { IWP = 15 },
     time = 60,
     unlocks = { buildings = { "CoalMine", "IronMine", "GraniteMine", "GoldMine" } },
     aiPriority = 90,
@@ -142,7 +143,7 @@ rttr:AddTechnology{
     description = "In der Eisenschmelze wird Erz mit Kohle zu Eisen geschmolzen.",
     era = 1,
     requires = { "mining" },
-    knowledge = { IWP = 12 },
+    knowledge = { IWP = 12+2 },
     cost = {},
     time = 120,
     unlocks = { buildings = { "Ironsmelter" } },
@@ -155,7 +156,7 @@ rttr:AddTechnology{
         .. "damit neue Berufe ausgebildet werden können.",
     era = 1,
     requires = { "metallurgy" },
-    knowledge = { IWP = 12 },
+    knowledge = { IWP = 12+2 },
     cost = {},
     time = 60,
     unlocks = { buildings = { "Metalworks" } },
@@ -168,7 +169,7 @@ rttr:AddTechnology{
     description = "Holz wird in Meilern langsam zu Holzkohle verschwelt - Kohle ganz ohne Bergwerk.",
     era = 1,
     requires = { "metallurgy" },
-    knowledge = { IWP = 12 },
+    knowledge = { IWP = 12+2 },
     cost = { Wood = 4 },
     time = 120,
     unlocks = { buildings = { "Charburner" } },
@@ -182,7 +183,7 @@ rttr:AddTechnology{
     description = "Aus Getreide und Wasser wird Bier gebraut. Ohne Bier lassen sich keine Soldaten ausheben.",
     era = 1,
     requires = { "agriculture" },
-    knowledge = { LWP = 12 },
+    knowledge = { LWP = 12+2 },
     time = 60,
     unlocks = { buildings = { "Brewery" } },
     aiPriority = 78,
@@ -194,7 +195,7 @@ rttr:AddTechnology{
     description = "Schmiede fertigen aus Eisen und Kohle Schwerter und Schilde für neue Soldaten.",
     era = 1,
     requires = { "metallurgy"},
-    knowledge = { IWP = 8, MWP = 8 },
+    knowledge = { IWP = 8+1, MWP = 8+1 },
     cost = {},
     time = 60,
     unlocks = { buildings = { "Armory" } },
@@ -207,7 +208,7 @@ rttr:AddTechnology{
     description = "Gold wird abgebaut und zu Münzen geprägt. Münzen spornen Soldaten zur Ausbildung an.",
     era = 1,
     requires = { "mining" },
-    knowledge = { IWP = 16 },
+    knowledge = { IWP = 15+2 },
     cost = { },
     time = 90,
     unlocks = { buildings = { "Mint" } },
@@ -220,7 +221,7 @@ rttr:AddTechnology{
     description = "Esel werden gezüchtet und tragen auf stark genutzten Straßen zusätzlich Waren.",
     era = 1,
     requires = { "animal_husbandry" },
-    knowledge = { LWP = 12 },
+    knowledge = { LWP = 12+2 },
     time = 1,
     unlocks = { buildings = { "DonkeyBreeder" } },
     aiPriority = 50,
@@ -232,8 +233,7 @@ rttr:AddTechnology{
     description = "An sonnigen Hängen werden Reben gepflanzt; der Winzer keltert aus den Trauben Wein.",
     era = 1,
     requires = { "agriculture" },
-    knowledge = { LWP = 12 },
-    cost = { Wood = 4, Water = 12 },
+    knowledge = { LWP = 12+2 },
     time = 30,
     unlocks = { buildings = { "Vineyard", "Winery" } },
     addon = "WINE",
@@ -246,7 +246,7 @@ rttr:AddTechnology{
     description = "Häute aus der Schweinezucht werden gegerbt und zu Leder und Rüstungen verarbeitet.",
     era = 1,
     requires = { "animal_husbandry" },
-    knowledge = { LWP = 8, IWP = 8 },
+    knowledge = { LWP = 8+1, IWP = 8+1 },
     cost = { },
     time = 60,
     unlocks = { buildings = { "Skinner", "Tannery", "LeatherWorks" } },
@@ -260,13 +260,24 @@ rttr:AddTechnology{
     description = "Durch Späher kann man Feinde schon frühzeitig ausfindig machen.",
     era = 1,
     requires = { "stone_walls" },
-    knowledge = { MWP = 12 },
+    knowledge = { MWP = 12+2 },
     time = 60,
     unlocks = { buildings = { "LookoutTower" } },
     addon = "LEATHER",
     aiPriority = 89,
 }
 
+rttr:AddTechnology{
+    name = "libraries",
+    title = "Bibliotheken",
+    description = "Wissensmedien werden in eigenen Häusern gesammelt und gepflegt. Dort zählen sie voll statt nur halb.",
+    era = 1,
+    requires = { "bone_carving" },
+    knowledge = { LWP = 10, IWP = 10, MWP = 10 },      
+    -- cost = { ... },
+    time = 120,
+    unlocks = { buildings = { "Library" } },
+}
 
 
 -------------------------------------------------------------------------------
@@ -279,7 +290,7 @@ rttr:AddTechnology{
     description = "Steinerne Wachtürme sichern die Grenzen und beherbergen mehr Soldaten.",
     era = 2,
     requires = { "metallurgy", "lookout" },
-    knowledge = { MWP = 12 },
+    knowledge = { MWP = 12+4 },
     cost = { Stones = 6 },
     time = 120,
     unlocks = { buildings = { "Watchtower" } },
@@ -292,7 +303,7 @@ rttr:AddTechnology{
     description = "Werften bauen Boote für Wasserstraßen und später hochseetaugliche Schiffe.",
     era = 2,
     requires = { "toolmaking" },
-    knowledge = { IWP = 16 },
+    knowledge = { IWP = 16+4 },
     cost = { Boards = 8 },
     time = 60,
     unlocks = { buildings = { "Shipyard" } },
@@ -305,7 +316,7 @@ rttr:AddTechnology{
     description = "Häfen ermöglichen Expeditionen über das Meer, Handel mit Übersee und Angriffe von See aus.",
     era = 2,
     requires = { "shipbuilding" },
-    knowledge = { LWP = 8, IWP = 8, MWP = 8 },
+    knowledge = { LWP = 8+2, IWP = 8+2, MWP = 8+2 },
     cost = {},
     time = 120,
     unlocks = { buildings = { "HarborBuilding" } },
@@ -318,7 +329,7 @@ rttr:AddTechnology{
     description = "Katapulte schleudern Steine auf feindliche Militärgebäude.",
     era = 2,
     requires = { "fortification" },
-    knowledge = { MWP = 30 },
+    knowledge = { MWP = 30+4 },
     cost = { Stones = 1 },
     time = 160,
     unlocks = { buildings = { "Catapult" } },
@@ -331,25 +342,12 @@ rttr:AddTechnology{
     description = "Tempel nehmen Opfergaben aus Wein, Fleisch und Brot entgegen und bringen dafür Gold hervor.",
     era = 2,
     requires = { "viticulture" },
-    knowledge = { LWP = 5, IWP = 10 },
+    knowledge = { LWP = 5+2, IWP = 10+2 },
     cost = {},
     time = 160,
     unlocks = { buildings = { "Temple" } },
     addon = "WINE",
     aiPriority = 30,
-}
-
-rttr:AddTechnology{
-    name = "libraries",
-    title = "Bibliotheken", -- PLATZHALTER: Anzeigename
-    description = "Wissensmedien werden in eigenen Häusern gesammelt und gepflegt. Dort zählen sie voll statt nur halb.", -- PLATZHALTER
-    era = 2,
-    requires = { "bone_carving" }, -- PLATZHALTER: Voraussetzungen noch offen
-    knowledge = { LWP = 1 },      -- PLATZHALTER: WP-Kosten noch offen
-    -- PLATZHALTER: Warenkosten und Dauer noch offen, z.B.
-    -- cost = { ... },
-    -- time = ?,
-    unlocks = { buildings = { "Library" } },
 }
 
 -------------------------------------------------------------------------------
@@ -362,7 +360,7 @@ rttr:AddTechnology{
     description = "Mächtige Burgen kontrollieren ein großes Gebiet und bieten Platz für eine ganze Garnison.",
     era = 3,
     requires = { "fortification", "currency" },
-    knowledge = { MWP = 20 },
+    knowledge = { MWP = 20+6 },
     time = 240,
     unlocks = { buildings = { "Fortress" } },
     aiPriority = 90,
