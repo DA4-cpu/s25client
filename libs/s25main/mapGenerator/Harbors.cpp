@@ -26,13 +26,13 @@ void PlaceHarborPosition(Map& map, const MapPoint& position)
         textures.Set(triangle, harborTexture);
     }
 
-    for(const Triangle& triangle : triangles)
-    {
-        if(helpers::contains_if(GetTriangleEdges(triangle, map.size), isWater))
-        {
-            map.harbors.push_back(triangle);
-        }
-    }
+    // The map format marks a harbor in the RSU terrain byte of the harbor node itself (see MapLoader). Marking the
+    // triangles around it would create harbor positions at the neighbor nodes, which are often not at the coast.
+    const bool atWater = helpers::contains_if(triangles, [&](const Triangle& triangle) {
+        return helpers::contains_if(GetTriangleEdges(triangle, map.size), isWater);
+    });
+    if(atWater)
+        map.harbors.push_back(Triangle(true, position));
 }
 
 std::vector<std::vector<MapPoint>> FindCoastlines(const Map& map, const std::vector<River>& rivers)

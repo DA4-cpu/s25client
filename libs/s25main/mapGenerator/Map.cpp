@@ -19,6 +19,10 @@ Map::Map(const MapExtent& size, uint8_t players, const WorldDescription& worldDe
     z.Resize(size);
     climate.Resize(size, 50);
     temperature.Resize(size, 50);
+    heightPercent.Resize(size, 0);
+    zones.Resize(size, 0);
+    terrainFlags.Resize(size, 0);
+    riverCourse.Resize(size, 0);
     objectTypes.Resize(size, libsiedler2::OT_Empty);
     objectInfos.Resize(size, libsiedler2::OI_Empty);
     resources.Resize(size, libsiedler2::R_None);
@@ -85,9 +89,9 @@ libsiedler2::Archiv Map::CreateArchiv() const
     for(const Triangle& t : harbors)
     {
         if(t.rsu)
-            rsu[t.position.x + t.position.y * size.y] |= libsiedler2::HARBOR_MASK;
+            rsu[t.position.x + t.position.y * size.x] |= libsiedler2::HARBOR_MASK;
         else
-            lsd[t.position.x + t.position.y * size.y] |= libsiedler2::HARBOR_MASK;
+            lsd[t.position.x + t.position.y * size.x] |= libsiedler2::HARBOR_MASK;
     }
 
     libsiedler2::Archiv info;

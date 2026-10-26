@@ -39,7 +39,7 @@ bool GameDataLoader::Load()
 {
     curFile_ = basePath_ / "default.lua";
     curIncludeDepth_ = 0;
-    return loadScript(curFile_);
+    return loadScript(curFile_) && CheckMapGen();
 }
 
 void GameDataLoader::Register(kaguya::State& state)
@@ -55,7 +55,10 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
         .addFunction("AddByproduct", &GameDataLoader::AddByproduct)
-        .addFunction("SetKnowledgeDistribution", &GameDataLoader::SetKnowledgeDistribution));
+        .addFunction("SetKnowledgeDistribution", &GameDataLoader::SetKnowledgeDistribution)
+        .addFunction("SetMapClimate", &GameDataLoader::SetMapClimate)
+        .addFunction("AddMapZone", &GameDataLoader::AddMapZone)
+        .addFunction("AddMapResource", &GameDataLoader::AddMapResource));
 }
 
 class LuaIncludeError : public std::runtime_error
@@ -169,6 +172,52 @@ void GameDataLoader::SetKnowledgeDistribution(const kaguya::LuaTable& data)
             throw GameDataError(context + ": values must be in [0, 10]");
     }
     worldDesc_.knowledgeDistribution = values;
+}
+
+void GameDataLoader::SetMapClimate(const kaguya::LuaTable& data)
+{
+    if(worldDesc_.mapGen.climateSet)
+        throw GameDataError("Map climate (rttr:SetMapClimate) is defined twice");
+    worldDesc_.mapGen.climate = MapClimateDesc(data);
+    worldDesc_.mapGen.climateSet = true;
+}
+
+void GameDataLoader::AddMapZone(const kaguya::LuaTable& data)
+{
+    MapZoneDesc zone(data);
+    if(worldDesc_.mapGen.getZoneIndex(zone.name) >= 0)
+        throw GameDataError("Map zone '" + zone.name + "' is defined twice");
+    if(worldDesc_.mapGen.zones.size() >= 32)
+        throw GameDataError("At most 32 map zones are possible");
+    worldDesc_.mapGen.zones.push_back(zone);
+}
+
+void GameDataLoader::AddMapResource(const kaguya::LuaTable& data)
+{
+    MapResourceDesc resource(data);
+    for(const MapResourceDesc& other : worldDesc_.mapGen.resources)
+    {
+        if(other.name == resource.name)
+            throw GameDataError("Map resource '" + resource.name + "' is defined twice");
+    }
+    worldDesc_.mapGen.resources.push_back(resource);
+}
+
+bool GameDataLoader::CheckMapGen()
+{
+    for(const MapResourceDesc& resource : worldDesc_.mapGen.resources)
+    {
+        for(const std::string& zone : resource.zones)
+        {
+            if(worldDesc_.mapGen.getZoneIndex(zone) < 0)
+            {
+                log("Invalid game data: Map resource '" + resource.name + "': unknown zone '" + zone
+                    + "' (see rttr:AddMapZone)");
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)

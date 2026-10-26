@@ -7,6 +7,7 @@
 #include "helpers/containerUtils.h"
 #include "mapGenerator/Algorithms.h"
 #include "mapGenerator/NodeMapUtilities.h"
+#include "mapGenerator/TextureHelper.h"
 #include "mapGenerator/Triangles.h"
 #include "gameData/WorldDescription.h"
 
@@ -32,7 +33,8 @@ private:
 public:
     TextureOperator(const WorldDescription& worldDesc, const DescIdx<LandscapeDesc> landscape)
         : worldDesc_(worldDesc), landscape_(landscape),
-          terrains_(worldDesc_.terrain.findAll([landscape](const TerrainDesc& t) { return t.landscape == landscape; }))
+          terrains_(worldDesc_.terrain.findAll(
+            [landscape](const TerrainDesc& t) { return t.landscape == landscape && IsTerrainAvailable(t); }))
     {}
 
     uint8_t GetTextureId(DescIdx<TerrainDesc> texture) const { return worldDesc_.get(texture).s2Id; }

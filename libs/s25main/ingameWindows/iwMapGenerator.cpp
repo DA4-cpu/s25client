@@ -5,7 +5,9 @@
 #include "iwMapGenerator.h"
 #include "Loader.h"
 #include "controls/ctrlComboBox.h"
+#include "controls/ctrlEdit.h"
 #include "controls/ctrlProgress.h"
+#include "controls/ctrlText.h"
 #include "helpers/containerUtils.h"
 #include "helpers/format.hpp"
 #include "lua/GameDataLoader.h"
@@ -14,6 +16,7 @@
 #include "gameData/const_gui_ids.h"
 #include "s25util/StringConversion.h"
 #include "s25util/colors.h"
+#include <random>
 #include <string>
 
 using namespace rttr::mapGenerator;
@@ -24,10 +27,36 @@ namespace {
 // [0, climateZoneSizeMax - climateZoneSizeMin], which are offset by climateZoneSizeMin below.
 constexpr unsigned short climateZoneSizeMin = 10;
 constexpr unsigned short climateZoneSizeMax = 150;
+
+// Layout (namespace constants: MSVC does not allow local constexpr in lambdas without capture)
+constexpr int col1 = 20;
+constexpr int col2 = 280;
+constexpr int ctrlOffset = 120;
+constexpr int rowHeight = 30;
+constexpr Extent ctrlSize(130, 20);
+constexpr Extent editSize(60, 20);
+constexpr Extent buttonSize(100, 20);
+
+/// Read a number from an edit field, limited to maxValue
+template<typename T>
+T GetNumber(const ctrlEdit& edit, T maxValue)
+{
+    const std::string text = edit.GetText();
+    unsigned long long value = 0;
+    for(const char c : text)
+    {
+        if(c < '0' || c > '9')
+            break;
+        value = value * 10 + static_cast<unsigned>(c - '0');
+        if(value > maxValue)
+            return maxValue;
+    }
+    return static_cast<T>(value);
+}
 } // namespace
 
-iwMapGenerator::iwMapGenerator(MapSettings& settings)
-    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(270, 600), _("Map Generator"),
+iwMapGenerator::iwMapGenerator(MapSettings& settings, uint32_t lastSeed)
+    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(540, 420), _("Map Generator"),
                    LOADER.GetImageN("resource", 41), true, CloseBehavior::Custom),
       mapSettings(settings)
 {
@@ -39,10 +68,8 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
         return;
     }
 
-    // The generator no longer lets the user pick a landscape up front (greenland/wasteland/
-    // winterworld remain available for backwards compatibility with existing maps, but are no
-    // longer offered here) - it always targets the combined "world" landscape, which draws on
-    // all of their terrains at once via the (humidity, temperature) climate system instead.
+    // The generator always targets the combined "world" landscape, which draws on the terrains of all landscapes
+    // via the climate (humidity, temperature). Greenland/wasteland/winterworld stay for existing maps.
     const DescIdx<LandscapeDesc> worldLandscape = desc.landscapes.getIndex("world");
     if(!worldLandscape)
     {
@@ -51,106 +78,139 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings)
     }
     mapSettings.type = worldLandscape;
 
-    DrawPoint curPos(20, 0);
 
-    constexpr Extent comboSize(230, 20);
-    constexpr Extent comboSizeSmall(130, 20);
-    constexpr Extent progressSize(130, 20);
-    constexpr Extent buttonSize(100, 20);
-    constexpr int pgrOffset = 120;
+    const auto addLabel = [this](unsigned id, int x, int y, const std::string& text) {
+        AddText(id, DrawPoint(x, y + 3), text, COLOR_YELLOW, FontStyle{}, NormalFont);
+    };
+    const auto addNumberEdit = [this](unsigned id, int x, int y, unsigned short maxLength) {
+        ctrlEdit* edit = AddEdit(id, DrawPoint(x, y), editSize, TextureColor::Grey, NormalFont, maxLength);
+        edit->SetNumberOnly(true);
+        return edit;
+    };
 
-    curPos.y += 30;
-    ctrlComboBox* combo = AddComboBox(ID_cbNumPlayers, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+    // ---- Left column: shape of the map ----
+    int y = 30;
+    ctrlComboBox* combo =
+      AddComboBox(ID_cbNumPlayers, DrawPoint(col1, y), Extent(ctrlOffset + ctrlSize.x, 20), TextureColor::Grey,
+                  NormalFont, 100);
     for(unsigned n = 2; n <= MAX_PLAYERS; n++)
         combo->AddItem(helpers::format(_("%1% players"), n));
 
-    curPos.y += 30;
-    AddText(ID_txtMapStyle, curPos, _("Style"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    combo =
-      AddComboBox(ID_cbMapStyle, curPos + DrawPoint(100, -5), comboSizeSmall, TextureColor::Grey, NormalFont, 100);
-    combo->AddItem(_("Water"));
-    combo->AddItem(_("Land"));
-    combo->AddItem(_("Mixed"));
-
-    curPos.y += 30;
-    AddText(ID_txtMapSize, curPos, _("Size"), COLOR_YELLOW, FontStyle{}, NormalFont);
+    y += rowHeight;
+    addLabel(ID_txtMapSize, col1, y, _("Size"));
     auto* cbSizeX =
-      AddComboBox(ID_cbMapSizeX, curPos + DrawPoint(100, -5), Extent(50, 20), TextureColor::Grey, NormalFont, 200);
-    AddText(ID_txtMapSizeX, curPos + DrawPoint(160, 5), "x", COLOR_YELLOW, FontStyle::VCENTER, NormalFont);
-    auto* cbSizeY =
-      AddComboBox(ID_cbMapSizeY, curPos + DrawPoint(180, -5), Extent(50, 20), TextureColor::Grey, NormalFont, 200);
-    for(unsigned size = 32; size <= 320; size += 32)
+      AddComboBox(ID_cbMapSizeX, DrawPoint(col1 + ctrlOffset, y), Extent(55, 20), TextureColor::Grey, NormalFont, 200);
+    AddText(ID_txtMapSizeX, DrawPoint(col1 + ctrlOffset + 60, y + 10), "x", COLOR_YELLOW, FontStyle::VCENTER,
+            NormalFont);
+    auto* cbSizeY = AddComboBox(ID_cbMapSizeY, DrawPoint(col1 + ctrlOffset + 75, y), Extent(55, 20),
+                                TextureColor::Grey, NormalFont, 200);
+    for(unsigned size = 32; size <= 512; size += 32)
     {
         const auto strSize = s25util::toStringClassic(size);
         cbSizeX->AddItem(strSize);
         cbSizeY->AddItem(strSize);
     }
 
-    curPos.y += 30;
-    AddText(ID_txtMountainDist, curPos, _("HQ distance to mountain"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    curPos.y += 20;
-    combo = AddComboBox(ID_cbMountainDist, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+    y += rowHeight;
+    addLabel(ID_txtSeed, col1, y, _("Zufallswert"));
+    AddEdit(ID_edtSeed, DrawPoint(col1 + ctrlOffset, y), Extent(80, 20), TextureColor::Grey, NormalFont, 10)
+      ->SetNumberOnly(true);
+    AddTextButton(ID_btRandomSeed, DrawPoint(col1 + ctrlOffset + 85, y), Extent(45, 20), TextureColor::Grey,
+                  _("Neu"), NormalFont, _("Leer = bei jeder Karte ein neuer Zufallswert"));
+
+    y += rowHeight;
+    addLabel(ID_txtLandMass, col1, y, _("Landmasse"));
+    combo = AddComboBox(ID_cbLandMass, DrawPoint(col1 + ctrlOffset, y), ctrlSize, TextureColor::Grey, NormalFont, 100);
+    combo->AddItem(_("Inseln"));
+    combo->AddItem(_("Normal"));
+    combo->AddItem(_("Kontinente"));
+
+    y += rowHeight;
+    addLabel(ID_txtWater, col1, y, _("Wasser (in %)"));
+    addNumberEdit(ID_edtWater, col1 + ctrlOffset, y, 2);
+
+    y += rowHeight;
+    addLabel(ID_txtMountains, col1, y, _("Gebirge (in %)"));
+    addNumberEdit(ID_edtMountains, col1 + ctrlOffset, y, 2);
+
+    y += rowHeight;
+    addLabel(ID_txtRoughness, col1, y, _("Oberfläche"));
+    combo =
+      AddComboBox(ID_cbRoughness, DrawPoint(col1 + ctrlOffset, y), ctrlSize, TextureColor::Grey, NormalFont, 100);
+    combo->AddItem(_("Glatt"));
+    combo->AddItem(_("Normal"));
+    combo->AddItem(_("Rau"));
+
+    y += rowHeight;
+    addLabel(ID_txtRivers, col1, y, _("Rivers:"));
+    AddProgress(ID_pgRivers, DrawPoint(col1 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138, 100);
+
+    y += rowHeight;
+    addLabel(ID_txtMountainDist, col1, y, _("HQ-Abstand Berg"));
+    combo =
+      AddComboBox(ID_cbMountainDist, DrawPoint(col1 + ctrlOffset, y), ctrlSize, TextureColor::Grey, NormalFont, 100);
     combo->AddItem(_("Close"));
     combo->AddItem(_("Normal"));
     combo->AddItem(_("Far"));
     combo->AddItem(_("Very far"));
 
-    curPos.y += 30;
-    AddText(ID_txtIslands, curPos, _("Islands"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    curPos.y += 20;
-    combo = AddComboBox(ID_cbIslands, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
-    combo->AddItem(_("Few"));
-    combo->AddItem(_("Medium"));
-    combo->AddItem(_("Many"));
+    y += rowHeight;
+    AddText(ID_txtLastSeed, DrawPoint(col1, y + 3),
+            lastSeed ? helpers::format(_("Letzte Karte: Zufallswert %1%"), lastSeed) : std::string(), COLOR_GREEN,
+            FontStyle{}, NormalFont);
 
-    curPos.y += 30;
-    AddText(ID_txtClimateTemperature, curPos, _("Temperature"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    curPos.y += 20;
-    combo = AddComboBox(ID_cbClimateTemperature, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+    // ---- Right column: climate and resources ----
+    y = 30;
+    addLabel(ID_txtClimateTemperature, col2, y, _("Temperature"));
+    combo = AddComboBox(ID_cbClimateTemperature, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey,
+                        NormalFont, 100);
     combo->AddItem(_("Kalt"));
     combo->AddItem(_("Kühl"));
     combo->AddItem(_("Gemäßigt"));
     combo->AddItem(_("Warm"));
     combo->AddItem(_("Heiß"));
 
-    curPos.y += 30;
-    AddText(ID_txtClimateHumidity, curPos, _("Humidity"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    curPos.y += 20;
-    combo = AddComboBox(ID_cbClimateHumidity, curPos, comboSize, TextureColor::Grey, NormalFont, 100);
+    y += rowHeight;
+    addLabel(ID_txtClimateHumidity, col2, y, _("Humidity"));
+    combo = AddComboBox(ID_cbClimateHumidity, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey,
+                        NormalFont, 100);
     combo->AddItem(_("Feucht"));
     combo->AddItem(_("Gemäßigt"));
     combo->AddItem(_("Trocken"));
 
-    curPos.y += 30;
-    AddText(ID_txtClimateZoneSize, curPos, _("Climate zone size:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgClimateZoneSize, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138,
+    y += rowHeight;
+    addLabel(ID_txtClimateZoneSize, col2, y, _("Klimagebiete"));
+    AddProgress(ID_pgClimateZoneSize, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138,
                 climateZoneSizeMax - climateZoneSizeMin);
 
-    curPos.y += 35;
-    AddText(ID_txtGold, curPos, _("Gold:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgGoldRatio, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
-    curPos.y += 30;
-    AddText(ID_txtIron, curPos, _("Iron:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgIronRatio, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
-    curPos.y += 30;
-    AddText(ID_txtCoal, curPos, _("Coal:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgCoalRatio, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
-    curPos.y += 30;
-    AddText(ID_txtGranite, curPos, _("Granite:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgGraniteRatio, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
-    curPos.y += 30;
-    AddText(ID_txtRivers, curPos, _("Rivers:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgRivers, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
-    curPos.y += 30;
-    AddText(ID_txtTrees, curPos, _("Trees:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgTrees, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
-    curPos.y += 30;
-    AddText(ID_txtStonePiles, curPos, _("Stone piles:"), COLOR_YELLOW, FontStyle{}, NormalFont);
-    AddProgress(ID_pgStonePiles, DrawPoint(pgrOffset, curPos.y - 5), progressSize, TextureColor::Grey, 139, 138, 100);
+    y += rowHeight;
+    addLabel(ID_txtTrees, col2, y, _("Wald (in %)"));
+    addNumberEdit(ID_edtTrees, col2 + ctrlOffset, y, 3);
 
-    curPos.y += 25;
-    AddTextButton(ID_btBack, curPos, buttonSize, TextureColor::Red1, _("Back"), NormalFont);
-    AddTextButton(ID_btApply, DrawPoint(130, curPos.y), buttonSize, TextureColor::Green2, _("Apply"), NormalFont);
+    y += rowHeight;
+    addLabel(ID_txtStonePiles, col2, y, _("Steinhaufen (in %)"));
+    addNumberEdit(ID_edtStonePiles, col2 + ctrlOffset, y, 3);
+
+    y += rowHeight;
+    addLabel(ID_txtResourceAmount, col2, y, _("Ressourcen (in %)"));
+    addNumberEdit(ID_edtResourceAmount, col2 + ctrlOffset, y, 3);
+
+    y += rowHeight;
+    addLabel(ID_txtGold, col2, y, _("Gold:"));
+    AddProgress(ID_pgGoldRatio, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138, 100);
+    y += rowHeight;
+    addLabel(ID_txtIron, col2, y, _("Iron:"));
+    AddProgress(ID_pgIronRatio, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138, 100);
+    y += rowHeight;
+    addLabel(ID_txtCoal, col2, y, _("Coal:"));
+    AddProgress(ID_pgCoalRatio, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138, 100);
+    y += rowHeight;
+    addLabel(ID_txtGranite, col2, y, _("Granite:"));
+    AddProgress(ID_pgGraniteRatio, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138, 100);
+
+    y += rowHeight + 15;
+    AddTextButton(ID_btBack, DrawPoint(col1 + 130, y), buttonSize, TextureColor::Red1, _("Back"), NormalFont);
+    AddTextButton(ID_btApply, DrawPoint(col2 + 10, y), buttonSize, TextureColor::Green2, _("Apply"), NormalFont);
 
     Reset();
 }
@@ -164,6 +224,15 @@ void iwMapGenerator::Msg_ButtonClick(const unsigned ctrl_id)
             Apply();
             Close();
             break;
+        case ID_btRandomSeed:
+        {
+            // Not game relevant, so a non deterministic random number is fine
+            uint32_t seed = 0;
+            while(seed == 0)
+                seed = std::random_device{}() % 1000000000u;
+            GetCtrl<ctrlEdit>(ID_edtSeed)->SetText(s25util::toStringClassic(seed));
+            break;
+        }
     }
 }
 
@@ -175,8 +244,12 @@ void iwMapGenerator::Apply()
     mapSettings.ratioCoal = GetCtrl<ctrlProgress>(ID_pgCoalRatio)->GetPosition();
     mapSettings.ratioGranite = GetCtrl<ctrlProgress>(ID_pgGraniteRatio)->GetPosition();
     mapSettings.rivers = GetCtrl<ctrlProgress>(ID_pgRivers)->GetPosition();
-    mapSettings.trees = GetCtrl<ctrlProgress>(ID_pgTrees)->GetPosition();
-    mapSettings.stonePiles = GetCtrl<ctrlProgress>(ID_pgStonePiles)->GetPosition();
+    mapSettings.seed = GetNumber<uint32_t>(*GetCtrl<ctrlEdit>(ID_edtSeed), 4000000000u);
+    mapSettings.water = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtWater), 90);
+    mapSettings.mountains = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtMountains), 90);
+    mapSettings.trees = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtTrees), 100);
+    mapSettings.stonePiles = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtStonePiles), 100);
+    mapSettings.resourceAmount = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtResourceAmount), 300);
 
     switch(GetCtrl<ctrlComboBox>(ID_cbMountainDist)->GetSelection().value())
     {
@@ -185,22 +258,22 @@ void iwMapGenerator::Apply()
         case 2: mapSettings.mountainDistance = MountainDistance::Far; break;
         case 3: mapSettings.mountainDistance = MountainDistance::VeryFar; break;
     }
-    switch(GetCtrl<ctrlComboBox>(ID_cbMapStyle)->GetSelection().value())
+    switch(GetCtrl<ctrlComboBox>(ID_cbLandMass)->GetSelection().value())
     {
-        case 0: mapSettings.style = MapStyle::Water; break;
-        case 1: mapSettings.style = MapStyle::Land; break;
-        case 2: mapSettings.style = MapStyle::Mixed; break;
+        case 0: mapSettings.landMass = LandMass::Islands; break;
+        case 1: mapSettings.landMass = LandMass::Normal; break;
+        case 2: mapSettings.landMass = LandMass::Continents; break;
+    }
+    switch(GetCtrl<ctrlComboBox>(ID_cbRoughness)->GetSelection().value())
+    {
+        case 0: mapSettings.roughness = Roughness::Smooth; break;
+        case 1: mapSettings.roughness = Roughness::Normal; break;
+        case 2: mapSettings.roughness = Roughness::Rough; break;
     }
     mapSettings.size.x =
       s25util::fromStringClassic<unsigned>(GetCtrl<ctrlComboBox>(ID_cbMapSizeX)->GetSelectedText().value_or("128"));
     mapSettings.size.y =
       s25util::fromStringClassic<unsigned>(GetCtrl<ctrlComboBox>(ID_cbMapSizeY)->GetSelectedText().value_or("128"));
-    switch(GetCtrl<ctrlComboBox>(ID_cbIslands)->GetSelection().value())
-    {
-        case 0: mapSettings.islands = IslandAmount::Few; break;
-        case 1: mapSettings.islands = IslandAmount::Normal; break;
-        case 2: mapSettings.islands = IslandAmount::Many; break;
-    }
     switch(GetCtrl<ctrlComboBox>(ID_cbClimateTemperature)->GetSelection().value())
     {
         case 0: mapSettings.climateTemperature = ClimateTemperature::Cold; break;
@@ -229,8 +302,13 @@ void iwMapGenerator::Reset()
     GetCtrl<ctrlProgress>(ID_pgCoalRatio)->SetPosition(mapSettings.ratioCoal);
     GetCtrl<ctrlProgress>(ID_pgGraniteRatio)->SetPosition(mapSettings.ratioGranite);
     GetCtrl<ctrlProgress>(ID_pgRivers)->SetPosition(mapSettings.rivers);
-    GetCtrl<ctrlProgress>(ID_pgTrees)->SetPosition(mapSettings.trees);
-    GetCtrl<ctrlProgress>(ID_pgStonePiles)->SetPosition(mapSettings.stonePiles);
+
+    GetCtrl<ctrlEdit>(ID_edtSeed)->SetText(mapSettings.seed ? s25util::toStringClassic(mapSettings.seed) : "");
+    GetCtrl<ctrlEdit>(ID_edtWater)->SetText(mapSettings.water);
+    GetCtrl<ctrlEdit>(ID_edtMountains)->SetText(mapSettings.mountains);
+    GetCtrl<ctrlEdit>(ID_edtTrees)->SetText(mapSettings.trees);
+    GetCtrl<ctrlEdit>(ID_edtStonePiles)->SetText(mapSettings.stonePiles);
+    GetCtrl<ctrlEdit>(ID_edtResourceAmount)->SetText(mapSettings.resourceAmount);
 
     auto* combo = GetCtrl<ctrlComboBox>(ID_cbMountainDist);
     switch(mapSettings.mountainDistance)
@@ -241,12 +319,20 @@ void iwMapGenerator::Reset()
         case MountainDistance::VeryFar: combo->SetSelection(3); break;
     }
 
-    combo = GetCtrl<ctrlComboBox>(ID_cbMapStyle);
-    switch(mapSettings.style)
+    combo = GetCtrl<ctrlComboBox>(ID_cbLandMass);
+    switch(mapSettings.landMass)
     {
-        case MapStyle::Water: combo->SetSelection(0); break;
-        case MapStyle::Land: combo->SetSelection(1); break;
-        case MapStyle::Mixed: combo->SetSelection(2); break;
+        case LandMass::Islands: combo->SetSelection(0); break;
+        case LandMass::Normal: combo->SetSelection(1); break;
+        case LandMass::Continents: combo->SetSelection(2); break;
+    }
+
+    combo = GetCtrl<ctrlComboBox>(ID_cbRoughness);
+    switch(mapSettings.roughness)
+    {
+        case Roughness::Smooth: combo->SetSelection(0); break;
+        case Roughness::Normal: combo->SetSelection(1); break;
+        case Roughness::Rough: combo->SetSelection(2); break;
     }
 
     const auto strSizeX = s25util::toStringClassic(mapSettings.size.x);
@@ -261,14 +347,6 @@ void iwMapGenerator::Reset()
             cbSizeX->SetSelection(i);
         if(cbSizeY->GetText(i) == strSizeY)
             cbSizeY->SetSelection(i);
-    }
-
-    combo = GetCtrl<ctrlComboBox>(ID_cbIslands);
-    switch(mapSettings.islands)
-    {
-        case IslandAmount::Few: combo->SetSelection(0); break;
-        case IslandAmount::Normal: combo->SetSelection(1); break;
-        case IslandAmount::Many: combo->SetSelection(2); break;
     }
 
     combo = GetCtrl<ctrlComboBox>(ID_cbClimateTemperature);

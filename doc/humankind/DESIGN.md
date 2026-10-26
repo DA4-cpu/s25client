@@ -44,6 +44,10 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-23 | **Geritzte Knochen sind drei Waren** (LWP, IWP, MWP) mit gemeinsamer Warenart `GeritzterKnochen` und der Wissensart als Eigenschaft. Eine Ware mit drei Arten gibt es technisch nicht, weil jede Ware ein eigener Lagerplatz ist; über die Tags lassen sie sich trotzdem gemeinsam bestellen. |
 | 2026-10-23 | Der Knochenschnitzer braucht ein **Beil** (Cleaver). Elfenbein kommt später (mit den Tieren der Zonen). |
 | 2026-10-23 | Umsetzung Regler „Wissen“ (technische Auslegung, vom Nutzer änderbar): drei Regler 0–10 je Wissensart, gewichtete Zufallswahl pro Produkt (wie Werkzeug-Prioritäten der Schlosserei); stehen alle möglichen Medien einer Werkstatt auf 0, wird gleich verteilt. Startwerte in `knowledge.lua`. |
+| 2026-10-26 | **Welt:** Der Kartengenerator wird nach dem Online-Generator der RttR-Seite umgebaut und **ersetzt** die Stile Wasser/Land/Gemischt (Landmasse Inseln/Normal/Kontinente, Wasser %, Gebirge %, Oberfläche, Zufallswert). Flüsse, Häfen und HQ-Abstand zum Berg bleiben. |
+| 2026-10-26 | Menge im Generatorfenster: ein Regler **„Ressourcen (in %)“** vervielfacht alle Lua-Regeln (auch Bäume und Steine), dazu **Wald %** und **Steinhaufen %** wie im Online-Generator. |
+| 2026-10-26 | Die neuen Terraingrafiken (Rusty Valley, Polar Night, Wetlands) werden **zusätzliche Böden** der Landschaft „world“; die Dateien liegen im Spielordner, nicht in Git. |
+| 2026-10-26 | Auf jeder Karte kommen **immer alle Zonen** vor (auch auf kleinen Karten). |
 | 2026-10-23 | Medien-WP zählen aus dem **echten Bestand**: in Lagerhaus/HQ/Hafen 0,5-fach, in der Bibliothek 1-fach. Medien unterwegs oder an Flaggen zählen nicht. Die Bibliothek nimmt **alle** Waren mit `knowledge` an (keine Grenze von 3 Eingängen) und bestellt erst, wenn der Bibliothekar da ist. |
 
 ## Zuordnung Humankind → Siedler
@@ -57,7 +61,7 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | Emblematische Quartiere | Besondere Gebäude pro Kultur (Grafik der RttR-Völker wiederverwenden) | geplant |
 | Emblematische Einheiten | Soldaten mit Kultur-Boni (Stärke, Tempo); echte Einheitentypen später | geplant |
 | Zeitalter | Ebenen des Baums (`era = 0…6`), keine eigene Aufstiegsmechanik | fertig (als Datenfeld) |
-| Strategische Ressourcen | Neue Rohstoffe und Warenketten (Lehm, Ton, Papyrus, Baumwolle …, später Pferde, Salpeter …), verteilt nach Klimazonen | geplant (Phase 3/4) |
+| Strategische Ressourcen | Neue Rohstoffe und Warenketten (Lehm, Ton, Papyrus, Baumwolle …, später Pferde, Salpeter …), verteilt nach Klimazonen | Verteilung nach Klima/Zone/Terrain fertig (Welt Stufe 1), neue Rohstoffe geplant (Phase 3) |
 | Wunder | Großbaustellen mit hohen Warenkosten, exklusiv | geplant |
 | Civics, Stabilität, Einfluss | Später; Stabilität z. B. über Versorgung mit Luxuswaren (Wein …) | später |
 | Religion | Tempel-Addon als Ausgangspunkt | später |
@@ -269,6 +273,77 @@ rttr:AddWorkshop{
 
 Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt der Nutzer fest.
 
+## Welt: Kartengenerator mit Klima und Zonen (Stufe 1)
+
+Stand 2026-10-26. Gilt nur für **erzeugte Karten** (Zufallskarte im Kartenauswahlmenü).
+
+### Ablauf der Erzeugung (`mapGenerator/RandomMap.cpp`)
+
+1. **Land und Wasser wie im Online-Generator** (`Landscape.cpp`): ein fraktales Rauschen (wiederholt sich an den
+   Kartenrändern, Zeilen halb so hoch wie Spalten wie im Spiel) wird nach Rang geschnitten: die untersten `Wasser %`
+   der Knoten werden Wasser, die obersten `Gebirge %` des Landes Gebirge. Land steigt flach von der Küste an (etwa 10
+   Höhenstufen), Gebirge sind 2–3-mal so hoch. Landmasse bestimmt die Größe der Formen (Inseln klein, Kontinente groß),
+   Oberfläche die Feinheit (Oktaven) und das Höhenrauschen.
+2. **Flüsse** fließen bergab von einer zufälligen hohen Landstelle bis zum Meer, in einen anderen Fluss oder in eine
+   Senke (dort kleiner Teich). Regler „Flüsse“: bei 100 % etwa ein Fluss je 1500 Knoten.
+3. **Klima:** Temperatur und Feuchtigkeit wie bisher (Regler Temperatur/Feuchtigkeit/Klimagebiete), dazu Höhe in
+   Prozent (0 = Meer, 100 = höchster Punkt). Mit der Höhe wird es kälter (`heightCooling`).
+4. **Texturen** nach Höhe und Klima. Gebirgstexturen werden nach Temperatur gewählt (Grönland/Ödland/Winter-Gebirge),
+   Schnee nur auf den obersten 8 % der Gipfel.
+5. **Häfen, Hauptquartiere:** Jeder Spieler kommt auf die Landmasse mit dem meisten Platz pro Spieler. Auf Inselkarten
+   bekommt so jeder seine eigene Insel, auf Karten mit einem großen Kontinent starten alle dort.
+6. **Zonen** (`Zones.cpp`): alle Zonen aus Lua, jede genau einmal als zusammenhängendes Gebiet, jeder Knoten in genau
+   einer Zone. Sie wachsen gleichzeitig von weit verteilten Startpunkten mit welligen Grenzen.
+7. **Terrain-Merkmale:** Süß-/Salzwasser nach Größe des Gewässers (`freshwaterMaxSize`), Flüsse immer Süßwasser, Ufer und
+   Nähe (`nearWaterDistance`).
+8. **Ressourcen nach Lua-Regeln** (`Resources.cpp`), in der Reihenfolge der Datei.
+9. Speichern als `Random.swd` (Name „Zufall <Zufallswert>“) und ein **Vorschaubild** `Random_Vorschau.bmp` im
+   Kartenordner (`<RTTR_USERDATA>/MAPS`), von oben nach unten: Zonen, Temperatur, Feuchtigkeit, Höhe, Ressourcen.
+
+Gleicher Zufallswert und gleiche Einstellungen ergeben dieselbe Karte. Leeres Feld = jedes Mal ein neuer Wert; der
+zuletzt benutzte steht im Generatorfenster.
+
+### Datenformat (`data/RTTR/gamedata/world/mapgen.lua`)
+
+Ausführliche Anleitung steht in der Datei. Kurz:
+
+```lua
+rttr:SetMapClimate{ heightCooling = 30, nearWaterDistance = 4, freshwaterMaxSize = 3, previewImages = true }
+rttr:AddMapZone{ name = "Afrika", title = "Afrika", color = 0xE08030, packages = {
+    { name = "regenwald", temperature = {65, 100}, humidity = {55, 100}, height = {0, 40},
+      trees = { Palm1 = 2, Pineapple = 1 }, animals = { Deer = 2, Duck = 1 } },
+    { trees = { Oak = 1 } } -- ohne Bereiche: gilt überall sonst
+} }
+rttr:AddMapResource{ name = "Steinhaufen", object = "stones", amount = "stonePiles",
+    terrain = { "land", "mountain" }, cluster = 8, density = 80,
+    weights = { { temperature = {60, 100}, humidity = {60, 100}, factor = 0.3 } } }
+```
+
+- Objekte: `trees`, `stones`, `animals`, `decoration`, `fish`, `groundwater`, `coal`, `iron`, `gold`, `granite`.
+  Baum- und Tierarten kommen aus dem Paket der Zone (erstes passendes Paket). Enten nur auf Wasser.
+- Terrain: `land`, `mountain`, `freshwater`, `saltwater`, `river`, `shore_fresh`, `shore_salt`, `shore_river`,
+  `near_fresh`, `near_salt`, `near_river` (mehrere = eines muss passen).
+- Menge: `amount` = Prozent der passenden Knoten (Mittel), oder ein Regler: `"forest"`, `"stonePiles"`, `"coal"`,
+  `"iron"`, `"gold"`, `"granite"`. Alles mal Regler „Ressourcen (in %)“. `weights` ändern die Menge je Klima.
+- Klumpen: `cluster` = Größe in Knoten (glattes Rauschen unter einer Schwelle), `density` = belegter Anteil darin.
+  Bodenschätze werden gemeinsam in Klumpen verteilt (Anteile nach ihren Mengen, in der Mitte reich).
+- Optional: `temperature`/`humidity`/`height` (harte Grenzen), `zones`, `hqDistance = {min, max}`.
+- Fehler im Lua (Tippfehler, unbekannte Art, Bereich falsch herum …) werden beim Laden gemeldet.
+
+### Neue Böden (Texturpaket)
+
+18 zusätzliche Böden in `world.lua` (`w_wet_*`, `w_rust_*`, `w_polar_*`, s2Id 44–61) mit `optional = true`: Der
+Generator nutzt sie nur, wenn die Datei im Spielordner liegt (`GFX/TEXTURES/TEX5_WETLANDS.LBM`, `TEX6_RUSTY.LBM`,
+`TEX7_POLAR.LBM`, Kopien aus dem Zip). Ihre Klimawerte sind Platzhalter. Das S2-Kartenformat erlaubt höchstens 64
+Böden je Landschaft (6 Bit); „world“ hat jetzt 62.
+
+### Grenzen
+
+- Neue Pflanzen und Tiere (Mahagoni, Schimpanse …) und Lehm brauchen erst Kartenobjekte, Grafiken und ein Speicherformat
+  (das S2-Format kennt nur 9 Baumarten und 6 Tierarten). Bis dahin stehen vorhandene Arten in den Paketen.
+- Eisbären lassen sich im Kartenformat nicht speichern.
+- Originalkarten werden nicht verändert.
+
 ## Phasen (Roadmap)
 
 1. **Fundament** – Addon, Lua-Technologiebaum, Forschung mit Warenkosten, Freischalten von S2-Gebäuden, Exklusivität,
@@ -286,7 +361,7 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
         Zahlenwerte sind Platzhalter)*
 3. **Neue Rohstoffe und Warenketten** – Lehm (Kartenobjekt, Lehmgrube), Ton, Tontafeln, Ziegel, Vasen; Lehm und Ziegel
    als Baustoff (Baukosten über Tags); Papyrus, Baumwolle/Knotenschnüre, Steintafeln. Später Pferde, Salpeter …
-4. **Welt** – Kartengenerator mit Klimazonen (Temperatur, Feuchtigkeit, Höhe) und 7 geographischen Zonen mit eigener
+4. **Welt** – *(Stufe 1 fertig 2026-10-26, siehe oben)* Kartengenerator mit Klimazonen (Temperatur, Feuchtigkeit, Höhe) und 7 geographischen Zonen mit eigener
    Flora und Fauna; Rohstoffe wie Lehm nach Klima verteilt. Nach Wunsch des Nutzers (Konzept 2026-10-23): Umbau mit
    dem Online-Kartengenerator der RttR-Seite als Vorbild (Beispielkarten in `MAPS/`), neue Terraingrafiken
    (`TEX_RUSTY_POLAR_RC2_neue_Landschaftsgrafiken.zip`), Ressourcenverteilung per Lua (Höhe/Temperatur/Feuchte,
@@ -306,7 +381,8 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
 - Wie viele Kulturen pro Ära (Humankind hat 10+)?
 - Warenkosten der Forschung: weiter aus dem Lagerbestand nehmen oder von einem Gebäude per Träger bestellen lassen?
 - Warenlimit für Lager (Idee des Nutzers, noch nicht ausgearbeitet).
-- Welt: Gelten Klimazonen und Rohstoffverteilung nur für generierte Karten oder auch für Originalkarten?
+- Welt: Gelten Klimazonen und Rohstoffverteilung nur für generierte Karten oder auch für Originalkarten? (Stufe 1: nur
+  generierte Karten)
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 
@@ -327,7 +403,8 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
 
 ## Bekannte Probleme im Fork (Stand 40aa9a2, nicht durch den Zivilisationsmodus verursacht)
 
-- `Test_gameData/LoadGameData` erwartet 14 Kanten, durch `world.lua` sind es 28.
+- `Test_gameData/LoadGameData` erwartet 14 Kanten, durch `world.lua` sind es 28 (seit Welt Stufe 1 mit den Böden des
+  Texturpakets 33).
 - 3 KI-Tests (`AI/BuildWoodIndustry`, `AI/ExpandWhenNoSpace`, `AI/DoBuildMilitaryBuildingsOutsideComputerBarrier`)
   schlagen nach den eigenen KI-Änderungen fehl.
 - 22 Cheat-Tests (`CheatsTests/*`, `CheatCommandTrackerTests/*`) schlagen fehl.

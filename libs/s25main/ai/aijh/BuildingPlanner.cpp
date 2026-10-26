@@ -541,7 +541,7 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
             freeSpace += GetNumBuildingSites(bld) * building.libraryCapacity;
             const bool needMore = numWaiting > freeSpace;
             const unsigned wanted = numExisting + (needMore ? 1u : 0u);
-            buildingsWanted[bld] = std::min(wanted, potentialWorkers, 10);
+            buildingsWanted[bld] = std::min({wanted, potentialWorkers, 10u});
         } else if(building.workDesc.waresNeeded.empty())
             buildingsWanted[bld] = std::min(1u, potentialWorkers);
 
@@ -552,7 +552,7 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
                 numInputs += aijh.AmountInStorage(input);
             const unsigned wanted = numInputs == 0 ? 0u : 1u + numInputs / 8u;
             // Never plan less than existing (would not destroy them anyway), but not more than workers are available
-            buildingsWanted[bld] = std::min(std::max(wanted, numExisting), potentialWorkers, 10);
+            buildingsWanted[bld] = std::min({std::max(wanted, numExisting), potentialWorkers, 10u});
         }
     }
 }

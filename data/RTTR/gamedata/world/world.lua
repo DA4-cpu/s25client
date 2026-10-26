@@ -414,6 +414,7 @@ rttr:AddTerrain{
 	s2Id = 18,
 	edgePriority = 30,
 	kind = "mountain",
+	temperature = 85, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {0, 48, 32, 31},
 	color = 0xFF706c54
@@ -425,6 +426,7 @@ rttr:AddTerrain{
 	s2Id = 19,
 	edgePriority = 30,
 	kind = "mountain",
+	temperature = 85, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {48, 48, 32, 31},
 	color = 0xFF706454
@@ -436,6 +438,7 @@ rttr:AddTerrain{
 	s2Id = 20,
 	edgePriority = 30,
 	kind = "mountain",
+	temperature = 85, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {96, 48, 32, 31},
 	color = 0xFF684c24
@@ -447,6 +450,7 @@ rttr:AddTerrain{
 	s2Id = 21,
 	edgePriority = 30,
 	kind = "mountain",
+	temperature = 85, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {144, 48, 32, 31},
 	color = 0xFF684c24
@@ -630,6 +634,7 @@ rttr:AddTerrain{
 	s2Id = 32,
 	edgePriority = 48,
 	kind = "mountain",
+	temperature = 15, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {0, 48, 32, 31},
 	color = 0xFF54586c
@@ -641,6 +646,7 @@ rttr:AddTerrain{
 	s2Id = 33,
 	edgePriority = 63,
 	kind = "mountain",
+	temperature = 15, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {48, 48, 32, 31},
 	color = 0xFF60607c
@@ -652,6 +658,7 @@ rttr:AddTerrain{
 	s2Id = 34,
 	edgePriority = 58,
 	kind = "mountain",
+	temperature = 15, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {96, 48, 32, 31},
 	color = 0xFF686c8c
@@ -663,6 +670,7 @@ rttr:AddTerrain{
 	s2Id = 35,
 	edgePriority = 53,
 	kind = "mountain",
+	temperature = 15, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	texture = texFile,
 	pos = {144, 48, 32, 31},
 	color = 0xFF686c8c
@@ -770,4 +778,306 @@ rttr:AddTerrain{
 	texture = texFile,
 	pos = {48, 0, 32, 31},
 	color = 0xFF0070b0
+}
+
+
+-- ===== Zusätzliche Böden aus dem Texturpaket "Rusty Polar" (settlers2.net, Merri) =====
+-- Die Dateien gehören NICHT ins Git-Repo (bearbeitete Original-Grafiken). Sie liegen im Spielordner unter
+--   <S2-Ordner>/GFX/TEXTURES/TEX5_WETLANDS.LBM, TEX6_RUSTY.LBM, TEX7_POLAR.LBM
+-- (Kopien von GFX/TEXTURES/TEX5.LBM, TEX6.LBM, TEX7.LBM aus TEX_RUSTY_POLAR_RC2_neue_Landschaftsgrafiken.zip).
+-- "optional = true": Fehlt eine Datei, verwendet der Kartengenerator diese Böden einfach nicht.
+-- Jede Gruppe kopiert die 6 bebaubaren Böden ihrer Landschaft mit dem neuen Aussehen.
+-- humidity/temperature legen fest, bei welchem Klima der Generator den Boden wählt (der nächstgelegene Boden gewinnt).
+-- Die Werte sind PLATZHALTER von Claude: die relative Lage der Originalböden, verschoben in eine Lücke des Klimas
+-- (Wetlands: heiß und sehr feucht, Rusty: gemäßigt warm und trocken, Polar: kühl). s2Id 44-61 (höchstens 63).
+
+-- Wetlands (Ersatz für Grönland): feuchter, mit nassen Steinen statt trockener Stellen
+texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX5_WETLANDS.LBM"
+rttr:AddTerrainEdge{
+	name = "w_wet_meadow",
+	landscape = "world",
+	texture = texFile,
+	pos = {192, 224, 64, 16}
+}
+rttr:AddTerrainEdge{
+	name = "w_wet_desert",
+	landscape = "world",
+	texture = texFile,
+	pos = {192, 208, 64, 16}
+}
+rttr:AddTerrain{
+	name = "w_wet_meadowFlowers",
+	landscape = "world",
+	edgeType = "w_wet_meadow",
+	s2Id = 44,
+	edgePriority = 35,
+	kind = "land",
+	humidity = 95, -- PLATZHALTER (Original w_gl_meadowFlowers: 75)
+	temperature = 81, -- PLATZHALTER (Original: 48)
+	texture = texFile,
+	pos = {144, 0, 32, 31},
+	color = 0xFF5c943e,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_wet_savannah",
+	landscape = "world",
+	edgeType = "w_wet_desert",
+	s2Id = 45,
+	edgePriority = 15,
+	kind = "land",
+	humidity = 86, -- PLATZHALTER (Original w_gl_savannah: 45)
+	temperature = 92, -- PLATZHALTER (Original: 60)
+	texture = texFile,
+	pos = {0, 96, 32, 31},
+	color = 0xFF4b893c,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_wet_meadow1",
+	landscape = "world",
+	edgeType = "w_wet_meadow",
+	s2Id = 46,
+	edgePriority = 30,
+	kind = "land",
+	humidity = 100, -- PLATZHALTER (Original w_gl_meadow1: 90)
+	temperature = 78, -- PLATZHALTER (Original: 45)
+	texture = texFile,
+	pos = {48, 96, 32, 31},
+	color = 0xFF52923a,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_wet_meadow2",
+	landscape = "world",
+	edgeType = "w_wet_meadow",
+	s2Id = 47,
+	edgePriority = 25,
+	kind = "land",
+	humidity = 92, -- PLATZHALTER (Original w_gl_meadow2: 65)
+	temperature = 83, -- PLATZHALTER (Original: 50)
+	texture = texFile,
+	pos = {96, 96, 32, 31},
+	color = 0xFF52913a,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_wet_meadow3",
+	landscape = "world",
+	edgeType = "w_wet_meadow",
+	s2Id = 48,
+	edgePriority = 20,
+	kind = "land",
+	humidity = 89, -- PLATZHALTER (Original w_gl_meadow3: 55)
+	temperature = 87, -- PLATZHALTER (Original: 55)
+	texture = texFile,
+	pos = {144, 96, 32, 31},
+	color = 0xFF55933b,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_wet_steppe",
+	landscape = "world",
+	edgeType = "w_wet_desert",
+	s2Id = 49,
+	edgePriority = 60,
+	kind = "land",
+	humidity = 80, -- PLATZHALTER (Original w_gl_steppe: 25)
+	temperature = 95, -- PLATZHALTER (Original: 63)
+	texture = texFile,
+	pos = {0, 144, 32, 31},
+	color = 0xFF518049,
+	optional = true
+}
+
+-- Rusty Valley (Ersatz für Ödland): trocken, sandig, rostig
+texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX6_RUSTY.LBM"
+rttr:AddTerrainEdge{
+	name = "w_rust_mountain",
+	landscape = "world",
+	texture = texFile,
+	pos = {192, 224, 64, 16}
+}
+rttr:AddTerrainEdge{
+	name = "w_rust_wasteland",
+	landscape = "world",
+	texture = texFile,
+	pos = {192, 208, 64, 16}
+}
+rttr:AddTerrain{
+	name = "w_rust_flowerPasture",
+	landscape = "world",
+	edgeType = "w_rust_mountain",
+	s2Id = 50,
+	edgePriority = 40,
+	kind = "land",
+	humidity = 35, -- PLATZHALTER (Original w_wl_flowerPasture: 70)
+	temperature = 50, -- PLATZHALTER (Original: 65)
+	texture = texFile,
+	pos = {144, 0, 32, 31},
+	color = 0xFFa07544,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_rust_dSteppe",
+	landscape = "world",
+	edgeType = "w_rust_mountain",
+	s2Id = 51,
+	edgePriority = 40,
+	kind = "land",
+	humidity = 12, -- PLATZHALTER (Original w_wl_dSteppe: 20)
+	temperature = 61, -- PLATZHALTER (Original: 85)
+	texture = texFile,
+	pos = {0, 96, 32, 31},
+	color = 0xFF8f7552,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_rust_pasture1",
+	landscape = "world",
+	edgeType = "w_rust_mountain",
+	s2Id = 52,
+	edgePriority = 40,
+	kind = "land",
+	humidity = 40, -- PLATZHALTER (Original w_wl_pasture1: 80)
+	temperature = 53, -- PLATZHALTER (Original: 70)
+	texture = texFile,
+	pos = {48, 96, 32, 31},
+	color = 0xFF917652,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_rust_pasture2",
+	landscape = "world",
+	edgeType = "w_rust_mountain",
+	s2Id = 53,
+	edgePriority = 40,
+	kind = "land",
+	humidity = 26, -- PLATZHALTER (Original w_wl_pasture2: 50)
+	temperature = 55, -- PLATZHALTER (Original: 75)
+	texture = texFile,
+	pos = {96, 96, 32, 31},
+	color = 0xFF927840,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_rust_pasture3",
+	landscape = "world",
+	edgeType = "w_rust_mountain",
+	s2Id = 54,
+	edgePriority = 40,
+	kind = "land",
+	humidity = 19, -- PLATZHALTER (Original w_wl_pasture3: 35)
+	temperature = 58, -- PLATZHALTER (Original: 80)
+	texture = texFile,
+	pos = {144, 96, 32, 31},
+	color = 0xFF9d733f,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_rust_lSteppe",
+	landscape = "world",
+	edgeType = "w_rust_wasteland",
+	s2Id = 55,
+	edgePriority = 60,
+	kind = "land",
+	humidity = 5, -- PLATZHALTER (Original w_wl_lSteppe: 5)
+	temperature = 66, -- PLATZHALTER (Original: 95)
+	texture = texFile,
+	pos = {0, 144, 32, 31},
+	color = 0xFF9c7a4a,
+	optional = true
+}
+
+-- Polar Night (Ersatz für Winterwelt): Spätherbst, erster Schnee, grüne Flecken
+texFile = "<RTTR_GAME>/GFX/TEXTURES/TEX7_POLAR.LBM"
+rttr:AddTerrainEdge{
+	name = "w_polar_tundra",
+	landscape = "world",
+	texture = texFile,
+	pos = {192, 224, 64, 16}
+}
+rttr:AddTerrain{
+	name = "w_polar_tundraFlower",
+	landscape = "world",
+	edgeType = "w_polar_tundra",
+	s2Id = 56,
+	edgePriority = 13,
+	kind = "land",
+	humidity = 82, -- PLATZHALTER (Original w_ww_tundraFlower: 85)
+	temperature = 46, -- PLATZHALTER (Original: 32)
+	texture = texFile,
+	pos = {144, 0, 32, 31},
+	color = 0xFF84884f,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_polar_taiga",
+	landscape = "world",
+	edgeType = "w_polar_tundra",
+	s2Id = 57,
+	edgePriority = 18,
+	kind = "land",
+	humidity = 64, -- PLATZHALTER (Original w_ww_taiga: 60)
+	temperature = 45, -- PLATZHALTER (Original: 30)
+	texture = texFile,
+	pos = {0, 96, 32, 31},
+	color = 0xFF9e9d7e,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_polar_tundra1",
+	landscape = "world",
+	edgeType = "w_polar_tundra",
+	s2Id = 58,
+	edgePriority = 23,
+	kind = "land",
+	humidity = 90, -- PLATZHALTER (Original w_ww_tundra1: 95)
+	temperature = 36, -- PLATZHALTER (Original: 10)
+	texture = texFile,
+	pos = {48, 96, 32, 31},
+	color = 0xFF808015,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_polar_tundra2",
+	landscape = "world",
+	edgeType = "w_polar_tundra",
+	s2Id = 59,
+	edgePriority = 28,
+	kind = "land",
+	humidity = 60, -- PLATZHALTER (Original w_ww_tundra2: 55)
+	temperature = 38, -- PLATZHALTER (Original: 15)
+	texture = texFile,
+	pos = {96, 96, 32, 31},
+	color = 0xFF808014,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_polar_tundra3",
+	landscape = "world",
+	edgeType = "w_polar_tundra",
+	s2Id = 60,
+	edgePriority = 33,
+	kind = "land",
+	humidity = 75, -- PLATZHALTER (Original w_ww_tundra3: 75)
+	temperature = 41, -- PLATZHALTER (Original: 20)
+	texture = texFile,
+	pos = {144, 96, 32, 31},
+	color = 0xFF7b7b10,
+	optional = true
+}
+rttr:AddTerrain{
+	name = "w_polar_tundra4",
+	landscape = "world",
+	edgeType = "w_polar_tundra",
+	s2Id = 61,
+	edgePriority = 8,
+	kind = "land",
+	humidity = 30, -- PLATZHALTER (Original w_ww_tundra4: 15)
+	temperature = 34, -- PLATZHALTER (Original: 5)
+	texture = texFile,
+	pos = {0, 144, 32, 31},
+	color = 0xFFa7aa9d,
+	optional = true
 }

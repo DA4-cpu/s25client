@@ -14,6 +14,7 @@
 #include "controls/ctrlOptionGroup.h"
 #include "controls/ctrlPercent.h"
 #include "controls/ctrlProgress.h"
+#include "controls/ctrlText.h"
 #include "desktops/dskGameLobby.h"
 #include "drivers/VideoDriverWrapper.h"
 #include "helpers/format.hpp"
@@ -36,9 +37,9 @@
 #include <functional>
 
 // LCOV_EXCL_START
-BOOST_TEST_DONT_PRINT_LOG_VALUE(rttr::mapGenerator::MapStyle)
+BOOST_TEST_DONT_PRINT_LOG_VALUE(rttr::mapGenerator::LandMass)
+BOOST_TEST_DONT_PRINT_LOG_VALUE(rttr::mapGenerator::Roughness)
 BOOST_TEST_DONT_PRINT_LOG_VALUE(rttr::mapGenerator::MountainDistance)
-BOOST_TEST_DONT_PRINT_LOG_VALUE(rttr::mapGenerator::IslandAmount)
 // LCOV_EXCL_STOP
 
 BOOST_FIXTURE_TEST_SUITE(IngameWindows, uiHelper::Fixture)
@@ -83,6 +84,10 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     const auto expectedRivers = rttr::test::randomValue(0u, 100u);
     const auto expectedTrees = rttr::test::randomValue(0u, 100u);
     const auto expectedStonePiles = rttr::test::randomValue(0u, 100u);
+    const auto expectedWater = rttr::test::randomValue(0u, 90u);
+    const auto expectedMountains = rttr::test::randomValue(0u, 90u);
+    const auto expectedResources = rttr::test::randomValue(0u, 300u);
+    const auto expectedSeed = rttr::test::randomValue(1u, 100000u);
 
     WorldDescription worldDesc;
     loadGameData(worldDesc);
@@ -90,16 +95,19 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     BOOST_TEST_REQUIRE(worldLandscape);
 
     rttr::mapGenerator::MapSettings settings;
-    iwMapGenerator wnd(settings);
+    iwMapGenerator wnd(settings, 1234u);
     // UI values are set according to current values. Check that and adjust to random value to test apply-button
     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbNumPlayers)->GetSelection().value()
                == settings.numPlayers - 2u);
     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbNumPlayers)->SetSelection(expectedNumPlayers - 2);
     // The generator always uses the combined "world" landscape (climate zones), the landscape can't be chosen anymore
     BOOST_TEST(settings.type == worldLandscape);
-    BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapStyle)->GetSelection().value()
-               == static_cast<unsigned>(settings.style));
-    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapStyle)->SetSelection(1); // MapStyle::Land
+    BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbLandMass)->GetSelection().value()
+               == static_cast<unsigned>(settings.landMass));
+    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbLandMass)->SetSelection(0); // Islands
+    BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbRoughness)->GetSelection().value()
+               == static_cast<unsigned>(settings.roughness));
+    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbRoughness)->SetSelection(2); // Rough
     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapSizeX)->GetSelectedText().value()
                == s25util::toStringClassic(settings.size.x));
     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapSizeY)->GetSelectedText().value()
@@ -108,8 +116,25 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapSizeY)->SetSelection(3);                              // 128
     BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMountainDist)->GetSelection().value() == 1u); // Normal
     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMountainDist)->SetSelection(3);                          // VeryFar
-    BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbIslands)->GetSelection().value() == 0u);      // Few
-    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbIslands)->SetSelection(2); // IslandAmount::Many
+    // Number fields
+    BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtSeed)->GetText().empty()); // 0 = random
+    wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtSeed)->SetText(expectedSeed);
+    BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtWater)->GetText()
+               == s25util::toStringClassic(settings.water));
+    wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtWater)->SetText(expectedWater);
+    BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtMountains)->GetText()
+               == s25util::toStringClassic(settings.mountains));
+    wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtMountains)->SetText(expectedMountains);
+    BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtTrees)->GetText()
+               == s25util::toStringClassic(settings.trees));
+    wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtTrees)->SetText(expectedTrees);
+    BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtStonePiles)->GetText()
+               == s25util::toStringClassic(settings.stonePiles));
+    wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtStonePiles)->SetText(expectedStonePiles);
+    BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtResourceAmount)->GetText()
+               == s25util::toStringClassic(settings.resourceAmount));
+    wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtResourceAmount)->SetText(expectedResources);
+    // Sliders
     BOOST_TEST(wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgGoldRatio)->GetPosition() == settings.ratioGold);
     wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgGoldRatio)->SetPosition(expectedGoldRatio);
     BOOST_TEST(wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgIronRatio)->GetPosition() == settings.ratioIron);
@@ -120,19 +145,21 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgGraniteRatio)->SetPosition(expectedGraniteRatio);
     BOOST_TEST(wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgRivers)->GetPosition() == settings.rivers);
     wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgRivers)->SetPosition(expectedRivers);
-    BOOST_TEST(wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgTrees)->GetPosition() == settings.trees);
-    wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgTrees)->SetPosition(expectedTrees);
-    BOOST_TEST(wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgStonePiles)->GetPosition() == settings.stonePiles);
-    wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgStonePiles)->SetPosition(expectedStonePiles);
+    // The seed of the last map is shown
+    BOOST_TEST(wnd.GetCtrl<ctrlText>(iwMapGenerator::ID_txtLastSeed)->GetText().find("1234") != std::string::npos);
     wnd.Msg_ButtonClick(iwMapGenerator::ID_btApply);
     BOOST_TEST(wnd.ShouldBeClosed());
 
     BOOST_TEST(settings.numPlayers == expectedNumPlayers);
     BOOST_TEST(settings.type == worldLandscape);
     BOOST_TEST(settings.size == MapExtent(256, 128));
-    BOOST_TEST(settings.style == rttr::mapGenerator::MapStyle::Land);
+    BOOST_TEST(settings.landMass == rttr::mapGenerator::LandMass::Islands);
+    BOOST_TEST(settings.roughness == rttr::mapGenerator::Roughness::Rough);
     BOOST_TEST(settings.mountainDistance == rttr::mapGenerator::MountainDistance::VeryFar);
-    BOOST_TEST(settings.islands == rttr::mapGenerator::IslandAmount::Many);
+    BOOST_TEST(settings.seed == expectedSeed);
+    BOOST_TEST(settings.water == expectedWater);
+    BOOST_TEST(settings.mountains == expectedMountains);
+    BOOST_TEST(settings.resourceAmount == expectedResources);
     BOOST_TEST(settings.ratioGold == expectedGoldRatio);
     BOOST_TEST(settings.ratioIron == expectedIronRatio);
     BOOST_TEST(settings.ratioCoal == expectedCoalRatio);
@@ -140,6 +167,17 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     BOOST_TEST(settings.rivers == expectedRivers);
     BOOST_TEST(settings.trees == expectedTrees);
     BOOST_TEST(settings.stonePiles == expectedStonePiles);
+}
+
+BOOST_AUTO_TEST_CASE(IwMapGeneratorRandomSeedButton)
+{
+    rttr::mapGenerator::MapSettings settings;
+    iwMapGenerator wnd(settings);
+    BOOST_TEST(wnd.GetCtrl<ctrlText>(iwMapGenerator::ID_txtLastSeed)->GetText().empty());
+    wnd.Msg_ButtonClick(iwMapGenerator::ID_btRandomSeed);
+    BOOST_TEST(!wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtSeed)->GetText().empty());
+    wnd.Msg_ButtonClick(iwMapGenerator::ID_btApply);
+    BOOST_TEST(settings.seed > 0u);
 }
 
 BOOST_AUTO_TEST_CASE(ConnectWindow)

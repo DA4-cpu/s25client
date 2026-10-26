@@ -56,6 +56,8 @@ private:
 
     CreateServerInfo csi;
     rttr::mapGenerator::MapSettings rndMapSettings;
+    /// Seed of the last generated random map (0 = none yet)
+    uint32_t lastRandMapSeed = 0;
     boost::thread* mapGenThread;
     boost::filesystem::path newRandMapPath;
     std::string randMapGenError;

@@ -79,6 +79,9 @@ struct TerrainDesc
     std::string texturePath;
     Rect posInTexture;
     unsigned minimapColor;
+    /// The texture file is optional (e.g. an additional texture pack in the game folder): The map generator only uses
+    /// this terrain if the file exists
+    bool optional;
 
     TerrainDesc(CheckedLuaTable luaData, const WorldDescription& worldDesc);
     ~TerrainDesc();

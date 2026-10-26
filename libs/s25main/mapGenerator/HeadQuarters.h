@@ -25,6 +25,11 @@ namespace rttr::mapGenerator {
 std::vector<MapPoint> FindLargestConnectedArea(const Map& map);
 
 /**
+ * Find all connected land areas of the map (like FindLargestConnectedArea), sorted by size, largest first.
+ */
+std::vector<std::vector<MapPoint>> FindConnectedAreas(const Map& map);
+
+/**
  * Finds suitable positions for a HQ in the specified area of the map. The resulting HQ positions are sorted by
  * quality. To find suitable positions, this function does:
  * 1. look for points within a buildable area of radius 2 (min. req. of HQ)
@@ -129,5 +134,16 @@ void PlaceHeadquarter(Map& map, const T_Container& area, MountainDistance distan
  * @throw runtime_error
  */
 void PlaceHeadquarters(Map& map, RandomUtility& rnd, int number, MountainDistance distance, int retries = 10);
+
+/**
+ * Places the HQs of all players on the connected land areas (islands, continents): Each player goes to the area with
+ * the most space per player (size / (players already there + 1)), so on maps with many islands each player gets his
+ * own island and on maps with one large continent all players start there. Areas which are too small for an HQ are
+ * skipped.
+ *
+ * @throw runtime_error if no valid position is found
+ */
+void PlaceHeadquartersOnLandmasses(Map& map, RandomUtility& rnd, unsigned number, MountainDistance distance,
+                                   int retries = 10);
 
 } // namespace rttr::mapGenerator

@@ -8,6 +8,7 @@
 #include "DescriptionContainer.h"
 #include "EdgeDesc.h"
 #include "LandscapeDesc.h"
+#include "MapGenDesc.h"
 #include "TechnologyDesc.h"
 #include "TerrainDesc.h"
 #include <optional>
@@ -44,6 +45,8 @@ struct WorldDescription
     std::vector<ByproductDesc> byproducts;
     /// Default setting of the regulator "Wissen" (weights 0..10 for LWP, IWP, MWP). Not set: all equal
     std::optional<KnowledgeValues> knowledgeDistribution;
+    /// Random map generator: climate, zones and resource rules (gamedata/world/mapgen.lua)
+    MapGenDesc mapGen;
     // Convenience accessors
     template<class T>
     const T& get(DescIdx<T> idx) const

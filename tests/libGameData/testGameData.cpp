@@ -328,6 +328,137 @@ BOOST_AUTO_TEST_CASE(DetectInvalidWaresAndWorkshops)
       + " }");
 }
 
+BOOST_AUTO_TEST_CASE(LoadMapGenerator)
+{
+    rttr::test::TmpFolder tmp;
+    {
+        bnw::ofstream file(tmp / "default.lua");
+        file << R"(
+rttr:SetMapClimate{ heightCooling = 25, nearWaterDistance = 3, freshwaterMaxSize = 1.5, previewImages = false }
+rttr:AddMapZone{ name = "Afrika", title = "Afrika", color = 0xC08040, packages = {
+    { name = "regenwald", temperature = {65, 100}, humidity = {60, 100}, height = {0, 40},
+      trees = { Palm1 = 2, Palm2 = 1 }, animals = { Deer = 1, Duck = 3 } },
+    { trees = { Oak = 1 } }
+} }
+rttr:AddMapZone{ name = "Europa" }
+rttr:AddMapResource{ name = "Wald", object = "trees", amount = "forest", terrain = { "land", "mountain" },
+                     cluster = 6, density = 80, zones = { "Afrika" },
+                     weights = { { temperature = {70, 100}, humidity = {0, 30}, factor = 0.3 } } }
+rttr:AddMapResource{ name = "Lehmprobe", object = "stones", amount = 4.5, terrain = { "near_river", "shore_fresh" },
+                     temperature = {50, 100}, hqDistance = {0, 20} }
+)";
+    }
+    WorldDescription desc;
+    GameDataLoader loader(desc, tmp);
+    BOOST_TEST_REQUIRE(loader.Load());
+    const MapGenDesc& mapGen = desc.mapGen;
+    BOOST_TEST(mapGen.climateSet);
+    BOOST_TEST(mapGen.climate.heightCooling == 25u);
+    BOOST_TEST(mapGen.climate.nearWaterDistance == 3u);
+    BOOST_TEST(mapGen.climate.freshwaterMaxSize == 1.5);
+    BOOST_TEST(!mapGen.climate.previewImages);
+
+    BOOST_TEST_REQUIRE(mapGen.zones.size() == 2u);
+    const MapZoneDesc& africa = mapGen.zones[0];
+    BOOST_TEST(africa.name == "Afrika");
+    BOOST_TEST(africa.color == 0xC08040u);
+    BOOST_TEST_REQUIRE(africa.packages.size() == 2u);
+    const MapZonePackageDesc& rainforest = africa.packages[0];
+    BOOST_TEST(rainforest.name == "regenwald");
+    BOOST_TEST(rainforest.climate.temperature.minimum == 65u);
+    BOOST_TEST(rainforest.climate.height.maximum == 40u);
+    BOOST_TEST(rainforest.climate.matches(80, 70, 10));
+    BOOST_TEST(!rainforest.climate.matches(80, 70, 50));
+    // Sorted by name
+    BOOST_TEST_REQUIRE(rainforest.trees.size() == 2u);
+    BOOST_TEST(rainforest.trees[0].first == "Palm1");
+    BOOST_TEST(rainforest.trees[0].second == 2u);
+    BOOST_TEST_REQUIRE(rainforest.animals.size() == 2u);
+    BOOST_TEST(rainforest.animals[1].first == "Duck");
+    // Without ranges: matches everything
+    BOOST_TEST(africa.packages[1].climate.matches(0, 100, 100));
+    BOOST_TEST(mapGen.zones[1].title == "Europa");
+    BOOST_TEST(mapGen.getZoneIndex("Europa") == 1);
+    BOOST_TEST(mapGen.getZoneIndex("Asien") == -1);
+
+    BOOST_TEST_REQUIRE(mapGen.resources.size() == 2u);
+    const MapResourceDesc& forest = mapGen.resources[0];
+    BOOST_TEST(forest.object == "trees");
+    BOOST_TEST(forest.amountSlider == "forest");
+    BOOST_TEST(forest.terrain == (toFlag(MapGenTerrain::Land) | toFlag(MapGenTerrain::Mountain)));
+    BOOST_TEST(forest.cluster == 6u);
+    BOOST_TEST(forest.density == 80u);
+    BOOST_TEST((forest.zones == std::vector<std::string>{"Afrika"}));
+    BOOST_TEST(forest.getWeight(80, 10, 0) == 0.3);
+    BOOST_TEST(forest.getWeight(50, 10, 0) == 1.);
+    const MapResourceDesc& sample = mapGen.resources[1];
+    BOOST_TEST(sample.amount == 4.5);
+    BOOST_TEST(sample.amountSlider.empty());
+    BOOST_TEST(sample.terrain == (toFlag(MapGenTerrain::NearRiver) | toFlag(MapGenTerrain::ShoreFresh)));
+    BOOST_TEST(sample.climate.temperature.minimum == 50u);
+    BOOST_TEST_REQUIRE(sample.hqDistance.has_value());
+    BOOST_TEST(sample.hqDistance->second == 20u);
+    BOOST_TEST(sample.density == 100u);
+    BOOST_TEST(sample.cluster == 0u);
+}
+
+BOOST_AUTO_TEST_CASE(DetectInvalidMapGenerator)
+{
+    const auto expectLoadFailure = [](const std::string& content) {
+        rttr::test::TmpFolder tmp;
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << content;
+        }
+        WorldDescription desc;
+        GameDataLoader loader(desc, tmp);
+        rttr::test::LogAccessor logAcc;
+        BOOST_TEST(!loader.Load(), content);
+    };
+    const std::string res = R"(rttr:AddMapResource{ name = "R", object = "stones", amount = 5, terrain = { "land" })";
+    // Valid
+    {
+        rttr::test::TmpFolder tmp;
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << res << " }";
+        }
+        WorldDescription desc;
+        GameDataLoader loader(desc, tmp);
+        BOOST_TEST(loader.Load());
+    }
+    // Climate
+    expectLoadFailure(R"(rttr:SetMapClimate{ heightCooling = 101 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ nearWaterDistance = 0 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ heightCoolin = 10 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ } rttr:SetMapClimate{ })");
+    // Zones
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "Süd" })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A" } rttr:AddMapZone{ name = "A" })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A", packages = { { trees = { Mahagoni = 1 } } } })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A", packages = { { animals = { Oak = 1 } } } })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A", packages = { { temperature = {50, 20} } } })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A", packages = { { temperature = {50, 120} } } })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A", packages = { { humidity = {50} } } })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A", packages = { "B" } })");
+    expectLoadFailure(R"(rttr:AddMapZone{ name = "A", color = 0x1000000 })");
+    // Resources
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "loam", amount = 5, terrain = { "land" } })");
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", terrain = { "land" } })");
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", amount = 101, terrain = { "land" } })");
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", amount = "wood", terrain = { "land" } })");
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", amount = 5 })");
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", amount = 5, terrain = { } })");
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", amount = 5, terrain = { "lake" } })");
+    expectLoadFailure(res + R"(, density = 0 })");
+    expectLoadFailure(res + R"(, cluster = 500 })");
+    expectLoadFailure(res + R"(, hqDistance = {10, 5} })");
+    expectLoadFailure(res + R"(, weights = { { factor = -1 } } })");
+    expectLoadFailure(res + R"(, weights = { { temperature = {0, 10} } } })");
+    expectLoadFailure(res + R"(, zones = { "Atlantis" } })");
+    expectLoadFailure(res + R"( } )" + res + " }");
+}
+
 BOOST_AUTO_TEST_CASE(DetectRecursion)
 {
     rttr::test::TmpFolder tmp;

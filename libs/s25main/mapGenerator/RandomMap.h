@@ -8,8 +8,11 @@
 #include "mapGenerator/MapSettings.h"
 #include "mapGenerator/RandomUtility.h"
 #include "mapGenerator/Rivers.h"
+#include "mapGenerator/Textures.h"
 
 #include <boost/filesystem/path.hpp>
+
+struct MapGenDesc;
 
 namespace rttr::mapGenerator {
 
@@ -27,21 +30,30 @@ class RandomMap
 private:
     RandomUtility& rnd_;
     Map& map_;
+    const MapGenDesc& desc_;
     Texturizer texturizer_;
     MapSettings settings_;
 
-    std::vector<River> CreateRivers(MapPoint source = MapPoint::Invalid());
-    void CreateFreeIslands(unsigned waterNodes);
-    void CreateMixedMap();
-    void CreateLandMap();
-    void CreateWaterMap();
-
 public:
-    RandomMap(RandomUtility& rnd, Map& map);
+    RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc);
+    /**
+     * Creates the map: land and water like the online map generator of the RttR website (CreateLandscape), rivers,
+     * climate (temperature, humidity, height), textures, harbors, HQs, zones and finally all objects and resources
+     * according to the lua data (PlaceResources).
+     */
     void Create(const MapSettings& settings);
 };
 
+/// Generate a map. Retries a few times (with further random numbers) if no valid HQ positions are found
 Map GenerateRandomMap(RandomUtility& rnd, const WorldDescription& worldDesc, const MapSettings& settings);
-void CreateRandomMap(const boost::filesystem::path& filePath, const MapSettings& settings);
+/**
+ * Generate a map and save it. Uses settings.seed for the random numbers or a random seed if it is 0.
+ * Also saves a preview image next to the map (<name>_Vorschau.bmp) if enabled in the lua data.
+ *
+ * @returns the seed used
+ */
+uint32_t CreateRandomMap(const boost::filesystem::path& filePath, const MapSettings& settings);
+/// Path of the preview image of a generated map
+boost::filesystem::path GetPreviewImagePath(const boost::filesystem::path& mapPath);
 
 } // namespace rttr::mapGenerator

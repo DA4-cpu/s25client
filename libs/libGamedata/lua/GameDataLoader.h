@@ -36,6 +36,11 @@ private:
     void AddWorkshop(const kaguya::LuaTable& data);
     void AddByproduct(const kaguya::LuaTable& data);
     void SetKnowledgeDistribution(const kaguya::LuaTable& data);
+    void SetMapClimate(const kaguya::LuaTable& data);
+    void AddMapZone(const kaguya::LuaTable& data);
+    void AddMapResource(const kaguya::LuaTable& data);
+    /// Check references between the loaded definitions. Logs and returns false on errors
+    bool CheckMapGen();
 
     WorldDescription& worldDesc_;
     boost::filesystem::path basePath_, curFile_;

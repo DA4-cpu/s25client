@@ -1,278 +1,485 @@
 // Copyright (C) 2005 - 2021 Settlers Freaks (sf-team at siedler25.org)
+// Copyright (C) 2026 DA4-cpu
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "mapGenerator/Resources.h"
 #include "RttrForeachPt.h"
 #include "helpers/containerUtils.h"
-#include "helpers/make_array.h"
 #include "mapGenerator/Algorithms.h"
-#include "mapGenerator/Terrain.h"
+#include "mapGenerator/Noise.h"
 #include "mapGenerator/TextureHelper.h"
+#include "gameData/MapGenDesc.h"
+#include <algorithm>
+#include <array>
+#include <limits>
+#include <stdexcept>
 
 namespace rttr::mapGenerator {
 
-std::vector<Tree> CreateTrees(const TextureMap& textures)
+TreeCode GetTreeCode(const std::string& species)
 {
-    const auto landscapeId = textures.GetLandscapeId();
-
-    Tree pineApple(libsiedler2::OT_Palm, libsiedler2::OI_Tree1_Begin);
-    Tree palm1(libsiedler2::OT_TreeOrPalm, libsiedler2::OI_Palm_Begin);
-    Tree palm2(libsiedler2::OT_Palm, libsiedler2::OI_TreeOrPalm_Begin);
-    Tree fir(libsiedler2::OT_Palm + 1, libsiedler2::OI_TreeOrPalm_Begin);
-    Tree oak(libsiedler2::OT_TreeOrPalm, libsiedler2::OI_Tree2_Begin);
-    Tree birch(libsiedler2::OT_TreeOrPalm, libsiedler2::OI_Tree1_Begin);
-    Tree cherry(libsiedler2::OT_Palm, libsiedler2::OI_Palm_Begin);
-    Tree pine(libsiedler2::OT_TreeOrPalm, libsiedler2::OI_TreeOrPalm_Begin);
-    Tree cypress(libsiedler2::OT_Palm, libsiedler2::OI_Tree2_Begin);
-
-    if(landscapeId == 0x0) // greenland
-    {
-        return {pineApple, palm1,  palm2, cypress, oak,  birch, oak,  cherry, oak,
-                birch,     cherry, oak,   birch,   pine, birch, pine, fir};
-    }
-
-    if(landscapeId == 0x1) // wasteland
-    {
-        return {pineApple, palm1,  palm2, cypress, oak,  birch, oak,  cherry, oak,
-                birch,     cherry, oak,   birch,   pine, birch, pine, fir};
-    }
-
-    if(landscapeId == 0x2) // winter
-    {
-        return {fir, oak, birch, cherry, pine, oak, birch, cherry, pine};
-    }
-
-    if(landscapeId == 0x3) // world (combined greenland/wasteland/winterworld climate landscape)
-    {
-        // The map generator no longer picks a single landscape up front, so this can't pick a
-        // matching tree list per region either (tree placement doesn't consider local
-        // humidity/temperature) - use a superset of the greenland/wasteland and winterworld lists
-        // so both warm-climate and cold-climate trees appear somewhere on the map.
-        return {pineApple, palm1,  palm2, cypress, oak,  birch, oak,  cherry, oak,
-                birch,     cherry, oak,   birch,   pine, birch, pine, fir,
-                fir,       oak,    birch, cherry,  pine, oak,   birch, cherry, pine};
-    }
-
-    throw std::invalid_argument("invalid landscape type");
+    using namespace libsiedler2;
+    const auto code = [](unsigned type, unsigned index) {
+        return TreeCode{static_cast<uint8_t>(type), static_cast<uint8_t>(index)};
+    };
+    // Tree types of noTree 0-8, see MapLoader::PlaceObjects
+    if(species == "Pine")
+        return code(OT_TreeOrPalm, OI_TreeOrPalm_Begin);
+    if(species == "Birch")
+        return code(OT_TreeOrPalm, OI_Tree1_Begin);
+    if(species == "Oak")
+        return code(OT_TreeOrPalm, OI_Tree2_Begin);
+    if(species == "Palm1")
+        return code(OT_TreeOrPalm, OI_Palm_Begin);
+    if(species == "Palm2")
+        return code(OT_Palm, OI_TreeOrPalm_Begin);
+    if(species == "Pineapple")
+        return code(OT_Palm, OI_Tree1_Begin);
+    if(species == "Cypress")
+        return code(OT_Palm, OI_Tree2_Begin);
+    if(species == "Cherry")
+        return code(OT_Palm, OI_Palm_Begin);
+    if(species == "Fir")
+        return code(OT_Palm + 1u, OI_TreeOrPalm_Begin);
+    throw std::invalid_argument("Unknown tree species: " + species);
 }
 
-void AddObjects(Map& map, RandomUtility& rnd, const MapSettings& settings)
+libsiedler2::Animal GetAnimalCode(const std::string& species)
 {
-    std::set<MapPoint, MapPointLess> excludedArea;
-    NodeMapBase<unsigned> probabilities;
-    probabilities.Resize(map.size, 0u);
+    using libsiedler2::Animal;
+    if(species == "Rabbit")
+        return Animal::Rabbit;
+    if(species == "Fox")
+        return Animal::Fox;
+    if(species == "Stag")
+        return Animal::Stag;
+    if(species == "Deer")
+        return Animal::Deer;
+    if(species == "Duck")
+        return Animal::Duck;
+    if(species == "Sheep")
+        return Animal::Sheep;
+    throw std::invalid_argument("Unknown animal species: " + species);
+}
 
-    // Do not allow to place trees/stone piles nearby head quarters or
-    // harbor positions to avoid inaccessible harbors or invalid player positions.
+bool IsWaterAnimal(const std::string& species)
+{
+    return species == "Duck";
+}
 
-    const auto harborOrHeadquarter = [&map](const MapPoint& pt) {
-        return helpers::contains(map.hqPositions, pt)
-               || helpers::contains_if(map.harbors, [pt](const Triangle& tr) { return tr.position == pt; });
-    };
+double GetResourceAmount(const MapResourceDesc& resource, const MapSettings& settings)
+{
+    const std::string& slider = resource.amountSlider;
+    if(slider.empty())
+        return resource.amount;
+    if(slider == "forest")
+        return settings.trees;
+    if(slider == "stonePiles")
+        return settings.stonePiles;
+    if(slider == "coal")
+        return settings.ratioCoal;
+    if(slider == "iron")
+        return settings.ratioIron;
+    if(slider == "gold")
+        return settings.ratioGold;
+    if(slider == "granite")
+        return settings.ratioGranite;
+    throw std::invalid_argument("Unknown slider: " + slider);
+}
 
-    RTTR_FOREACH_PT(MapPoint, map.size)
+const MapZonePackageDesc* GetZonePackage(const Map& map, const MapGenDesc& desc, const MapPoint& pt)
+{
+    const unsigned zone = map.zones[pt];
+    if(zone >= desc.zones.size())
+        return nullptr;
+    for(const MapZonePackageDesc& package : desc.zones[zone].packages)
     {
-        if(harborOrHeadquarter(pt))
-        {
-            auto suroundingArea = map.getTextures().GetPointsInRadiusWithCenter(pt, 5);
-            excludedArea.insert(suroundingArea.begin(), suroundingArea.end());
-        } else if(map.textureMap.Any(pt, IsSnowOrLava))
-        {
-            excludedArea.insert(pt);
-        }
+        if(package.climate.matches(map.temperature[pt], map.climate[pt], map.heightPercent[pt]))
+            return &package;
     }
+    return nullptr;
+}
 
-    const auto distanceToExcludedArea = DistancesTo(excludedArea, map.size);
+namespace {
 
-    // 1) compute maximum water distance until mountain area
-    // 2) probabilities
-    // 2a) non-mountains: distance to water
-    // 2b) mountains: max prob - distance to non-mountain
-    // 2c) forbidden area: 0
-    // 3) tree type
-    // 3a) non-mountains: distance to water
-    // 3b) mountains: last element of trees
+enum class ObjectKind
+{
+    Trees,
+    Stones,
+    Animals,
+    Decoration,
+    Fish,
+    Groundwater,
+    Mine
+};
 
-    auto& textureMap = map.textureMap;
-    const auto mountain = [&textureMap](const MapPoint& pt) { return textureMap.Any(pt, IsMountainOrSnowOrLava); };
-    const auto mountainDistance = DistancesTo(map.size, mountain);
+ObjectKind GetObjectKind(const std::string& object)
+{
+    if(object == "trees")
+        return ObjectKind::Trees;
+    if(object == "stones")
+        return ObjectKind::Stones;
+    if(object == "animals")
+        return ObjectKind::Animals;
+    if(object == "decoration")
+        return ObjectKind::Decoration;
+    if(object == "fish")
+        return ObjectKind::Fish;
+    if(object == "groundwater")
+        return ObjectKind::Groundwater;
+    if(object == "coal" || object == "iron" || object == "gold" || object == "granite")
+        return ObjectKind::Mine;
+    throw std::invalid_argument("Unknown map resource object: " + object);
+}
 
-    const auto water = [&textureMap](const MapPoint& pt) { return textureMap.Any(pt, IsWater); };
-    auto waterDistance = DistancesTo(map.size, water);
+uint8_t GetMineResourceBase(const std::string& object)
+{
+    if(object == "coal")
+        return libsiedler2::R_Coal;
+    if(object == "iron")
+        return libsiedler2::R_Iron;
+    if(object == "gold")
+        return libsiedler2::R_Gold;
+    return libsiedler2::R_Granite;
+}
 
-    RTTR_FOREACH_PT(MapPoint, map.size)
+/// Decoration objects without function (object type 0xC8): bushes, flowers, mushrooms, small stones
+constexpr std::array<uint8_t, 19> decorationIds{0x00, 0x01, 0x05, 0x06, 0x0A, 0x0E, 0x0F, 0x10, 0x11, 0x12,
+                                                0x13, 0x14, 0x22, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A};
+
+template<class T>
+const std::string* PickWeighted(RandomUtility& rnd, const MapGenWeights& weights, T&& isAllowed)
+{
+    unsigned total = 0;
+    for(const auto& entry : weights)
     {
-        // work around to avoid mountains to be considered for the total range of
-        // distance-to-water values
-        if(waterDistance[pt] > 0 && mountainDistance[pt] == 0)
-        {
-            waterDistance[pt] = 1;
-        }
+        if(isAllowed(entry.first))
+            total += entry.second;
     }
-
-    const auto range = GetRange(waterDistance);
-    const auto probRange = ValueRange<unsigned>(settings.trees / 2, settings.trees);
-    const unsigned probDiff = probRange.GetDifference();
-
-    const auto mountainFoot = [&map](const MapPoint& pt) { return !map.textureMap.All(pt, IsMountainOrSnowOrLava); };
-    const auto mountainDepth = DistancesTo(map.size, mountainFoot);
-    const auto mountainRange = GetRange(mountainDepth);
-
-    RTTR_FOREACH_PT(MapPoint, map.size)
+    if(total == 0)
+        return nullptr;
+    unsigned value = rnd.RandomValue(1u, total);
+    for(const auto& entry : weights)
     {
-        if(waterDistance[pt] > 0 && distanceToExcludedArea[pt] > 0)
-        {
-            if(mountainDistance[pt] > 0)
-            {
-                const unsigned prob = probDiff ? MapValueToIndex(waterDistance[pt], range, probDiff) : 0;
-                probabilities[pt] = prob + probRange.minimum;
-            } else
-            {
-                const unsigned diff = mountainRange.maximum - mountainDepth[pt];
-                const unsigned prob = probDiff ? MapValueToIndex(diff, mountainRange, probDiff) : 0;
-                probabilities[pt] = prob + probRange.minimum;
-            }
-        } else
-        {
-            probabilities[pt] = 0;
-        }
-    }
-
-    const auto trees = CreateTrees(map.textureMap);
-    const auto treeForPoint = [&mountainDistance, &waterDistance, &range, &trees](const MapPoint& pt) {
-        if(mountainDistance[pt] == 0)
-        {
-            return trees.back();
-        }
-        auto index = MapValueToIndex(waterDistance[pt], range, trees.size());
-        return trees[index];
-    };
-
-    RTTR_FOREACH_PT(MapPoint, map.size)
-    {
-        const bool canPlaceStonePile = waterDistance[pt] > 0 && distanceToExcludedArea[pt] > 0;
-        if(canPlaceStonePile && rnd.ByChance(settings.stonePiles))
-        {
-            map.objectTypes[pt] = rnd.ByChance(50) ? 0xCC : 0xCD;
-            map.objectInfos[pt] = rnd.RandomValue(1, 6);
+        if(!isAllowed(entry.first))
             continue;
-        }
-
-        const auto treeProb = probabilities[pt];
-        if(treeProb > 0 && rnd.ByChance(treeProb))
-        {
-            auto tree = treeForPoint(pt);
-
-            map.objectTypes[pt] = tree.type;
-            map.objectInfos[pt] = tree.index + rnd.RandomValue(0, 7);
-        }
+        if(value <= entry.second)
+            return &entry.first;
+        value -= entry.second;
     }
+    return nullptr; // LCOV_EXCL_LINE
 }
 
-void AddResources(Map& map, RandomUtility& rnd, const MapSettings& settings)
+/// Data shared by all rules
+class ResourcePlacer
 {
-    const auto& textures = map.textureMap;
-    auto& resources = map.resources;
-    struct MineableResourceInfo
+public:
+    ResourcePlacer(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc)
+        : map_(map), rnd_(rnd), settings_(settings), desc_(desc), globalFactor_(settings.resourceAmount / 100.)
     {
-        // The current "budget", that is, how many many are we over, or under, compared to the desired distribution.
-        int budget = 0;
-        // The ratio is the user defined ratio for this resource.
-        int ratio;
-        // The resource encoding
-        libsiedler2::Resource resource;
-        MineableResourceInfo(int ratio, libsiedler2::Resource resource) : ratio(ratio), resource(resource) {}
-    };
-    auto mRIs = helpers::make_array(MineableResourceInfo(settings.ratioCoal, libsiedler2::R_Coal),
-                                    MineableResourceInfo(settings.ratioGold, libsiedler2::R_Gold),
-                                    MineableResourceInfo(settings.ratioIron, libsiedler2::R_Iron),
-                                    MineableResourceInfo(settings.ratioGranite, libsiedler2::R_Granite));
-    const int total = settings.ratioCoal + settings.ratioGold + settings.ratioIron + settings.ratioGranite;
+        const MapExtent size = map.size;
+        const auto& textures = map.textureMap;
 
-    // Helper to pick an index [0,4) into the mRIs array that identifies a randomly selected resource we should
-    // place. Note that we do not perform budget adjustments and checks here.
-    auto resourcePicker = [&]() {
-        int ratio = 0;
-        int randomNumber = rnd.RandomValue(1, std::max(1, total));
-        for(unsigned i = 0; i < mRIs.size(); ++i)
+        packages_.Resize(size, nullptr);
+        objectFree_.Resize(size, 0);
+        mineable_.Resize(size, 0);
+        allWater_.Resize(size, 0);
+
+        // Keep the area around HQs and harbors free of objects, otherwise harbors could be inaccessible or HQs
+        // could not be placed
+        std::vector<MapPoint> reserved;
+        RTTR_FOREACH_PT(MapPoint, size)
         {
-            ratio += mRIs[i].ratio;
-            if(randomNumber <= ratio)
-                return i;
-        }
-        RTTR_Assert_Msg(0, "Expected to pick a resource!");
-        return 0u;
-    };
-
-    RTTR_FOREACH_PT(MapPoint, map.size)
-    {
-        if(textures.All(pt, IsMinableMountain))
-        {
-            // No mineable resources wanted.
-            if(total == 0)
-                continue;
-
-            // Pick a random resource
-            unsigned randomMRIindex = resourcePicker();
-            auto& mRI = mRIs[randomMRIindex];
-
-            // Adjust and check the budget, if we are over we will not place the resource because we have already in
-            // the past.
-            ++mRI.budget;
-            if(mRI.budget <= 0)
-                continue;
-
-            // Budget is positive so we want to place resources, however, we avoid overwriting existing clusters as
-            // this results in sprinkles. If we have a resource on this field we keep the budget and place a cluster
-            // later.
-            if(resources[pt])
-                continue;
-
-            // Cluster the resource around the map point.
-            for(int xd = -4; xd <= 4; ++xd)
+            if(helpers::contains(map.hqPositions, pt)
+               || helpers::contains_if(map.harbors, [pt](const Triangle& tr) { return tr.position == pt; }))
             {
-                for(int yd = -4; yd <= 4; ++yd)
+                for(const MapPoint& p : map.z.GetPointsInRadiusWithCenter(pt, 5))
+                    reserved.push_back(p);
+            }
+        }
+        NodeMapBase<uint8_t> isReserved;
+        isReserved.Resize(size, 0);
+        for(const MapPoint& pt : reserved)
+            isReserved[pt] = 1;
+
+        const auto isBlocked = [](const TerrainDesc& t) {
+            return IsSnowOrLava(t) || (t.kind == TerrainKind::Land && !t.Is(ETerrain::Walkable));
+        };
+        RTTR_FOREACH_PT(MapPoint, size)
+        {
+            packages_[pt] = GetZonePackage(map, desc, pt);
+            allWater_[pt] = textures.All(pt, IsWater) ? 1 : 0;
+            mineable_[pt] = textures.All(pt, IsMinableMountain) ? 1 : 0;
+            objectFree_[pt] = (!isReserved[pt] && !allWater_[pt] && !textures.Any(pt, isBlocked)) ? 1 : 0;
+        }
+        if(!map.hqPositions.empty())
+            hqDistance_ = DistancesTo(map.hqPositions, size);
+        else
+            hqDistance_.Resize(size, std::numeric_limits<unsigned>::max());
+    }
+
+    void PlaceAll()
+    {
+        bool minesDone = false;
+        for(const MapResourceDesc& rule : desc_.resources)
+        {
+            const ObjectKind kind = GetObjectKind(rule.object);
+            if(kind == ObjectKind::Mine)
+            {
+                // All mine resources are placed together, so they share the mountains according to their amounts
+                if(!minesDone)
+                    PlaceMineResources();
+                minesDone = true;
+            } else
+                PlaceRule(rule, kind);
+        }
+    }
+
+private:
+    Map& map_;
+    RandomUtility& rnd_;
+    const MapSettings& settings_;
+    const MapGenDesc& desc_;
+    const double globalFactor_;
+    NodeMapBase<const MapZonePackageDesc*> packages_;
+    /// Objects (trees, stones, ...) may be placed here
+    NodeMapBase<uint8_t> objectFree_;
+    /// All triangles are mineable mountain
+    NodeMapBase<uint8_t> mineable_;
+    /// All triangles are water
+    NodeMapBase<uint8_t> allWater_;
+    NodeMapBase<unsigned> hqDistance_;
+
+    bool Matches(const MapResourceDesc& rule, const std::vector<unsigned>& zones, const MapPoint& pt) const
+    {
+        if((map_.terrainFlags[pt] & rule.terrain) == 0)
+            return false;
+        if(!rule.climate.matches(map_.temperature[pt], map_.climate[pt], map_.heightPercent[pt]))
+            return false;
+        if(!zones.empty() && !helpers::contains(zones, static_cast<unsigned>(map_.zones[pt])))
+            return false;
+        if(rule.hqDistance
+           && (hqDistance_[pt] < rule.hqDistance->first || hqDistance_[pt] > rule.hqDistance->second))
+            return false;
+        return true;
+    }
+
+    std::vector<unsigned> GetZoneIndices(const MapResourceDesc& rule) const
+    {
+        std::vector<unsigned> result;
+        for(const std::string& zone : rule.zones)
+        {
+            const int idx = desc_.getZoneIndex(zone);
+            if(idx < 0)
+                throw std::runtime_error("Map resource '" + rule.name + "': unknown zone '" + zone + "'");
+            result.push_back(static_cast<unsigned>(idx));
+        }
+        return result;
+    }
+
+    double GetProbability(const MapResourceDesc& rule, double amount, const MapPoint& pt) const
+    {
+        return amount / 100. * globalFactor_
+               * rule.getWeight(map_.temperature[pt], map_.climate[pt], map_.heightPercent[pt]);
+    }
+
+    /// Try to place the object of the rule. Returns false if the node is not suitable
+    bool Place(ObjectKind kind, const MapPoint& pt)
+    {
+        using namespace libsiedler2;
+        switch(kind)
+        {
+            case ObjectKind::Trees:
+            {
+                if(!objectFree_[pt] || map_.objectTypes[pt] != OT_Empty || !packages_[pt])
+                    return false;
+                const std::string* species = PickWeighted(rnd_, packages_[pt]->trees, [](const auto&) { return true; });
+                if(!species)
+                    return false;
+                const TreeCode code = GetTreeCode(*species);
+                map_.objectTypes[pt] = code.type;
+                map_.objectInfos[pt] = static_cast<uint8_t>(code.index + rnd_.RandomValue(0, 7));
+                return true;
+            }
+            case ObjectKind::Stones:
+                if(!objectFree_[pt] || map_.objectTypes[pt] != OT_Empty)
+                    return false;
+                map_.objectTypes[pt] = static_cast<uint8_t>(rnd_.ByChance(50) ? OT_Stone1 : OT_Stone2);
+                map_.objectInfos[pt] = static_cast<uint8_t>(rnd_.RandomValue(1, 6));
+                return true;
+            case ObjectKind::Decoration:
+                if(!objectFree_[pt] || map_.objectTypes[pt] != OT_Empty)
+                    return false;
+                map_.objectTypes[pt] = 0xC8;
+                map_.objectInfos[pt] = decorationIds[rnd_.Index(decorationIds.size())];
+                return true;
+            case ObjectKind::Animals:
+            {
+                if(map_.animals[pt] != Animal::None || !packages_[pt])
+                    return false;
+                const bool onWater = allWater_[pt] != 0;
+                if(!onWater && !objectFree_[pt])
+                    return false;
+                const std::string* species = PickWeighted(rnd_, packages_[pt]->animals, [onWater](const auto& name) {
+                    return IsWaterAnimal(name) == onWater;
+                });
+                if(!species)
+                    return false;
+                map_.animals[pt] = GetAnimalCode(*species);
+                return true;
+            }
+            case ObjectKind::Fish:
+                if(map_.resources[pt] != R_None)
+                    return false;
+                map_.resources[pt] = R_Fish;
+                return true;
+            case ObjectKind::Groundwater:
+                if(map_.resources[pt] != R_None)
+                    return false;
+                map_.resources[pt] = R_Water;
+                return true;
+            case ObjectKind::Mine: break;
+        }
+        return false; // LCOV_EXCL_LINE
+    }
+
+    void PlaceRule(const MapResourceDesc& rule, ObjectKind kind)
+    {
+        const double amount = GetResourceAmount(rule, settings_);
+        if(amount <= 0. || globalFactor_ <= 0.)
+            return;
+        const auto zones = GetZoneIndices(rule);
+        const double density = rule.density / 100.;
+        NodeMapBase<double> clusterValues;
+        if(rule.cluster > 0)
+            clusterValues = ToUniform(CreateFractalNoise(rnd_, map_.size, rule.cluster, 2, 0.5));
+
+        RTTR_FOREACH_PT(MapPoint, map_.size)
+        {
+            if(!Matches(rule, zones, pt))
+                continue;
+            const double probability = GetProbability(rule, amount, pt);
+            if(probability <= 0.)
+                continue;
+            if(rule.cluster > 0)
+            {
+                // Inside a cluster (smooth noise below the threshold) a share of `density` of the nodes is used, so
+                // on average the share `probability` of all matching nodes gets the object
+                if(clusterValues[pt] >= std::min(1., probability / density) || rnd_.RandomDouble(0., 1.) >= density)
+                    continue;
+            } else if(rnd_.RandomDouble(0., 1.) >= probability)
+                continue;
+            Place(kind, pt);
+        }
+    }
+
+    void PlaceMineResources()
+    {
+        struct MineRule
+        {
+            const MapResourceDesc* rule;
+            std::vector<unsigned> zones;
+            double amount;
+            uint8_t resourceBase;
+            unsigned radius;
+        };
+        std::vector<MineRule> rules;
+        for(const MapResourceDesc& rule : desc_.resources)
+        {
+            if(GetObjectKind(rule.object) != ObjectKind::Mine)
+                continue;
+            const double amount = GetResourceAmount(rule, settings_);
+            if(amount > 0.)
+                rules.push_back(MineRule{&rule, GetZoneIndices(rule), amount, GetMineResourceBase(rule.object),
+                                         rule.cluster / 2u});
+        }
+        if(rules.empty() || globalFactor_ <= 0.)
+            return;
+
+        // Visit the mountain nodes in random order. Each node starts a cluster of one resource (chosen according to
+        // the amounts) with a probability so that the clusters cover about the share sum(amount) of the mountains.
+        // Several passes because later clusters overlap earlier ones.
+        std::vector<MapPoint> nodes;
+        RTTR_FOREACH_PT(MapPoint, map_.size)
+        {
+            if(mineable_[pt])
+                nodes.push_back(pt);
+        }
+        for(unsigned i = nodes.size(); i > 1; --i)
+            std::swap(nodes[i - 1], nodes[rnd_.Index(i)]);
+
+        std::vector<double> probabilities(rules.size());
+        const auto computeProbabilities = [&](const MapPoint& pt) {
+            double total = 0.;
+            for(unsigned i = 0; i < rules.size(); ++i)
+            {
+                probabilities[i] =
+                  Matches(*rules[i].rule, rules[i].zones, pt) ? GetProbability(*rules[i].rule, rules[i].amount, pt) : 0.;
+                total += probabilities[i];
+            }
+            return total;
+        };
+        double target = 0.;
+        for(const MapPoint& pt : nodes)
+            target += std::min(1., computeProbabilities(pt));
+
+        unsigned numPlaced = 0;
+        constexpr unsigned maxPasses = 5;
+        for(unsigned pass = 0; pass < maxPasses && numPlaced < target; ++pass)
+        {
+            for(const MapPoint& pt : nodes)
+            {
+                if(numPlaced >= target)
+                    break;
+                if(map_.resources[pt] != libsiedler2::R_None)
+                    continue;
+                const double total = computeProbabilities(pt);
+                if(total <= 0.)
+                    continue;
+                double value = rnd_.RandomDouble(0., total);
+                unsigned chosen = 0;
+                while(chosen + 1 < rules.size() && value >= probabilities[chosen])
                 {
-                    const MapPoint pt_d = resources.MakeMapPoint(pt + Position(xd, yd));
-                    // Only place it on mines that have no resource yet, adjust the budget for each placed
-                    // resource.
-                    if(!resources[pt_d] && textures.All(pt_d, IsMinableMountain))
-                    {
-                        --mRI.budget;
-                        resources[pt_d] = mRI.resource + rnd.RandomValue(1, 8);
-                    }
+                    value -= probabilities[chosen];
+                    ++chosen;
+                }
+                const MineRule& mineRule = rules[chosen];
+                const unsigned radius = mineRule.radius;
+                const double density = mineRule.rule->density / 100.;
+                // Free nodes the cluster would cover: Clusters at the edge of the mountains cover less, so they are
+                // started more often
+                std::vector<MapPoint> clusterNodes;
+                for(const MapPoint& p : map_.z.GetPointsInRadiusWithCenter(pt, radius))
+                {
+                    if(map_.resources[p] == libsiedler2::R_None && mineable_[p]
+                       && Matches(*mineRule.rule, mineRule.zones, p))
+                        clusterNodes.push_back(p);
+                }
+                const double expectedSize = std::max(1., clusterNodes.size() * density);
+                if(rnd_.RandomDouble(0., 1.) >= std::min(1., total) / expectedSize)
+                    continue;
+                for(const MapPoint& p : clusterNodes)
+                {
+                    if(p != pt && rnd_.RandomDouble(0., 1.) >= density)
+                        continue;
+                    // Rich in the middle of the cluster, less at the edges
+                    const unsigned distance = map_.z.CalcDistance(p, pt);
+                    const unsigned amount = (distance * 2 <= radius) ? 7u : rnd_.RandomValue(1u, 6u);
+                    map_.resources[p] = static_cast<uint8_t>(mineRule.resourceBase + amount);
+                    ++numPlaced;
                 }
             }
-        } else if(textures.All(pt, IsWater))
-        {
-            resources[pt] = libsiedler2::R_Fish;
-        } else
-        {
-            resources[pt] = libsiedler2::R_Water;
         }
     }
-}
+};
 
-void AddAnimals(Map& map, RandomUtility& rnd)
+} // namespace
+
+void PlaceResources(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc)
 {
-    std::vector<libsiedler2::Animal> landAnimals{libsiedler2::Animal::Rabbit, libsiedler2::Animal::Fox,
-                                                 libsiedler2::Animal::Stag, libsiedler2::Animal::Deer,
-                                                 libsiedler2::Animal::Sheep};
-    const auto& textures = map.textureMap;
-    RTTR_FOREACH_PT(MapPoint, map.size)
-    {
-        if(rnd.ByChance(3))
-        {
-            if(textures.All(pt, IsWater))
-            {
-                map.animals[pt] = libsiedler2::Animal::Duck;
-            } else if(textures.All(pt, IsLand))
-            {
-                map.animals[pt] = rnd.RandomItem(landAnimals);
-            }
-        }
-    }
+    ResourcePlacer placer(map, rnd, settings, desc);
+    placer.PlaceAll();
 }
 
 } // namespace rttr::mapGenerator

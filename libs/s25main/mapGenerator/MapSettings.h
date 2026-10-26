@@ -11,15 +11,31 @@
 
 namespace rttr::mapGenerator {
 
-enum class MapStyle
+/// Shape of the land like the online map generator of the RttR website ("Landmasse")
+enum class LandMass : uint8_t
 {
-    Water,
-    Land,
-    Mixed
+    /// Many islands, each player on his own island if possible
+    Islands,
+    /// Land with lakes and seas
+    Normal,
+    /// Few large continents
+    Continents
 };
-constexpr auto maxEnumValue(MapStyle)
+constexpr auto maxEnumValue(LandMass)
 {
-    return MapStyle::Mixed;
+    return LandMass::Continents;
+}
+
+/// Roughness of coasts and heights ("Oberflächenbild")
+enum class Roughness : uint8_t
+{
+    Smooth,
+    Normal,
+    Rough
+};
+constexpr auto maxEnumValue(Roughness)
+{
+    return Roughness::Rough;
 }
 
 enum class MountainDistance : uint8_t
@@ -28,13 +44,6 @@ enum class MountainDistance : uint8_t
     Normal = 15,
     Far = 25,
     VeryFar = 30
-};
-
-enum class IslandAmount : uint8_t
-{
-    Few = 0,
-    Normal = 10,
-    Many = 30
 };
 
 /// Overall temperature bias for the map generator's climate system (see rttr::mapGenerator::Climate.h).
@@ -79,9 +88,20 @@ struct MapSettings
     unsigned short ratioCoal = 40;
     unsigned short ratioGranite = 15;
     unsigned short rivers = 15;
-    unsigned short trees = 40;
+    /// Forest in percent of the land ("Wald %", amount of resource rules with amount = "forest")
+    unsigned short trees = 10;
+    /// Stone piles in percent of the land ("Granit %" of the online generator, amount = "stonePiles")
     unsigned short stonePiles = 5;
-    IslandAmount islands = IslandAmount::Few;
+    /// Seed for the random numbers. 0: choose one randomly. The same seed and settings give the same map
+    uint32_t seed = 0;
+    LandMass landMass = LandMass::Normal;
+    /// Water in percent of the map
+    unsigned short water = 30;
+    /// Mountains in percent of the land
+    unsigned short mountains = 15;
+    Roughness roughness = Roughness::Normal;
+    /// Factor in percent for the amount of all resources of the resource rules (lua), 100 = as defined
+    unsigned short resourceAmount = 100;
     MountainDistance mountainDistance = MountainDistance::Normal;
     // Index 3 is the "world" landscape (data/RTTR/gamedata/world/world.lua), which is registered
     // after the original greenland(0)/wasteland(1)/winterworld(2) and combines all of their
@@ -90,7 +110,6 @@ struct MapSettings
     // constructor re-resolves this by name at runtime as well, so this default only matters if a
     // map is generated without ever opening the map generator settings dialog.
     DescIdx<LandscapeDesc> type = DescIdx<LandscapeDesc>(3);
-    MapStyle style = MapStyle::Mixed;
     ClimateTemperature climateTemperature = ClimateTemperature::Temperate;
     ClimateHumidity climateHumidity = ClimateHumidity::Temperate;
     /// Approximate width/height (in nodes) of a single climate zone (see GenerateClimateMap()).

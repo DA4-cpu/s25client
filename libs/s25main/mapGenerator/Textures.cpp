@@ -7,11 +7,18 @@
 #include "mapGenerator/TextureHelper.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
+#include <map>
 #include <set>
 #include <stdexcept>
 
 namespace rttr::mapGenerator {
+
+namespace {
+/// Share of the mountain height range at the top covered by snow
+constexpr double peakShare = 0.08;
+} // namespace
 
 void TextureMap::Set(const MapPoint& pt, DescIdx<TerrainDesc> texture)
 {
@@ -56,8 +63,15 @@ void Texturizer::ApplyTexturingByHeightMap(unsigned mountainLevel)
 
     const auto waterTexture = textureMap_.Find(IsShipableWater);
     const auto landTextures = textureMap_.FindAll(IsBuildableLand);
-    auto mountainTextures = textureMap_.FindAll(IsMinableMountain);
-    mountainTextures.push_back(textureMap_.Find(IsSnowOrLava));
+    // Mountain textures are grouped by their temperature (e.g. greenland, wasteland and winter mountains): The group
+    // closest to the local temperature is used, within the group the height decides. Snow on the peaks.
+    std::map<uint8_t, std::vector<DescIdx<TerrainDesc>>> mountainGroups;
+    for(const auto texture : textureMap_.FindAll(IsMinableMountain))
+        mountainGroups[textureMap_.GetDesc(texture).temperature].push_back(texture);
+    if(mountainGroups.empty())
+        throw std::invalid_argument("no mountain textures found");
+    // Only the highest peaks get snow (it can not be used for anything)
+    const auto peakTexture = textureMap_.Find(IsSnowOrLava);
 
     const MapExtent size = z_.GetSize();
     const auto& z = z_;
@@ -114,8 +128,26 @@ void Texturizer::ApplyTexturingByHeightMap(unsigned mountainLevel)
             return pickLandTexture(climateValue, temperatureValue);
         }
 
-        const ValueRange<uint8_t> mountainRange(mountainLevel, maxZ);
-        return mountainTextures[MapValueToIndex(zValue, mountainRange, mountainTextures.size())];
+        const uint8_t temperatureValue = interpolate(temperature, triangle);
+        const std::vector<DescIdx<TerrainDesc>>* mountainTextures = nullptr;
+        int bestDistance = std::numeric_limits<int>::max();
+        for(const auto& group : mountainGroups)
+        {
+            const int distance = std::abs(static_cast<int>(group.first) - temperatureValue);
+            if(distance < bestDistance)
+            {
+                bestDistance = distance;
+                mountainTextures = &group.second;
+            }
+        }
+        const int mountainHeight = std::max(0, static_cast<int>(maxZ) - static_cast<int>(mountainLevel));
+        const auto peakLevel = static_cast<uint8_t>(maxZ - static_cast<int>(mountainHeight * peakShare));
+        if(zValue > peakLevel)
+            return peakTexture;
+        const ValueRange<uint8_t> mountainRange(static_cast<uint8_t>(mountainLevel),
+                                                std::max(peakLevel, static_cast<uint8_t>(mountainLevel)));
+        return (*mountainTextures)[MapValueToIndex(std::min(zValue, peakLevel), mountainRange,
+                                                   mountainTextures->size())];
     };
 
     RTTR_FOREACH_PT(MapPoint, size)

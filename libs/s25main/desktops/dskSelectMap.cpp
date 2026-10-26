@@ -290,7 +290,7 @@ void dskSelectMap::Msg_ButtonClick(const unsigned ctrl_id)
         break;
         case 7: // random map generator settings
         {
-            WINDOWMANAGER.ToggleWindow(std::make_unique<iwMapGenerator>(rndMapSettings));
+            WINDOWMANAGER.ToggleWindow(std::make_unique<iwMapGenerator>(rndMapSettings, lastRandMapSeed));
         }
         break;
     }
@@ -310,7 +310,8 @@ void dskSelectMap::CreateRandomMap()
     try
     {
         // create a random map and save filepath
-        rttr::mapGenerator::CreateRandomMap(mapPath, rndMapSettings);
+        rndMapSettings.MakeValid();
+        lastRandMapSeed = rttr::mapGenerator::CreateRandomMap(mapPath, rndMapSettings);
         newRandMapPath = mapPath;
     } catch(const std::runtime_error& e)
     {

@@ -71,4 +71,22 @@ BOOST_AUTO_TEST_CASE(MakeValid_clamps_climate_zone_size_to_a_safe_non_zero_range
     BOOST_TEST(settings.climateZoneSize <= 150u);
 }
 
+BOOST_AUTO_TEST_CASE(MakeValid_clamps_percentages)
+{
+    MapSettings settings;
+    settings.water = 200;
+    settings.mountains = 200;
+    settings.trees = 200;
+    settings.stonePiles = 200;
+    settings.rivers = 200;
+    settings.resourceAmount = 1000;
+    settings.MakeValid();
+    BOOST_TEST(settings.water == 90u);
+    BOOST_TEST(settings.mountains == 90u);
+    BOOST_TEST(settings.trees == 100u);
+    BOOST_TEST(settings.stonePiles == 100u);
+    BOOST_TEST(settings.rivers == 100u);
+    BOOST_TEST(settings.resourceAmount == 300u);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

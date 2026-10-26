@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "mapGenerator/TextureHelper.h"
+#include "RttrConfig.h"
+#include <boost/filesystem/operations.hpp>
 
 namespace rttr::mapGenerator {
 
@@ -69,6 +71,19 @@ bool IsSnowOrLava(const TerrainDesc& terrain)
 bool IsMountainOrSnowOrLava(const TerrainDesc& terrain)
 {
     return terrain.kind == TerrainKind::Mountain || IsSnowOrLava(terrain);
+}
+
+bool IsTerrainAvailable(const TerrainDesc& terrain)
+{
+    if(!terrain.optional)
+        return true;
+    try
+    {
+        return boost::filesystem::exists(RTTRCONFIG.ExpandPath(terrain.texturePath));
+    } catch(const std::exception&)
+    {
+        return false;
+    }
 }
 
 } // namespace rttr::mapGenerator

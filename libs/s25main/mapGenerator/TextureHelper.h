@@ -34,4 +34,8 @@ bool IsSnowOrLava(const TerrainDesc& terrain);
 
 bool IsMountainOrSnowOrLava(const TerrainDesc& terrain);
 
+/// False for optional terrains (TerrainDesc::optional) whose texture file does not exist. The generator does not
+/// use those, otherwise the game could not load the map
+bool IsTerrainAvailable(const TerrainDesc& terrain);
+
 } // namespace rttr::mapGenerator

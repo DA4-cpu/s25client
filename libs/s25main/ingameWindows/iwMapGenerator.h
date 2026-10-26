@@ -15,44 +15,55 @@ public:
     {
         ID_btBack,
         ID_btApply,
-        ID_txtGold,
-        ID_txtIron,
-        ID_txtCoal,
-        ID_txtGranite,
-        ID_txtRivers,
-        ID_txtMountainDist,
-        ID_txtTrees,
-        ID_txtStonePiles,
-        ID_txtIslands,
         ID_cbNumPlayers,
-        ID_txtMapStyle,
-        ID_cbMapStyle,
         ID_txtMapSize,
         ID_txtMapSizeX,
         ID_cbMapSizeX,
         ID_cbMapSizeY,
-        ID_pgGoldRatio,
-        ID_pgIronRatio,
-        ID_pgCoalRatio,
-        ID_pgGraniteRatio,
+        ID_txtSeed,
+        ID_edtSeed,
+        ID_btRandomSeed,
+        ID_txtLastSeed,
+        ID_txtLandMass,
+        ID_cbLandMass,
+        ID_txtWater,
+        ID_edtWater,
+        ID_txtMountains,
+        ID_edtMountains,
+        ID_txtRoughness,
+        ID_cbRoughness,
+        ID_txtRivers,
         ID_pgRivers,
+        ID_txtMountainDist,
         ID_cbMountainDist,
-        ID_pgTrees,
-        ID_pgStonePiles,
-        ID_cbIslands,
         ID_txtClimateTemperature,
         ID_cbClimateTemperature,
         ID_txtClimateHumidity,
         ID_cbClimateHumidity,
         ID_txtClimateZoneSize,
-        ID_pgClimateZoneSize
+        ID_pgClimateZoneSize,
+        ID_txtTrees,
+        ID_edtTrees,
+        ID_txtStonePiles,
+        ID_edtStonePiles,
+        ID_txtResourceAmount,
+        ID_edtResourceAmount,
+        ID_txtGold,
+        ID_pgGoldRatio,
+        ID_txtIron,
+        ID_pgIronRatio,
+        ID_txtCoal,
+        ID_pgCoalRatio,
+        ID_txtGranite,
+        ID_pgGraniteRatio
     };
 
     /**
      * Creates a new ingame window to configure the random map generator.
      * @param settings reference to the settings to be manipulated
+     * @param lastSeed seed of the last generated map (shown for reproducing it), 0 = none
      */
-    iwMapGenerator(rttr::mapGenerator::MapSettings& settings);
+    iwMapGenerator(rttr::mapGenerator::MapSettings& settings, uint32_t lastSeed = 0);
 
     void Msg_ButtonClick(unsigned ctrl_id) override;
 

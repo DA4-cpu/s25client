@@ -116,6 +116,7 @@ TerrainDesc::TerrainDesc(CheckedLuaTable luaData, const WorldDescription& worldD
     texType = strToTexType(luaData.getOrDefault<std::string>("texType", "overlapped"));
     palAnimIdx = luaData.getOrDefault<int8_t>("palAnimIdx", -1);
     luaData.getOrThrow(minimapColor, "color");
+    optional = luaData.getOrDefault("optional", false);
 
     luaData.checkUnused();
 }

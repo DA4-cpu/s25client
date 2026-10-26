@@ -5,6 +5,7 @@
 #include "mapGenerator/MapSettings.h"
 #include "helpers/mathFuncs.h"
 #include "gameData/MaxPlayers.h"
+#include <algorithm>
 
 namespace rttr::mapGenerator {
 
@@ -22,6 +23,12 @@ void MapSettings::MakeValid()
     size = elMax(size, MapExtent::all(16));
     if(ratioGold + ratioIron + ratioCoal + ratioGranite == 0)
         ratioCoal = 1;
+    water = std::min<unsigned short>(water, 90);
+    mountains = std::min<unsigned short>(mountains, 90);
+    trees = std::min<unsigned short>(trees, 100);
+    stonePiles = std::min<unsigned short>(stonePiles, 100);
+    rivers = std::min<unsigned short>(rivers, 100);
+    resourceAmount = std::min<unsigned short>(resourceAmount, 300);
     // Must be >0 (used as a divisor in GenerateClimateMap) and capped at a sane maximum
     climateZoneSize =
       helpers::clamp(climateZoneSize, static_cast<unsigned short>(10), static_cast<unsigned short>(150));
