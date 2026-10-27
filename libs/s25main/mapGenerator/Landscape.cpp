@@ -6,20 +6,15 @@
 #include "RttrForeachPt.h"
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
+#include "mapGenerator/Algorithms.h"
 #include "mapGenerator/Noise.h"
 #include "mapGenerator/TextureHelper.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <queue>
 
 namespace rttr::mapGenerator {
-
-LandscapeLevels GetLandscapeLevels(uint8_t maxHeight)
-{
-    // The online generator keeps the land quite flat (about 10 height steps from the coast to the mountains) and
-    // the mountains about 2-3 times as high.
-    const auto landTop = static_cast<uint8_t>(std::clamp(maxHeight / 5, 3, 12));
-    return LandscapeLevels{landTop, static_cast<uint8_t>(landTop + 2)};
-}
 
 namespace {
 /// Size of the largest features in (visual) nodes for the given land mass
@@ -35,27 +30,39 @@ double GetFeatureSize(LandMass landMass, const MapExtent& size)
     }
     return minDimension / 3.;
 }
+
+double SmoothStep(double edge0, double edge1, double x)
+{
+    const double t = std::clamp((x - edge0) / (edge1 - edge0), 0., 1.);
+    return t * t * (3. - 2. * t);
+}
+
+/// Hills of land and mountains are at most this high (map height units) on large maps
+constexpr double maxHillHeight = 12.;
+/// Mountains rise at least this much above their foot ...
+constexpr double minMountainHeight = 8.;
+/// ... and at most this much
+constexpr double maxMountainHeight = 45.;
+/// Slope of mountains at their foot (height units per node) for flat and steep mountain ranges. Mines need the
+/// south east neighbor at most 3 higher, so this stays below 3
+constexpr double minMountainSlope = 0.8;
+constexpr double maxMountainSlope = 2.4;
 } // namespace
 
-LandscapeLevels CreateLandscape(Map& map, RandomUtility& rnd, const MapSettings& settings)
+void CreateLandMasses(Map& map, RandomUtility& rnd, const MapSettings& settings)
 {
-    const LandscapeLevels levels = GetLandscapeLevels(map.height.maximum);
-
     unsigned octaves = 4;
     double persistence = 0.5;
-    unsigned heightJitter = 1;
     switch(settings.roughness)
     {
         case Roughness::Smooth:
             octaves = 3;
             persistence = 0.35;
-            heightJitter = 0;
             break;
         case Roughness::Normal: break;
         case Roughness::Rough:
             octaves = 5;
             persistence = 0.6;
-            heightJitter = 2;
             break;
     }
 
@@ -88,140 +95,215 @@ LandscapeLevels CreateLandscape(Map& map, RandomUtility& rnd, const MapSettings&
         }
     }
     const double mountainLimit = 1. - (1. - waterLimit) * mountainShare;
-    const unsigned maxMountainRise = map.height.maximum > levels.mountainLevel ?
-                                       map.height.maximum - levels.mountainLevel :
-                                       0u;
-    const unsigned mountainRise = std::min(maxMountainRise, levels.landTop * 3u);
 
     RTTR_FOREACH_PT(MapPoint, map.size)
     {
         const double value = noise[pt];
         if(value < waterLimit)
+            map.nodeKind[pt] = NodeKind::Water;
+        else if(value < mountainLimit)
+            map.nodeKind[pt] = NodeKind::Land;
+        else
+            map.nodeKind[pt] = NodeKind::Mountain;
+    }
+}
+
+void CreateHeights(Map& map, RandomUtility& rnd, const MapSettings& settings)
+{
+    const MapExtent size = map.size;
+    // Small maps have a smaller maximum height, scale everything down there
+    const double scale = std::clamp(map.height.maximum / 64., 0.4, 1.);
+    const double unevenness = std::min(settings.unevenness, static_cast<unsigned short>(100)) / 100.;
+
+    const auto distanceToWater = DistancesTo(size, [&map](const MapPoint& pt) { return map.nodeKind[pt] == NodeKind::Water; });
+    const auto depthInMountains =
+      DistancesTo(size, [&map](const MapPoint& pt) { return map.nodeKind[pt] != NodeKind::Mountain; });
+
+    // Hills, and per region how hilly it is (flat plains vs. hilly land)
+    const auto hills = ToUniform(CreateFractalNoise(rnd, size, 12., 3, 0.5));
+    const auto hilliness = ToUniform(CreateFractalNoise(rnd, size, 40., 2, 0.5));
+    // Per mountain range: steepness and height
+    const auto steepness = ToUniform(CreateFractalNoise(rnd, size, 30., 2, 0.5));
+    const auto mountainHeight = ToUniform(CreateFractalNoise(rnd, size, 30., 2, 0.5));
+    // Detail on the mountains (ridges), roughly [-1, 1]
+    const auto ridges = CreateFractalNoise(rnd, size, 8., 3, 0.5);
+
+    // Random bumps of single nodes: none on flat maps, up to 2 on very uneven maps
+    const unsigned jitter = unevenness >= 0.75 ? 2u : (unevenness >= 0.25 ? 1u : 0u);
+    // Mountains get steeper (and flatter) with the unevenness, too
+    const double slopeFactor = 0.6 + 0.8 * unevenness;
+
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        map.mountainLift[pt] = 0;
+        if(map.nodeKind[pt] == NodeKind::Water)
         {
             map.z[pt] = map.height.minimum;
-        } else if(value < mountainLimit)
+            continue;
+        }
+        const double coastDistance = std::min(distanceToWater[pt], 10u);
+        // Flat beaches, then rising slowly
+        const double coastRise = coastDistance * 0.4 * scale;
+        const double region = SmoothStep(0.25, 0.85, hilliness[pt]);
+        const double hillHeight =
+          maxHillHeight * scale * unevenness * region * std::min(1., coastDistance / 6.) * hills[pt];
+        double height = 1. + coastRise + hillHeight;
+
+        if(map.nodeKind[pt] == NodeKind::Mountain)
         {
-            const double t = (value - waterLimit) / (mountainLimit - waterLimit);
-            unsigned height = 1u + static_cast<unsigned>(t * levels.landTop);
-            if(heightJitter > 0)
-                height += rnd.RandomValue(0u, heightJitter);
-            map.z[pt] = static_cast<uint8_t>(std::clamp(height, 1u, static_cast<unsigned>(levels.landTop)));
-        } else
+            const double depth = depthInMountains[pt];
+            const double slope = (minMountainSlope + (maxMountainSlope - minMountainSlope) * steepness[pt]) * slopeFactor;
+            const double cap =
+              (minMountainHeight + (maxMountainHeight - minMountainHeight) * std::pow(mountainHeight[pt], 1.3)) * scale;
+            // Rises with the slope at the foot and levels off towards the top
+            double lift = cap * (1. - std::exp(-depth * slope / cap));
+            lift += ridges[pt] * 0.1 * cap * std::min(1., depth / 3.);
+            lift = std::max(lift, 1.);
+            map.mountainLift[pt] = static_cast<uint8_t>(std::min(std::lround(lift), 250l));
+            height += 1. + lift;
+        }
+        unsigned z = static_cast<unsigned>(std::lround(height));
+        if(jitter > 0)
+            z += rnd.RandomValue(0u, jitter);
+        map.z[pt] = static_cast<uint8_t>(std::clamp(z, 1u, static_cast<unsigned>(map.height.maximum)));
+    }
+
+    // Mountains are never lower than the land next to them (hills and random bumps could make the foot lower)
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        if(map.nodeKind[pt] != NodeKind::Mountain)
+            continue;
+        for(const MapPoint& neighbor : map.z.GetNeighbours(pt))
         {
-            const double t = (value - mountainLimit) / std::max(1. - mountainLimit, 1e-9);
-            unsigned height = levels.mountainLevel + static_cast<unsigned>(t * mountainRise);
-            if(heightJitter > 0)
-                height += rnd.RandomValue(0u, heightJitter);
-            map.z[pt] = static_cast<uint8_t>(
-              std::clamp(height, static_cast<unsigned>(levels.mountainLevel), static_cast<unsigned>(map.height.maximum)));
+            if(map.nodeKind[neighbor] == NodeKind::Land && map.z[neighbor] >= map.z[pt])
+                map.z[pt] = static_cast<uint8_t>(std::min<unsigned>(map.z[neighbor] + 1u, map.height.maximum));
+        }
+    }
+}
+
+void MarkLakes(Map& map, unsigned maxSize)
+{
+    map.lakes.Resize(map.size, 0);
+    NodeMapBase<uint8_t> visited;
+    visited.Resize(map.size, 0);
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        if(map.nodeKind[pt] != NodeKind::Water || visited[pt])
+            continue;
+        std::vector<MapPoint> body{pt};
+        visited[pt] = 1;
+        for(unsigned i = 0; i < body.size(); ++i)
+        {
+            for(const MapPoint& neighbor : map.z.GetNeighbours(body[i]))
+            {
+                if(map.nodeKind[neighbor] == NodeKind::Water && !visited[neighbor])
+                {
+                    visited[neighbor] = 1;
+                    body.push_back(neighbor);
+                }
+            }
+        }
+        if(body.size() <= maxSize)
+        {
+            for(const MapPoint& node : body)
+                map.lakes[node] = 1;
+        }
+    }
+}
+
+NodeMapBase<uint8_t> GetTextureLevels(const Map& map, uint8_t mountainLevel)
+{
+    NodeMapBase<uint8_t> levels;
+    levels.Resize(map.size, 0);
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        switch(map.nodeKind[pt])
+        {
+            case NodeKind::Water: levels[pt] = 0; break;
+            case NodeKind::Land: levels[pt] = 1; break;
+            case NodeKind::Mountain:
+                levels[pt] = static_cast<uint8_t>(std::min(255u, mountainLevel + 0u + map.mountainLift[pt]));
+                break;
         }
     }
     return levels;
 }
 
-River CreateRiver(Map& map, RandomUtility& rnd, MapPoint source, unsigned maxLength)
+std::vector<MapPoint> PlaceMountainBuildingSites(Map& map, unsigned spacing)
 {
-    River river;
+    std::vector<MapPoint> sites;
+    if(spacing < 2)
+        return sites;
     auto& textures = map.textureMap;
-    const auto water = textures.Find(IsWater);
-    const uint8_t seaLevel = map.height.minimum;
+    const auto buildableTextures = textures.FindAll(IsBuildableMountain);
+    if(buildableTextures.empty())
+        return sites;
 
-    // Course of this river (to avoid flowing in circles)
-    std::set<MapPoint, MapPointLess> course;
-    MapPoint current = source;
-    const auto setWater = [&](const MapPoint& pt, Direction dir) {
-        for(const Triangle& triangle : GetTriangles(pt, map.size, dir))
+    // A site needs mountains all around (2 nodes), otherwise the flag or the building could end up at the water
+    const auto isSuitable = [&](const MapPoint& pt) {
+        for(const MapPoint& p : map.z.GetPointsInRadiusWithCenter(pt, 2))
         {
-            textures.Set(triangle, water);
-            for(const MapPoint& edge : GetTriangleEdges(triangle, map.size))
-                river.insert(edge);
+            if(!textures.All(p, IsMinableMountain) || map.riverCourse[p])
+                return false;
         }
+        return true;
     };
+    NodeMapBase<uint8_t> isSite;
+    isSite.Resize(map.size, 0);
 
-    for(unsigned step = 0; step < maxLength; ++step)
+    // Regular grid: every `spacing` nodes, every second grid row shifted by half the spacing
+    unsigned gridRow = 0;
+    for(unsigned y = spacing / 2; y < map.size.y; y += spacing, ++gridRow)
     {
-        // Reached the sea level (water is textured later) -> done
-        if(map.z[current] <= seaLevel)
-            break;
-        course.insert(current);
-        map.riverCourse[current] = 1;
-
-        // Find the lowest neighbors. Rivers dig through small bumps (up to 2 height steps, e.g. from the rough
-        // surface) but end in a sink if the land around is higher
-        constexpr unsigned maxBump = 2;
-        std::vector<Direction> candidates;
-        unsigned lowest = map.z[current] + maxBump;
-        for(const auto dir : helpers::EnumRange<Direction>())
+        const unsigned offset = (gridRow % 2) ? spacing / 2 : 0;
+        for(unsigned x = offset; x < map.size.x; x += spacing)
         {
-            const MapPoint next = map.z.GetNeighbour(current, dir);
-            if(helpers::contains(course, next) || map.z[next] > lowest)
+            const MapPoint gridPt(static_cast<MapCoord>(x), static_cast<MapCoord>(y));
+            if(map.nodeKind[gridPt] != NodeKind::Mountain)
                 continue;
-            if(map.z[next] < lowest)
+            // The grid point itself or the closest suitable node nearby
+            MapPoint site = MapPoint::Invalid();
+            if(isSuitable(gridPt))
+                site = gridPt;
+            else
             {
-                lowest = map.z[next];
-                candidates.clear();
+                for(const MapPoint& p : map.z.GetPointsInRadius(gridPt, std::max(1u, spacing / 3)))
+                {
+                    if(isSuitable(p))
+                    {
+                        site = p;
+                        break;
+                    }
+                }
             }
-            candidates.push_back(dir);
+            if(!site.isValid())
+                continue;
+            // Flattening a site changes the heights in radius 2, so sites must be further apart
+            if(helpers::contains_if(map.z.GetPointsInRadiusWithCenter(site, 4),
+                                    [&isSite](const MapPoint& p) { return isSite[p] != 0; }))
+                continue;
+
+            // Texture of the mountain type matching the temperature (like the mountain textures)
+            DescIdx<TerrainDesc> texture = buildableTextures.front();
+            int bestDistance = std::numeric_limits<int>::max();
+            for(const auto candidate : buildableTextures)
+            {
+                const int distance = std::abs(static_cast<int>(textures.GetDesc(candidate).temperature)
+                                              - static_cast<int>(map.temperature[site]));
+                if(distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    texture = candidate;
+                }
+            }
+            for(const Triangle& triangle : GetTriangles(site, map.size))
+                textures.Set(triangle, texture);
+            FlattenForCastleBuilding(map.z, site);
+            isSite[site] = 1;
+            sites.push_back(site);
         }
-
-        if(candidates.empty())
-        {
-            // A sink: end in a small pond
-            for(const auto dir : helpers::EnumRange<Direction>())
-                setWater(current, dir);
-            break;
-        }
-
-        const Direction dir = rnd.RandomItem(candidates);
-        setWater(current, dir);
-        const MapPoint next = map.z.GetNeighbour(current, dir);
-        // Dig through the bump so the river flows downhill
-        if(map.z[next] > map.z[current])
-            map.z[next] = map.z[current];
-        // Joined another river
-        if(map.riverCourse[next])
-            break;
-        current = next;
     }
-
-    // Rivers dig into the land a bit
-    for(const MapPoint& pt : course)
-    {
-        if(map.z[pt] > seaLevel + 1)
-            map.z[pt] = static_cast<uint8_t>(map.z[pt] - 1);
-    }
-    return river;
-}
-
-std::vector<River> CreateRivers(Map& map, RandomUtility& rnd, unsigned amount, const LandscapeLevels& levels)
-{
-    std::vector<River> rivers;
-    if(amount == 0)
-        return rivers;
-
-    // Sources: upper part of the land, but not on the mountains
-    const unsigned minSourceHeight = std::max(1u, levels.landTop * 2u / 3u);
-    std::vector<MapPoint> sources;
-    RTTR_FOREACH_PT(MapPoint, map.size)
-    {
-        if(map.z[pt] >= minSourceHeight && map.z[pt] < levels.mountainLevel)
-            sources.push_back(pt);
-    }
-    if(sources.empty())
-        return rivers;
-
-    const unsigned numNodes = static_cast<unsigned>(map.size.x) * map.size.y;
-    // At 100 % about one river per 1500 nodes
-    const unsigned numRivers = std::max(1u, static_cast<unsigned>(std::lround(amount / 100. * numNodes / 1500.)));
-    const unsigned maxLength = map.size.x + map.size.y;
-    for(unsigned i = 0; i < numRivers; ++i)
-    {
-        const MapPoint source = sources[rnd.Index(sources.size())];
-        if(map.riverCourse[source])
-            continue;
-        rivers.push_back(CreateRiver(map, rnd, source, maxLength));
-    }
-    return rivers;
+    return sites;
 }
 
 } // namespace rttr::mapGenerator

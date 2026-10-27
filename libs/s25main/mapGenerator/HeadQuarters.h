@@ -139,7 +139,8 @@ void PlaceHeadquarters(Map& map, RandomUtility& rnd, int number, MountainDistanc
  * Places the HQs of all players on the connected land areas (islands, continents): Each player goes to the area with
  * the most space per player (size / (players already there + 1)), so on maps with many islands each player gets his
  * own island and on maps with one large continent all players start there. Areas which are too small for an HQ are
- * skipped.
+ * skipped. Positions with little buildable land around (less than 40 % within 8 nodes, e.g. on a narrow peninsula)
+ * are only used if there is no other position.
  *
  * @throw runtime_error if no valid position is found
  */

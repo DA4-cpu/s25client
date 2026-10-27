@@ -17,7 +17,8 @@ struct MapGenDesc;
 namespace rttr::mapGenerator {
 
 unsigned GetMaximumHeight(const MapExtent& size);
-unsigned GetCoastline(const MapExtent& size);
+/// Width of the sand beach at the sea in rows of triangles (see Texturizer::ApplyBeach)
+unsigned GetBeachWidth(const MapExtent& size);
 unsigned GetIslandRadius(const MapExtent& size);
 unsigned GetIslandSize(const MapExtent& size);
 unsigned GetSmoothRadius(const MapExtent& size);
@@ -31,15 +32,15 @@ private:
     RandomUtility& rnd_;
     Map& map_;
     const MapGenDesc& desc_;
-    Texturizer texturizer_;
     MapSettings settings_;
 
 public:
     RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc);
     /**
-     * Creates the map: land and water like the online map generator of the RttR website (CreateLandscape), rivers,
-     * climate (temperature, humidity, height), textures, harbors, HQs, zones and finally all objects and resources
-     * according to the lua data (PlaceResources).
+     * Creates the map: water, land and mountains like the online map generator of the RttR website
+     * (CreateLandMasses), heights (CreateHeights), rivers, climate (temperature, humidity, height), textures, building
+     * sites in the mountains, harbors, HQs, zones and finally all objects and resources according to the lua data
+     * (PlaceResources).
      */
     void Create(const MapSettings& settings);
 };

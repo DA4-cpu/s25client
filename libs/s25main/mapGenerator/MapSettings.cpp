@@ -29,7 +29,8 @@ void MapSettings::MakeValid()
     stonePiles = std::min<unsigned short>(stonePiles, 100);
     rivers = std::min<unsigned short>(rivers, 100);
     resourceAmount = std::min<unsigned short>(resourceAmount, 300);
-    // Must be >0 (used as a divisor in GenerateClimateMap) and capped at a sane maximum
+    unevenness = std::min<unsigned short>(unevenness, 100);
+    // Size of climate areas in nodes, capped at a sane range
     climateZoneSize =
       helpers::clamp(climateZoneSize, static_cast<unsigned short>(10), static_cast<unsigned short>(150));
 }

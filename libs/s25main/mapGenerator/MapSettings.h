@@ -100,6 +100,9 @@ struct MapSettings
     /// Mountains in percent of the land
     unsigned short mountains = 15;
     Roughness roughness = Roughness::Normal;
+    /// How uneven the heights are in percent: 0 = flat land and flat mountains, 100 = very hilly land and steep
+    /// mountains. Regions vary anyway (plains and hills)
+    unsigned short unevenness = 50;
     /// Factor in percent for the amount of all resources of the resource rules (lua), 100 = as defined
     unsigned short resourceAmount = 100;
     MountainDistance mountainDistance = MountainDistance::Normal;
@@ -112,7 +115,7 @@ struct MapSettings
     DescIdx<LandscapeDesc> type = DescIdx<LandscapeDesc>(3);
     ClimateTemperature climateTemperature = ClimateTemperature::Temperate;
     ClimateHumidity climateHumidity = ClimateHumidity::Temperate;
-    /// Approximate width/height (in nodes) of a single climate zone (see GenerateClimateMap()).
+    /// Approximate width/height (in nodes) of areas with similar climate (see GenerateClimateMap()).
     /// Smaller values produce many small zones, larger values produce few large, near-uniform zones.
     /// Unlike the two presets above this is exposed as a fine-grained slider in the UI rather than a
     /// small fixed set of options.

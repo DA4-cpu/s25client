@@ -56,7 +56,7 @@ T GetNumber(const ctrlEdit& edit, T maxValue)
 } // namespace
 
 iwMapGenerator::iwMapGenerator(MapSettings& settings, uint32_t lastSeed)
-    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(540, 420), _("Map Generator"),
+    : IngameWindow(CGI_MAP_GENERATOR, IngameWindow::posLastOrCenter, Extent(540, 430), _("Map Generator"),
                    LOADER.GetImageN("resource", 41), true, CloseBehavior::Custom),
       mapSettings(settings)
 {
@@ -142,6 +142,10 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings, uint32_t lastSeed)
     combo->AddItem(_("Rau"));
 
     y += rowHeight;
+    addLabel(ID_txtUnevenness, col1, y, _("Unebenheit (in %)"));
+    addNumberEdit(ID_edtUnevenness, col1 + ctrlOffset, y, 3);
+
+    y += rowHeight;
     addLabel(ID_txtRivers, col1, y, _("Rivers:"));
     AddProgress(ID_pgRivers, DrawPoint(col1 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138, 100);
 
@@ -208,7 +212,7 @@ iwMapGenerator::iwMapGenerator(MapSettings& settings, uint32_t lastSeed)
     addLabel(ID_txtGranite, col2, y, _("Granite:"));
     AddProgress(ID_pgGraniteRatio, DrawPoint(col2 + ctrlOffset, y), ctrlSize, TextureColor::Grey, 139, 138, 100);
 
-    y += rowHeight + 15;
+    y = 30 + 11 * rowHeight + 5;
     AddTextButton(ID_btBack, DrawPoint(col1 + 130, y), buttonSize, TextureColor::Red1, _("Back"), NormalFont);
     AddTextButton(ID_btApply, DrawPoint(col2 + 10, y), buttonSize, TextureColor::Green2, _("Apply"), NormalFont);
 
@@ -250,6 +254,7 @@ void iwMapGenerator::Apply()
     mapSettings.trees = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtTrees), 100);
     mapSettings.stonePiles = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtStonePiles), 100);
     mapSettings.resourceAmount = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtResourceAmount), 300);
+    mapSettings.unevenness = GetNumber<unsigned short>(*GetCtrl<ctrlEdit>(ID_edtUnevenness), 100);
 
     switch(GetCtrl<ctrlComboBox>(ID_cbMountainDist)->GetSelection().value())
     {
@@ -309,6 +314,7 @@ void iwMapGenerator::Reset()
     GetCtrl<ctrlEdit>(ID_edtTrees)->SetText(mapSettings.trees);
     GetCtrl<ctrlEdit>(ID_edtStonePiles)->SetText(mapSettings.stonePiles);
     GetCtrl<ctrlEdit>(ID_edtResourceAmount)->SetText(mapSettings.resourceAmount);
+    GetCtrl<ctrlEdit>(ID_edtUnevenness)->SetText(mapSettings.unevenness);
 
     auto* combo = GetCtrl<ctrlComboBox>(ID_cbMountainDist);
     switch(mapSettings.mountainDistance)

@@ -141,12 +141,25 @@ struct MapClimateDesc
 {
     /// Temperature points subtracted at the highest point of the map (linear with height)
     unsigned heightCooling = 0;
-    /// Maximum distance in nodes for the terrain types "near_fresh", "near_salt" and "near_river"
+    /// Maximum distance in nodes for the terrain types "near_fresh", "near_salt" and "near_river" and for the higher
+    /// humidity at lakes and rivers
     unsigned nearWaterDistance = 4;
-    /// Bodies of water up to this size (percent of the map) are fresh water, larger ones salt water
-    double freshwaterMaxSize = 2.;
+    /// Bodies of water up to this size (nodes) are lakes (fresh water), larger ones are the sea (salt water)
+    unsigned lakeMaxSize = 500;
+    /// Humidity points added directly at lakes and rivers, less with the distance up to nearWaterDistance
+    unsigned waterHumidity = 10;
     /// Save preview images (zones, climate) next to the generated map
     bool previewImages = true;
+    /// Standard deviation of temperature and humidity around the mean of the preset (about 68 % of the map within
+    /// mean +- spread)
+    double temperatureSpread = 15.;
+    double humiditySpread = 15.;
+    /// Rivers start at nodes with at least this height in percent of the highest point
+    unsigned riverMinHeight = 30;
+    /// Shorter rivers are not created (steps along the edges of the map)
+    unsigned riverMinLength = 15;
+    /// Distance in nodes between the small building sites in the mountains, 0 = none
+    unsigned mountainBuildSpacing = 6;
 
     MapClimateDesc() = default;
     explicit MapClimateDesc(const kaguya::LuaTable& luaData);

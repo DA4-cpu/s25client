@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "mapGenerator/Textures.h"
+#include "RttrForeachPt.h"
 #include "mapGenerator/Algorithms.h"
 #include "mapGenerator/TextureHelper.h"
 
@@ -114,20 +115,33 @@ void Texturizer::ApplyTexturingByHeightMap(unsigned mountainLevel)
     // *within* the land band, the texture is now picked by local humidity and temperature instead of
     // by height, so e.g. a desert region and a swamp region can appear at the same altitude.
     // Mountain/snow/lava textures stay purely height-driven, same as before.
+    // Water if all corners are water, mountain if most corners are mountain, land otherwise
     auto pickTexture = [&](const Triangle& triangle) {
-        const uint8_t zValue = interpolate(z, triangle);
+        const auto& corners = GetTriangleEdges(triangle, size);
+        unsigned numWater = 0, numMountain = 0, mountainSum = 0;
+        for(const MapPoint& corner : corners)
+        {
+            if(z[corner] <= seaLevel_)
+                ++numWater;
+            else if(z[corner] >= mountainLevel)
+            {
+                ++numMountain;
+                mountainSum += z[corner];
+            }
+        }
 
-        if(zValue <= seaLevel_)
+        if(numWater == corners.size())
         {
             return waterTexture;
         }
-        if(zValue < mountainLevel)
+        if(numMountain < 2)
         {
             const uint8_t climateValue = interpolate(climate, triangle);
             const uint8_t temperatureValue = interpolate(temperature, triangle);
             return pickLandTexture(climateValue, temperatureValue);
         }
 
+        const auto zValue = static_cast<uint8_t>((mountainSum + numMountain - 1) / numMountain);
         const uint8_t temperatureValue = interpolate(temperature, triangle);
         const std::vector<DescIdx<TerrainDesc>>* mountainTextures = nullptr;
         int bestDistance = std::numeric_limits<int>::max();
@@ -159,32 +173,61 @@ void Texturizer::ApplyTexturingByHeightMap(unsigned mountainLevel)
     }
 }
 
-void Texturizer::ApplyCoastTexturing(const std::vector<MapPoint>& coast, unsigned width)
+void Texturizer::ApplyBeach(unsigned rows)
 {
-    std::set<MapPoint, MapPointLess> visited;
-    std::copy(coast.begin(), coast.end(), std::inserter(visited, visited.begin()));
+    if(rows == 0)
+        return;
+    const MapExtent size = textures_.GetSize();
+    const auto sand = textureMap_.Find(IsCoastTerrain);
+    const auto hasExcludedCorner = [this, &size](const Triangle& triangle) {
+        if(!noCoast_)
+            return false;
+        for(const MapPoint& corner : GetTriangleEdges(triangle, size))
+        {
+            if((*noCoast_)[corner] & ShoreExclusion::NoBeach)
+                return true;
+        }
+        return false;
+    };
+    const auto index = [&size](const Triangle& triangle) {
+        return (static_cast<unsigned>(triangle.position.y) * size.x + triangle.position.x) * 2u
+               + (triangle.rsu ? 1u : 0u);
+    };
+    std::vector<uint8_t> visited(static_cast<size_t>(size.x) * size.y * 2u, 0);
 
-    // setup transition textures from water to land
-    auto sand = textureMap_.Find(IsCoastTerrain);
-    auto sandGrass = textureMap_.FindAll(IsBuildableCoast);
-    textureMap_.Sort(sandGrass, ByHumidity);
-    std::array<DescIdx<TerrainDesc>, 1> transitionTextures{sand};
-
-    // exclude mountain & water textures from being replaced by water-land transition
-    std::set<DescIdx<TerrainDesc>> excludedTextures;
-    const auto mountainTextures = textureMap_.FindAll(IsMountainOrSnowOrLava);
-    const auto water = textureMap_.Find(IsShipableWater);
-    excludedTextures.insert(mountainTextures.begin(), mountainTextures.end());
-    excludedTextures.insert(water);
-
-    for(unsigned i = 0; i < transitionTextures.size(); ++i)
+    // Rows of triangles growing from the water, each row shares a side with the previous one
+    std::vector<Triangle> row;
+    RTTR_FOREACH_PT(MapPoint, size)
     {
-        // for nodes covered by water & coast, replace only neighboring coast textures
-        unsigned appliedWidth = width - (i == 0 ? 1 : 0);
-        ReplaceTextures(textures_, appliedWidth, visited, transitionTextures[i], excludedTextures);
-
-        // don't replace already applied transition textures
-        excludedTextures.insert(transitionTextures[i]);
+        for(const bool rsu : {true, false})
+        {
+            const Triangle triangle(rsu, pt);
+            if(textureMap_.Check(triangle, IsWater) && !hasExcludedCorner(triangle))
+            {
+                visited[index(triangle)] = 1;
+                row.push_back(triangle);
+            }
+        }
+    }
+    for(unsigned i = 0; i < rows && !row.empty(); ++i)
+    {
+        std::vector<Triangle> nextRow;
+        for(const Triangle& triangle : row)
+        {
+            for(const Triangle& neighbor : GetTriangleNeighbors(triangle, size))
+            {
+                auto& isVisited = visited[index(neighbor)];
+                if(isVisited)
+                    continue;
+                isVisited = 1;
+                if(!textureMap_.Check(neighbor, IsLand) || textureMap_.Check(neighbor, IsMountainOrSnowOrLava)
+                   || hasExcludedCorner(neighbor))
+                    continue;
+                textureMap_.Set(neighbor, sand);
+                nextRow.push_back(neighbor);
+            }
+        }
+        row = std::move(nextRow);
     }
 }
 
@@ -218,23 +261,10 @@ void Texturizer::ApplyMountainWaterTransitions(const std::vector<MapPoint>& tran
     ReplaceTextures(textures_, 1, nodes, boulder, {swamp, water});
 }
 
-void Texturizer::AddTextures(unsigned mountainLevel, unsigned coastline)
+void Texturizer::AddTextures(unsigned mountainLevel, unsigned beachWidth)
 {
     ApplyTexturingByHeightMap(mountainLevel);
-
-    auto coast = SelectPoints(
-      [this](const MapPoint& pt) { return this->textureMap_.Any(pt, IsLand) && this->textureMap_.Any(pt, IsWater); },
-      this->textures_.GetSize());
-
-    ApplyCoastTexturing(coast, 1); // small for tiny rivers
-
-    auto isRiver = [this](const MapPoint& pt) {
-        auto suroundedByWater = [this](const MapPoint& pt) { return this->textureMap_.All(pt, IsWater); };
-        return !helpers::contains_if(this->textures_.GetNeighbours(pt), suroundedByWater);
-    };
-    helpers::erase_if(coast, isRiver);
-
-    ApplyCoastTexturing(coast, coastline);
+    ApplyBeach(beachWidth);
 
     const auto mountainFoot = SelectPoints(
       [this](const MapPoint& pt) {
@@ -244,11 +274,13 @@ void Texturizer::AddTextures(unsigned mountainLevel, unsigned coastline)
 
     ApplyMountainTransitions(mountainFoot);
 
-    const auto moutainWaterTransition = SelectPoints(
+    auto moutainWaterTransition = SelectPoints(
       [this](const MapPoint& pt) {
           return this->textureMap_.Any(pt, IsMinableMountain) && this->textureMap_.Any(pt, IsWater);
       },
       this->textures_.GetSize());
+    helpers::erase_if(moutainWaterTransition,
+                      [this](const MapPoint& pt) { return noCoast_ && ((*noCoast_)[pt] & ShoreExclusion::NoSwamp); });
 
     ApplyMountainWaterTransitions(moutainWaterTransition);
 }

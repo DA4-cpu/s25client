@@ -11,6 +11,11 @@
 
 namespace rttr::mapGenerator {
 
+namespace {
+    /// Radius around an HQ which needs enough buildable land (see PlaceHeadquartersOnLandmasses)
+    constexpr unsigned hqRoomRadius = 8;
+} // namespace
+
 std::vector<MapPoint> FindLargestConnectedArea(const Map& map)
 {
     std::set<MapPoint, MapPointLess> visited;
@@ -138,6 +143,27 @@ void PlaceHeadquartersOnLandmasses(Map& map, RandomUtility& rnd, unsigned number
 
     // An HQ needs some land around it to be playable
     const size_t minAreaSize = std::min<size_t>(300, areas.front().size() / 2);
+    // ... and room to build around it: Positions on a narrow peninsula or a tiny island connected by a thin strip of
+    // land are only used if there is nothing better
+    NodeMapBase<uint8_t> buildable;
+    buildable.Resize(map.size, 0);
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        buildable[pt] = map.textureMap.All(pt, IsBuildableLand) ? 1 : 0;
+    }
+    const unsigned numNodesInRadius = 1 + 3 * hqRoomRadius * (hqRoomRadius + 1);
+    NodeMapBase<uint8_t> roomCache; // 0 = unknown, 1 = no room, 2 = room
+    roomCache.Resize(map.size, 0);
+    const auto hasRoom = [&](const MapPoint& pt) {
+        if(!roomCache[pt])
+        {
+            unsigned numBuildable = 0;
+            for(const MapPoint& p : map.z.GetPointsInRadiusWithCenter(pt, hqRoomRadius))
+                numBuildable += buildable[p];
+            roomCache[pt] = numBuildable * 5 >= numNodesInRadius * 2 ? 2 : 1; // 40 %
+        }
+        return roomCache[pt] == 2;
+    };
 
     for(int attempt = 0; attempt < retries; ++attempt)
     {
@@ -157,17 +183,24 @@ void PlaceHeadquartersOnLandmasses(Map& map, RandomUtility& rnd, unsigned number
                 return areas[a].size() * (playersInArea[b] + 1) > areas[b].size() * (playersInArea[a] + 1);
             });
             bool placed = false;
-            for(const unsigned areaIdx : order)
+            for(const bool requireRoom : {true, false})
             {
-                const auto positions = FindHqPositions(map, areas[areaIdx], distance);
-                if(positions.empty())
-                    continue;
-                // First attempt: best positions. Later attempts: random among the better half
-                const size_t numCandidates = attempt == 0 ? 1 : std::max<size_t>(1, positions.size() / 2);
-                map.hqPositions.push_back(positions[rnd.Index(numCandidates)]);
-                ++playersInArea[areaIdx];
-                placed = true;
-                break;
+                for(const unsigned areaIdx : order)
+                {
+                    auto positions = FindHqPositions(map, areas[areaIdx], distance);
+                    if(requireRoom)
+                        helpers::erase_if(positions, [&hasRoom](const MapPoint& pt) { return !hasRoom(pt); });
+                    if(positions.empty())
+                        continue;
+                    // First attempt: best positions. Later attempts: random among the better half
+                    const size_t numCandidates = attempt == 0 ? 1 : std::max<size_t>(1, positions.size() / 2);
+                    map.hqPositions.push_back(positions[rnd.Index(numCandidates)]);
+                    ++playersInArea[areaIdx];
+                    placed = true;
+                    break;
+                }
+                if(placed)
+                    break;
             }
             success = placed;
         }

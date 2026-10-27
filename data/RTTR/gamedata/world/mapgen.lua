@@ -36,7 +36,7 @@
 --   "near_fresh"   in der Nähe von Süßwasser (Abstand siehe nearWaterDistance, schließt das Ufer ein)
 --   "near_salt"    in der Nähe von Salzwasser
 --   "near_river"   in der Nähe eines Flusses
--- Ob ein Gewässer Süß- oder Salzwasser ist, hängt von seiner Größe ab (freshwaterMaxSize). Flüsse sind immer Süßwasser.
+-- Ob ein Gewässer Süß- oder Salzwasser ist, hängt von seiner Größe ab (lakeMaxSize). Flüsse sind immer Süßwasser.
 --
 -- Vorhandene Baumarten (für trees): Pine (Kiefer), Birch (Birke), Oak (Eiche), Palm1 (Palme 1), Palm2 (Palme 2),
 --   Pineapple (Ananas), Cypress (Zypresse), Cherry (Kirschbaum), Fir (Tanne)
@@ -46,15 +46,32 @@
 -- Arten als Platzhalter.
 
 -- ---------------------------------------------------------------------------------------------------------------------
--- Allgemeine Klima-Einstellungen
+-- Allgemeine Einstellungen (Klima, Flüsse, Gebirge)
 -- ---------------------------------------------------------------------------------------------------------------------
 rttr:SetMapClimate{
 	-- Um so viele Punkte sinkt die Temperatur am höchsten Punkt der Karte (gleichmäßig mit der Höhe). 0 = gar nicht
 	heightCooling = 30, -- PLATZHALTER
-	-- Abstand in Knoten für "near_fresh", "near_salt" und "near_river"
-	nearWaterDistance = 4, -- PLATZHALTER
-	-- Gewässer bis zu dieser Größe (Prozent der Kartenfläche) sind Süßwasser (Seen), größere sind Salzwasser (Meer)
-	freshwaterMaxSize = 3, -- PLATZHALTER
+	-- Streuung von Temperatur und Feuchtigkeit um den Mittelwert der Voreinstellung im Generatorfenster
+	-- (Kalt 27,5 / Kühl 37,5 / Gemäßigt 50 / Warm 62,5 / Heiß 72,5; Feucht 72,5 / Gemäßigt 50 / Trocken 27,5).
+	-- 68 % der Karte liegen innerhalb Mittelwert +- Streuung, 95 % innerhalb +- doppelter Streuung.
+	temperatureSpread = 20, -- PLATZHALTER
+	humiditySpread = 20, -- PLATZHALTER
+	-- Abstand in Knoten für "near_fresh", "near_salt" und "near_river". So weit reicht auch die höhere Feuchtigkeit an
+	-- Seen und Flüssen (waterHumidity)
+	nearWaterDistance = 5, -- PLATZHALTER
+	-- Gewässer bis zu dieser Größe (Anzahl Knoten, unabhängig von der Kartengröße) sind Seen (Süßwasser, ohne Strand),
+	-- größere sind Meer (Salzwasser, mit Sandstrand)
+	lakeMaxSize = 50, 
+	-- So viele Punkte steigt die Feuchtigkeit direkt an Seen und Flüssen. Mit dem Abstand wird es weniger, ab
+	-- nearWaterDistance + 1 Knoten Abstand gar nichts mehr. 0 = keine Änderung
+	waterHumidity = 50, -- PLATZHALTER
+	-- Flüsse entspringen nur ab dieser Höhe (Prozent des höchsten Punkts der Karte), meist also im Gebirge
+	riverMinHeight = 30,
+	-- Kürzere Flüsse werden nicht angelegt (Schritte entlang der Kanten, etwa Knoten)
+	riverMinLength = 15, -- PLATZHALTER
+	-- Abstand in Knoten zwischen den kleinen Bauflächen im Gebirge (für Militärgebäude, wie im Online-Generator).
+	-- 0 = keine
+	mountainBuildSpacing = 6,
 	-- Vorschaubilder (Zonen, Temperatur, Feuchtigkeit, Höhe) neben der erzeugten Karte speichern
 	-- (Ordner der gespielten Karten, Datei "Random_Vorschau.bmp")
 	previewImages = true

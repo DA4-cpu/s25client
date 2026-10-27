@@ -230,4 +230,28 @@ BOOST_AUTO_TEST_CASE(PlaceHeadquarters_without_suitable_position_throws_exceptio
     BOOST_CHECK_THROW(PlaceHeadquarters(map, rnd, players, mntDist), std::runtime_error);
 }
 
+BOOST_AUTO_TEST_CASE(PlaceHeadquartersOnLandmasses_avoids_narrow_peninsulas)
+{
+    // A large block of land with a long, narrow peninsula (5 nodes wide): The point farthest away from the first HQ is
+    // the tip of the peninsula, but there is no room to build. The second HQ goes into the block.
+    const MapExtent size(64, 64);
+    Map map = createMap(size);
+    TextureMap& textures = map.textureMap;
+    const auto water = textures.Find(IsShipableWater);
+    const auto land = textures.Find(IsBuildableLand);
+    map.getTextures().Resize(size, TexturePair(water));
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        const bool block = pt.x >= 2 && pt.x <= 30 && pt.y >= 2 && pt.y <= 30;
+        const bool peninsula = pt.x > 30 && pt.x <= 60 && pt.y >= 14 && pt.y <= 18;
+        if(block || peninsula)
+            map.getTextures()[pt] = TexturePair(land);
+    }
+    RandomUtility rnd(0);
+    PlaceHeadquartersOnLandmasses(map, rnd, 2, MountainDistance::Normal);
+    BOOST_TEST_REQUIRE(map.hqPositions.size() == 2u);
+    for(const MapPoint& hq : map.hqPositions)
+        BOOST_TEST(hq.x <= 30);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

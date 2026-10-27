@@ -112,11 +112,32 @@ void ApplyHeightCooling(Map& map, unsigned cooling)
     }
 }
 
-void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance, double freshwaterMaxSize)
+void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity)
+{
+    if(humidity == 0)
+        return;
+    std::vector<MapPoint> freshWater;
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        if(map.lakes[pt] || map.riverCourse[pt])
+            freshWater.push_back(pt);
+    }
+    if(freshWater.empty())
+        return;
+    const auto distance = DistancesTo(freshWater, map.size);
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        if(distance[pt] > maxDistance)
+            continue;
+        const unsigned increase = humidity * (maxDistance + 1u - distance[pt]) / (maxDistance + 1u);
+        map.climate[pt] = static_cast<uint8_t>(std::min(100u, map.climate[pt] + increase));
+    }
+}
+
+void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance)
 {
     const MapExtent size = map.size;
     const auto& textures = map.textureMap;
-    const unsigned numNodes = static_cast<unsigned>(size.x) * size.y;
 
     NodeMapBase<uint8_t> isWater; // All triangles water
     isWater.Resize(size, 0);
@@ -125,41 +146,8 @@ void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance, double freshwater
         isWater[pt] = textures.All(pt, IsWater) ? 1 : 0;
     }
 
-    // Bodies of water: connected nodes completely covered by water. River courses are not part of them, otherwise a
-    // river would connect a lake with the sea.
-    NodeMapBase<uint8_t> isFresh;
-    isFresh.Resize(size, 0);
-    NodeMapBase<uint8_t> visited;
-    visited.Resize(size, 0);
-    const auto maxFreshSize = static_cast<unsigned>(freshwaterMaxSize / 100. * numNodes);
-    RTTR_FOREACH_PT(MapPoint, size)
-    {
-        if(!isWater[pt] || visited[pt])
-            continue;
-        std::vector<MapPoint> body;
-        std::queue<MapPoint> todo;
-        todo.push(pt);
-        visited[pt] = 1;
-        while(!todo.empty())
-        {
-            const MapPoint cur = todo.front();
-            todo.pop();
-            body.push_back(cur);
-            for(const MapPoint& neighbor : isWater.GetNeighbours(cur))
-            {
-                if(isWater[neighbor] && !visited[neighbor])
-                {
-                    visited[neighbor] = 1;
-                    todo.push(neighbor);
-                }
-            }
-        }
-        if(body.size() <= maxFreshSize)
-        {
-            for(const MapPoint& cur : body)
-                isFresh[cur] = 1;
-        }
-    }
+    // Lakes are fresh water, the sea salt water (see MarkLakes). Water from rivers on land nodes is fresh water, too
+    const auto isFresh = [&map](const MapPoint& pt) { return map.nodeKind[pt] != NodeKind::Water || map.lakes[pt]; };
 
     std::vector<MapPoint> freshNodes, saltNodes, riverNodes;
     RTTR_FOREACH_PT(MapPoint, size)
@@ -170,7 +158,7 @@ void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance, double freshwater
             freshNodes.push_back(pt);
         } else if(isWater[pt])
         {
-            if(isFresh[pt])
+            if(isFresh(pt))
                 freshNodes.push_back(pt);
             else
                 saltNodes.push_back(pt);
@@ -208,7 +196,7 @@ void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance, double freshwater
             }
             if(isWater[pt])
             {
-                curFlags |= toFlag(isFresh[pt] ? MapGenTerrain::Freshwater : MapGenTerrain::Saltwater);
+                curFlags |= toFlag(isFresh(pt) ? MapGenTerrain::Freshwater : MapGenTerrain::Saltwater);
                 continue;
             }
             if(!textures.Any(pt, IsWater))

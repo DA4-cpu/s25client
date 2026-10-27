@@ -80,6 +80,7 @@ BOOST_AUTO_TEST_CASE(MakeValid_clamps_percentages)
     settings.stonePiles = 200;
     settings.rivers = 200;
     settings.resourceAmount = 1000;
+    settings.unevenness = 500;
     settings.MakeValid();
     BOOST_TEST(settings.water == 90u);
     BOOST_TEST(settings.mountains == 90u);
@@ -87,6 +88,7 @@ BOOST_AUTO_TEST_CASE(MakeValid_clamps_percentages)
     BOOST_TEST(settings.stonePiles == 100u);
     BOOST_TEST(settings.rivers == 100u);
     BOOST_TEST(settings.resourceAmount == 300u);
+    BOOST_TEST(settings.unevenness == 100u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

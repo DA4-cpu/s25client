@@ -26,10 +26,16 @@ void ComputeHeightPercent(Map& map);
 void ApplyHeightCooling(Map& map, unsigned cooling);
 
 /**
- * Fill map.terrainFlags (bit flags of MapGenTerrain) from the textures and map.riverCourse:
- * Bodies of water up to freshwaterMaxSize percent of the map are fresh water, larger ones salt water. River courses
- * are always fresh water. "Shore" nodes touch the water, "near" nodes are at most nearWaterDistance nodes away.
+ * Raise map.climate (humidity) at lakes (map.lakes) and rivers (map.riverCourse): By `humidity` points at the water,
+ * less with the distance, nothing from maxDistance + 1 nodes on.
  */
-void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance, double freshwaterMaxSize);
+void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity);
+
+/**
+ * Fill map.terrainFlags (bit flags of MapGenTerrain) from the textures, map.lakes and map.riverCourse:
+ * Lakes and rivers are fresh water, the sea is salt water. "Shore" nodes touch the water, "near" nodes are at most
+ * nearWaterDistance nodes away.
+ */
+void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance);
 
 } // namespace rttr::mapGenerator

@@ -82,7 +82,7 @@ struct ResourceTestFixture : MapGenFixture
         desc.zones.push_back(makeZone("Left", {{"Oak", 1}}, {{"Deer", 1}, {"Duck", 1}}));
         desc.zones.push_back(makeZone("Right", {{"Palm1", 1}}, {{"Fox", 1}}));
         ComputeHeightPercent(map);
-        ComputeTerrainFlags(map, 2, 50.);
+        ComputeTerrainFlags(map, 2);
     }
 
     unsigned countObjects() const

@@ -5,6 +5,7 @@
 #include "PointOutput.h"
 #include "RttrForeachPt.h"
 #include "mapGenFixtures.h"
+#include "mapGenerator/Landscape.h"
 #include "mapGenerator/Noise.h"
 #include "mapGenerator/TextureHelper.h"
 #include "mapGenerator/Zones.h"
@@ -117,15 +118,18 @@ BOOST_FIXTURE_TEST_CASE(ComputeTerrainFlags_distinguishes_fresh_and_salt_water, 
     RTTR_FOREACH_PT(MapPoint, size)
     {
         map.getTextures()[pt] = TexturePair(land);
-        if(pt.x < 16)
+        if(pt.x < 16 || (pt.x >= 28 && pt.x < 31 && pt.y >= 18 && pt.y < 21))
+        {
             map.getTextures()[pt] = TexturePair(water);
-        else if(pt.x >= 28 && pt.x < 31 && pt.y >= 18 && pt.y < 21)
-            map.getTextures()[pt] = TexturePair(water);
-        else if(pt.x >= 34 && pt.x < 38)
+            map.nodeKind[pt] = NodeKind::Water;
+        } else if(pt.x >= 34 && pt.x < 38)
             map.getTextures()[pt] = TexturePair(mountain);
     }
-    // Lakes up to 2 % of the map (32 nodes) are fresh water
-    ComputeTerrainFlags(map, 3, 2.);
+    // Lakes up to 32 nodes are fresh water: The lake has 9 nodes, the sea 640
+    MarkLakes(map, 32);
+    BOOST_TEST(map.lakes[MapPoint(29, 19)] == 1u);
+    BOOST_TEST(map.lakes[MapPoint(5, 5)] == 0u);
+    ComputeTerrainFlags(map, 3);
 
     const auto has = [&map](const MapPoint& pt, MapGenTerrain terrain) {
         return (map.terrainFlags[pt] & toFlag(terrain)) != 0;
@@ -149,9 +153,14 @@ BOOST_FIXTURE_TEST_CASE(ComputeTerrainFlags_distinguishes_fresh_and_salt_water, 
     BOOST_TEST(has(MapPoint(36, 5), MapGenTerrain::Mountain));
     BOOST_TEST(!has(MapPoint(36, 5), MapGenTerrain::Land));
 
-    // With a smaller limit the lake is salt water, too
-    ComputeTerrainFlags(map, 3, 0.);
+    // With a smaller limit the lake is salt water, too (the size of the map does not matter)
+    MarkLakes(map, 8);
+    ComputeTerrainFlags(map, 3);
     BOOST_TEST(has(MapPoint(29, 19), MapGenTerrain::Saltwater));
+    // And with a larger one the sea is fresh water
+    MarkLakes(map, 640);
+    ComputeTerrainFlags(map, 3);
+    BOOST_TEST(has(MapPoint(5, 5), MapGenTerrain::Freshwater));
 }
 
 BOOST_FIXTURE_TEST_CASE(ComputeTerrainFlags_marks_rivers, MapGenFixture)
@@ -171,7 +180,7 @@ BOOST_FIXTURE_TEST_CASE(ComputeTerrainFlags_marks_rivers, MapGenFixture)
         for(const Triangle& triangle : GetTriangles(pt, size, Direction::East))
             map.textureMap.Set(triangle, water);
     }
-    ComputeTerrainFlags(map, 2, 2.);
+    ComputeTerrainFlags(map, 2);
     const auto has = [&map](const MapPoint& pt, MapGenTerrain terrain) {
         return (map.terrainFlags[pt] & toFlag(terrain)) != 0;
     };
@@ -183,6 +192,35 @@ BOOST_FIXTURE_TEST_CASE(ComputeTerrainFlags_marks_rivers, MapGenFixture)
     BOOST_TEST(has(MapPoint(10, 12), MapGenTerrain::NearFresh));
     BOOST_TEST(!has(MapPoint(10, 20), MapGenTerrain::NearRiver));
     BOOST_TEST(has(MapPoint(10, 20), MapGenTerrain::Land));
+}
+
+BOOST_FIXTURE_TEST_CASE(ApplyWaterHumidity_raises_humidity_at_lakes_and_rivers, MapGenFixture)
+{
+    const MapExtent size(40, 20);
+    auto map = createMap(size);
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        map.climate[pt] = 50;
+        if(pt.x < 4)
+            map.nodeKind[pt] = NodeKind::Water; // Sea
+    }
+    map.lakes[MapPoint(15, 10)] = 1;
+    map.nodeKind[MapPoint(15, 10)] = NodeKind::Water;
+    map.riverCourse[MapPoint(30, 10)] = 1;
+    ApplyWaterHumidity(map, 4, 10);
+    // 10 points at the water, less further away, nothing from 5 nodes on
+    BOOST_TEST(map.climate[MapPoint(15, 10)] == 60u);
+    BOOST_TEST(map.climate[MapPoint(16, 10)] == 58u);
+    BOOST_TEST(map.climate[MapPoint(19, 10)] == 52u);
+    BOOST_TEST(map.climate[MapPoint(20, 10)] == 50u);
+    BOOST_TEST(map.climate[MapPoint(30, 10)] == 60u);
+    BOOST_TEST(map.climate[MapPoint(28, 10)] == 56u);
+    // Not at the sea
+    BOOST_TEST(map.climate[MapPoint(5, 10)] == 50u);
+    // Never above 100
+    map.climate[MapPoint(30, 10)] = 95;
+    ApplyWaterHumidity(map, 4, 10);
+    BOOST_TEST(map.climate[MapPoint(30, 10)] == 100u);
 }
 
 BOOST_FIXTURE_TEST_CASE(HeightPercent_and_cooling, MapGenFixture)

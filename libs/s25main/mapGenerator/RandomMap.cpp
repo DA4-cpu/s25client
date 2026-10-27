@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "mapGenerator/RandomMap.h"
+#include "RttrForeachPt.h"
 #include "mapGenerator/Climate.h"
 #include "mapGenerator/Harbors.h"
 #include "mapGenerator/HeadQuarters.h"
@@ -40,7 +41,7 @@ unsigned GetMaximumHeight(const MapExtent& size)
         return 60;
 }
 
-unsigned GetCoastline(const MapExtent& size)
+unsigned GetBeachWidth(const MapExtent& size)
 {
     const unsigned combinedSize = size.x * size.y;
     if(combinedSize <= 128 * 128)
@@ -124,10 +125,7 @@ void SmoothHeightMap(NodeMapBase<uint8_t>& z, const ValueRange<uint8_t>& range)
     Scale(z, range.minimum, range.maximum);
 }
 
-RandomMap::RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc)
-    : rnd_(rnd), map_(map), desc_(desc),
-      texturizer_(map.z, map.climate, map.temperature, map.getTextures(), map.textureMap)
-{}
+RandomMap::RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc) : rnd_(rnd), map_(map), desc_(desc) {}
 
 void RandomMap::Create(const MapSettings& settings)
 {
@@ -135,27 +133,60 @@ void RandomMap::Create(const MapSettings& settings)
     const MapExtent size = settings.size;
     map_.z.Resize(size, map_.height.minimum);
 
-    // 1) Land, water and mountains (heights) like the online generator, then rivers flowing downhill
-    const LandscapeLevels levels = CreateLandscape(map_, rnd_, settings_);
-    const auto rivers = CreateRivers(map_, rnd_, settings_.rivers, levels);
+    // 1) Water, land and mountains like the online generator, heights, then rivers from the high land to the water
+    CreateLandMasses(map_, rnd_, settings_);
+    CreateHeights(map_, rnd_, settings_);
+    MarkLakes(map_, desc_.climate.lakeMaxSize);
+    RiverSettings riverSettings;
+    riverSettings.amount = settings_.rivers;
+    riverSettings.minHeight = desc_.climate.riverMinHeight;
+    riverSettings.minLength = desc_.climate.riverMinLength;
+    const auto rivers = CreateRivers(map_, rnd_, riverSettings);
 
-    // 2) Climate: humidity and temperature are independent of the height, but it gets colder further up
+    // 2) Climate: humidity and temperature mostly around the mean of the preset, independent of the height, but it
+    // gets colder further up and more humid at lakes and rivers
     ComputeHeightPercent(map_);
-    map_.climate = GenerateClimateMap(rnd_, size, settings_.climateZoneSize, 2., GetHumidityRange(settings_.climateHumidity));
+    map_.climate = GenerateClimateMap(rnd_, size, settings_.climateZoneSize, GetHumidityMean(settings_.climateHumidity),
+                                      desc_.climate.humiditySpread);
+    ApplyWaterHumidity(map_, desc_.climate.nearWaterDistance, desc_.climate.waterHumidity);
     map_.temperature =
-      GenerateClimateMap(rnd_, size, settings_.climateZoneSize, 2., GetTemperatureRange(settings_.climateTemperature));
+      GenerateClimateMap(rnd_, size, settings_.climateZoneSize, GetTemperatureMean(settings_.climateTemperature),
+                         desc_.climate.temperatureSpread);
     ApplyHeightCooling(map_, desc_.climate.heightCooling);
 
-    // 3) Textures by height and climate, harbors and HQs
-    texturizer_.AddTextures(levels.mountainLevel, GetCoastline(size));
+    // 3) Textures by kind of node, mountain height and climate. Sand beaches only at the sea: Rivers have grass banks
+    // (and no swamp), lakes no beach
+    constexpr uint8_t mountainLevel = 2;
+    auto textureLevels = GetTextureLevels(map_, mountainLevel);
+    NodeMapBase<uint8_t> shoreExclusion;
+    shoreExclusion.Resize(size, 0);
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        uint8_t exclusion = 0;
+        if(map_.riverCourse[pt])
+            exclusion = static_cast<uint8_t>(ShoreExclusion::NoBeach | ShoreExclusion::NoSwamp);
+        else if(map_.lakes[pt])
+            exclusion = ShoreExclusion::NoBeach;
+        if(!exclusion)
+            continue;
+        shoreExclusion[pt] |= exclusion;
+        for(const MapPoint& neighbor : shoreExclusion.GetNeighbours(pt))
+            shoreExclusion[neighbor] |= exclusion;
+    }
+    Texturizer texturizer(textureLevels, map_.climate, map_.temperature, map_.getTextures(), map_.textureMap);
+    texturizer.SetCoastExclusion(&shoreExclusion);
+    texturizer.AddTextures(mountainLevel, GetBeachWidth(size));
+
+    // 4) Building sites in the mountains, harbors and HQs
+    PlaceMountainBuildingSites(map_, desc_.climate.mountainBuildSpacing);
     PlaceHarbors(map_, rivers);
     PlaceHeadquartersOnLandmasses(map_, rnd_, map_.players, settings_.mountainDistance);
-    // Heights changed a bit around the HQs
+    // Heights changed a bit around the HQs and building sites
     ComputeHeightPercent(map_);
 
-    // 4) Zones (each exactly once, connected), terrain types and then everything on the map according to lua
+    // 5) Zones (each exactly once, connected), terrain types and then everything on the map according to lua
     map_.zones = GenerateZones(rnd_, size, std::max<unsigned>(1u, static_cast<unsigned>(desc_.zones.size())));
-    ComputeTerrainFlags(map_, desc_.climate.nearWaterDistance, desc_.climate.freshwaterMaxSize);
+    ComputeTerrainFlags(map_, desc_.climate.nearWaterDistance);
     PlaceResources(map_, rnd_, settings_, desc_);
 }
 

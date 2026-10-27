@@ -527,6 +527,7 @@ rttr:AddTerrain{
 	s2Id = 27,
 	edgePriority = 90,
 	kind = "mountain",
+	temperature = 85, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	property = "buildable",
 	texture = texFile,
 	pos = {48, 144, 32, 31},
@@ -760,6 +761,7 @@ rttr:AddTerrain{
 	s2Id = 42,
 	edgePriority = 38,
 	kind = "mountain",
+	temperature = 15, -- Gruppe der Gebirgstexturen nach Klima (Kartengenerator)
 	property = "buildable",
 	texture = texFile,
 	pos = {48, 48, 32, 31},

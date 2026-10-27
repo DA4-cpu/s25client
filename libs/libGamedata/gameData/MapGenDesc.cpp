@@ -266,10 +266,26 @@ MapClimateDesc::MapClimateDesc(const kaguya::LuaTable& luaTable)
     nearWaterDistance = luaData.getOrDefault("nearWaterDistance", nearWaterDistance);
     if(nearWaterDistance == 0 || nearWaterDistance > 30)
         throw GameDataError(context + ": nearWaterDistance must be in [1, 30] (nodes)");
-    freshwaterMaxSize = luaData.getOrDefault("freshwaterMaxSize", freshwaterMaxSize);
-    if(freshwaterMaxSize < 0 || freshwaterMaxSize > 100)
-        throw GameDataError(context + ": freshwaterMaxSize must be in [0, 100] (percent of the map)");
+    lakeMaxSize = luaData.getOrDefault("lakeMaxSize", lakeMaxSize);
+    if(lakeMaxSize > 1000000)
+        throw GameDataError(context + ": lakeMaxSize must be in [0, 1000000] (nodes)");
+    waterHumidity = luaData.getOrDefault("waterHumidity", waterHumidity);
+    if(waterHumidity > 100)
+        throw GameDataError(context + ": waterHumidity must be in [0, 100]");
     previewImages = luaData.getOrDefault("previewImages", previewImages);
+    temperatureSpread = luaData.getOrDefault("temperatureSpread", temperatureSpread);
+    humiditySpread = luaData.getOrDefault("humiditySpread", humiditySpread);
+    if(temperatureSpread < 0 || temperatureSpread > 100 || humiditySpread < 0 || humiditySpread > 100)
+        throw GameDataError(context + ": temperatureSpread and humiditySpread must be in [0, 100]");
+    riverMinHeight = luaData.getOrDefault("riverMinHeight", riverMinHeight);
+    if(riverMinHeight > 100)
+        throw GameDataError(context + ": riverMinHeight must be in [0, 100] (percent)");
+    riverMinLength = luaData.getOrDefault("riverMinLength", riverMinLength);
+    if(riverMinLength > 500)
+        throw GameDataError(context + ": riverMinLength must be in [0, 500] (steps)");
+    mountainBuildSpacing = luaData.getOrDefault("mountainBuildSpacing", mountainBuildSpacing);
+    if(mountainBuildSpacing == 1 || mountainBuildSpacing > 50)
+        throw GameDataError(context + ": mountainBuildSpacing must be 0 (none) or in [2, 50] (nodes)");
     luaData.checkUnused();
 }
 

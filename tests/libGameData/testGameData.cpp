@@ -334,7 +334,9 @@ BOOST_AUTO_TEST_CASE(LoadMapGenerator)
     {
         bnw::ofstream file(tmp / "default.lua");
         file << R"(
-rttr:SetMapClimate{ heightCooling = 25, nearWaterDistance = 3, freshwaterMaxSize = 1.5, previewImages = false }
+rttr:SetMapClimate{ heightCooling = 25, nearWaterDistance = 3, lakeMaxSize = 250, waterHumidity = 7,
+                    previewImages = false, temperatureSpread = 12, humiditySpread = 20.5, riverMinHeight = 40,
+                    riverMinLength = 20, mountainBuildSpacing = 8 }
 rttr:AddMapZone{ name = "Afrika", title = "Afrika", color = 0xC08040, packages = {
     { name = "regenwald", temperature = {65, 100}, humidity = {60, 100}, height = {0, 40},
       trees = { Palm1 = 2, Palm2 = 1 }, animals = { Deer = 1, Duck = 3 } },
@@ -355,8 +357,14 @@ rttr:AddMapResource{ name = "Lehmprobe", object = "stones", amount = 4.5, terrai
     BOOST_TEST(mapGen.climateSet);
     BOOST_TEST(mapGen.climate.heightCooling == 25u);
     BOOST_TEST(mapGen.climate.nearWaterDistance == 3u);
-    BOOST_TEST(mapGen.climate.freshwaterMaxSize == 1.5);
+    BOOST_TEST(mapGen.climate.lakeMaxSize == 250u);
+    BOOST_TEST(mapGen.climate.waterHumidity == 7u);
     BOOST_TEST(!mapGen.climate.previewImages);
+    BOOST_TEST(mapGen.climate.temperatureSpread == 12.);
+    BOOST_TEST(mapGen.climate.humiditySpread == 20.5);
+    BOOST_TEST(mapGen.climate.riverMinHeight == 40u);
+    BOOST_TEST(mapGen.climate.riverMinLength == 20u);
+    BOOST_TEST(mapGen.climate.mountainBuildSpacing == 8u);
 
     BOOST_TEST_REQUIRE(mapGen.zones.size() == 2u);
     const MapZoneDesc& africa = mapGen.zones[0];
@@ -432,6 +440,10 @@ BOOST_AUTO_TEST_CASE(DetectInvalidMapGenerator)
     expectLoadFailure(R"(rttr:SetMapClimate{ nearWaterDistance = 0 })");
     expectLoadFailure(R"(rttr:SetMapClimate{ heightCoolin = 10 })");
     expectLoadFailure(R"(rttr:SetMapClimate{ } rttr:SetMapClimate{ })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ temperatureSpread = -1 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ riverMinHeight = 101 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ waterHumidity = 101 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ mountainBuildSpacing = 1 })");
     // Zones
     expectLoadFailure(R"(rttr:AddMapZone{ name = "Süd" })");
     expectLoadFailure(R"(rttr:AddMapZone{ name = "A" } rttr:AddMapZone{ name = "A" })");

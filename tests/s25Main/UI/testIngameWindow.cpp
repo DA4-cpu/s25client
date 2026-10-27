@@ -88,6 +88,7 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     const auto expectedMountains = rttr::test::randomValue(0u, 90u);
     const auto expectedResources = rttr::test::randomValue(0u, 300u);
     const auto expectedSeed = rttr::test::randomValue(1u, 100000u);
+    const auto expectedUnevenness = rttr::test::randomValue(0u, 100u);
 
     WorldDescription worldDesc;
     loadGameData(worldDesc);
@@ -134,6 +135,9 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtResourceAmount)->GetText()
                == s25util::toStringClassic(settings.resourceAmount));
     wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtResourceAmount)->SetText(expectedResources);
+    BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtUnevenness)->GetText()
+               == s25util::toStringClassic(settings.unevenness));
+    wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtUnevenness)->SetText(expectedUnevenness);
     // Sliders
     BOOST_TEST(wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgGoldRatio)->GetPosition() == settings.ratioGold);
     wnd.GetCtrl<ctrlProgress>(iwMapGenerator::ID_pgGoldRatio)->SetPosition(expectedGoldRatio);
@@ -160,6 +164,7 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
     BOOST_TEST(settings.water == expectedWater);
     BOOST_TEST(settings.mountains == expectedMountains);
     BOOST_TEST(settings.resourceAmount == expectedResources);
+    BOOST_TEST(settings.unevenness == expectedUnevenness);
     BOOST_TEST(settings.ratioGold == expectedGoldRatio);
     BOOST_TEST(settings.ratioIron == expectedIronRatio);
     BOOST_TEST(settings.ratioCoal == expectedCoalRatio);

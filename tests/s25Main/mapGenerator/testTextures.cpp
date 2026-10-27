@@ -197,4 +197,56 @@ BOOST_FIXTURE_TEST_CASE(ReplaceTextures_does_not_replace_excluded_textures, Text
     }
 }
 
+BOOST_AUTO_TEST_CASE(AddTextures_beach_only_at_the_sea)
+{
+    MapGenFixture fixture;
+    const MapExtent size(40, 20);
+    TextureMap textureMap(fixture.worldDesc, fixture.landscape, size);
+    NodeMapBase<uint8_t> z, climate, temperature, noBeach;
+    z.Resize(size, 3);
+    climate.Resize(size, 50);
+    temperature.Resize(size, 50);
+    noBeach.Resize(size, 0);
+    const auto isLake = [](const MapPoint& pt) { return pt.x >= 24 && pt.x <= 26 && pt.y >= 8 && pt.y <= 10; };
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        if(pt.x < 8 || isLake(pt))
+            z[pt] = 0;
+        if(isLake(pt))
+        {
+            noBeach[pt] = ShoreExclusion::NoBeach;
+            for(const MapPoint& neighbor : z.GetNeighbours(pt))
+                noBeach[neighbor] = ShoreExclusion::NoBeach;
+        }
+    }
+    const auto countSand = [&](unsigned beachWidth, bool checkLake) {
+        textureMap.textures_.Resize(size);
+        Texturizer texturizer(z, climate, temperature, textureMap.textures_, textureMap);
+        texturizer.SetCoastExclusion(&noBeach);
+        texturizer.AddTextures(5, beachWidth);
+        unsigned numSand = 0;
+        RTTR_FOREACH_PT(MapPoint, size)
+        {
+            for(const Triangle& triangle : GetTriangles(pt, size))
+            {
+                if(!textureMap.Check(triangle, IsCoastTerrain))
+                    continue;
+                // Beach only at the sea, never far inland and never at the lake
+                BOOST_TEST_REQUIRE(!(pt.x > 12 && pt.x < 36));
+                if(checkLake)
+                    BOOST_TEST_REQUIRE(!isLake(pt));
+            }
+            for(const bool rsu : {true, false})
+                numSand += textureMap.Check(Triangle(rsu, pt), IsCoastTerrain) ? 1 : 0;
+        }
+        return numSand;
+    };
+    const unsigned oneRow = countSand(1, true);
+    const unsigned twoRows = countSand(2, true);
+    // 2 coasts of 20 nodes: one row of sand is one triangle per node at each coast
+    BOOST_TEST(oneRow == 40u);
+    BOOST_TEST(twoRows == 80u);
+    BOOST_TEST(countSand(0, true) == 0u);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

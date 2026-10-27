@@ -19,10 +19,13 @@ Map::Map(const MapExtent& size, uint8_t players, const WorldDescription& worldDe
     z.Resize(size);
     climate.Resize(size, 50);
     temperature.Resize(size, 50);
+    nodeKind.Resize(size, NodeKind::Land);
+    mountainLift.Resize(size, 0);
     heightPercent.Resize(size, 0);
     zones.Resize(size, 0);
     terrainFlags.Resize(size, 0);
     riverCourse.Resize(size, 0);
+    lakes.Resize(size, 0);
     objectTypes.Resize(size, libsiedler2::OT_Empty);
     objectInfos.Resize(size, libsiedler2::OI_Empty);
     resources.Resize(size, libsiedler2::R_None);

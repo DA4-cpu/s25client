@@ -55,7 +55,9 @@ public:
         ID_txtCoal,
         ID_pgCoalRatio,
         ID_txtGranite,
-        ID_pgGraniteRatio
+        ID_pgGraniteRatio,
+        ID_txtUnevenness,
+        ID_edtUnevenness
     };
 
     /**

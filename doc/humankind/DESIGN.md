@@ -48,6 +48,8 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-26 | Menge im Generatorfenster: ein Regler **„Ressourcen (in %)“** vervielfacht alle Lua-Regeln (auch Bäume und Steine), dazu **Wald %** und **Steinhaufen %** wie im Online-Generator. |
 | 2026-10-26 | Die neuen Terraingrafiken (Rusty Valley, Polar Night, Wetlands) werden **zusätzliche Böden** der Landschaft „world“; die Dateien liegen im Spielordner, nicht in Git. |
 | 2026-10-26 | Auf jeder Karte kommen **immer alle Zonen** vor (auch auf kleinen Karten). |
+| 2026-10-27 | Nach Test: Höhen abwechslungsreich (Ebenen und Hügel, flache und steile Berge, Berge nie unter dem Umland, Minen auf den Bergen möglich), Regler **Unebenheit**; **Bauflächen im Gebirge** in festem Abstand wie im Online-Generator; Klima um die Mitte statt zu Extremen; **Flüsse** neu (aus der Höhe bis ins Wasser, durchgehend, Mindesthöhe). |
+| 2026-10-27 | Flüsse wieder **wie im Original angeordnet** (2 Dreiecke je Schritt entlang einer Kante, Richtung ändert sich bei jedem Schritt um 60°: durchgehend und schmal), **keine Furten**. Seen ohne Strand, Süßwasser nach absoluter Größe (`lakeMaxSize`, nicht mehr Prozent der Karte), feuchter an Seen und Flüssen (`waterHumidity`), Strand halb so breit. |
 | 2026-10-23 | Medien-WP zählen aus dem **echten Bestand**: in Lagerhaus/HQ/Hafen 0,5-fach, in der Bibliothek 1-fach. Medien unterwegs oder an Flaggen zählen nicht. Die Bibliothek nimmt **alle** Waren mit `knowledge` an (keine Grenze von 3 Eingängen) und bestellt erst, wenn der Bibliothekar da ist. |
 
 ## Zuordnung Humankind → Siedler
@@ -275,30 +277,61 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
 
 ## Welt: Kartengenerator mit Klima und Zonen (Stufe 1)
 
-Stand 2026-10-26. Gilt nur für **erzeugte Karten** (Zufallskarte im Kartenauswahlmenü).
+Stand 2026-10-27 (Überarbeitung nach Test des Nutzers). Gilt nur für **erzeugte Karten** (Zufallskarte im
+Kartenauswahlmenü).
 
 ### Ablauf der Erzeugung (`mapGenerator/RandomMap.cpp`)
 
-1. **Land und Wasser wie im Online-Generator** (`Landscape.cpp`): ein fraktales Rauschen (wiederholt sich an den
-   Kartenrändern, Zeilen halb so hoch wie Spalten wie im Spiel) wird nach Rang geschnitten: die untersten `Wasser %`
-   der Knoten werden Wasser, die obersten `Gebirge %` des Landes Gebirge. Land steigt flach von der Küste an (etwa 10
-   Höhenstufen), Gebirge sind 2–3-mal so hoch. Landmasse bestimmt die Größe der Formen (Inseln klein, Kontinente groß),
-   Oberfläche die Feinheit (Oktaven) und das Höhenrauschen.
-2. **Flüsse** fließen bergab von einer zufälligen hohen Landstelle bis zum Meer, in einen anderen Fluss oder in eine
-   Senke (dort kleiner Teich). Regler „Flüsse“: bei 100 % etwa ein Fluss je 1500 Knoten.
-3. **Klima:** Temperatur und Feuchtigkeit wie bisher (Regler Temperatur/Feuchtigkeit/Klimagebiete), dazu Höhe in
-   Prozent (0 = Meer, 100 = höchster Punkt). Mit der Höhe wird es kälter (`heightCooling`).
-4. **Texturen** nach Höhe und Klima. Gebirgstexturen werden nach Temperatur gewählt (Grönland/Ödland/Winter-Gebirge),
-   Schnee nur auf den obersten 8 % der Gipfel.
-5. **Häfen, Hauptquartiere:** Jeder Spieler kommt auf die Landmasse mit dem meisten Platz pro Spieler. Auf Inselkarten
-   bekommt so jeder seine eigene Insel, auf Karten mit einem großen Kontinent starten alle dort.
-6. **Zonen** (`Zones.cpp`): alle Zonen aus Lua, jede genau einmal als zusammenhängendes Gebiet, jeder Knoten in genau
+1. **Wasser, Land, Gebirge wie im Online-Generator** (`Landscape.cpp`, `CreateLandMasses`): ein fraktales Rauschen
+   (wiederholt sich an den Kartenrändern, Zeilen halb so hoch wie Spalten wie im Spiel) wird nach Rang geschnitten:
+   die untersten `Wasser %` werden Wasser, die obersten `Gebirge %` des Landes Gebirge. Landmasse bestimmt die Größe
+   der Formen (Inseln klein, Kontinente groß), Oberfläche die Feinheit der Küsten und Bergränder.
+2. **Höhen** (`CreateHeights`): Land steigt flach von der Küste an (flache Strände). Hügel gibt es je nach Gegend:
+   manche Gegenden sind Ebenen, andere hügelig. Gebirge stehen auf dem Land und steigen vom Fuß an; jede Bergkette hat
+   eigene Steilheit und Höhe (flache niedrige und steile hohe Berge), Berge sind nie niedriger als das Land daneben.
+   Die Hänge bleiben so, dass auf fast allen Bergknoten Minen gehen (Nachbar im Südosten höchstens 3 höher).
+   Regler **„Unebenheit (in %)“**: 0 = alles flach, 100 = sehr hügelig und steile Berge (Standard 50).
+3. **Seen** (`MarkLakes`): Gewässer bis `lakeMaxSize` Knoten (absolut, unabhängig von der Kartengröße) sind Seen
+   (Süßwasser, kein Strand), größere sind Meer (Salzwasser).
+   **Flüsse** (`Rivers.cpp`): Jeder Landknoten bekommt einen Abfluss-Nachbarn aus einer „Priority Flood“ ab allen
+   Wasserknoten. Flüsse entspringen ab `riverMinHeight` (meist im Gebirge) und folgen dem Abfluss bis ins Meer oder in
+   einen See – über den niedrigsten Pass, nie im Kreis, nie ins Nichts; trifft einer auf einen anderen Fluss, mündet er.
+   Das Wasser wird **wie im Original-Generator** (`CreateStream`) angeordnet: Der Lauf geht entlang der Kanten des
+   Kartengitters, bei jedem Schritt werden die 2 Dreiecke links und rechts der Kante Wasser, und die Richtung ändert sich
+   bei **jedem** Schritt um 60° (nie geradeaus, höchstens 2 Drehungen in dieselbe Richtung hintereinander). Nur so
+   teilen sich die Dreiecke zweier Schritte eine Seite: Der Fluss ist durchgehend und ein Dreieck breit (geradeaus
+   würden sich die Wasserflächen nur an einer Ecke berühren = „Pfützen“). Der Lauf ist der kürzeste solche Weg in
+   einem Korridor von 3 Knoten um den Abflussweg (bergauf teuer, etwas Zufall für natürliche Biegungen). Keine Furten:
+   Flüsse trennen das Land wie im Original. Das Flussbett wird gegraben (flussabwärts nie höher), die Ufer bekommen
+   keinen Sand und keinen Sumpf. Kürzere als `riverMinLength` Schritte entfallen. Regler „Flüsse“: bei 100 % etwa ein
+   Fluss je 2000 Knoten.
+4. **Klima:** Temperatur und Feuchtigkeit sind **normalverteilt** um den Mittelwert der Voreinstellung (Gemäßigt = 50)
+   mit der Streuung `temperatureSpread`/`humiditySpread`: der größte Teil der Karte ist gemäßigt, Extreme sind selten.
+   Mit der Höhe wird es kälter (`heightCooling`). Vorher waren die Werte gleichverteilt (gleich viel extrem wie mild).
+   An Seen und Flüssen steigt die Feuchtigkeit um `waterHumidity` Punkte, mit dem Abstand weniger, ab
+   `nearWaterDistance` + 1 Knoten gar nicht mehr (nicht am Meer).
+5. **Texturen:** Dreieck = Wasser, wenn alle Ecken Wasser sind, Gebirge, wenn mindestens 2 Ecken Gebirge sind, sonst
+   Land nach Klima. Gebirgstexturen nach Temperatur (Grönland/Ödland/Winter), innerhalb nach Höhe über dem Bergfuß;
+   Schnee nur auf den höchsten 8 % der Gipfel der Karte. Sandstrand nur am Meer, in Dreiecksreihen ab dem Wasser
+   (`GetBeachWidth`: 1 Reihe bis 128×128, 2 bis 512×512, 3 bis 1024×1024, sonst 4; halb so breit wie vorher).
+6. **Bauflächen im Gebirge** (`PlaceMountainBuildingSites`) wie im Online-Generator: auf einem regelmäßigen Raster
+   (`mountainBuildSpacing`, Standard 6 Knoten, jede zweite Reihe versetzt) bekommen die 6 Dreiecke um einen Knoten
+   Bergwiese (bebaubares Gebirge passend zur Temperatur) und die Höhen werden eingeebnet, sodass dort große Gebäude
+   (Militär) gehen. Liegt ein Rasterpunkt nicht ganz im Gebirge, wird ein Knoten in der Nähe genommen.
+7. **Häfen, Hauptquartiere:** Jeder Spieler kommt auf die Landmasse mit dem meisten Platz pro Spieler. Auf Inselkarten
+   bekommt so jeder seine eigene Insel, auf Karten mit einem großen Kontinent starten alle dort. Ein HQ braucht im
+   Umkreis von 8 Knoten mindestens 40 % bebaubares Land (sonst landete es z. B. auf einer schmalen Halbinsel, und die
+   KI kam dort nicht weg); nur wenn es keine solche Stelle gibt, wird eine engere genommen.
+8. **Zonen** (`Zones.cpp`): alle Zonen aus Lua, jede genau einmal als zusammenhängendes Gebiet, jeder Knoten in genau
    einer Zone. Sie wachsen gleichzeitig von weit verteilten Startpunkten mit welligen Grenzen.
-7. **Terrain-Merkmale:** Süß-/Salzwasser nach Größe des Gewässers (`freshwaterMaxSize`), Flüsse immer Süßwasser, Ufer und
-   Nähe (`nearWaterDistance`).
-8. **Ressourcen nach Lua-Regeln** (`Resources.cpp`), in der Reihenfolge der Datei.
-9. Speichern als `Random.swd` (Name „Zufall <Zufallswert>“) und ein **Vorschaubild** `Random_Vorschau.bmp` im
-   Kartenordner (`<RTTR_USERDATA>/MAPS`), von oben nach unten: Zonen, Temperatur, Feuchtigkeit, Höhe, Ressourcen.
+9. **Terrain-Merkmale:** Seen und Flüsse Süßwasser, Meer Salzwasser (`lakeMaxSize`), Ufer und Nähe
+   (`nearWaterDistance`).
+10. **Ressourcen nach Lua-Regeln** (`Resources.cpp`), in der Reihenfolge der Datei.
+11. Speichern als `Random.swd` (Name „Zufall <Zufallswert>“) und ein **Vorschaubild** `Random_Vorschau.bmp` im
+    Kartenordner (`<RTTR_USERDATA>/MAPS`), von oben nach unten: Zonen, Temperatur, Feuchtigkeit, Höhe, Ressourcen.
+
+Messung (256×256, Unebenheit 50): Minen auf 99 % der Bergknoten möglich, Burgen (nur nach Höhe) auf ~78 % des Landes;
+Unebenheit 0: 91 %, Unebenheit 100: 23 %. Zum Vergleich die Online-Karten: 97–100 % Minen, 34–54 % Burgen.
 
 Gleicher Zufallswert und gleiche Einstellungen ergeben dieselbe Karte. Leeres Feld = jedes Mal ein neuer Wert; der
 zuletzt benutzte steht im Generatorfenster.
@@ -308,7 +341,9 @@ zuletzt benutzte steht im Generatorfenster.
 Ausführliche Anleitung steht in der Datei. Kurz:
 
 ```lua
-rttr:SetMapClimate{ heightCooling = 30, nearWaterDistance = 4, freshwaterMaxSize = 3, previewImages = true }
+rttr:SetMapClimate{ heightCooling = 20, temperatureSpread = 19, humiditySpread = 19, nearWaterDistance = 4,
+                    lakeMaxSize = 500, waterHumidity = 10, riverMinHeight = 30, riverMinLength = 15,
+                    mountainBuildSpacing = 6, previewImages = true }
 rttr:AddMapZone{ name = "Afrika", title = "Afrika", color = 0xE08030, packages = {
     { name = "regenwald", temperature = {65, 100}, humidity = {55, 100}, height = {0, 40},
       trees = { Palm1 = 2, Pineapple = 1 }, animals = { Deer = 2, Duck = 1 } },

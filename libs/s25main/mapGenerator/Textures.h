@@ -150,6 +150,13 @@ public:
     DescIdx<TerrainDesc> Get(const Triangle& triangle) const;
 };
 
+/// Bits for Texturizer::SetCoastExclusion
+struct ShoreExclusion
+{
+    static constexpr uint8_t NoBeach = 1;
+    static constexpr uint8_t NoSwamp = 2;
+};
+
 class Texturizer
 {
 private:
@@ -163,6 +170,8 @@ private:
     NodeMapBase<TexturePair>& textures_;
     TextureMap& textureMap_;
     unsigned seaLevel_;
+    /// Bits of ShoreExclusion per node: no beach or no swamp there (e.g. at rivers and lakes). Optional
+    const NodeMapBase<uint8_t>* noCoast_ = nullptr;
 
     /**
      * Adds textures based on z-values, sea- and mountain levels. Land textures within the
@@ -177,12 +186,12 @@ private:
     void ApplyTexturingByHeightMap(unsigned mountainLevel);
 
     /**
-     * Sets textures near the specified coast to ensure a smooth looking transition from water to buildable land.
+     * Sand beach at the sea: Land triangles at most `rows` triangle sides away from the water become sand. Water
+     * touching nodes excluded by the mask (ShoreExclusion::NoBeach, e.g. rivers and lakes) gets no beach.
      *
-     * @param coast nodes to consider for re-texturing
-     * @param width width (in node edges) for each coast transition texture
+     * @param rows width of the beach in rows of triangles (1 = only triangles sharing a side with the water)
      */
-    void ApplyCoastTexturing(const std::vector<MapPoint>& coast, unsigned width);
+    void ApplyBeach(unsigned rows);
 
     /**
      * Creates smooth transitions between grass and mountain textures.
@@ -206,13 +215,19 @@ public:
         seaLevel_ = GetRange(z).minimum;
     }
 
+    /// Nodes with the bit ShoreExclusion::NoBeach in the mask get no sand beach, nodes with NoSwamp no swamp between
+    /// mountains and water. The mask must outlive AddTextures
+    void SetCoastExclusion(const NodeMapBase<uint8_t>* mask) { noCoast_ = mask; }
+
     /**
      * Adds missing textures based on the height map and the specified sea- and mountain levels.
+     * A triangle is water if all corners are at sea level, mountain if at least 2 corners are at or above the
+     * mountain level and land otherwise.
      *
      * @param mountainLevel minimum z-value defining the starting height for mountains
-     * @param coastline size of the coastline
+     * @param beachWidth width of the sand beach at the sea in rows of triangles (see ApplyBeach)
      */
-    void AddTextures(unsigned mountainLevel, unsigned coastline);
+    void AddTextures(unsigned mountainLevel, unsigned beachWidth);
 };
 
 /**
