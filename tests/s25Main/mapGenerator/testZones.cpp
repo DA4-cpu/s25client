@@ -198,17 +198,24 @@ BOOST_FIXTURE_TEST_CASE(ApplyWaterHumidity_raises_humidity_at_lakes_and_rivers, 
 {
     const MapExtent size(40, 20);
     auto map = createMap(size);
+    const auto reset = [&map]() {
+        RTTR_FOREACH_PT(MapPoint, map.size)
+        {
+            map.climate[pt] = 50;
+        }
+    };
     RTTR_FOREACH_PT(MapPoint, size)
     {
-        map.climate[pt] = 50;
         if(pt.x < 4)
             map.nodeKind[pt] = NodeKind::Water; // Sea
     }
     map.lakes[MapPoint(15, 10)] = 1;
     map.nodeKind[MapPoint(15, 10)] = NodeKind::Water;
     map.riverCourse[MapPoint(30, 10)] = 1;
-    ApplyWaterHumidity(map, 4, 10);
-    // 10 points at the water, less further away, nothing from 5 nodes on
+
+    // 10 points at the water, 2 less per node, nothing from 5 nodes on
+    reset();
+    ApplyWaterHumidity(map, 4, 10, 2, 1);
     BOOST_TEST(map.climate[MapPoint(15, 10)] == 60u);
     BOOST_TEST(map.climate[MapPoint(16, 10)] == 58u);
     BOOST_TEST(map.climate[MapPoint(19, 10)] == 52u);
@@ -217,9 +224,30 @@ BOOST_FIXTURE_TEST_CASE(ApplyWaterHumidity_raises_humidity_at_lakes_and_rivers, 
     BOOST_TEST(map.climate[MapPoint(28, 10)] == 56u);
     // Not at the sea
     BOOST_TEST(map.climate[MapPoint(5, 10)] == 50u);
-    // Never above 100
+
+    // No decrease: the same up to the maximum distance
+    reset();
+    ApplyWaterHumidity(map, 4, 10, 0, 1);
+    BOOST_TEST(map.climate[MapPoint(15, 10)] == 60u);
+    BOOST_TEST(map.climate[MapPoint(19, 10)] == 60u);
+    BOOST_TEST(map.climate[MapPoint(20, 10)] == 50u);
+
+    // Decrease only every 2 nodes
+    reset();
+    ApplyWaterHumidity(map, 4, 10, 3, 2);
+    BOOST_TEST(map.climate[MapPoint(30, 10)] == 60u);
+    BOOST_TEST(map.climate[MapPoint(31, 10)] == 60u);
+    BOOST_TEST(map.climate[MapPoint(32, 10)] == 57u);
+    BOOST_TEST(map.climate[MapPoint(33, 10)] == 57u);
+    BOOST_TEST(map.climate[MapPoint(34, 10)] == 54u);
+    BOOST_TEST(map.climate[MapPoint(35, 10)] == 50u);
+
+    // Never below the original value or above 100
+    reset();
+    ApplyWaterHumidity(map, 4, 10, 6, 1);
+    BOOST_TEST(map.climate[MapPoint(32, 10)] == 50u);
     map.climate[MapPoint(30, 10)] = 95;
-    ApplyWaterHumidity(map, 4, 10);
+    ApplyWaterHumidity(map, 4, 10, 2, 1);
     BOOST_TEST(map.climate[MapPoint(30, 10)] == 100u);
 }
 

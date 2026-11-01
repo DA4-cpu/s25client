@@ -115,6 +115,9 @@ bool WritePreviewImage(const Map& map, const MapGenDesc& desc, const boost::file
                     return Color{20, 90, 20};
                 if(objectType == 0xCC || objectType == 0xCD)
                     return Color{200, 200, 200};
+                // Map objects of the civilization mode (e.g. loam deposits)
+                if(objectType >= 0xD0 && objectType <= 0xDF)
+                    return Color{176, 120, 72};
                 if(map.animals[pt] != libsiedler2::Animal::None)
                     return Color{230, 40, 40};
                 const uint8_t resource = map.resources[pt];

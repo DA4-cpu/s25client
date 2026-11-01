@@ -47,9 +47,46 @@ constexpr double maxMountainHeight = 45.;
 /// south east neighbor at most 3 higher, so this stays below 3
 constexpr double minMountainSlope = 0.8;
 constexpr double maxMountainSlope = 2.4;
+/// Smoothing passes for the mountain factors (each pass spreads the transition about one node further)
+constexpr unsigned mountainFactorSmoothing = 4;
 } // namespace
 
 void CreateLandMasses(Map& map, RandomUtility& rnd, const MapSettings& settings)
+{
+    NodeMapBase<double> noFactor;
+    noFactor.Resize(map.size, 1.);
+    CreateLandMasses(map, rnd, settings, noFactor);
+}
+
+NodeMapBase<double> GetMountainFactors(const Map& map, const MapClimateDesc& climateDesc)
+{
+    NodeMapBase<double> factors;
+    factors.Resize(map.size, 1.);
+    if(climateDesc.mountainWeights.empty())
+        return factors;
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        factors[pt] = climateDesc.getMountainFactor(map.temperature[pt], map.climate[pt]);
+    }
+    // Smooth transitions: average with the neighbors a few times
+    for(unsigned iteration = 0; iteration < mountainFactorSmoothing; ++iteration)
+    {
+        NodeMapBase<double> smoothed;
+        smoothed.Resize(map.size, 1.);
+        RTTR_FOREACH_PT(MapPoint, map.size)
+        {
+            double sum = factors[pt];
+            for(const MapPoint& neighbor : factors.GetNeighbours(pt))
+                sum += factors[neighbor];
+            smoothed[pt] = sum / 7.;
+        }
+        factors = std::move(smoothed);
+    }
+    return factors;
+}
+
+void CreateLandMasses(Map& map, RandomUtility& rnd, const MapSettings& settings,
+                      const NodeMapBase<double>& mountainFactor)
 {
     unsigned octaves = 4;
     double persistence = 0.5;
@@ -94,11 +131,11 @@ void CreateLandMasses(Map& map, RandomUtility& rnd, const MapSettings& settings)
             waterLimit = std::clamp(waterLimit + (waterShare - numWaterTriangles / numTriangles), 0., 0.98);
         }
     }
-    const double mountainLimit = 1. - (1. - waterLimit) * mountainShare;
-
     RTTR_FOREACH_PT(MapPoint, map.size)
     {
         const double value = noise[pt];
+        const double localMountainShare = std::clamp(mountainShare * mountainFactor[pt], 0., 0.95);
+        const double mountainLimit = 1. - (1. - waterLimit) * localMountainShare;
         if(value < waterLimit)
             map.nodeKind[pt] = NodeKind::Water;
         else if(value < mountainLimit)

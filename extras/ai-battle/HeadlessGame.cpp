@@ -3,18 +3,23 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "HeadlessGame.h"
+#include "BuildingRegister.h"
 #include "EventManager.h"
+#include "GamePlayer.h"
 #include "GlobalGameSettings.h"
 #include "PlayerInfo.h"
 #include "Savegame.h"
+#include "civ/Content.h"
 #include "civ/Knowledge.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "factories/AIFactory.h"
 #include "helpers/EnumRange.h"
 #include "network/PlayerGameCommands.h"
 #include "world/GameWorld.h"
 #include "world/MapLoader.h"
+#include "gameTypes/BuildingCount.h"
 #include "gameTypes/MapInfo.h"
 #include "gameData/GameConsts.h"
 #include "s25util/colors.h"
@@ -128,6 +133,35 @@ void HeadlessGame::Run(unsigned maxGF)
         }
     }
     PrintState();
+    PrintCivSummary();
+}
+
+void HeadlessGame::PrintCivSummary()
+{
+    if(!civ::isEnabled(world_))
+        return;
+    // Workshops (built/sites) and wares in the inventory per player, e.g. to check new workshops of the lua files
+    const civ::Content& content = world_.GetTechTree().GetContent();
+    printConsole("Werkstaetten (fertig/Baustellen) und Waren des Zivilisationsmodus:\n");
+    for(unsigned playerId = 0; playerId < world_.GetNumPlayers(); ++playerId)
+    {
+        const GamePlayer& player = world_.GetPlayer(playerId);
+        const BuildingCount count = player.GetBuildingRegister().GetBuildingNums();
+        std::string line;
+        for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
+        {
+            const BuildingType bld = getCustomBuilding(i);
+            line += " " + content.GetBuilding(bld)->name + " " + std::to_string(count.buildings[bld]) + "/"
+                    + std::to_string(count.buildingSites[bld]);
+        }
+        line += " |";
+        for(unsigned i = 0; i < content.GetNumWares(); ++i)
+        {
+            const GoodType good = getCustomGood(i);
+            line += " " + content.GetWare(good)->name + " " + std::to_string(player.GetInventory()[good]);
+        }
+        printConsole("  %-22s%s\n", player.name.c_str(), line.c_str());
+    }
 }
 
 void HeadlessGame::Close()

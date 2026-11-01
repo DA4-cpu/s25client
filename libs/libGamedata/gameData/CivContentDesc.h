@@ -57,8 +57,27 @@ struct WorkerDesc
     std::string look;
 };
 
+/// Object on the map which a workshop can collect (rttr:AddMapObject), e.g. a loam deposit. It has several sizes and
+/// gets smaller with every collected ware; the smallest one disappears after the last ware
+struct MapObjectDesc
+{
+    /// Unique identifier, used in workshops, the map generator, map files and savegames
+    std::string name;
+    /// Displayed name
+    std::string title;
+    /// Number of sizes = wares in a full object (1..16)
+    unsigned sizes = 6;
+    /// Placeholder graphics: "Granite1" or "Granite2" (granite piles)
+    std::string look;
+    /// Placeholder graphics are tinted with this color (0xRRGGBB), 0xFFFFFF = unchanged
+    unsigned tint = 0xFFFFFF;
+
+    MapObjectDesc() = default;
+    explicit MapObjectDesc(const kaguya::LuaTable& luaData);
+};
+
 /// Simple production building of the civilization mode as read from lua (rttr:AddWorkshop):
-/// Takes input wares and produces an output ware
+/// Takes input wares and produces an output ware or collects map objects (like the quarry)
 struct WorkshopDesc
 {
     std::string name;
@@ -89,6 +108,11 @@ struct WorkshopDesc
     unsigned storage = 6;
     /// Seconds of work per product and seconds of waiting before
     unsigned workTime = 0, waitTime = 0;
+    /// Collector: Identifier of the map object the worker collects (rttr:AddMapObject) instead of consuming inputs.
+    /// Empty: normal workshop
+    std::string collectObject;
+    /// Collector: Maximum distance of the map objects in nodes
+    unsigned collectRadius = 0;
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);

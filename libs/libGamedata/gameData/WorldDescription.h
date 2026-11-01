@@ -39,6 +39,8 @@ struct WorldDescription
     std::vector<WareDesc> wares;
     /// Additional tags of built-in wares: Ware identifier -> tags
     std::map<std::string, WareTagsDesc> wareTags;
+    /// Objects on the map that workshops can collect (civilization mode) in order of definition
+    std::vector<MapObjectDesc> mapObjects;
     /// Workshops (simple production buildings) of the civilization mode in order of definition
     std::vector<WorkshopDesc> workshops;
     /// Byproducts of buildings in the civilization mode in order of definition

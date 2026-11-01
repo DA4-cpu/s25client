@@ -8,6 +8,7 @@
 #include "mapGenerator/MapSettings.h"
 #include "mapGenerator/RandomUtility.h"
 #include "mapGenerator/Rivers.h"
+#include "gameData/MapGenDesc.h"
 
 namespace rttr::mapGenerator {
 
@@ -18,6 +19,20 @@ namespace rttr::mapGenerator {
  * detail on settings.roughness.
  */
 void CreateLandMasses(Map& map, RandomUtility& rnd, const MapSettings& settings);
+
+/**
+ * Like CreateLandMasses, but the share of mountains is multiplied by mountainFactor per node (e.g. fewer mountains in
+ * warm, humid areas). The factor only takes mountains away (or adds), it does not change the other areas.
+ */
+void CreateLandMasses(Map& map, RandomUtility& rnd, const MapSettings& settings,
+                      const NodeMapBase<double>& mountainFactor);
+
+/**
+ * Factor for the share of mountains per node from the climate (map.temperature and map.climate) according to
+ * MapClimateDesc::mountainWeights. The factor changes smoothly over a few nodes, so mountain ranges get thinner instead
+ * of ending abruptly at the border of a climate area.
+ */
+NodeMapBase<double> GetMountainFactors(const Map& map, const MapClimateDesc& climateDesc);
 
 /**
  * Creates the heights (map.z, map.mountainLift) from map.nodeKind:

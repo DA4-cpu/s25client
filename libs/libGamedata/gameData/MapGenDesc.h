@@ -109,7 +109,8 @@ struct MapResourceWeight
 struct MapResourceDesc
 {
     std::string name;
-    /// What is placed, see getMapGenObjectNames()
+    /// What is placed, see getMapGenObjectNames(). Other names are map objects of the civilization mode
+    /// (rttr:AddMapObject)
     std::string object;
     /// Percentage of the matching nodes that get the object
     double amount = 0.;
@@ -146,8 +147,11 @@ struct MapClimateDesc
     unsigned nearWaterDistance = 4;
     /// Bodies of water up to this size (nodes) are lakes (fresh water), larger ones are the sea (salt water)
     unsigned lakeMaxSize = 500;
-    /// Humidity points added directly at lakes and rivers, less with the distance up to nearWaterDistance
+    /// Humidity points added directly at lakes and rivers, up to nearWaterDistance nodes away
     unsigned waterHumidity = 10;
+    /// ... decreasing by this many points every waterHumidityStep nodes (0 = no decrease)
+    unsigned waterHumidityFalloff = 2;
+    unsigned waterHumidityStep = 1;
     /// Save preview images (zones, climate) next to the generated map
     bool previewImages = true;
     /// Standard deviation of temperature and humidity around the mean of the preset (about 68 % of the map within
@@ -160,9 +164,14 @@ struct MapClimateDesc
     unsigned riverMinLength = 15;
     /// Distance in nodes between the small building sites in the mountains, 0 = none
     unsigned mountainBuildSpacing = 6;
+    /// Factors for the share of mountains in parts of the climate (temperature and humidity only), the first matching
+    /// one is used (otherwise 1). E.g. 0.5 = half as many mountains there
+    std::vector<MapResourceWeight> mountainWeights;
 
     MapClimateDesc() = default;
     explicit MapClimateDesc(const kaguya::LuaTable& luaData);
+    /// Factor for the share of mountains at the given climate according to mountainWeights
+    double getMountainFactor(unsigned temperature, unsigned humidity) const;
 };
 
 struct MapGenDesc

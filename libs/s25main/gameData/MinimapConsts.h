@@ -12,6 +12,8 @@ const int VARY_TREE_COLOR = 20;
 const unsigned GRANITE_COLOR = 0xFFA2A2A2;
 /// Variierung der Helligkeit der Granitblöcke
 const int VARY_GRANITE_COLOR = 20;
+/// Map objects defined in lua (civilization mode, e.g. loam deposits)
+const unsigned DEPOSIT_COLOR = 0xFFB07848;
 /// Farbe für Gebäude
 const unsigned BUILDING_COLOR = 0xFFFFFFFF;
 /// Färbe für Straßen

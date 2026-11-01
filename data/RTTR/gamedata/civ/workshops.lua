@@ -15,6 +15,8 @@ rttr:AddWorkshop{...}:
   look        Platzhaltergrafik: Das Gebäude sieht aus wie dieses eingebaute Gebäude (z.B. "Sawmill")
   worker      Arbeiter: { title = "...", tool = "Hammer" (oder "none"), look = "Carpenter" }
               tool: Werkzeug, das ein Helfer braucht, um Arbeiter zu werden. look: Platzhaltergrafik (eingebauter Beruf)
+              Eigene Bilder für Gebäude und Arbeiter: Ordner data/RTTR/assets/civ/<name>/,
+              siehe data/RTTR/assets/civ/LIESMICH.txt
   inputs      optional: bis zu 3 Eingänge, jeder eine Tag-Abfrage, z.B. { "Bones" } oder { { "Bretter", "Nadelholz" } }
   consume     optional: "each" (Standard): von jedem Eingang 1 Ware pro Produkt, jeder Eingang muss genau eine Ware
               treffen. "any": 1 Ware des Eingangs mit dem größten Vorrat (wie bei den Minen), höchstens 3 Waren insgesamt.
@@ -30,6 +32,12 @@ rttr:AddWorkshop{...}:
               Eine Bibliothek bestellt alle Wissensmedien (Waren mit knowledge in wares.lua) per Träger, bis capacity
               erreicht ist, und stellt nichts her. Darin zählen die WP der Medien voll (in Lagern nur halb). Wird sie
               zerstört, sind die Medien verloren. Ohne inputs, output und workTime.
+  collect     optional: macht die Werkstatt zum Sammler wie den Steinbruch. Der Arbeiter geht zu Objekten auf der Karte
+              (mapobjects.lua) im Umkreis radius, arbeitet dort workTime Sekunden und bringt output nach Hause:
+              collect = { object = "LoamDeposit", radius = 8 }. Ohne inputs.
+              Arbeitsanimation je nach worker.look: "Planer" gräbt mit der Schaufel, "Woodcutter" hackt,
+              sonst klopft er wie der Steinmetz.
+  plant       (fehlt aktuell noch) optional: macht die Werkstatt zum Anbauer wie der Farm oder dem Köhler. 
   workTime    Arbeitszeit pro Produkt in Sekunden
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
 
@@ -101,3 +109,22 @@ rttr:AddWorkshop{
     worker = { title = "Bibliothekar", tool = "none", look = "Helper" },
     library = { capacity = 20 },
 }
+
+-------------------------------------------------------------------------------
+-- Lehmgrube: sammelt Lehmvorkommen (mapobjects.lua) wie der Steinbruch die Steinhaufen.
+-- Der Lehmstecher gräbt mit der Schaufel (Grafik-Vorbild: Planierer).
+-------------------------------------------------------------------------------
+
+rttr:AddWorkshop{
+    name = "LoamPit",
+    title = "Lehmgrube",
+    size = "small",
+    cost = { Boards = 2 },           
+    look = "Quarry",                
+    worker = { title = "Lehmstecher", tool = "Shovel", look = "Planer" },
+    collect = { object = "LoamDeposit", radius = 8 }, -- PLATZHALTER: Reichweite wie der Steinbruch
+    output = "Loam",
+    workTime = 7,                    
+    waitTime = 40,                   
+}
+

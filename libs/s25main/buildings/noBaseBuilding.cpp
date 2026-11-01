@@ -275,11 +275,11 @@ ITexture& noBaseBuilding::GetBuildingImage() const
 
 ITexture& noBaseBuilding::GetBuildingImage(BuildingType type, Nation nation) //-V688
 {
-    return LOADER.building_cache[nation][civ::getLook(type)].building;
+    return LOADER.getBuildingSprites(nation, type).building;
 }
 
 /// Gibt ein Bild zurück für die Tür des Gebäudes
 ITexture& noBaseBuilding::GetDoorImage() const
 {
-    return LOADER.building_cache[nation][civ::getLook(bldType_)].door;
+    return LOADER.getBuildingSprites(nation, bldType_).door;
 }

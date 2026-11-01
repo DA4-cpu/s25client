@@ -54,6 +54,7 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("AddWare", &GameDataLoader::AddWare)
         .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
+        .addFunction("AddMapObject", &GameDataLoader::AddMapObject)
         .addFunction("AddByproduct", &GameDataLoader::AddByproduct)
         .addFunction("SetKnowledgeDistribution", &GameDataLoader::SetKnowledgeDistribution)
         .addFunction("SetMapClimate", &GameDataLoader::SetMapClimate)
@@ -153,6 +154,11 @@ void GameDataLoader::SetWareTags(const kaguya::LuaTable& data)
 void GameDataLoader::AddWorkshop(const kaguya::LuaTable& data)
 {
     worldDesc_.workshops.emplace_back(data);
+}
+
+void GameDataLoader::AddMapObject(const kaguya::LuaTable& data)
+{
+    worldDesc_.mapObjects.emplace_back(data);
 }
 
 void GameDataLoader::AddByproduct(const kaguya::LuaTable& data)

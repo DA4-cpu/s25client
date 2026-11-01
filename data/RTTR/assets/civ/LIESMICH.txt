@@ -1,0 +1,119 @@
+Eigene Grafiken für den Zivilisationsmodus
+==========================================
+
+Für jede Ware, Werkstatt und jedes Kartenobjekt aus gamedata/civ/*.lua gibt es hier einen Ordner mit dem
+Bezeichner (name = "...") als Namen, z.B. für Lehm:
+
+  Loam/          Ware "Lehm"                      (civ/wares.lua)
+  LoamPit/       Werkstatt "Lehmgrube" und ihr Arbeiter "Lehmstecher"  (civ/workshops.lua)
+  LoamDeposit/   Kartenobjekt "Lehmvorkommen"     (civ/mapobjects.lua)
+
+Jedes Bild ist freiwillig. Fehlt eines, zeichnet das Spiel wie bisher die Platzhaltergrafik (look = "..." in der
+Lua-Datei). Man kann also mit einem einzigen Bild anfangen. Groß-/Kleinschreibung der Dateinamen ist egal.
+
+
+So geht's
+---------
+1. Ein Spiel mit dem Addon "Zivilisationsmodus" starten (eine Runde genügt, gleich wieder beenden).
+   Beim Laden schreibt das Spiel alle Platzhaltergrafiken als VORLAGEN in den Benutzerordner von RttR
+   (der Ordner mit SAVE und LOGS). Unter Windows ist das
+     C:\Users\<Name>\Saved Games\Return To The Roots   (im Explorer: Benutzerordner > "Gespeicherte Spiele")
+   Schnell hin: Win+R, dann  %USERPROFILE%\Saved Games\Return To The Roots  eingeben.
+   Die Vorlagen liegen dort in
+
+     civ-vorlagen\<Bezeichner>\...
+
+   Das Log des Spiels liegt im selben Ordner unter LOGS (neueste Datei). Dort steht der genaue Pfad:
+     "Civilization mode: ... own images loaded from <eigene Bilder>, ... new templates written to <Vorlagen>"
+   Die Vorlagen haben schon die richtigen Namen, Größen und Ankerpunkte. Vorhandene Vorlagen werden nie
+   überschrieben; zum Neu-Erzeugen den Ordner civ-vorlagen löschen. Auf einer Winterkarte kommen die
+   Winter-Varianten dazu (…_Winter…).
+   ACHTUNG: Die Vorlagen SIND Original-S2-Grafiken. Nur zum Abmessen und Nachzeichnen verwenden, nicht
+   veröffentlichen und nicht ins Repo legen.
+
+2. Das eigene Bild zeichnen - am einfachsten in derselben Größe wie die Vorlage - und als PNG mit Transparenz
+   (oder BMP) mit dem Namen der Vorlage HIER in den Ordner des Bezeichners legen.
+   Den Teil ".nx<X>.ny<Y>" im Namen der Vorlage mitnehmen, dann sitzt das Bild genau wie das Original.
+
+3. data/RTTR wird beim Bauen nach build\...\RTTR kopiert: Einmal bauen (oder die Datei zusätzlich direkt in den
+   Ordner RTTR\assets\civ\<Bezeichner> neben der s25client.exe legen) und ein Spiel starten oder laden.
+   Bilder werden nur beim Laden eines Spiels gelesen. Probleme (z.B. kaputte Datei) stehen im Log.
+
+Ob die eigenen Bilder ins Git-Repo sollen, entscheidest du: Was hier liegt, wird von "git add" erfasst.
+
+KI-Gebäude aus dem S2-KI-Kit: s2_sprite_pipeline.py schreibt mit --name Bild und Schatten gleich richtig benannt in
+den Ausgabeordner, z.B.
+  python s2_sprite_pipeline.py lehmgrube.png --pal ...\PAL5.BBM --out ...\data\RTTR\assets\civ\LoamPit --name Gebaeude
+  -> Gebaeude.nx<X>.ny<Y>.png und Gebaeude_Schatten.nx<X>.ny<Y>.png  (für die Baustelle: --name Baustelle)
+
+
+Dateiformat
+-----------
+- PNG mit Alpha-Kanal (beliebige Farben, halbtransparente Kanten gehen auch) oder
+  BMP: 8 Bit mit S2-Palette (Index 254 = transparent, wie bei s2_sprite_pipeline.py) oder 24/32 Bit.
+- Name[.nx<X>.ny<Y>].png - X/Y = Ankerpunkt in Pixeln, gemessen von der linken oberen Ecke des Bildes.
+  Der Ankerpunkt ist der Punkt, der genau auf dem Kartenpunkt liegt:
+    Gebäude: der Fahnen-/Türpunkt unten, Figuren: zwischen den Füßen, Kartenobjekte: Mitte unten.
+  Ohne .nx/.ny liegt der Ankerpunkt an derselben relativen Stelle wie in der Platzhaltergrafik (bei gleicher
+  Größe also genau gleich, bei doppelter Größe an der doppelten Stelle).
+  Teile wie ".rle", ".player" oder ".shadow" (RttR-Archivnamen) werden ignoriert,
+  z.B. Gebaeude.rle.nx48.ny70.bmp. Andere Zusätze (z.B. Gebaeude.alt.png) -> Datei wird nicht benutzt.
+- Spielerfarbe (Arbeiter, Träger): Pixel, die GENAU eine der 4 blauen Spielerfarben der S2-Palette haben
+  (Palette PAL5, Index 128-131), zeichnet das Spiel in der Farbe des Spielers. Die Vorlagen enthalten diese
+  Pixel schon in genau diesen Farben - beim Übermalen einfach übernehmen (Pipette).
+- Schatten (Namen mit _Schatten): Jedes nicht transparente Pixel wird zu Schatten, die Farbe ist egal.
+- Landschaften: An jeden Namen kann _Gruenland, _Oedland oder _Winter angehängt werden, z.B.
+  Groesse0_Winter.png oder Gebaeude_Schatten_Winter.nx40.ny60.png. Diese Variante gilt dann auf Karten dieser
+  Landschaft, sonst die ohne Zusatz.
+
+
+Ware  (Ordner = Bezeichner der Ware, z.B. Loam)
+-----------------------------------------------
+  Symbol.png            Symbol in den Fenstern (Inventar, Verteilung, Statistik, Werkstatt ...)
+  Fahne.png             Ware, die an einer Fahne liegt
+  Esel.png              Ware auf dem Packesel
+  Traeger_<Richtung>.png
+                        Ware in den Armen eines Trägers bzw. Arbeiters; wird über den Körper gezeichnet.
+                        <Richtung> = West, Nordwest, Nordost, Ost, Suedost, Suedwest - alle 6 nötig.
+                        Wahlweise ein Bild je Schritt: Traeger_<Richtung>_<0-7>.png. Die Vorlagen zeigen, was
+                        S2 bei diesem Platzhalter macht (ein Bild je Richtung oder je Schritt).
+                        Ist der Platzhalter eine Wein- oder Lederware, zeigen die Vorlagen die Bretter.
+  TraegerDick_<Richtung>.png
+                        dasselbe für den dicken Träger (freiwillig, sonst werden die Traeger_-Bilder benutzt)
+
+
+Werkstatt  (Ordner = Bezeichner der Werkstatt, z.B. LoamPit)
+------------------------------------------------------------
+  Gebaeude.png              das fertige Gebäude
+  Gebaeude_Schatten.png
+  Baustelle.png             Gerüst; wird beim Bauen von unten nach oben aufgedeckt, darüber das Gebäude
+  Baustelle_Schatten.png
+  Tuer.png                  geschlossene Tür (freiwillig)
+  Icon.png                  Bild im Baumenü
+  Diese Bilder gelten für alle Völker. Abweichende Bilder für ein Volk mit denselben Namen in den Unterordner
+  Roemer\, Wikinger\, Afrikaner\, Japaner\ oder Babylonier\ legen. Die Vorlagen liegen je Volk im Unterordner.
+  Gibt es ein eigenes Gebäude, aber keinen eigenen Schatten oder keine eigene Tür, wird keiner gezeichnet
+  (der vom Platzhalter würde nicht passen).
+
+  Der Arbeiter der Werkstatt (im selben Ordner):
+  Arbeiter_Symbol.png               Symbol in den Fenstern
+  Arbeiter_<Richtung>_<0-7>.png     Laufen: die ganze Figur, 8 Bilder je Richtung (Richtungen wie oben).
+                                    Eine Richtung wird nur benutzt, wenn alle 8 Bilder da sind.
+  Arbeiter_Arbeit_<0,1,2,...>.png   Arbeitsanimation am Kartenobjekt (z.B. Lehm stechen): beliebig viele Bilder,
+                                    ab 0 ohne Lücke. Sie laufen in Schleife im Takt der Platzhalter-Animation.
+  Trägt der Arbeiter etwas, sieht er aus wie ein Träger mit dieser Ware (Traeger_-Bilder der Ware).
+
+
+Kartenobjekt  (Ordner = Bezeichner des Objekts, z.B. LoamDeposit)
+-----------------------------------------------------------------
+  Groesse<N>.png               N = 0 (kleinstes, kurz vor dem Verschwinden) bis sizes-1 (volles Vorkommen),
+  Groesse<N>_Schatten.png      sizes steht in mapobjects.lua (Lehmvorkommen: 0 bis 5).
+  Fehlt eine Größe, wird für sie der eingefärbte Platzhalter gezeichnet. Die Vorlagen sind schon eingefärbt.
+
+
+Checkliste Lehm (alles, was es im Spiel zu sehen gibt)
+------------------------------------------------------
+  Loam\         Symbol, Fahne, Esel, Traeger_<6 Richtungen> (+ freiwillig TraegerDick_<6 Richtungen>)
+  LoamPit\      Gebaeude, Gebaeude_Schatten, Baustelle, Baustelle_Schatten, Tuer, Icon,
+                Arbeiter_Symbol, Arbeiter_<6 Richtungen>_<0-7>, Arbeiter_Arbeit_<0...>
+  LoamDeposit\  Groesse0 ... Groesse5, jeweils mit _Schatten

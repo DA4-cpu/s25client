@@ -6,6 +6,8 @@
 #include "BuildingRegister.h"
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
+#include "Loader.h"
+#include "PointOutput.h"
 #include "RttrConfig.h"
 #include "SerializedGameData.h"
 #include "addons/const_addons.h"
@@ -15,6 +17,8 @@
 #include "buildings/nobHQ.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
+#include "civ/CustomGraphics.h"
+#include "civ/ImageFile.h"
 #include "civ/Knowledge.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
@@ -26,8 +30,12 @@
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
 #include "lua/GameDataLoader.h"
+#include "ogl/glArchivItem_Bitmap_Player.h"
+#include "ogl/glArchivItem_Bitmap_Raw.h"
+#include "ogl/glSmartBitmap.h"
 #include "worldFixtures/MockLocalGameState.h"
 #include "worldFixtures/WorldWithGCExecution.h"
+#include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noFlag.h"
 #include "gameTypes/MapTypes.h"
 #include "gameData/BuildingConsts.h"
@@ -35,6 +43,11 @@
 #include "gameData/JobConsts.h"
 #include "gameData/SettingTypeConv.h"
 #include "gameData/WorldDescription.h"
+#include "libsiedler2/Archiv.h"
+#include "libsiedler2/ArchivItem_Palette.h"
+#include "libsiedler2/PixelBufferPaletted.h"
+#include "libsiedler2/libsiedler2.h"
+#include "rttr/test/LogAccessor.hpp"
 #include "rttr/test/TmpFolder.hpp"
 #include <boost/nowide/fstream.hpp>
 #include <boost/test/unit_test.hpp>
@@ -164,6 +177,27 @@ WorldDescription makeLibraryDesc(unsigned capacity = 20)
     library.worker.look = "Helper";
     library.libraryCapacity = capacity;
     desc.workshops.push_back(library);
+    return desc;
+}
+
+/// Loam (ware), a deposit with 2 sizes and a pit collecting it in the given radius
+WorldDescription makeCollectorDesc(unsigned radius = 6)
+{
+    WorldDescription desc;
+    desc.wares.push_back(makeWare("Loam"));
+    MapObjectDesc deposit;
+    deposit.name = "Deposit";
+    deposit.title = "DepositTitle";
+    deposit.sizes = 2;
+    deposit.look = "Granite1";
+    desc.mapObjects.push_back(deposit);
+    auto pit = makeWorkshop("Pit", {}, {"Loam"});
+    pit.worker.tool = "Shovel";
+    pit.worker.look = "Planer";
+    pit.collectObject = "Deposit";
+    pit.collectRadius = radius;
+    pit.workTime = 1;
+    desc.workshops.push_back(pit);
     return desc;
 }
 
@@ -394,6 +428,94 @@ BOOST_AUTO_TEST_CASE(DocumentedExamplesAreValid)
     BOOST_TEST(desc.workshops.size() == 1u);
     const civ::Content content(desc);
     BOOST_TEST(content.GetNumBuildings() == 1u);
+}
+
+BOOST_AUTO_TEST_CASE(MapObjectsAndCollectors)
+{
+    const civ::Content content(makeCollectorDesc());
+    BOOST_TEST_REQUIRE(content.GetMapObjects().size() == 1u);
+    const civ::CustomMapObject& deposit = *content.GetMapObject(0);
+    BOOST_TEST(deposit.name == "Deposit");
+    BOOST_TEST(deposit.sizes == 2u);
+    BOOST_TEST(deposit.lookGranite == 0u);
+    BOOST_TEST(deposit.tint == 0xFFFFFFu);
+    BOOST_TEST(!content.GetMapObject(1));
+    BOOST_TEST((content.FindMapObject("Deposit") == 0u));
+    BOOST_TEST(!content.FindMapObject("Other"));
+    const civ::CustomBuilding& pit = *content.GetBuilding(BuildingType::Custom0);
+    BOOST_TEST(pit.IsCollector());
+    BOOST_TEST(pit.collectObject == 0);
+    BOOST_TEST(pit.collectRadius == 6u);
+    BOOST_TEST((pit.product == GoodType::Custom0));
+    BOOST_TEST(pit.workDesc.waresNeeded.empty());
+    BOOST_TEST(!content.GetBuilding(BuildingType::Custom0)->IsLibrary());
+    // Map objects are part of the signature: appending is fine, renaming not
+    const auto signature = content.GetSignature();
+    BOOST_TEST((signature == std::vector<std::string>{"W:Loam", "B:Pit", "O:Deposit"}));
+    BOOST_TEST(content.IsCompatibleTo({"W:Loam", "B:Pit"}));
+    BOOST_TEST(content.IsCompatibleTo(signature));
+    BOOST_TEST(!content.IsCompatibleTo({"W:Loam", "B:Pit", "O:Other"}));
+    BOOST_TEST(!content.IsCompatibleTo({"W:Loam", "B:Pit", "O:Deposit", "O:Second"}));
+
+    // Invalid: unknown object, too many objects
+    {
+        WorldDescription desc = makeCollectorDesc();
+        desc.workshops.front().collectObject = "Unknown";
+        BOOST_CHECK_THROW(civ::Content{desc}, GameDataError);
+    }
+    {
+        WorldDescription desc = makeCollectorDesc();
+        desc.mapObjects.push_back(desc.mapObjects.front());
+        BOOST_CHECK_THROW(civ::Content{desc}, GameDataError);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(MapObjectsAndCollectorsFromLua)
+{
+    const std::string base = R"(
+rttr:AddWare{ name = "Loam", title = "Lehm", look = "Stones", transport = "Stones" }
+rttr:AddMapObject{ name = "LoamDeposit", title = "Lehmvorkommen", sizes = 4, look = "Granite2", tint = 0xC08050 }
+rttr:AddWorkshop{ name = "LoamPit", title = "Lehmgrube", size = "small", cost = { Boards = 2 }, look = "Quarry",
+    worker = { title = "Lehmstecher", tool = "Shovel", look = "Planer" },
+    collect = { object = "LoamDeposit", radius = 8 }, output = "Loam", workTime = 7, waitTime = 40 }
+)";
+    const auto load = [](const std::string& content, WorldDescription& desc) {
+        rttr::test::TmpFolder tmp;
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << content;
+        }
+        GameDataLoader loader(desc, tmp);
+        rttr::test::LogAccessor logAcc;
+        return loader.Load();
+    };
+    {
+        WorldDescription desc;
+        BOOST_TEST_REQUIRE(load(base, desc));
+        BOOST_TEST_REQUIRE(desc.mapObjects.size() == 1u);
+        BOOST_TEST(desc.mapObjects[0].tint == 0xC08050u);
+        BOOST_TEST(desc.workshops[0].collectObject == "LoamDeposit");
+        BOOST_TEST(desc.workshops[0].collectRadius == 8u);
+        const civ::Content content(desc);
+        BOOST_TEST(content.GetMapObject(0)->sizes == 4u);
+        BOOST_TEST(content.GetMapObject(0)->lookGranite == 1u);
+        BOOST_TEST(content.GetBuilding(BuildingType::Custom0)->IsCollector());
+    }
+    const auto replaced = [&base](const std::string& from, const std::string& to) {
+        std::string result = base;
+        const auto pos = result.find(from);
+        BOOST_TEST_REQUIRE(pos != std::string::npos);
+        return result.replace(pos, from.size(), to);
+    };
+    for(const std::string& invalid :
+        {replaced("sizes = 4", "sizes = 0"), replaced("sizes = 4", "sizes = 17"),
+         replaced("look = \"Granite2\"", "look = \"Tree\""), replaced("tint = 0xC08050", "tint = 0x1000000"),
+         replaced("radius = 8", "radius = 0"), replaced("collect = {", "inputs = { \"Loam\" }, collect = {")})
+    {
+        WorldDescription desc;
+        BOOST_TEST_INFO(invalid);
+        BOOST_TEST(!load(invalid, desc));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(GlobalTablesUseActiveContent)
@@ -818,6 +940,74 @@ BOOST_FIXTURE_TEST_CASE(SerializeCustomContent, ContentWorldFixture)
 }
 
 namespace {
+struct CollectorWorldFixture : public ContentWorldFixture
+{
+    // Small radius as the test world is small (and wraps around)
+    CollectorWorldFixture() : ContentWorldFixture(makeCollectorDesc(2)) {}
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(CollectorCollectsDeposits, CollectorWorldFixture)
+{
+    hq().AddToInventory(GoodCounts::make(GoodType::Shovel, 1), true);
+    const MapPoint bldPos = world.MakeMapPoint(hqPos + Position(4, 2));
+    // 2 deposits with 2 wares each in range of the building (radius 2), one too far away
+    const MapPoint deposit1 = world.MakeMapPoint(bldPos + Position(2, 0));
+    const MapPoint deposit2 = world.MakeMapPoint(bldPos + Position(0, 2));
+    const MapPoint farDeposit = world.MakeMapPoint(bldPos + Position(5, 0));
+    BOOST_TEST_REQUIRE(world.CalcDistance(bldPos, deposit1) == 2u);
+    BOOST_TEST_REQUIRE(world.CalcDistance(bldPos, deposit2) == 2u);
+    BOOST_TEST_REQUIRE(world.CalcDistance(bldPos, farDeposit) > 2u);
+    for(const MapPoint pt : {deposit1, deposit2, farDeposit})
+    {
+        world.SetNO(pt, new noDeposit(0, 1));
+        world.RecalcBQAroundPointBig(pt);
+    }
+    BOOST_TEST((world.GetNO(deposit1)->GetType() == NodalObjectType::Deposit));
+    placeConnectedBuilding(BuildingType::Custom0);
+    const auto& bld = *world.GetSpecObj<nobUsual>(bldPos);
+    RTTR_EXEC_TILL(4000, bld.HasWorker());
+    BOOST_TEST((bld.GetWorker()->GetGOT() == GO_Type::NofCustomCollector));
+    // The worker goes out, digs and brings the loam home: each deposit gets smaller and disappears after 2 loam
+    RTTR_EXEC_TILL(20000, countInHQ(GoodType::Custom0) >= 4u);
+    BOOST_TEST(!world.GetSpecObj<noDeposit>(deposit1));
+    BOOST_TEST(!world.GetSpecObj<noDeposit>(deposit2));
+    BOOST_TEST((world.GetNO(deposit1)->GetType() == NodalObjectType::Nothing));
+    // Out of range: still there and nothing more to collect
+    BOOST_TEST_REQUIRE(world.GetSpecObj<noDeposit>(farDeposit));
+    BOOST_TEST(world.GetSpecObj<noDeposit>(farDeposit)->GetSize() == 1u);
+    RTTR_SKIP_GFS(2000);
+    BOOST_TEST(countInHQ(GoodType::Custom0) == 4u);
+    BOOST_TEST(bld.GetProductivity() == 0u);
+}
+
+BOOST_FIXTURE_TEST_CASE(SerializeDepositsAndCollectors, CollectorWorldFixture)
+{
+    hq().AddToInventory(GoodCounts::make(GoodType::Shovel, 1), true);
+    const MapPoint bldPos = world.MakeMapPoint(hqPos + Position(4, 2));
+    const MapPoint depositPos = world.MakeMapPoint(bldPos + Position(2, 0));
+    world.SetNO(depositPos, new noDeposit(0, 1));
+    world.RecalcBQAroundPointBig(depositPos);
+    placeConnectedBuilding(BuildingType::Custom0);
+    RTTR_EXEC_TILL(4000, world.GetSpecObj<nobUsual>(bldPos)->HasWorker());
+
+    SerializedGameData sgd;
+    sgd.MakeSnapshot(*game);
+    MockLocalGameState lgs;
+    em.Clear();
+    world.Unload();
+    sgd.ReadSnapshot(*game, lgs);
+    civ::startGame(world);
+
+    const auto* deposit = world.GetSpecObj<noDeposit>(depositPos);
+    BOOST_TEST_REQUIRE(deposit);
+    BOOST_TEST(deposit->GetObjectIdx() == 0u);
+    BOOST_TEST(deposit->GetSize() == 1u);
+    RTTR_EXEC_TILL(20000, countInHQ(GoodType::Custom0) >= 2u);
+    BOOST_TEST(!world.GetSpecObj<noDeposit>(depositPos));
+}
+
+namespace {
 struct ByproductWorldFixture : public ContentWorldFixture
 {
     ByproductWorldFixture(unsigned amount = 1) : ContentWorldFixture(makeByproductDesc(amount, true)) {}
@@ -1117,6 +1307,54 @@ BOOST_FIXTURE_TEST_CASE(AIBuildsWorkshopsAndLibraries, BiggerCivWorldFixture)
     BOOST_TEST(hasBld(getCustomBuilding(1)));
 }
 
+BOOST_FIXTURE_TEST_CASE(AIBuildsCollectorNextToDeposits, BiggerCivWorldFixture)
+{
+    ggs.setSelection(AddonId::CIVILIZATION, 1);
+    world.SetTechTree(std::make_unique<civ::TechTree>(makeCollectorDesc(4)));
+    civ::startGame(world);
+    addStartResources();
+    auto& hqBld = *world.GetPlayer(curPlayer).GetHQ();
+    hqBld.AddToInventory(GoodCounts::make(GoodType::Shovel, 2), true);
+    // Some deposits south east of the HQ
+    std::vector<MapPoint> deposits;
+    for(const Position offset : {Position(5, 4), Position(6, 5), Position(4, 6)})
+    {
+        const MapPoint pt = world.MakeMapPoint(hqPos + offset);
+        world.SetNO(pt, new noDeposit(0, 1));
+        world.RecalcBQAroundPointBig(pt);
+        deposits.push_back(pt);
+    }
+    world.InitAfterLoad();
+    const BuildingRegister& buildings = world.GetPlayer(curPlayer).GetBuildingRegister();
+    const auto findCollector = [&buildings]() {
+        for(const noBuildingSite* site : buildings.GetBuildingSites())
+        {
+            if(site->GetBuildingType() == BuildingType::Custom0)
+                return site->GetPos();
+        }
+        for(const nobUsual* bld : buildings.GetBuildings(BuildingType::Custom0))
+            return bld->GetPos();
+        return MapPoint::Invalid();
+    };
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    for(unsigned gf = 0; gf < 12000 && !findCollector().isValid();)
+    {
+        std::vector<gc::GameCommandPtr> aiGcs = ai->FetchGameCommands();
+        for(unsigned i = 0; i < 5; i++, gf++)
+        {
+            em.ExecuteNextGF();
+            ai->RunGF(em.GetCurrentGF(), i == 0);
+        }
+        for(gc::GameCommandPtr& gc : aiGcs)
+            gc->Execute(world, curPlayer);
+    }
+    const MapPoint collectorPos = findCollector();
+    BOOST_TEST_REQUIRE(collectorPos.isValid());
+    // In range of the deposits
+    BOOST_TEST(
+      helpers::contains_if(deposits, [&](const MapPoint& pt) { return world.CalcDistance(pt, collectorPos) <= 4u; }));
+}
+
 BOOST_FIXTURE_TEST_CASE(AISetsRegulatorForResearch, BiggerCivWorldFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 1);
@@ -1162,6 +1400,203 @@ BOOST_FIXTURE_TEST_CASE(AISetsRegulatorForResearch, BiggerCivWorldFixture)
     runAI(600);
     BOOST_TEST(!research.GetCurrent().has_value());
     BOOST_TEST((setting() == std::array<unsigned, 3>{4, 4, 4}));
+}
+
+namespace {
+namespace bfs = boost::filesystem;
+
+libsiedler2::PixelBufferBGRA makeImage(uint16_t width, uint16_t height, libsiedler2::ColorBGRA clr)
+{
+    return libsiedler2::PixelBufferBGRA(width, height, clr);
+}
+} // namespace
+
+BOOST_AUTO_TEST_CASE(ImageFileNames)
+{
+    auto info = civ::parseImageFileName("Gebaeude.png");
+    BOOST_TEST_REQUIRE(info.has_value());
+    BOOST_TEST(info->name == "gebaeude");
+    BOOST_TEST(!info->nx);
+    BOOST_TEST(!info->ny);
+    info = civ::parseImageFileName("dir/Gebaeude_Schatten.nx12.ny-3.BMP");
+    BOOST_TEST_REQUIRE(info.has_value());
+    BOOST_TEST(info->name == "gebaeude_schatten");
+    BOOST_TEST((info->nx == 12));
+    BOOST_TEST((info->ny == -3));
+    // Types of RttR archive folders are ignored
+    info = civ::parseImageFileName("Gebaeude.rle.nx40.ny61.bmp");
+    BOOST_TEST_REQUIRE(info.has_value());
+    BOOST_TEST(info->name == "gebaeude");
+    BOOST_TEST((info->ny == 61));
+    // Not an image or unknown parts
+    BOOST_TEST(!civ::parseImageFileName("Gebaeude.txt"));
+    BOOST_TEST(!civ::parseImageFileName("Gebaeude.alt.png"));
+    BOOST_TEST(!civ::parseImageFileName("Gebaeude.nxA.png"));
+    BOOST_TEST(!civ::parseImageFileName(".png"));
+    BOOST_TEST(!civ::parseImageFileName("LIESMICH"));
+}
+
+BOOST_AUTO_TEST_CASE(PngRoundTripAndPlayerColors)
+{
+    rttr::test::TmpFolder tmp;
+    libsiedler2::PixelBufferBGRA img = makeImage(5, 3, libsiedler2::ColorBGRA());
+    img.set(0, 0, libsiedler2::ColorBGRA(10, 20, 30, 255)); // B, G, R, A
+    img.set(4, 2, libsiedler2::ColorBGRA(1, 2, 3, 128));
+    const std::array<libsiedler2::ColorRGB, 4> playerColors = {
+      libsiedler2::ColorRGB(0, 0, 200), libsiedler2::ColorRGB(0, 0, 180), libsiedler2::ColorRGB(0, 0, 160),
+      libsiedler2::ColorRGB(0, 0, 140)};
+    img.set(2, 1, libsiedler2::ColorBGRA(playerColors[2], 255));
+    civ::writePngFile(tmp / "Test.png", img);
+    const libsiedler2::PixelBufferBGRA loaded = civ::loadImageFile(tmp / "Test.png");
+    BOOST_TEST_REQUIRE(loaded.getWidth() == 5u);
+    BOOST_TEST_REQUIRE(loaded.getHeight() == 3u);
+    for(uint16_t y = 0; y < 3; ++y)
+    {
+        for(uint16_t x = 0; x < 5; ++x)
+            BOOST_TEST(loaded.get(x, y).asValue() == img.get(x, y).asValue());
+    }
+    BOOST_CHECK_THROW(civ::loadImageFile(tmp / "Missing.png"), std::runtime_error);
+    {
+        boost::nowide::ofstream broken(tmp / "Broken.png");
+        broken << "no png";
+    }
+    BOOST_CHECK_THROW(civ::loadImageFile(tmp / "Broken.png"), std::runtime_error);
+
+    // 8 bit BMP with palette (e.g. from s2_sprite_pipeline.py): Index 254 is transparent
+    {
+        libsiedler2::ArchivItem_Palette palette;
+        for(unsigned i = 0; i < 256; ++i)
+            palette.set(i, libsiedler2::ColorRGB(i, 255 - i, 7));
+        palette.set(254, libsiedler2::TRANSPARENT_COLOR); // Like in the S2 palette
+        libsiedler2::PixelBufferPaletted indices(3, 2, 254);
+        indices.set(1, 0, 17);
+        indices.set(2, 1, 253);
+        auto palBmp = std::make_unique<glArchivItem_Bitmap_Raw>();
+        BOOST_TEST_REQUIRE(palBmp->create(indices, &palette) == 0);
+        libsiedler2::Archiv archive;
+        archive.push(std::move(palBmp));
+        BOOST_TEST_REQUIRE(libsiedler2::Write(tmp / "Gebaeude.rle.nx1.ny1.bmp", archive, &palette) == 0);
+        const libsiedler2::PixelBufferBGRA bmpImg = civ::loadImageFile(tmp / "Gebaeude.rle.nx1.ny1.bmp");
+        BOOST_TEST_REQUIRE(bmpImg.getWidth() == 3u);
+        BOOST_TEST(bmpImg.get(0, 0).getAlpha() == 0u);
+        BOOST_TEST(bmpImg.get(1, 0).getAlpha() == 255u);
+        BOOST_TEST(bmpImg.get(1, 0).getRed() == 17u);
+        BOOST_TEST(bmpImg.get(1, 0).getGreen() == 238u);
+        BOOST_TEST(bmpImg.get(2, 1).getAlpha() == 255u); // Shadow index is visible
+    }
+
+    const auto plBmp = civ::createPlayerBitmap(loaded, Position(2, 3), playerColors);
+    BOOST_TEST(plBmp->getNx() == 2);
+    BOOST_TEST(plBmp->getNy() == 3);
+    BOOST_TEST(plBmp->isPlayerColor(2, 1));
+    BOOST_TEST(plBmp->getPlayerColorIdx(2, 1) == 2u);
+    BOOST_TEST(!plBmp->isPlayerColor(0, 0));
+    BOOST_TEST(!plBmp->isPlayerColor(1, 1));
+    const auto bmp = civ::createBitmap(loaded, Position(-1, 7));
+    BOOST_TEST(bmp->getWidth() == 5u);
+    BOOST_TEST(bmp->getNx() == -1);
+    BOOST_TEST(bmp->getNy() == 7);
+}
+
+BOOST_AUTO_TEST_CASE(AnchorOfOwnImages)
+{
+    civ::ImageFileInfo info;
+    // Without placeholder: Center of the bottom line
+    BOOST_TEST(civ::calcAnchor(info, Extent(10, 20), std::nullopt) == Position(5, 19));
+    // Same relative position as the placeholder
+    const civ::AnchorRef ref{Position(10, 30), Extent(20, 40)};
+    BOOST_TEST(civ::calcAnchor(info, Extent(20, 40), ref) == Position(10, 30));
+    BOOST_TEST(civ::calcAnchor(info, Extent(40, 20), ref) == Position(20, 15));
+    // From the file name
+    info.nx = 3;
+    BOOST_TEST(civ::calcAnchor(info, Extent(40, 20), ref) == Position(3, 15));
+    info.ny = -2;
+    BOOST_TEST(civ::calcAnchor(info, Extent(40, 20), ref) == Position(3, -2));
+    // Anchor of a placeholder drawn with an offset and of combined bitmaps
+    glArchivItem_Bitmap_Raw body, overlay;
+    body.init(10, 20, libsiedler2::TextureFormat::BGRA);
+    body.setNx(5);
+    body.setNy(18);
+    overlay.init(6, 30, libsiedler2::TextureFormat::BGRA);
+    overlay.setNx(2);
+    overlay.setNy(25);
+    auto bodyRef = civ::getAnchorRef(&body, DrawPoint(-9, 0));
+    BOOST_TEST_REQUIRE(bodyRef.has_value());
+    BOOST_TEST(bodyRef->origin == Position(14, 18));
+    auto combined = civ::getAnchorRef({&body, nullptr, &overlay});
+    BOOST_TEST_REQUIRE(combined.has_value());
+    BOOST_TEST(combined->origin == Position(5, 25));
+    // Right: max(10-5, 6-2) = 5, bottom: max(20-18, 30-25) = 5
+    BOOST_TEST(combined->size == Extent(10, 30));
+    BOOST_TEST(!civ::getAnchorRef(nullptr));
+}
+
+BOOST_AUTO_TEST_CASE(OwnGraphicsReplacePlaceholders)
+{
+    LOADER.LoadDummyGUIFiles();
+    LOADER.LoadDummyMapFiles();
+    const ActiveContent active(makeCollectorDesc());
+    const civ::Content& content = *active.content;
+    rttr::test::TmpFolder images, templates;
+    const libsiedler2::ColorBGRA brown(40, 80, 160, 255);
+    bfs::create_directories(images / "Loam");
+    bfs::create_directories(images / "Deposit");
+    bfs::create_directories(images / "Pit");
+    civ::writePngFile(images / "Loam" / "Symbol.nx3.ny4.png", makeImage(8, 6, brown));
+    civ::writePngFile(images / "Loam" / "fahne.png", makeImage(4, 4, brown)); // Case does not matter
+    civ::writePngFile(images / "Deposit" / "Groesse1.png", makeImage(12, 7, brown));
+    civ::writePngFile(images / "Deposit" / "Groesse1_Schatten.nx0.ny0.png", makeImage(14, 5, brown));
+    civ::writePngFile(images / "Deposit" / "Groesse0_Winter.png", makeImage(9, 9, brown));
+    civ::writePngFile(images / "Pit" / "Arbeiter_Symbol.png", makeImage(5, 5, brown));
+    civ::writePngFile(images / "Pit" / "Arbeiter_Arbeit_0.png", makeImage(6, 6, brown));
+    civ::writePngFile(images / "Pit" / "Arbeiter_Arbeit_1.png", makeImage(6, 6, brown));
+    civ::writePngFile(images / "Pit" / "Arbeiter_Arbeit_3.png", makeImage(6, 6, brown)); // Gap: not used
+
+    civ::CustomGraphics& gfx = LOADER.GetCivGraphics();
+    civ::CustomGraphics::Settings settings;
+    settings.folder = images.get();
+    settings.templateFolder = templates.get();
+    settings.landscape = "Gruenland";
+    gfx.fillCaches(LOADER, nullptr, content, settings);
+
+    const auto* icon = dynamic_cast<glArchivItem_Bitmap*>(LOADER.GetWareTex(GoodType::Custom0));
+    BOOST_TEST_REQUIRE(icon);
+    BOOST_TEST(icon == gfx.GetWareIcon(GoodType::Custom0));
+    BOOST_TEST(icon->getWidth() == 8u);
+    BOOST_TEST(icon->getNx() == 3);
+    BOOST_TEST(icon->getNy() == 4);
+    BOOST_TEST(gfx.GetWareFlag(GoodType::Custom0));
+    BOOST_TEST(!gfx.GetWareDonkey(GoodType::Custom0));
+    BOOST_TEST(LOADER.GetJobTex(Job::Custom0) == gfx.GetJobIcon(Job::Custom0));
+    BOOST_TEST(gfx.GetJobIcon(Job::Custom0));
+    BOOST_TEST(gfx.GetWorkFrames(Job::Custom0).size() == 2u);
+    BOOST_TEST(!gfx.HasWalking(Job::Custom0));
+    // Map object: Only the size with an own image, the winter variant is not used on greenland
+    BOOST_TEST(!gfx.GetMapObject(0, 0));
+    glSmartBitmap* deposit = gfx.GetMapObject(0, 1);
+    BOOST_TEST_REQUIRE(deposit);
+    BOOST_TEST(deposit->GetSize().x == 14u);
+    BOOST_TEST(!gfx.GetMapObject(0, 2));
+    BOOST_TEST(!gfx.GetMapObject(1, 0));
+    BOOST_TEST(gfx.GetNumLoaded() == 7u);
+    // Templates of the placeholders which exist in the dummy files (granite piles)
+    BOOST_TEST(bfs::exists(templates / "Deposit" / "Groesse0.nx0.ny0.png"));
+    BOOST_TEST(bfs::exists(templates / "Deposit" / "Groesse1.nx0.ny0.png"));
+
+    // Winter: The landscape variant is preferred
+    settings.landscape = "Winter";
+    gfx.fillCaches(LOADER, nullptr, content, settings);
+    BOOST_TEST_REQUIRE(gfx.GetMapObject(0, 0));
+    BOOST_TEST(gfx.GetMapObject(0, 0)->GetSize().x == 9u);
+    BOOST_TEST(gfx.GetMapObject(0, 1));
+    BOOST_TEST(bfs::exists(templates / "Deposit" / "Groesse0_Winter.nx0.ny0.png"));
+
+    // Without content everything is removed again
+    gfx.fillCaches(LOADER, nullptr, civ::Content(), settings);
+    BOOST_TEST(!gfx.GetWareIcon(GoodType::Custom0));
+    BOOST_TEST(!gfx.GetMapObject(0, 1));
+    BOOST_TEST(gfx.GetWorkFrames(Job::Custom0).empty());
+    BOOST_TEST(gfx.GetNumLoaded() == 0u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

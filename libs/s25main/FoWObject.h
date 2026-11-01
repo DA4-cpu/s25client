@@ -17,11 +17,12 @@ enum class FoW_Type : uint8_t
     Buildingsite,
     Flag,
     Tree,
-    Granite
+    Granite,
+    Deposit
 };
 constexpr auto maxEnumValue(FoW_Type)
 {
-    return FoW_Type::Granite;
+    return FoW_Type::Deposit;
 }
 
 /// Visual object in the Fog of War which shows what a player has seen there

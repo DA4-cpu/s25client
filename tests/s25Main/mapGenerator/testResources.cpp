@@ -9,6 +9,7 @@
 #include "mapGenerator/TextureHelper.h"
 #include "mapGenerator/Zones.h"
 #include "gameData/MapGenDesc.h"
+#include "rttr/test/LogAccessor.hpp"
 #include <boost/test/unit_test.hpp>
 #include <array>
 #include <set>
@@ -192,6 +193,35 @@ BOOST_AUTO_TEST_CASE(PlaceResources_amount_climate_zones_and_global_factor)
     desc.resources.back().climate.temperature = MapGenRange{};
     desc.resources.back().weights.push_back(MapResourceWeight{MapGenClimate{}, 0.});
     BOOST_TEST(countStones(100, 100, 2) == 0u);
+}
+
+BOOST_AUTO_TEST_CASE(PlaceResources_places_map_objects_of_the_civilization_mode)
+{
+    desc.resources.push_back(makeRule("LoamDeposit", 30, toFlag(MapGenTerrain::Land)));
+    // Unknown map object (e.g. without data of the civilization mode): skipped
+    {
+        RandomUtility rnd(1);
+        rttr::test::LogAccessor logAcc;
+        PlaceResources(map, rnd, settings, desc);
+        RTTR_REQUIRE_LOG_CONTAINS("unknown object 'LoamDeposit'", false);
+        BOOST_TEST(helpers::count_if(map.objectTypes, [](uint8_t type) { return type >= 0xD0; }) == 0);
+    }
+    const std::vector<CustomMapObjectInfo> customObjects{{"Other", 2}, {"LoamDeposit", 4}};
+    RandomUtility rnd(1);
+    PlaceResources(map, rnd, settings, desc, customObjects);
+    unsigned numDeposits = 0;
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        if(map.objectTypes[pt] == 0xD1) // Object type 0xD0 + index
+        {
+            ++numDeposits;
+            BOOST_TEST_REQUIRE(map.objectInfos[pt] >= 1u); // Size 1..4
+            BOOST_TEST_REQUIRE(map.objectInfos[pt] <= 4u);
+            BOOST_TEST_REQUIRE((map.terrainFlags[pt] & toFlag(MapGenTerrain::Land)) != 0u);
+        } else
+            BOOST_TEST_REQUIRE(map.objectTypes[pt] != 0xD0);
+    }
+    BOOST_TEST(numDeposits > 20u);
 }
 
 BOOST_AUTO_TEST_CASE(PlaceResources_places_clusters)

@@ -12,7 +12,8 @@ rttr:AddWare{...} definiert eine neue Ware:
   kind        optional: Warenart-Tag, z.B. "Bretter"
   properties  optional: Eigenschafts-Tags, z.B. { "Nadelholz" }. Werkstätten mit inheritProperties = true geben
               die Eigenschaften der verbrauchten Ware an ihr Produkt weiter.
-  look        Platzhaltergrafik: Die Ware sieht aus wie diese eingebaute Ware (z.B. "Stones")
+  look        Platzhaltergrafik: Die Ware sieht aus wie diese eingebaute Ware (z.B. "Stones").
+              Eigene Bilder: Ordner data/RTTR/assets/civ/<name>/, siehe data/RTTR/assets/civ/LIESMICH.txt
   transport   Transportpriorität: gleiche Gruppe wie diese eingebaute Ware (z.B. "Stones")
   knowledge   optional: Wissenspunkte, wenn die Ware als Wissensmedium eingelagert ist, z.B. { LWP = 1 }
               (wird erst mit den Bibliotheken in Phase 2 ausgewertet)

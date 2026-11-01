@@ -127,6 +127,17 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
             throw GameDataError(context + ": library capacity must be in [1, 255]");
     }
     const bool isLibrary = libraryCapacity > 0;
+    if(auto collectTable = luaData.getOptional<kaguya::LuaTable>("collect"))
+    {
+        CheckedLuaTable collectData(*collectTable);
+        collectData.getOrThrow(collectObject, "object");
+        collectData.getOrThrow(collectRadius, "radius");
+        collectData.checkUnused();
+        if(collectRadius == 0 || collectRadius > 20)
+            throw GameDataError(context + ": collect radius must be in [1, 20] (nodes)");
+        if(!inputs.empty() || isLibrary)
+            throw GameDataError(context + ": a workshop that collects map objects has no inputs and is no library");
+    }
     if(isLibrary && !inputs.empty())
     {
         throw GameDataError(context
@@ -161,6 +172,24 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
             throw GameDataError(context + ": workTime must be > 0");
     }
     waitTime = luaData.getOrDefault("waitTime", 0u);
+    luaData.checkUnused();
+}
+
+MapObjectDesc::MapObjectDesc(const kaguya::LuaTable& luaTable)
+{
+    CheckedLuaTable luaData(luaTable);
+    name = readIdentifier(luaData, "Map object");
+    const std::string context = "Map object '" + name + "'";
+    title = luaData.getOrDefault("title", name);
+    sizes = luaData.getOrDefault("sizes", sizes);
+    if(sizes == 0 || sizes > 16)
+        throw GameDataError(context + ": sizes must be in [1, 16]");
+    luaData.getOrThrow(look, "look");
+    if(look != "Granite1" && look != "Granite2")
+        throw GameDataError(context + ": look must be \"Granite1\" or \"Granite2\"");
+    tint = luaData.getOrDefault("tint", tint);
+    if(tint > 0xFFFFFF)
+        throw GameDataError(context + ": tint must be a color like 0xB07040");
     luaData.checkUnused();
 }
 

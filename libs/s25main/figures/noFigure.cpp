@@ -15,6 +15,7 @@
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobHarborBuilding.h"
 #include "civ/Content.h"
+#include "civ/CustomGraphics.h"
 #include "helpers/containerUtils.h"
 #include "network/GameClient.h"
 #include "nofCarrier.h"
@@ -788,7 +789,12 @@ void noFigure::DrawWalking(DrawPoint drawPt, const ResourceId& file, unsigned id
 
 void noFigure::DrawWalking(DrawPoint drawPt)
 {
-    // Workers of buildings defined in lua (civilization mode) look like a built-in job
+    // Workers of buildings defined in lua (civilization mode): Own graphics or they look like a built-in job
+    if(LOADER.GetCivGraphics().HasWalking(job_))
+    {
+        DrawWalkingBobJobs(drawPt, job_);
+        return;
+    }
     switch(civ::getLook(job_))
     {
         case Job::PackDonkey:

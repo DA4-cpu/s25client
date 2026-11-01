@@ -39,6 +39,7 @@ rttr:SetBuildingKnowledge{
     Forester       = { LWP = 1, IWP = 1 },          -- Förster
     Sawmill        = { IWP = 3 },                   -- Sägewerk
     Quarry         = { IWP = 2 },                   -- Steinbruch
+    LoamPit        = { IWP = 2 },                   -- Lehmgrube (Werkstatt aus workshops.lua) PLATZHALTER
     GraniteMine    = { IWP = 1 },                   -- Granitmine
     CoalMine       = { IWP = 1 },                   -- Kohlemine
     IronMine       = { IWP = 1 },                   -- Eisenmine

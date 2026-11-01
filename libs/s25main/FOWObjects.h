@@ -90,6 +90,20 @@ public:
 };
 
 /// Granitblock
+/// Map object defined in lua (civilization mode, see noDeposit) in the fog of war
+class fowDeposit : public FOWObject
+{
+    const uint8_t objIdx;
+    const uint8_t state;
+
+public:
+    fowDeposit(unsigned objIdx, unsigned state);
+    fowDeposit(SerializedGameData& sgd);
+    void Serialize(SerializedGameData& sgd) const override;
+    void Draw(DrawPoint drawPt) const override;
+    FoW_Type GetType() const override { return FoW_Type::Deposit; }
+};
+
 class fowGranite : public FOWObject
 {
 private:

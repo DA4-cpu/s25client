@@ -8,6 +8,8 @@
 #include "mapGenerator/Map.h"
 #include "mapGenerator/MapSettings.h"
 #include "mapGenerator/RandomUtility.h"
+#include <string>
+#include <vector>
 
 struct MapGenDesc;
 struct MapResourceDesc;
@@ -34,12 +36,23 @@ double GetResourceAmount(const MapResourceDesc& resource, const MapSettings& set
 /// Package (plants and animals) of the zone of the node for its climate or nullptr if none matches
 const MapZonePackageDesc* GetZonePackage(const Map& map, const MapGenDesc& desc, const MapPoint& pt);
 
+/// Map object of the civilization mode (rttr:AddMapObject) the generator can place: stored as object type
+/// civ::FIRST_CUSTOM_MAP_OBJECT_TYPE + index with the size (1..sizes) as object info
+struct CustomMapObjectInfo
+{
+    std::string name;
+    unsigned sizes = 1;
+};
+
 /**
- * Places all objects (trees, stone piles, decoration), animals and resources (fish, ground water, coal, iron, gold,
- * granite) according to the resource rules of the lua data (rttr:AddMapResource). The rules are applied in order.
+ * Places all objects (trees, stone piles, decoration, map objects of the civilization mode), animals and resources
+ * (fish, ground water, coal, iron, gold, granite) according to the resource rules of the lua data
+ * (rttr:AddMapResource). The rules are applied in order.
  * Requires textures, zones, climate (map.temperature, map.climate, map.heightPercent), map.terrainFlags, HQs and
  * harbors to be set. The area around HQs and harbors stays free of objects.
+ * Rules with a map object which is not in customObjects are skipped (with a message in the log).
  */
-void PlaceResources(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc);
+void PlaceResources(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc,
+                    const std::vector<CustomMapObjectInfo>& customObjects = {});
 
 } // namespace rttr::mapGenerator

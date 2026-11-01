@@ -48,6 +48,23 @@ struct CustomWorker
     Job look;
 };
 
+/// Object on the map which can be collected (rttr:AddMapObject), e.g. a loam deposit
+struct CustomMapObject
+{
+    std::string name, title;
+    /// Number of sizes = wares in a full object
+    unsigned sizes = 6;
+    /// Granite pile whose graphics are used (placeholder): 0 or 1
+    unsigned lookGranite = 0;
+    /// Color of the placeholder graphics (0xRRGGBB)
+    unsigned tint = 0xFFFFFF;
+};
+
+/// Maximum number of map objects defined in lua (they are stored as object types 0xD0..0xDF in map files)
+constexpr unsigned MAX_CUSTOM_MAP_OBJECTS = 16;
+/// Object type in map files for the first map object
+constexpr uint8_t FIRST_CUSTOM_MAP_OBJECT_TYPE = 0xD0;
+
 /// Workshop defined in lua (rttr:AddWorkshop)
 struct CustomBuilding
 {
@@ -75,8 +92,13 @@ struct CustomBuilding
     std::vector<KnowledgeType> productChoiceTypes;
     /// Library: stores up to this many knowledge media and produces nothing. 0: normal workshop
     unsigned libraryCapacity = 0;
+    /// Collector: Index of the map object (Content::GetMapObject) the worker collects like the stonemason. -1: none
+    int collectObject = -1;
+    /// Collector: Maximum distance of the map objects
+    unsigned collectRadius = 0;
 
     bool IsLibrary() const { return libraryCapacity > 0; }
+    bool IsCollector() const { return collectObject >= 0; }
 };
 
 /// Wares, workshops and tags of the civilization mode which are defined in lua.
@@ -95,6 +117,15 @@ public:
     const CustomWorker* GetWorker(Job job) const;
     unsigned GetNumWares() const { return static_cast<unsigned>(wares_.size()); }
     unsigned GetNumBuildings() const { return static_cast<unsigned>(buildings_.size()); }
+    /// Objects on the map that can be collected, in order of definition
+    const std::vector<CustomMapObject>& GetMapObjects() const { return mapObjects_; }
+    /// Map object with the given index or nullptr
+    const CustomMapObject* GetMapObject(unsigned idx) const
+    {
+        return idx < mapObjects_.size() ? &mapObjects_[idx] : nullptr;
+    }
+    /// Index of the map object with the given identifier
+    std::optional<unsigned> FindMapObject(const std::string& identifier) const;
 
     /// True if the ware exists in this game (built-in or defined custom ware)
     bool IsUsed(GoodType good) const;
@@ -136,6 +167,7 @@ private:
     std::string getIdentifierOf(GoodType good) const;
 
     std::vector<CustomWare> wares_;
+    std::vector<CustomMapObject> mapObjects_;
     std::vector<CustomBuilding> buildings_;
     std::vector<CustomWorker> workers_;
     helpers::EnumArray<std::vector<std::string>, GoodType> tags_, properties_;

@@ -34,6 +34,8 @@ public:
 
 private:
     void PrintState();
+    /// Civilization mode: Workshops and custom wares per player
+    void PrintCivSummary();
 
     struct LocalState : ILocalGameState
     {

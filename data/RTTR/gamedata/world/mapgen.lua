@@ -54,21 +54,33 @@ rttr:SetMapClimate{
 	-- Streuung von Temperatur und Feuchtigkeit um den Mittelwert der Voreinstellung im Generatorfenster
 	-- (Kalt 27,5 / Kühl 37,5 / Gemäßigt 50 / Warm 62,5 / Heiß 72,5; Feucht 72,5 / Gemäßigt 50 / Trocken 27,5).
 	-- 68 % der Karte liegen innerhalb Mittelwert +- Streuung, 95 % innerhalb +- doppelter Streuung.
-	temperatureSpread = 20, -- PLATZHALTER
-	humiditySpread = 20, -- PLATZHALTER
+	temperatureSpread = 33, -- PLATZHALTER
+	humiditySpread = 33, -- PLATZHALTER
 	-- Abstand in Knoten für "near_fresh", "near_salt" und "near_river". So weit reicht auch die höhere Feuchtigkeit an
 	-- Seen und Flüssen (waterHumidity)
 	nearWaterDistance = 5, -- PLATZHALTER
 	-- Gewässer bis zu dieser Größe (Anzahl Knoten, unabhängig von der Kartengröße) sind Seen (Süßwasser, ohne Strand),
 	-- größere sind Meer (Salzwasser, mit Sandstrand)
-	lakeMaxSize = 50, 
-	-- So viele Punkte steigt die Feuchtigkeit direkt an Seen und Flüssen. Mit dem Abstand wird es weniger, ab
-	-- nearWaterDistance + 1 Knoten Abstand gar nichts mehr. 0 = keine Änderung
+	lakeMaxSize = 500,
+	-- So viele Punkte steigt die Feuchtigkeit direkt an Seen und Flüssen (0 = keine Änderung). Ab nearWaterDistance + 1
+	-- Knoten Abstand gar nichts mehr.
 	waterHumidity = 50, -- PLATZHALTER
+	-- Abnahme mit dem Abstand: alle waterHumidityStep Knoten um waterHumidityFalloff Punkte weniger.
+	-- Beispiele: Falloff 0 = überall bis nearWaterDistance gleich feucht; Falloff 10, Step 1 = 50, 40, 30, ... ;
+	-- Falloff 10, Step 2 = 50, 50, 40, 40, 30, 30.
+	waterHumidityFalloff = 10, -- PLATZHALTER
+	waterHumidityStep = 1, -- PLATZHALTER
 	-- Flüsse entspringen nur ab dieser Höhe (Prozent des höchsten Punkts der Karte), meist also im Gebirge
 	riverMinHeight = 30,
 	-- Kürzere Flüsse werden nicht angelegt (Schritte entlang der Kanten, etwa Knoten)
 	riverMinLength = 15, -- PLATZHALTER
+	-- Weniger (oder mehr) Gebirge je Klima: Faktor für den Gebirgsanteil (Regler "Gebirge %"), der erste passende
+	-- Eintrag gilt, sonst 1. Nur Temperatur und Feuchtigkeit (die Höhe gibt es da noch nicht). Der Faktor nimmt nur dort
+	-- Gebirge weg, das restliche Land bleibt wie es ist. Mit dem Gebirge gibt es dort auch weniger Bauflächen und Minen.
+	-- Konzept: Im feuchten, warmen Gebiet sind Minenplätze selten, weil sie von der Vegetation verdeckt werden.
+	mountainWeights = {
+		{ temperature = {60, 100}, humidity = {60, 100}, factor = 0.5 } -- PLATZHALTER
+	},
 	-- Abstand in Knoten zwischen den kleinen Bauflächen im Gebirge (für Militärgebäude, wie im Online-Generator).
 	-- 0 = keine
 	mountainBuildSpacing = 6,
@@ -206,7 +218,8 @@ rttr:AddMapZone{
 --   "fish"         Fische (Wasser)
 --   "groundwater"  Grundwasser für Brunnen
 --   "coal", "iron", "gold", "granite"   Bodenschätze im Gebirge
--- Später kommen neue Objekte dazu (z. B. Lehm), sobald es sie im Spiel gibt.
+--   Bezeichner aus civ/mapobjects.lua (rttr:AddMapObject), z.B. "LoamDeposit": Objekte des Zivilisationsmodus
+--                  wie Lehmvorkommen. Ohne Zivilisationsmodus werden sie beim Laden der Karte weggelassen.
 -- Die Regeln werden in dieser Reihenfolge abgearbeitet; ein Knoten bekommt höchstens ein Objekt (Bäume, Steine, Deko)
 -- und höchstens einen Bodenschatz (Kohle, Eisen, Gold, Granit, Fische, Grundwasser).
 -- Der Regler "Ressourcenmenge" im Generatorfenster vervielfacht alle Mengen (100 % = Werte aus dieser Datei).
@@ -231,10 +244,48 @@ rttr:AddMapResource{
 	terrain = { "land", "mountain" },
 	cluster = 8, -- PLATZHALTER
 	density = 80, -- PLATZHALTER
-	-- Im feuchten, warmen Gebiet sind Steine selten, weil sie von der Vegetation verdeckt werden (Konzept). PLATZHALTER
+	-- Im feuchten, warmen Gebiet sind Steine selten, weil sie von der Vegetation verdeckt werden (Konzept).
 	weights = {
 		{ temperature = {60, 100}, humidity = {60, 100}, factor = 0.3 }
 	}
+}
+
+-- Lehm (Konzept): im feuchten, warmen Gebiet sehr häufig, an Flüssen und Seen auch. Abbau mit der Lehmgrube.
+rttr:AddMapResource{
+	name = "Lehm",
+	object = "LoamDeposit",
+	amount = 1.5, -- PLATZHALTER
+	terrain = { "land" },
+	cluster = 6, -- PLATZHALTER
+	density = 60, -- PLATZHALTER
+	weights = {
+		{ humidity = {66, 100}, factor = 4 }, 
+		{ humidity = {33, 66}, factor = 1 },                           
+		{ humidity = {0, 33}, factor = 0.0 }                            
+	}
+}
+rttr:AddMapResource{
+	name = "Papyrusvorkommen",
+	object = "PapyrusDeposit",
+	amount = 2, 
+	terrain = { "shore_fresh" },
+	temperature = {67, 100}
+	zone = { "Afrika"}
+	cluster = 10, -- PLATZHALTER
+	density = 100, -- PLATZHALTER
+	weights = {
+		{ humidity = {67, 100}, factor = 4 }, 
+		{ humidity = {33, 67}, factor = 2 },                           
+		{ humidity = {0, 33}, factor = 0.3 }                            
+	}
+}
+rttr:AddMapResource{
+	name = "Kupfer",
+	object = "CopperDeposit", -- Soll als Bodenressourcen vorkommen
+	amount = 1.5, -- PLATZHALTER
+	terrain = { "mountain" },
+	cluster = 6, 
+	density = 60, 
 }
 
 rttr:AddMapResource{
@@ -273,16 +324,14 @@ rttr:AddMapResource{
 }
 
 -- Bodenschätze: Die Menge kommt aus den Reglern Kohle/Eisen/Gold/Granit im Generatorfenster.
--- Im feuchten, warmen Gebiet sind Minenplätze selten (Konzept). PLATZHALTER
-local wenigerImRegenwald = { { temperature = {60, 100}, humidity = {60, 100}, factor = 0.5 } }
+-- Dass es im feuchten, warmen Gebiet weniger Minenplätze gibt, macht mountainWeights oben (weniger Gebirge dort).
 
 rttr:AddMapResource{
 	name = "Kohle",
 	object = "coal",
 	amount = "coal",
 	terrain = { "mountain" },
-	cluster = 9,
-	weights = wenigerImRegenwald
+	cluster = 9
 }
 
 rttr:AddMapResource{
@@ -290,8 +339,7 @@ rttr:AddMapResource{
 	object = "iron",
 	amount = "iron",
 	terrain = { "mountain" },
-	cluster = 9,
-	weights = wenigerImRegenwald
+	cluster = 9
 }
 
 rttr:AddMapResource{
@@ -299,8 +347,7 @@ rttr:AddMapResource{
 	object = "gold",
 	amount = "gold",
 	terrain = { "mountain" },
-	cluster = 9,
-	weights = wenigerImRegenwald
+	cluster = 9
 }
 
 rttr:AddMapResource{
@@ -308,6 +355,5 @@ rttr:AddMapResource{
 	object = "granite",
 	amount = "granite",
 	terrain = { "mountain" },
-	cluster = 9,
-	weights = wenigerImRegenwald
+	cluster = 9
 }

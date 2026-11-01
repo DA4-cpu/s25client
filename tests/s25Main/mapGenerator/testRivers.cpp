@@ -110,6 +110,29 @@ unsigned countDisconnectedRiverWater(const Map& map)
     return numDisconnected;
 }
 
+/// Number of river triangles sticking out: only one side touches other water (sea or river). Each river has one at
+/// its source.
+unsigned countRiverSpikes(const Map& map)
+{
+    const auto isWater = [&map](const Triangle& t) { return isSea(map, t) || hasWaterTexture(map, t); };
+    unsigned result = 0;
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        for(const bool rsu : {true, false})
+        {
+            const Triangle triangle(rsu, pt);
+            if(!hasWaterTexture(map, triangle) || isSea(map, triangle))
+                continue;
+            unsigned numWaterNeighbors = 0;
+            for(const Triangle& neighbor : GetTriangleNeighbors(triangle, map.size))
+                numWaterNeighbors += isWater(neighbor) ? 1 : 0;
+            if(numWaterNeighbors <= 1)
+                ++result;
+        }
+    }
+    return result;
+}
+
 /// Number of land nodes with more than the given number of water triangles around
 unsigned countWideRiverNodes(const Map& map, unsigned maxWaterTriangles)
 {
@@ -155,6 +178,8 @@ BOOST_AUTO_TEST_CASE(CreateRivers_flows_from_high_sources_to_the_water)
     // One triangle wide like in the original generator: The course nodes have 4 water triangles (2 at the source),
     // the nodes beside the course less
     BOOST_TEST(countWideRiverNodes(map, 4) == 0u);
+    // No triangles sticking out of the river (only the end at the source)
+    BOOST_TEST(countRiverSpikes(map) <= 1u);
 
     // The course nodes form a chain from the sea upwards: Follow them from the sea
     NodeMapBase<uint8_t> reached;
@@ -280,6 +305,8 @@ BOOST_AUTO_TEST_CASE(Rivers_on_generated_landscapes_are_continuous_and_narrow)
             BOOST_TEST(countDisconnectedRiverWater(genMap) == 0u);
             // Only where rivers join, nodes may be surrounded by more water
             BOOST_TEST(countWideRiverNodes(genMap, 4) <= rivers.size());
+            // Nothing sticks out of the rivers, only their sources end in a single triangle
+            BOOST_TEST(countRiverSpikes(genMap) <= rivers.size());
         }
     }
 }

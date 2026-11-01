@@ -7,6 +7,7 @@
 #include "SerializedGameData.h"
 #include "SoundManager.h"
 #include "buildings/nobUsual.h"
+#include "figures/nofCustomCollector.h"
 #include "notifications/BuildingNote.h"
 #include "random/Random.h"
 #include "world/GameWorld.h"
@@ -34,6 +35,9 @@ nofFarmhand::nofFarmhand(SerializedGameData& sgd, const unsigned obj_id)
 
 unsigned nofFarmhand::GetWorkRadius(const Job job)
 {
+    // Collectors of workshops defined in lua (civilization mode)
+    if(isCustomJob(job))
+        return nofCustomCollector::GetCollectRadius(job);
     switch(job)
     {
         case Job::Carpenter: return 0;
@@ -97,6 +101,8 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
             // Number of additional radii in which points should be found
             // I.e. 0 => Don't search for points further away than ones already found
             const unsigned additionalRadiiToFind = [](Job job) {
+                if(isCustomJob(job))
+                    return 0u; // Collector: like the stonemason
                 switch(job)
                 {
                     case Job::Woodcutter:
@@ -106,8 +112,8 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
                     case Job::Hunter:
                     case Job::Farmer:
                     case Job::CharBurner:
-                    case Job::Winegrower: return 1;
-                    case Job::Stonemason: return 0;
+                    case Job::Winegrower: return 1u;
+                    case Job::Stonemason: return 0u;
                     default: throw std::logic_error("Invalid job");
                 }
             }(job_);
@@ -135,7 +141,7 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
                             {
                                 available_points[quality].push_back(pt);
                                 pointFound = true;
-                            } else if(job_ == Job::Stonemason)
+                            } else if(job_ == Job::Stonemason || isCustomJob(job_))
                                 wait = true;
                         }
                     }
@@ -174,7 +180,9 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
                 WalkingStarted();
             } else
             {
-                if(!wait)
+                if(!wait && isCustomJob(job_))
+                    workplace->OnOutOfResources();
+                else if(!wait)
                 {
                     switch(job_)
                     {

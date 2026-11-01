@@ -27,6 +27,9 @@
 #include <vector>
 
 class ArchiveLoader;
+namespace civ {
+class CustomGraphics;
+}
 class ArchiveLocator;
 class glArchivItem_Bitmap;
 class glArchivItem_Bitmap_Player;
@@ -137,6 +140,10 @@ public:
     glArchivItem_Bitmap_Player* GetMapPlayerImage(unsigned nr);
 
     bool IsWinterGFX() const { return isWinterGFX_; }
+    /// True if the building graphics of the nation are loaded (nation used in the game)
+    bool HasNationGraphics(Nation nation) const { return nation_gfx[nation] != nullptr; }
+    /// Own graphics of the wares, workshops and map objects of the civilization mode (assets/civ)
+    civ::CustomGraphics& GetCivGraphics() { return *civGraphics_; }
 
     std::vector<std::unique_ptr<MusicItem>> sng_lst;
 
@@ -171,6 +178,13 @@ public:
     };
     /// Buildings: Nation, Type, Building/Skeleton
     helpers::MultiEnumArray<BuildingSprites, Nation, BuildingType> building_cache;
+    BuildingSprites& getBuildingSprites(Nation nation, BuildingType bld)
+    {
+        // Workshops of the civilization mode without own graphics look like a built-in building
+        BuildingSprites& sprites = building_cache[nation][bld];
+        return (isCustomBuilding(bld) && sprites.building.empty()) ? building_cache[nation][civ::getLook(bld)] :
+                                                                     sprites;
+    }
     /// Flags: Nation, Type, AnimationFrame
     helpers::MultiEnumArray<AnimationSprites, Nation, FlagType> flag_cache;
     /// Military Flags: AnimationFrame
@@ -182,7 +196,9 @@ public:
     helpers::MultiEnumArray<AnimationSprites, Nation, Direction> fat_carrier_cache;
     glSmartBitmap& getBobSprite(Nation nat, Job job, Direction dir, unsigned aniFrame)
     {
-        return bob_jobs_cache[nat][civ::getLook(job)][dir][aniFrame];
+        // Workers of the civilization mode without own graphics look like a built-in job
+        glSmartBitmap& bmp = bob_jobs_cache[nat][job][dir][aniFrame];
+        return (isCustomJob(job) && bmp.empty()) ? bob_jobs_cache[nat][civ::getLook(job)][dir][aniFrame] : bmp;
     }
     glSmartBitmap& getCarrierBobSprite(Nation nat, bool fat, Direction dir, unsigned aniFrame)
     {
@@ -196,7 +212,9 @@ public:
     std::array<helpers::MultiEnumArray<AnimationSprites, GoodType, Direction>, 2> carrier_cache;
     glSmartBitmap& getCarrierSprite(GoodType ware, bool fat, Direction dir, unsigned aniFrame)
     {
-        return carrier_cache[fat][civ::getLook(ware)][dir][aniFrame];
+        // Wares of the civilization mode without own graphics look like a built-in ware
+        glSmartBitmap& bmp = carrier_cache[fat][ware][dir][aniFrame];
+        return (isCustomGood(ware) && bmp.empty()) ? carrier_cache[fat][civ::getLook(ware)][dir][aniFrame] : bmp;
     }
     /// Boundary stones: Nation
     helpers::EnumArray<glSmartBitmap, Nation> boundary_stone_cache;
@@ -232,6 +250,9 @@ private:
     std::vector<glFont> fonts;
 
     bool isWinterGFX_;
+    /// Landscape of the map graphics (file suffix of the civilization mode graphics, e.g. "Winter")
+    std::string landscapeName_;
+    std::unique_ptr<civ::CustomGraphics> civGraphics_;
     helpers::EnumArray<libsiedler2::Archiv*, Nation> nation_gfx;
     helpers::EnumArray<libsiedler2::Archiv*, Nation> nationIcons_;
     libsiedler2::Archiv* map_gfx;

@@ -26,8 +26,9 @@ enum class NodalObjectType : uint8_t
     Ship,            // Schiff
     CharburnerPile,  // Holz-/Kohle-Haufen vom Köhler
     Grapefield,
+    Deposit, // Object defined in lua that can be collected (civilization mode, e.g. loam deposit)
 };
 constexpr auto maxEnumValue(NodalObjectType)
 {
-    return NodalObjectType::Grapefield;
+    return NodalObjectType::Deposit;
 }

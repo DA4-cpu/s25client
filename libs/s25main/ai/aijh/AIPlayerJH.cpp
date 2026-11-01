@@ -37,6 +37,7 @@
 #include "notifications/ShipNote.h"
 #include "pathfinding/PathConditionRoad.h"
 #include "nodeObjs/noAnimal.h"
+#include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noFlag.h"
 #include "nodeObjs/noShip.h"
 #include "nodeObjs/noTree.h"
@@ -1205,9 +1206,47 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
                 foundPos = MapPoint::Invalid();
             break;
         }
-        default: foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius); break;
+        default:
+            // Civilization mode: Workshops collecting map objects (e.g. loam pit) go next to the objects
+            if(const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(type);
+               custom && custom->IsCollector())
+                foundPos = FindCollectorPosition(around, type, *custom, searchRadius);
+            else
+                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            break;
     }
     return foundPos;
+}
+
+MapPoint AIPlayerJH::FindCollectorPosition(const MapPoint& around, BuildingType type,
+                                           const civ::CustomBuilding& building, unsigned radius) const
+{
+    // Most objects to collect in range (but the worker should not walk too far)
+    const unsigned collectRadius = std::max(1u, std::min(building.collectRadius, 6u));
+    MapPoint bestPos = MapPoint::Invalid();
+    unsigned bestNumObjects = 0;
+    for(const MapPoint& curPt : gwb.GetPointsInRadius(around, radius))
+    {
+        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || !aii.IsOwnTerritory(curPt)
+           || aii.isHarborPosClose(curPt, 2, true) || !canUseBq(aii.GetBuildingQuality(curPt), BUILDING_SIZE[type]))
+            continue;
+        // Not next to another one of the same kind
+        if(aii.isBuildingNearby(type, curPt, collectRadius))
+            continue;
+        unsigned numObjects = 0;
+        for(const MapPoint& pt : gwb.GetPointsInRadius(curPt, collectRadius))
+        {
+            const auto* deposit = gwb.GetSpecObj<noDeposit>(pt);
+            if(deposit && static_cast<int>(deposit->GetObjectIdx()) == building.collectObject)
+                numObjects += deposit->GetSize() + 1u;
+        }
+        if(numObjects > bestNumObjects)
+        {
+            bestNumObjects = numObjects;
+            bestPos = curPt;
+        }
+    }
+    return bestPos;
 }
 
 static const char* AIResourceToString(AIResource res)

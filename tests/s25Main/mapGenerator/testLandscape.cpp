@@ -155,6 +155,78 @@ BOOST_AUTO_TEST_CASE(Land_has_flat_and_hilly_regions)
     BOOST_TEST(maxRange >= 5u);
 }
 
+BOOST_AUTO_TEST_CASE(Mountain_factor_reduces_mountains_only_there)
+{
+    MapSettings settings;
+    settings.size = MapExtent(128, 128);
+    settings.water = 20;
+    settings.mountains = 30;
+    const auto countMountains = [&](const Map& map, bool left) {
+        unsigned result = 0;
+        RTTR_FOREACH_PT(MapPoint, map.size)
+        {
+            if((pt.x < 64) == left && map.nodeKind[pt] == NodeKind::Mountain)
+                ++result;
+        }
+        return result;
+    };
+    Map normal(settings.size, 2, worldDesc, DescIdx<LandscapeDesc>(3), GetMaximumHeight(settings.size));
+    RandomUtility rnd1(9);
+    CreateLandMasses(normal, rnd1, settings);
+
+    // Half as many mountains in the left half (same random numbers, so the same noise)
+    Map reduced(settings.size, 2, worldDesc, DescIdx<LandscapeDesc>(3), GetMaximumHeight(settings.size));
+    NodeMapBase<double> factor;
+    factor.Resize(settings.size, 1.);
+    RTTR_FOREACH_PT(MapPoint, settings.size)
+    {
+        if(pt.x < 64)
+            factor[pt] = 0.5;
+    }
+    RandomUtility rnd2(9);
+    CreateLandMasses(reduced, rnd2, settings, factor);
+    BOOST_TEST_REQUIRE(countMountains(normal, true) > 100u);
+    BOOST_TEST(countMountains(reduced, true) < countMountains(normal, true) * 0.7);
+    BOOST_TEST(countMountains(reduced, true) > countMountains(normal, true) * 0.3);
+    // The other half and the water are unchanged
+    BOOST_TEST(countMountains(reduced, false) == countMountains(normal, false));
+    RTTR_FOREACH_PT(MapPoint, settings.size)
+    {
+        BOOST_TEST_REQUIRE((reduced.nodeKind[pt] == NodeKind::Water) == (normal.nodeKind[pt] == NodeKind::Water));
+        // Mountains only get fewer, they never appear somewhere else
+        if(reduced.nodeKind[pt] == NodeKind::Mountain)
+            BOOST_TEST_REQUIRE((normal.nodeKind[pt] == NodeKind::Mountain));
+    }
+}
+
+BOOST_AUTO_TEST_CASE(GetMountainFactors_by_climate_with_smooth_transitions)
+{
+    Map map(MapExtent(64, 64), 2, worldDesc, DescIdx<LandscapeDesc>(3), 64);
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        map.temperature[pt] = 80;
+        map.climate[pt] = pt.x < 32 ? 80 : 20; // Humid on the left
+    }
+    MapClimateDesc climate;
+    BOOST_TEST(GetMountainFactors(map, climate)[MapPoint(10, 10)] == 1.);
+    MapResourceWeight weight;
+    weight.climate.temperature.minimum = 60;
+    weight.climate.humidity.minimum = 60;
+    weight.factor = 0.5;
+    climate.mountainWeights.push_back(weight);
+    BOOST_TEST(climate.getMountainFactor(80, 80) == 0.5);
+    BOOST_TEST(climate.getMountainFactor(80, 20) == 1.);
+    BOOST_TEST(climate.getMountainFactor(20, 80) == 1.);
+    const auto factors = GetMountainFactors(map, climate);
+    BOOST_TEST(factors[MapPoint(16, 10)] == 0.5, boost::test_tools::tolerance(1e-9));
+    BOOST_TEST(factors[MapPoint(48, 10)] == 1., boost::test_tools::tolerance(1e-9));
+    // In between near the border
+    BOOST_TEST(factors[MapPoint(31, 10)] > 0.5);
+    BOOST_TEST(factors[MapPoint(31, 10)] < 1.);
+    BOOST_TEST(factors[MapPoint(32, 10)] > 0.5);
+    BOOST_TEST(factors[MapPoint(32, 10)] < 1.);
+}
+
 BOOST_AUTO_TEST_CASE(PlaceMountainBuildingSites_places_flat_sites_on_a_grid)
 {
     Map map = createLandscape(worldDesc, 100, 6);

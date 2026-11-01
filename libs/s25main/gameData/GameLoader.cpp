@@ -8,6 +8,8 @@
 #include "Loader.h"
 #include "RttrForeachPt.h"
 #include "addons/const_addons.h"
+#include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "files.h"
 #include "helpers/containerUtils.h"
 #include <set>
@@ -79,6 +81,9 @@ bool GameLoader::loadTextures()
     if(!loader.LoadFilesAtGame(lt.mapGfxPath, lt.isWinter, usedNations, enabledAddons) || !loader.LoadFiles(textures))
         return false;
 
+    // Civilization mode: The wares and workshops defined in lua must be known for their own graphics
+    if(civ::isEnabled(game->world_))
+        game->world_.GetTechTree();
     loader.fillCaches();
     return true;
 }

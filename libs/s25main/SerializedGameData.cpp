@@ -34,6 +34,7 @@
 #include "figures/nofCarrier.h"
 #include "figures/nofCatapultMan.h"
 #include "figures/nofCharburner.h"
+#include "figures/nofCustomCollector.h"
 #include "figures/nofCustomWorker.h"
 #include "figures/nofDefender.h"
 #include "figures/nofDonkeybreeder.h"
@@ -72,6 +73,7 @@
 #include "world/MapSerializer.h"
 #include "nodeObjs/noAnimal.h"
 #include "nodeObjs/noCharburnerPile.h"
+#include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noDisappearingMapEnvObject.h"
 #include "nodeObjs/noEnvObject.h"
 #include "nodeObjs/noExtension.h"
@@ -117,7 +119,8 @@
 /// 18: Civilization mode: Slots for wares, buildings and jobs defined in lua (GoodType::Nothing moved),
 ///     signature of the lua content
 /// 19: Civilization mode: Regulator "Wissen" of players, knowledge media stored in libraries
-static const unsigned currentGameDataVersion = 19;
+/// 20: Civilization mode: Map objects defined in lua (deposits) and their collectors, map objects in the signature
+static const unsigned currentGameDataVersion = 20;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)
@@ -199,6 +202,8 @@ std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type 
         RTTR_CREATE_GO(GO_Type::NofTanner, nofTanner);
         RTTR_CREATE_GO(GO_Type::NofLeatherWorker, nofLeatherWorker);
         RTTR_CREATE_GO(GO_Type::NofCustomWorker, nofCustomWorker);
+        RTTR_CREATE_GO(GO_Type::Deposit, noDeposit);
+        RTTR_CREATE_GO(GO_Type::NofCustomCollector, nofCustomCollector);
 
         case GO_Type::Nothing: RTTR_Assert(false); break;
 #undef RTTR_CREATE_GO
@@ -217,6 +222,7 @@ std::unique_ptr<FOWObject> SerializedGameData::Create_FOWObject(const FoW_Type f
         case FoW_Type::Flag: return std::make_unique<fowFlag>(*this);
         case FoW_Type::Tree: return std::make_unique<fowTree>(*this);
         case FoW_Type::Granite: return std::make_unique<fowGranite>(*this);
+        case FoW_Type::Deposit: return std::make_unique<fowDeposit>(*this);
     }
 }
 

@@ -335,8 +335,10 @@ BOOST_AUTO_TEST_CASE(LoadMapGenerator)
         bnw::ofstream file(tmp / "default.lua");
         file << R"(
 rttr:SetMapClimate{ heightCooling = 25, nearWaterDistance = 3, lakeMaxSize = 250, waterHumidity = 7,
+                    waterHumidityFalloff = 3, waterHumidityStep = 2,
                     previewImages = false, temperatureSpread = 12, humiditySpread = 20.5, riverMinHeight = 40,
-                    riverMinLength = 20, mountainBuildSpacing = 8 }
+                    riverMinLength = 20, mountainBuildSpacing = 8,
+                    mountainWeights = { { temperature = {60, 100}, humidity = {70, 100}, factor = 0.25 } } }
 rttr:AddMapZone{ name = "Afrika", title = "Afrika", color = 0xC08040, packages = {
     { name = "regenwald", temperature = {65, 100}, humidity = {60, 100}, height = {0, 40},
       trees = { Palm1 = 2, Palm2 = 1 }, animals = { Deer = 1, Duck = 3 } },
@@ -359,12 +361,17 @@ rttr:AddMapResource{ name = "Lehmprobe", object = "stones", amount = 4.5, terrai
     BOOST_TEST(mapGen.climate.nearWaterDistance == 3u);
     BOOST_TEST(mapGen.climate.lakeMaxSize == 250u);
     BOOST_TEST(mapGen.climate.waterHumidity == 7u);
+    BOOST_TEST(mapGen.climate.waterHumidityFalloff == 3u);
+    BOOST_TEST(mapGen.climate.waterHumidityStep == 2u);
     BOOST_TEST(!mapGen.climate.previewImages);
     BOOST_TEST(mapGen.climate.temperatureSpread == 12.);
     BOOST_TEST(mapGen.climate.humiditySpread == 20.5);
     BOOST_TEST(mapGen.climate.riverMinHeight == 40u);
     BOOST_TEST(mapGen.climate.riverMinLength == 20u);
     BOOST_TEST(mapGen.climate.mountainBuildSpacing == 8u);
+    BOOST_TEST_REQUIRE(mapGen.climate.mountainWeights.size() == 1u);
+    BOOST_TEST(mapGen.climate.getMountainFactor(65, 75) == 0.25);
+    BOOST_TEST(mapGen.climate.getMountainFactor(65, 65) == 1.);
 
     BOOST_TEST_REQUIRE(mapGen.zones.size() == 2u);
     const MapZoneDesc& africa = mapGen.zones[0];
@@ -443,6 +450,9 @@ BOOST_AUTO_TEST_CASE(DetectInvalidMapGenerator)
     expectLoadFailure(R"(rttr:SetMapClimate{ temperatureSpread = -1 })");
     expectLoadFailure(R"(rttr:SetMapClimate{ riverMinHeight = 101 })");
     expectLoadFailure(R"(rttr:SetMapClimate{ waterHumidity = 101 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ waterHumidityStep = 0 })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ mountainWeights = { { height = {0, 50}, factor = 0.5 } } })");
+    expectLoadFailure(R"(rttr:SetMapClimate{ mountainWeights = { { factor = -1 } } })");
     expectLoadFailure(R"(rttr:SetMapClimate{ mountainBuildSpacing = 1 })");
     // Zones
     expectLoadFailure(R"(rttr:AddMapZone{ name = "Süd" })");
@@ -455,7 +465,7 @@ BOOST_AUTO_TEST_CASE(DetectInvalidMapGenerator)
     expectLoadFailure(R"(rttr:AddMapZone{ name = "A", packages = { "B" } })");
     expectLoadFailure(R"(rttr:AddMapZone{ name = "A", color = 0x1000000 })");
     // Resources
-    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "loam", amount = 5, terrain = { "land" } })");
+    expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "no object!", amount = 5, terrain = { "land" } })");
     expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", terrain = { "land" } })");
     expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", amount = 101, terrain = { "land" } })");
     expectLoadFailure(R"(rttr:AddMapResource{ name = "R", object = "stones", amount = "wood", terrain = { "land" } })");

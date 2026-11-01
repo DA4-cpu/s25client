@@ -23,6 +23,10 @@ namespace AIEvent {
 class Base;
 }
 
+namespace civ {
+struct CustomBuilding;
+}
+
 namespace AIJH {
 class BuildingPlanner;
 class AIConstruction;
@@ -140,6 +144,9 @@ public:
                               int minimum = 1);
     /// Finds a position for the desired building size
     MapPoint SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius) const;
+    /// Position for a workshop collecting map objects (civilization mode) with the most objects in its range
+    MapPoint FindCollectorPosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
+                                   unsigned radius) const;
     /// Find a position for a specific building around a given point
     MapPoint FindPositionForBuildingAround(BuildingType type, const MapPoint& around);
     /// Returns the position of the forester (finished or still under construction) that is

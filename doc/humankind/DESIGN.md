@@ -50,6 +50,9 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-26 | Auf jeder Karte kommen **immer alle Zonen** vor (auch auf kleinen Karten). |
 | 2026-10-27 | Nach Test: Höhen abwechslungsreich (Ebenen und Hügel, flache und steile Berge, Berge nie unter dem Umland, Minen auf den Bergen möglich), Regler **Unebenheit**; **Bauflächen im Gebirge** in festem Abstand wie im Online-Generator; Klima um die Mitte statt zu Extremen; **Flüsse** neu (aus der Höhe bis ins Wasser, durchgehend, Mindesthöhe). |
 | 2026-10-27 | Flüsse wieder **wie im Original angeordnet** (2 Dreiecke je Schritt entlang einer Kante, Richtung ändert sich bei jedem Schritt um 60°: durchgehend und schmal), **keine Furten**. Seen ohne Strand, Süßwasser nach absoluter Größe (`lakeMaxSize`, nicht mehr Prozent der Karte), feuchter an Seen und Flüssen (`waterHumidity`), Strand halb so breit. |
+| 2026-10-30 | Flüsse ohne abstehende Wasserdreiecke; Feuchte an Seen/Flüssen mit einstellbarer Abnahme (`waterHumidityFalloff`, `waterHumidityStep`); im feucht-warmen Gebiet **weniger Gebirge** (`mountainWeights`, Regler „Gebirge %“ wird dort nur verringert) statt weniger Erz. |
+| 2026-10-30 | **Lehm** ist zunächst nur Rohstoff: Lehmvorkommen auf der Karte (vor allem feucht-warm), **Lehmgrube** mit Lehmstecher baut sie ab wie der Steinbruch, Lagern/Tragen/Statistik, die KI baut Lehmgruben. Ton, Ziegel und Stampflehm kommen später. |
+| 2026-10-30 | **Eigene Grafiken:** Der Nutzer legt selbst gezeichnete Bilder (PNG/BMP) unter festen Namen in `data/RTTR/assets/civ/<Bezeichner>/` ab; fehlende Bilder bleiben Platzhalter. Das Spiel schreibt die Platzhalter als Vorlagen mit Namen, Größe und Ankerpunkt in den Benutzerordner (`civ-vorlagen`, nicht in Git). |
 | 2026-10-23 | Medien-WP zählen aus dem **echten Bestand**: in Lagerhaus/HQ/Hafen 0,5-fach, in der Bibliothek 1-fach. Medien unterwegs oder an Flaggen zählen nicht. Die Bibliothek nimmt **alle** Waren mit `knowledge` an (keine Grenze von 3 Eingängen) und bestellt erst, wenn der Bibliothekar da ist. |
 
 ## Zuordnung Humankind → Siedler
@@ -275,6 +278,34 @@ rttr:AddWorkshop{
 
 Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt der Nutzer fest.
 
+## Kartenobjekte und eigene Grafiken (Lehm)
+
+### Kartenobjekte
+
+`civ/mapobjects.lua` definiert Objekte, die eine Werkstatt einsammelt (`rttr:AddMapObject{ name, title, sizes, look,
+tint }`), z. B. `LoamDeposit`. Im Spiel ist das ein `noDeposit` mit Objektindex und Größe (0 = kleinste); jedes
+Einsammeln macht es eine Größe kleiner, nach der kleinsten verschwindet es. In Karten stehen sie als Objekttyp
+`0xD0 + Index` mit der Größe als Info-Byte (nur im Zivilisationsmodus geladen). Der Kartengenerator setzt sie über
+eine Regel in `world/mapgen.lua` (`object = "LoamDeposit"`).
+
+Eine Werkstatt mit `collect = { object = "LoamDeposit", radius = 8 }` ist ein **Sammler** (`nofCustomCollector`, wie
+der Steinmetz): Der Arbeiter geht zum nächsten Objekt im Umkreis, arbeitet `workTime` und bringt das Produkt zurück.
+Gibt es keins mehr, kommt die Meldung „Kein … mehr im Umkreis“. Die KI baut Sammler in die Nähe der Objekte und
+reißt sie ab, wenn nichts mehr da ist (wie Steinbrüche).
+
+### Eigene Grafiken (`civ/CustomGraphics.cpp`)
+
+- Ordner `data/RTTR/assets/civ/<Bezeichner>/`, Dateinamen siehe `data/RTTR/assets/civ/LIESMICH.txt`:
+  Ware (`Symbol`, `Fahne`, `Esel`, `Traeger_<Richtung>`), Werkstatt (`Gebaeude`, `Baustelle`, je mit `_Schatten`,
+  `Tuer`, `Icon`, je Volk überschreibbar), Arbeiter (`Arbeiter_Symbol`, `Arbeiter_<Richtung>_<0-7>`,
+  `Arbeiter_Arbeit_<n>`), Kartenobjekt (`Groesse<N>` mit `_Schatten`). Landschafts-Varianten mit `_Winter` usw.
+- PNG (über `external/stb`, Public Domain/MIT) oder BMP; Ankerpunkt `.nx<X>.ny<Y>` im Namen, sonst an derselben
+  relativen Stelle wie im Platzhalter. Pixel in den vier blauen Spielerfarben (PAL5 128–131) werden Spielerfarbe.
+- Gelesen in `Loader::fillCaches` (beim Laden eines Spiels). Eigene Bilder füllen die Cache-Plätze der Lua-Typen
+  (`building_cache`, `bob_jobs_cache`, `carrier_cache`); leere Plätze fallen auf den Platzhalter (`look`) zurück.
+- Vorlagen: Fehlende Dateien in `<Benutzerordner>/civ-vorlagen/<Bezeichner>/` werden aus den Platzhaltern geschrieben
+  (Original-S2-Grafik, darum nicht in Git).
+
 ## Welt: Kartengenerator mit Klima und Zonen (Stufe 1)
 
 Stand 2026-10-27 (Überarbeitung nach Test des Nutzers). Gilt nur für **erzeugte Karten** (Zufallskarte im
@@ -282,10 +313,18 @@ Kartenauswahlmenü).
 
 ### Ablauf der Erzeugung (`mapGenerator/RandomMap.cpp`)
 
-1. **Wasser, Land, Gebirge wie im Online-Generator** (`Landscape.cpp`, `CreateLandMasses`): ein fraktales Rauschen
+1. **Klima zuerst:** Temperatur und Feuchtigkeit sind **normalverteilt** um den Mittelwert der Voreinstellung
+   (Gemäßigt = 50) mit der Streuung `temperatureSpread`/`humiditySpread`: der größte Teil der Karte ist gemäßigt,
+   Extreme sind selten. Das Klima entsteht vor dem Land, weil es bestimmt, wo es weniger Gebirge gibt.
+   **Wasser, Land, Gebirge wie im Online-Generator** (`Landscape.cpp`, `CreateLandMasses`): ein fraktales Rauschen
    (wiederholt sich an den Kartenrändern, Zeilen halb so hoch wie Spalten wie im Spiel) wird nach Rang geschnitten:
    die untersten `Wasser %` werden Wasser, die obersten `Gebirge %` des Landes Gebirge. Landmasse bestimmt die Größe
    der Formen (Inseln klein, Kontinente groß), Oberfläche die Feinheit der Küsten und Bergränder.
+   `mountainWeights` (Faktor je Temperatur-/Feuchtebereich, `GetMountainFactors`) verringert den Gebirgsanteil dort,
+   z. B. halb so viel Gebirge im feucht-warmen Gebiet (Konzept: Minenplätze von Vegetation verdeckt). Der Faktor wird
+   über ein paar Knoten geglättet, Bergketten werden also dünner statt an einer Linie abzubrechen. Er nimmt nur
+   Gebirge weg; Wasser und das übrige Land bleiben unverändert, der Regler gilt dort also nur verringert. Mit dem
+   Gebirge gibt es dort auch weniger Bauflächen und Minen; die Erzmenge je Gebirgsknoten ist überall gleich.
 2. **Höhen** (`CreateHeights`): Land steigt flach von der Küste an (flache Strände). Hügel gibt es je nach Gegend:
    manche Gegenden sind Ebenen, andere hügelig. Gebirge stehen auf dem Land und steigen vom Fuß an; jede Bergkette hat
    eigene Steilheit und Höhe (flache niedrige und steile hohe Berge), Berge sind nie niedriger als das Land daneben.
@@ -300,16 +339,17 @@ Kartenauswahlmenü).
    Kartengitters, bei jedem Schritt werden die 2 Dreiecke links und rechts der Kante Wasser, und die Richtung ändert sich
    bei **jedem** Schritt um 60° (nie geradeaus, höchstens 2 Drehungen in dieselbe Richtung hintereinander). Nur so
    teilen sich die Dreiecke zweier Schritte eine Seite: Der Fluss ist durchgehend und ein Dreieck breit (geradeaus
-   würden sich die Wasserflächen nur an einer Ecke berühren = „Pfützen“). Der Lauf ist der kürzeste solche Weg in
+   würden sich die Wasserflächen nur an einer Ecke berühren = „Pfützen“). In einer Biegung mit zwei Drehungen in
+   dieselbe Richtung würde das äußere Dreieck des mittleren Schritts abstehen (berührt nur seinen Partner); deshalb
+   wird nur ein Dreieck gesetzt, das an den vorigen oder nächsten Schritt (an der Mündung: an Wasser) grenzt.
+   Der Lauf ist der kürzeste solche Weg in
    einem Korridor von 3 Knoten um den Abflussweg (bergauf teuer, etwas Zufall für natürliche Biegungen). Keine Furten:
    Flüsse trennen das Land wie im Original. Das Flussbett wird gegraben (flussabwärts nie höher), die Ufer bekommen
    keinen Sand und keinen Sumpf. Kürzere als `riverMinLength` Schritte entfallen. Regler „Flüsse“: bei 100 % etwa ein
    Fluss je 2000 Knoten.
-4. **Klima:** Temperatur und Feuchtigkeit sind **normalverteilt** um den Mittelwert der Voreinstellung (Gemäßigt = 50)
-   mit der Streuung `temperatureSpread`/`humiditySpread`: der größte Teil der Karte ist gemäßigt, Extreme sind selten.
-   Mit der Höhe wird es kälter (`heightCooling`). Vorher waren die Werte gleichverteilt (gleich viel extrem wie mild).
-   An Seen und Flüssen steigt die Feuchtigkeit um `waterHumidity` Punkte, mit dem Abstand weniger, ab
-   `nearWaterDistance` + 1 Knoten gar nicht mehr (nicht am Meer).
+4. **Klima nach Höhe und Wasser:** Mit der Höhe wird es kälter (`heightCooling`). An Seen und Flüssen steigt die
+   Feuchtigkeit um `waterHumidity` Punkte, alle `waterHumidityStep` Knoten Abstand um `waterHumidityFalloff` Punkte
+   weniger (0 = keine Abnahme), ab `nearWaterDistance` + 1 Knoten gar nicht mehr (nicht am Meer).
 5. **Texturen:** Dreieck = Wasser, wenn alle Ecken Wasser sind, Gebirge, wenn mindestens 2 Ecken Gebirge sind, sonst
    Land nach Klima. Gebirgstexturen nach Temperatur (Grönland/Ödland/Winter), innerhalb nach Höhe über dem Bergfuß;
    Schnee nur auf den höchsten 8 % der Gipfel der Karte. Sandstrand nur am Meer, in Dreiecksreihen ab dem Wasser
@@ -341,9 +381,10 @@ zuletzt benutzte steht im Generatorfenster.
 Ausführliche Anleitung steht in der Datei. Kurz:
 
 ```lua
-rttr:SetMapClimate{ heightCooling = 20, temperatureSpread = 19, humiditySpread = 19, nearWaterDistance = 4,
-                    lakeMaxSize = 500, waterHumidity = 10, riverMinHeight = 30, riverMinLength = 15,
-                    mountainBuildSpacing = 6, previewImages = true }
+rttr:SetMapClimate{ heightCooling = 30, temperatureSpread = 20, humiditySpread = 20, nearWaterDistance = 5,
+                    lakeMaxSize = 50, waterHumidity = 50, waterHumidityFalloff = 10, waterHumidityStep = 1,
+                    riverMinHeight = 30, riverMinLength = 15, mountainBuildSpacing = 6, previewImages = true,
+                    mountainWeights = { { temperature = {60, 100}, humidity = {60, 100}, factor = 0.5 } } }
 rttr:AddMapZone{ name = "Afrika", title = "Afrika", color = 0xE08030, packages = {
     { name = "regenwald", temperature = {65, 100}, humidity = {55, 100}, height = {0, 40},
       trees = { Palm1 = 2, Pineapple = 1 }, animals = { Deer = 2, Duck = 1 } },
@@ -374,8 +415,9 @@ Böden je Landschaft (6 Bit); „world“ hat jetzt 62.
 
 ### Grenzen
 
-- Neue Pflanzen und Tiere (Mahagoni, Schimpanse …) und Lehm brauchen erst Kartenobjekte, Grafiken und ein Speicherformat
-  (das S2-Format kennt nur 9 Baumarten und 6 Tierarten). Bis dahin stehen vorhandene Arten in den Paketen.
+- Neue Pflanzen und Tiere (Mahagoni, Schimpanse …) brauchen erst eigene Kartenobjekte und ein Speicherformat
+  (das S2-Format kennt nur 9 Baumarten und 6 Tierarten). Bis dahin stehen vorhandene Arten in den Paketen. Lehm nutzt
+  schon die Kartenobjekte des Zivilisationsmodus (siehe oben).
 - Eisbären lassen sich im Kartenformat nicht speichern.
 - Originalkarten werden nicht verändert.
 

@@ -44,6 +44,10 @@ option(RTTR_BUILD_UPDATER "Build auto-updater. Not advised when changing the def
 add_subdirectory(glad)
 add_library(kaguya INTERFACE)
 target_include_directories(kaguya SYSTEM INTERFACE kaguya/include)
+# Single header image loader/writer (PNG) by Sean Barrett, public domain/MIT. Used for the graphics of the
+# civilization mode (libs/s25main/civ/ImageFile.cpp)
+add_library(stb INTERFACE)
+target_include_directories(stb SYSTEM INTERFACE stb)
 add_subdirectory(libendian)
 set(RTTR_BUILD_LOBBY_CLIENT ON)
 add_subdirectory(liblobby)

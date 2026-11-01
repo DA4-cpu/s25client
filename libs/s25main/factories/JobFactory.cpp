@@ -21,6 +21,7 @@
 #include "figures/nofCarrier.h"
 #include "figures/nofCatapultMan.h"
 #include "figures/nofCharburner.h"
+#include "figures/nofCustomCollector.h"
 #include "figures/nofCustomWorker.h"
 #include "figures/nofDonkeybreeder.h"
 #include "figures/nofFarmer.h"
@@ -60,7 +61,11 @@ std::unique_ptr<noFigure> JobFactory::CreateJob(const Job job_id, const MapPoint
         return std::make_unique<nofPassiveWorker>(job_id, pt, player, &goal);
     // Workers of workshops defined in lua (civilization mode)
     if(isCustomJob(job_id))
+    {
+        if(nofCustomCollector::GetCollectRadius(job_id) > 0)
+            return std::make_unique<nofCustomCollector>(job_id, pt, player, &checkedCast<nobUsual>(goal));
         return std::make_unique<nofCustomWorker>(job_id, pt, player, &checkedCast<nobUsual>(goal));
+    }
     switch(job_id)
     {
         case Job::Builder:

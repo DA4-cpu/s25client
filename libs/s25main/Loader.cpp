@@ -12,6 +12,8 @@
 #include "Timer.h"
 #include "WineLoader.h"
 #include "addons/const_addons.h"
+#include "civ/Content.h"
+#include "civ/CustomGraphics.h"
 #include "commonDefines.h"
 #include "convertSounds.h"
 #include "files.h"
@@ -78,7 +80,9 @@ Loader::Loader(Log& logger, const RttrConfig& config)
     : logger_(logger), config_(config), archiveLocator_(std::make_unique<ArchiveLocator>(logger)),
       archiveLoader_(std::make_unique<ArchiveLoader>(logger)), isWinterGFX_(false), nation_gfx(), nationIcons_(),
       map_gfx(nullptr), stp(nullptr)
-{}
+{
+    civGraphics_ = std::make_unique<civ::CustomGraphics>();
+}
 
 Loader::~Loader() = default;
 
@@ -151,6 +155,8 @@ glArchivItem_Bitmap* Loader::GetNationImage(Nation nation, unsigned nr)
 
 glArchivItem_Bitmap* Loader::GetNationIcon(Nation nation, BuildingType bld)
 {
+    if(glArchivItem_Bitmap* own = civGraphics_->GetBuildingIcon(nation, bld))
+        return own;
     bld = civ::getLook(bld);
     if(bld == BuildingType::Charburner)
         return LOADER.GetImageN("charburner", rttr::enum_cast(nation) * 8 + 8);
@@ -160,6 +166,8 @@ glArchivItem_Bitmap* Loader::GetNationIcon(Nation nation, BuildingType bld)
 
 ITexture* Loader::GetBuildingTex(Nation nation, BuildingType bld)
 {
+    if(glArchivItem_Bitmap* own = civGraphics_->GetBuildingImage(nation, bld))
+        return own;
     bld = civ::getLook(bld);
     if(bld == BuildingType::Charburner)
     {
@@ -187,6 +195,8 @@ ITexture* Loader::GetMapTexture(unsigned nr)
 
 ITexture* Loader::GetWareTex(GoodType ware)
 {
+    if(glArchivItem_Bitmap* own = civGraphics_->GetWareIcon(ware))
+        return own;
     ware = civ::getLook(ware);
     if(wineaddon::isWineAddonGoodType(ware))
         return wineaddon::GetWareTex(ware);
@@ -198,6 +208,8 @@ ITexture* Loader::GetWareTex(GoodType ware)
 
 ITexture* Loader::GetWareStackTex(GoodType ware)
 {
+    if(glArchivItem_Bitmap* own = civGraphics_->GetWareFlag(ware))
+        return own;
     ware = civ::getLook(ware);
     if(wineaddon::isWineAddonGoodType(ware))
         return wineaddon::GetWareStackTex(ware);
@@ -209,6 +221,8 @@ ITexture* Loader::GetWareStackTex(GoodType ware)
 
 ITexture* Loader::GetWareDonkeyTex(GoodType ware)
 {
+    if(glArchivItem_Bitmap* own = civGraphics_->GetWareDonkey(ware))
+        return own;
     ware = civ::getLook(ware);
     if(wineaddon::isWineAddonGoodType(ware))
         return wineaddon::GetWareDonkeyTex(ware);
@@ -220,6 +234,8 @@ ITexture* Loader::GetWareDonkeyTex(GoodType ware)
 
 ITexture* Loader::GetJobTex(Job job)
 {
+    if(glArchivItem_Bitmap* own = civGraphics_->GetJobIcon(job))
+        return own;
     job = civ::getLook(job);
     if(wineaddon::isWineAddonJobType(job))
         return wineaddon::GetJobTex(job);
@@ -556,6 +572,7 @@ bool Loader::LoadFilesAtGame(const std::string& mapGfxPath, bool isWinterGFX, co
     map_gfx = &GetArchive(ResourceId::make(mapGFXFile));
 
     isWinterGFX_ = isWinterGFX;
+    landscapeName_ = civ::getLandscapeName(mapGfxPath);
 
     return true;
 }
@@ -1032,6 +1049,20 @@ void Loader::fillCaches()
                 bmp.reset();
             }
         }
+    }
+
+    // Own graphics of the civilization mode (only if a game in this mode is loaded)
+    {
+        const civ::Content& content = civ::getActiveContent();
+        civ::CustomGraphics::Settings civSettings;
+        civSettings.folder = config_.ExpandPath(civ::graphicsFolder);
+        const bool hasContent =
+          content.GetNumWares() > 0 || content.GetNumBuildings() > 0 || !content.GetMapObjects().empty();
+        if(hasContent)
+            civSettings.templateFolder = config_.ExpandPath(civ::templatesFolder);
+        civSettings.landscape = landscapeName_;
+        civSettings.isWinter = isWinterGFX_;
+        civGraphics_->fillCaches(*this, stp.get(), content, civSettings);
     }
 
     if(SETTINGS.video.sharedTextures)

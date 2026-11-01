@@ -4,19 +4,22 @@
 
 #include "mapGenerator/RandomMap.h"
 #include "RttrForeachPt.h"
+#include "civ/Content.h"
+#include "civ/TechTree.h"
 #include "mapGenerator/Climate.h"
 #include "mapGenerator/Harbors.h"
 #include "mapGenerator/HeadQuarters.h"
 #include "mapGenerator/Landscape.h"
 #include "mapGenerator/Preview.h"
 #include "mapGenerator/Resources.h"
-#include "mapGenerator/Zones.h"
 #include "mapGenerator/Terrain.h"
 #include "mapGenerator/TextureHelper.h"
 #include "mapGenerator/Textures.h"
+#include "mapGenerator/Zones.h"
 
 #include "lua/GameDataLoader.h"
 #include "libsiedler2/libsiedler2.h"
+#include "s25util/Log.h"
 
 #include <random>
 #include <stdexcept>
@@ -125,7 +128,10 @@ void SmoothHeightMap(NodeMapBase<uint8_t>& z, const ValueRange<uint8_t>& range)
     Scale(z, range.minimum, range.maximum);
 }
 
-RandomMap::RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc) : rnd_(rnd), map_(map), desc_(desc) {}
+RandomMap::RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc,
+                     std::vector<CustomMapObjectInfo> customObjects)
+    : rnd_(rnd), map_(map), desc_(desc), customObjects_(std::move(customObjects))
+{}
 
 void RandomMap::Create(const MapSettings& settings)
 {
@@ -133,8 +139,16 @@ void RandomMap::Create(const MapSettings& settings)
     const MapExtent size = settings.size;
     map_.z.Resize(size, map_.height.minimum);
 
-    // 1) Water, land and mountains like the online generator, heights, then rivers from the high land to the water
-    CreateLandMasses(map_, rnd_, settings_);
+    // 1) Climate: humidity and temperature mostly around the mean of the preset. It decides where mountains are
+    // rarer (MapClimateDesc::mountainWeights), later it gets colder further up and more humid at lakes and rivers
+    map_.climate = GenerateClimateMap(rnd_, size, settings_.climateZoneSize, GetHumidityMean(settings_.climateHumidity),
+                                      desc_.climate.humiditySpread);
+    map_.temperature =
+      GenerateClimateMap(rnd_, size, settings_.climateZoneSize, GetTemperatureMean(settings_.climateTemperature),
+                         desc_.climate.temperatureSpread);
+
+    // 2) Water, land and mountains like the online generator, heights, then rivers from the high land to the water
+    CreateLandMasses(map_, rnd_, settings_, GetMountainFactors(map_, desc_.climate));
     CreateHeights(map_, rnd_, settings_);
     MarkLakes(map_, desc_.climate.lakeMaxSize);
     RiverSettings riverSettings;
@@ -142,16 +156,9 @@ void RandomMap::Create(const MapSettings& settings)
     riverSettings.minHeight = desc_.climate.riverMinHeight;
     riverSettings.minLength = desc_.climate.riverMinLength;
     const auto rivers = CreateRivers(map_, rnd_, riverSettings);
-
-    // 2) Climate: humidity and temperature mostly around the mean of the preset, independent of the height, but it
-    // gets colder further up and more humid at lakes and rivers
     ComputeHeightPercent(map_);
-    map_.climate = GenerateClimateMap(rnd_, size, settings_.climateZoneSize, GetHumidityMean(settings_.climateHumidity),
-                                      desc_.climate.humiditySpread);
-    ApplyWaterHumidity(map_, desc_.climate.nearWaterDistance, desc_.climate.waterHumidity);
-    map_.temperature =
-      GenerateClimateMap(rnd_, size, settings_.climateZoneSize, GetTemperatureMean(settings_.climateTemperature),
-                         desc_.climate.temperatureSpread);
+    ApplyWaterHumidity(map_, desc_.climate.nearWaterDistance, desc_.climate.waterHumidity,
+                       desc_.climate.waterHumidityFalloff, desc_.climate.waterHumidityStep);
     ApplyHeightCooling(map_, desc_.climate.heightCooling);
 
     // 3) Textures by kind of node, mountain height and climate. Sand beaches only at the sea: Rivers have grass banks
@@ -187,17 +194,18 @@ void RandomMap::Create(const MapSettings& settings)
     // 5) Zones (each exactly once, connected), terrain types and then everything on the map according to lua
     map_.zones = GenerateZones(rnd_, size, std::max<unsigned>(1u, static_cast<unsigned>(desc_.zones.size())));
     ComputeTerrainFlags(map_, desc_.climate.nearWaterDistance);
-    PlaceResources(map_, rnd_, settings_, desc_);
+    PlaceResources(map_, rnd_, settings_, desc_, customObjects_);
 }
 
-Map GenerateRandomMap(RandomUtility& rnd, const WorldDescription& worldDesc, const MapSettings& settings)
+Map GenerateRandomMap(RandomUtility& rnd, const WorldDescription& worldDesc, const MapSettings& settings,
+                      const std::vector<CustomMapObjectInfo>& customObjects)
 {
     constexpr unsigned maxAttempts = 5;
     const auto height = GetMaximumHeight(settings.size);
     for(unsigned attempt = 1;; ++attempt)
     {
         Map map(settings.size, settings.numPlayers, worldDesc, settings.type, height);
-        RandomMap randomMap(rnd, map, worldDesc.mapGen);
+        RandomMap randomMap(rnd, map, worldDesc.mapGen, customObjects.empty() ? LoadCivMapObjects() : customObjects);
         try
         {
             randomMap.Create(settings);
@@ -209,6 +217,21 @@ Map GenerateRandomMap(RandomUtility& rnd, const WorldDescription& worldDesc, con
                 throw;
         }
     }
+}
+
+std::vector<CustomMapObjectInfo> LoadCivMapObjects()
+{
+    std::vector<CustomMapObjectInfo> result;
+    try
+    {
+        const civ::TechTree techTree = civ::loadDefaultTechTree();
+        for(const civ::CustomMapObject& obj : techTree.GetContent().GetMapObjects())
+            result.push_back(CustomMapObjectInfo{obj.name, obj.sizes});
+    } catch(const std::exception& e)
+    {
+        LOG.write("Map generator: could not load the map objects of the civilization mode: %1%\n") % e.what();
+    }
+    return result;
 }
 
 boost::filesystem::path GetPreviewImagePath(const boost::filesystem::path& mapPath)

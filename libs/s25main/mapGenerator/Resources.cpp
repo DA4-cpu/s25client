@@ -5,14 +5,17 @@
 
 #include "mapGenerator/Resources.h"
 #include "RttrForeachPt.h"
+#include "civ/Content.h"
 #include "helpers/containerUtils.h"
 #include "mapGenerator/Algorithms.h"
 #include "mapGenerator/Noise.h"
 #include "mapGenerator/TextureHelper.h"
 #include "gameData/MapGenDesc.h"
+#include "s25util/Log.h"
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 
 namespace rttr::mapGenerator {
@@ -111,7 +114,8 @@ enum class ObjectKind
     Decoration,
     Fish,
     Groundwater,
-    Mine
+    Mine,
+    Custom
 };
 
 ObjectKind GetObjectKind(const std::string& object)
@@ -130,7 +134,8 @@ ObjectKind GetObjectKind(const std::string& object)
         return ObjectKind::Groundwater;
     if(object == "coal" || object == "iron" || object == "gold" || object == "granite")
         return ObjectKind::Mine;
-    throw std::invalid_argument("Unknown map resource object: " + object);
+    // Map object of the civilization mode
+    return ObjectKind::Custom;
 }
 
 uint8_t GetMineResourceBase(const std::string& object)
@@ -175,8 +180,10 @@ const std::string* PickWeighted(RandomUtility& rnd, const MapGenWeights& weights
 class ResourcePlacer
 {
 public:
-    ResourcePlacer(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc)
-        : map_(map), rnd_(rnd), settings_(settings), desc_(desc), globalFactor_(settings.resourceAmount / 100.)
+    ResourcePlacer(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc,
+                   const std::vector<CustomMapObjectInfo>& customObjects)
+        : map_(map), rnd_(rnd), settings_(settings), desc_(desc), customObjects_(customObjects),
+          globalFactor_(settings.resourceAmount / 100.)
     {
         const MapExtent size = map.size;
         const auto& textures = map.textureMap;
@@ -231,6 +238,18 @@ public:
                 if(!minesDone)
                     PlaceMineResources();
                 minesDone = true;
+            } else if(kind == ObjectKind::Custom)
+            {
+                const auto idx = FindCustomObject(rule);
+                if(!idx)
+                {
+                    // E.g. data of the civilization mode not available: The map is generated without these objects
+                    LOG.write("Map generator: Map resource '%1%': unknown object '%2%' (skipped)\n") % rule.name
+                      % rule.object;
+                    continue;
+                }
+                customIdx_ = *idx;
+                PlaceRule(rule, kind);
             } else
                 PlaceRule(rule, kind);
         }
@@ -241,7 +260,10 @@ private:
     RandomUtility& rnd_;
     const MapSettings& settings_;
     const MapGenDesc& desc_;
+    const std::vector<CustomMapObjectInfo>& customObjects_;
     const double globalFactor_;
+    /// Index of the map object of the civilization mode of the current rule
+    unsigned customIdx_ = 0;
     NodeMapBase<const MapZonePackageDesc*> packages_;
     /// Objects (trees, stones, ...) may be placed here
     NodeMapBase<uint8_t> objectFree_;
@@ -250,6 +272,16 @@ private:
     /// All triangles are water
     NodeMapBase<uint8_t> allWater_;
     NodeMapBase<unsigned> hqDistance_;
+
+    std::optional<unsigned> FindCustomObject(const MapResourceDesc& rule) const
+    {
+        for(unsigned i = 0; i < customObjects_.size(); ++i)
+        {
+            if(customObjects_[i].name == rule.object)
+                return i;
+        }
+        return std::nullopt;
+    }
 
     bool Matches(const MapResourceDesc& rule, const std::vector<unsigned>& zones, const MapPoint& pt) const
     {
@@ -321,9 +353,8 @@ private:
                 const bool onWater = allWater_[pt] != 0;
                 if(!onWater && !objectFree_[pt])
                     return false;
-                const std::string* species = PickWeighted(rnd_, packages_[pt]->animals, [onWater](const auto& name) {
-                    return IsWaterAnimal(name) == onWater;
-                });
+                const std::string* species = PickWeighted(
+                  rnd_, packages_[pt]->animals, [onWater](const auto& name) { return IsWaterAnimal(name) == onWater; });
                 if(!species)
                     return false;
                 map_.animals[pt] = GetAnimalCode(*species);
@@ -339,6 +370,14 @@ private:
                     return false;
                 map_.resources[pt] = R_Water;
                 return true;
+            case ObjectKind::Custom:
+            {
+                if(!objectFree_[pt] || map_.objectTypes[pt] != OT_Empty)
+                    return false;
+                map_.objectTypes[pt] = static_cast<uint8_t>(civ::FIRST_CUSTOM_MAP_OBJECT_TYPE + customIdx_);
+                map_.objectInfos[pt] = static_cast<uint8_t>(rnd_.RandomValue(1u, customObjects_[customIdx_].sizes));
+                return true;
+            }
             case ObjectKind::Mine: break;
         }
         return false; // LCOV_EXCL_LINE
@@ -414,8 +453,9 @@ private:
             double total = 0.;
             for(unsigned i = 0; i < rules.size(); ++i)
             {
-                probabilities[i] =
-                  Matches(*rules[i].rule, rules[i].zones, pt) ? GetProbability(*rules[i].rule, rules[i].amount, pt) : 0.;
+                probabilities[i] = Matches(*rules[i].rule, rules[i].zones, pt) ?
+                                     GetProbability(*rules[i].rule, rules[i].amount, pt) :
+                                     0.;
                 total += probabilities[i];
             }
             return total;
@@ -476,9 +516,12 @@ private:
 
 } // namespace
 
-void PlaceResources(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc)
+void PlaceResources(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc,
+                    const std::vector<CustomMapObjectInfo>& customObjects)
 {
-    ResourcePlacer placer(map, rnd, settings, desc);
+    if(customObjects.size() > civ::MAX_CUSTOM_MAP_OBJECTS)
+        throw std::runtime_error("Too many map objects of the civilization mode");
+    ResourcePlacer placer(map, rnd, settings, desc, customObjects);
     placer.PlaceAll();
 }
 

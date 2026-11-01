@@ -9,6 +9,7 @@
 #include "mapGenerator/Noise.h"
 #include "mapGenerator/TextureHelper.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <queue>
@@ -364,18 +365,50 @@ std::vector<River> CreateRivers(Map& map, RandomUtility& rnd, const RiverSetting
             }
         }
 
-        River river;
-        for(unsigned i = 0; i < course.directions.size(); ++i)
+        // Water: the 2 triangles beside each step. Where the course turns twice in the same direction (a bend), the
+        // outer triangle of the middle step only touches its partner and would stick out of the river: Only
+        // triangles sharing a side with the previous or the next step (or the water at the mouth) are used. The source
+        // keeps both triangles.
+        const auto numSteps = static_cast<unsigned>(course.directions.size());
+        std::vector<std::array<Triangle, 2>> stepTriangles;
+        stepTriangles.reserve(numSteps);
+        for(unsigned i = 0; i < numSteps; ++i)
+            stepTriangles.push_back(GetTriangles(nodes[i], size, course.directions[i]));
+        const auto isStepTriangle = [&stepTriangles](unsigned step, const Triangle& triangle) {
+            return helpers::contains_if(stepTriangles[step], [&triangle](const Triangle& t) {
+                return t.rsu == triangle.rsu && t.position == triangle.position;
+            });
+        };
+        std::vector<Triangle> riverTriangles;
+        for(unsigned i = 0; i < numSteps; ++i)
         {
-            for(const Triangle& triangle : GetTriangles(nodes[i], size, course.directions[i]))
+            for(const Triangle& triangle : stepTriangles[i])
             {
-                map.textureMap.Set(triangle, water);
-                for(const MapPoint& corner : GetTriangleEdges(triangle, size))
+                bool touches = (i == 0);
+                for(const Triangle& neighbor : GetTriangleNeighbors(triangle, size))
                 {
-                    river.insert(corner);
-                    riverWater[corner] = 1;
+                    if((i > 0 && isStepTriangle(i - 1, neighbor))
+                       || (i + 1 < numSteps && isStepTriangle(i + 1, neighbor))
+                       || (i + 1 == numSteps && IsWaterTriangle(map, neighbor, water)))
+                        touches = true;
                 }
+                if(touches)
+                    riverTriangles.push_back(triangle);
             }
+        }
+
+        River river;
+        for(const Triangle& triangle : riverTriangles)
+        {
+            map.textureMap.Set(triangle, water);
+            for(const MapPoint& corner : GetTriangleEdges(triangle, size))
+            {
+                river.insert(corner);
+                riverWater[corner] = 1;
+            }
+        }
+        for(unsigned i = 0; i < numSteps; ++i)
+        {
             if(map.nodeKind[nodes[i]] == NodeKind::Water)
                 continue; // Coast of the sea or a lake
             map.riverCourse[nodes[i]] = 1;

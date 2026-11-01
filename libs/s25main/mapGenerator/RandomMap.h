@@ -7,6 +7,7 @@
 #include "mapGenerator/Map.h"
 #include "mapGenerator/MapSettings.h"
 #include "mapGenerator/RandomUtility.h"
+#include "mapGenerator/Resources.h"
 #include "mapGenerator/Rivers.h"
 #include "mapGenerator/Textures.h"
 
@@ -33,20 +34,27 @@ private:
     Map& map_;
     const MapGenDesc& desc_;
     MapSettings settings_;
+    std::vector<CustomMapObjectInfo> customObjects_;
 
 public:
-    RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc);
+    RandomMap(RandomUtility& rnd, Map& map, const MapGenDesc& desc,
+              std::vector<CustomMapObjectInfo> customObjects = {});
     /**
-     * Creates the map: water, land and mountains like the online map generator of the RttR website
-     * (CreateLandMasses), heights (CreateHeights), rivers, climate (temperature, humidity, height), textures, building
-     * sites in the mountains, harbors, HQs, zones and finally all objects and resources according to the lua data
-     * (PlaceResources).
+     * Creates the map: climate (temperature, humidity), water, land and mountains like the online map generator of the
+     * RttR website (CreateLandMasses, fewer mountains in some climates), heights (CreateHeights), rivers, textures,
+     * building sites in the mountains, harbors, HQs, zones and finally all objects and resources according to the lua
+     * data (PlaceResources).
      */
     void Create(const MapSettings& settings);
 };
 
-/// Generate a map. Retries a few times (with further random numbers) if no valid HQ positions are found
-Map GenerateRandomMap(RandomUtility& rnd, const WorldDescription& worldDesc, const MapSettings& settings);
+/// Generate a map. Retries a few times (with further random numbers) if no valid HQ positions are found.
+/// customObjects: Map objects of the civilization mode which the resource rules may place. Empty: loaded from the
+/// data of the civilization mode (LoadCivMapObjects)
+Map GenerateRandomMap(RandomUtility& rnd, const WorldDescription& worldDesc, const MapSettings& settings,
+                      const std::vector<CustomMapObjectInfo>& customObjects = {});
+/// Map objects of the civilization mode (gamedata/civ, rttr:AddMapObject). Empty if the data can't be loaded
+std::vector<CustomMapObjectInfo> LoadCivMapObjects();
 /**
  * Generate a map and save it. Uses settings.seed for the random numbers or a random seed if it is 0.
  * Also saves a preview image next to the map (<name>_Vorschau.bmp) if enabled in the lua data.

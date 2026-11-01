@@ -112,7 +112,7 @@ void ApplyHeightCooling(Map& map, unsigned cooling)
     }
 }
 
-void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity)
+void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity, unsigned falloff, unsigned step)
 {
     if(humidity == 0)
         return;
@@ -129,7 +129,11 @@ void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity)
     {
         if(distance[pt] > maxDistance)
             continue;
-        const unsigned increase = humidity * (maxDistance + 1u - distance[pt]) / (maxDistance + 1u);
+        // Less by `falloff` points every `step` nodes
+        const unsigned decrease = falloff * (distance[pt] / std::max(1u, step));
+        if(decrease >= humidity)
+            continue;
+        const unsigned increase = humidity - decrease;
         map.climate[pt] = static_cast<uint8_t>(std::min(100u, map.climate[pt] + increase));
     }
 }

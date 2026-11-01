@@ -79,6 +79,18 @@ unsigned IngameMinimap::CalcPixelColor(const MapPoint pt, const unsigned t)
                     color = CombineWithPlayerColor(color, owner);
             }
         }
+        // Map object defined in lua (civilization mode, e.g. loam deposit)?
+        else if((!fow && noType == NodalObjectType::Deposit) || (fow && fot == FoW_Type::Deposit))
+        {
+            color = VaryBrightness(DEPOSIT_COLOR, VARY_GRANITE_COLOR);
+            drawn_object = DrawnObject::Terrain;
+            if(owner)
+            {
+                drawn_object = DrawnObject::Player;
+                if(territory)
+                    color = CombineWithPlayerColor(color, owner);
+            }
+        }
         // Ansonsten die jeweilige Terrainfarbe nehmen
         else
         {

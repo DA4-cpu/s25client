@@ -102,6 +102,31 @@ void forEachListEntry(const kaguya::LuaTable& list, const std::string& context, 
         func(entry.get<kaguya::LuaTable>());
     }
 }
+
+/// Read a list like { { temperature = {60, 100}, humidity = {60, 100}, factor = 0.5 }, ... }
+std::vector<MapResourceWeight> readWeightList(CheckedLuaTable& luaData, const std::string& field,
+                                              const std::string& context, bool allowHeight)
+{
+    std::vector<MapResourceWeight> result;
+    const auto weightList = luaData.getOptional<kaguya::LuaTable>(field);
+    if(!weightList)
+        return result;
+    const std::string listContext = context + ", " + field;
+    forEachListEntry(*weightList, listContext, [&](const kaguya::LuaTable& entry) {
+        CheckedLuaTable weightData(entry);
+        MapResourceWeight weight;
+        weight.climate = readClimate(weightData, listContext);
+        if(!allowHeight && (weight.climate.height.minimum != 0 || weight.climate.height.maximum != 100))
+            throw GameDataError(listContext + ": only temperature and humidity are possible here");
+        weightData.getOrThrow(weight.factor, "factor");
+        if(weight.factor < 0 || weight.factor > 100)
+            throw GameDataError(listContext + ": factor must be in [0, 100]");
+        weightData.checkUnused();
+        result.push_back(weight);
+    });
+    return result;
+}
+
 } // namespace
 
 const std::vector<std::string>& getMapGenTerrainNames()
@@ -172,12 +197,14 @@ MapResourceDesc::MapResourceDesc(const kaguya::LuaTable& luaTable)
     name = readName(luaData, "Map resource");
     const std::string context = "Map resource '" + name + "'";
     luaData.getOrThrow(object, "object");
-    if(!helpers::contains(getMapGenObjectNames(), object))
+    // Other identifiers are objects defined in the civilization mode (rttr:AddMapObject, checked when generating)
+    if(!helpers::contains(getMapGenObjectNames(), object) && !isValidIdentifier(object))
     {
         std::string validNames;
         for(const std::string& curName : getMapGenObjectNames())
             validNames += (validNames.empty() ? "" : ", ") + curName;
-        throw GameDataError(context + ": unknown object '" + object + "'. Possible: " + validNames);
+        throw GameDataError(context + ": unknown object '" + object + "'. Possible: " + validNames
+                            + " or the name of a map object of the civilization mode (rttr:AddMapObject)");
     }
 
     const auto amountValue = luaData.getOptional<kaguya::LuaRef>("amount");
@@ -223,19 +250,7 @@ MapResourceDesc::MapResourceDesc(const kaguya::LuaTable& luaTable)
     if(density == 0 || density > 100)
         throw GameDataError(context + ": density must be in [1, 100] (percent)");
 
-    if(const auto weightList = luaData.getOptional<kaguya::LuaTable>("weights"))
-    {
-        forEachListEntry(*weightList, context + ", weights", [&](const kaguya::LuaTable& entry) {
-            CheckedLuaTable weightData(entry);
-            MapResourceWeight weight;
-            weight.climate = readClimate(weightData, context + ", weights");
-            weightData.getOrThrow(weight.factor, "factor");
-            if(weight.factor < 0 || weight.factor > 100)
-                throw GameDataError(context + ", weights: factor must be in [0, 100]");
-            weightData.checkUnused();
-            weights.push_back(weight);
-        });
-    }
+    weights = readWeightList(luaData, "weights", context, true);
 
     if(const auto hqValues = luaData.getOptional<std::vector<unsigned>>("hqDistance"))
     {
@@ -251,6 +266,16 @@ double MapResourceDesc::getWeight(unsigned temperature, unsigned humidity, unsig
     for(const MapResourceWeight& weight : weights)
     {
         if(weight.climate.matches(temperature, humidity, height))
+            return weight.factor;
+    }
+    return 1.;
+}
+
+double MapClimateDesc::getMountainFactor(unsigned temperature, unsigned humidity) const
+{
+    for(const MapResourceWeight& weight : mountainWeights)
+    {
+        if(weight.climate.temperature.contains(temperature) && weight.climate.humidity.contains(humidity))
             return weight.factor;
     }
     return 1.;
@@ -272,6 +297,12 @@ MapClimateDesc::MapClimateDesc(const kaguya::LuaTable& luaTable)
     waterHumidity = luaData.getOrDefault("waterHumidity", waterHumidity);
     if(waterHumidity > 100)
         throw GameDataError(context + ": waterHumidity must be in [0, 100]");
+    waterHumidityFalloff = luaData.getOrDefault("waterHumidityFalloff", waterHumidityFalloff);
+    if(waterHumidityFalloff > 100)
+        throw GameDataError(context + ": waterHumidityFalloff must be in [0, 100]");
+    waterHumidityStep = luaData.getOrDefault("waterHumidityStep", waterHumidityStep);
+    if(waterHumidityStep == 0 || waterHumidityStep > 30)
+        throw GameDataError(context + ": waterHumidityStep must be in [1, 30] (nodes)");
     previewImages = luaData.getOrDefault("previewImages", previewImages);
     temperatureSpread = luaData.getOrDefault("temperatureSpread", temperatureSpread);
     humiditySpread = luaData.getOrDefault("humiditySpread", humiditySpread);
@@ -286,6 +317,7 @@ MapClimateDesc::MapClimateDesc(const kaguya::LuaTable& luaTable)
     mountainBuildSpacing = luaData.getOrDefault("mountainBuildSpacing", mountainBuildSpacing);
     if(mountainBuildSpacing == 1 || mountainBuildSpacing > 50)
         throw GameDataError(context + ": mountainBuildSpacing must be 0 (none) or in [2, 50] (nodes)");
+    mountainWeights = readWeightList(luaData, "mountainWeights", context, false);
     luaData.checkUnused();
 }
 

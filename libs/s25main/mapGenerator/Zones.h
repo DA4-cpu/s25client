@@ -27,9 +27,10 @@ void ApplyHeightCooling(Map& map, unsigned cooling);
 
 /**
  * Raise map.climate (humidity) at lakes (map.lakes) and rivers (map.riverCourse): By `humidity` points at the water,
- * less with the distance, nothing from maxDistance + 1 nodes on.
+ * `falloff` points less every `step` nodes away from it (falloff 0 = the same everywhere), nothing from
+ * maxDistance + 1 nodes on.
  */
-void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity);
+void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity, unsigned falloff, unsigned step);
 
 /**
  * Fill map.terrainFlags (bit flags of MapGenTerrain) from the textures, map.lakes and map.riverCourse:

@@ -14,6 +14,7 @@
 #include "figures/nofBuildingWorker.h"
 #include "figures/nofPigbreeder.h"
 #include "helpers/containerUtils.h"
+#include "helpers/format.hpp"
 #include "helpers/serializeEnums.h"
 #include "network/GameClient.h"
 #include "notifications/BuildingNote.h"
@@ -648,7 +649,8 @@ void nobUsual::OnOutOfResources()
     productivity = 0;
     std::fill(lastProductivities.begin(), lastProductivities.end(), 0);
 
-    const char* error;
+    std::string error;
+    const civ::CustomBuilding* customBld = civ::getActiveContent().GetBuilding(GetBuildingType());
     if(GetBuildingType() == BuildingType::Well)
         error = _("This well has dried out");
     else if(BuildingProperties::IsMine(GetBuildingType()))
@@ -657,7 +659,13 @@ void nobUsual::OnOutOfResources()
         error = _("No more stones in range");
     else if(GetBuildingType() == BuildingType::Fishery)
         error = _("No more fish in range");
-    else
+    else if(customBld && customBld->IsCollector())
+    {
+        // Collector of a workshop defined in lua (civilization mode)
+        const civ::CustomMapObject* obj =
+          civ::getActiveContent().GetMapObject(static_cast<unsigned>(customBld->collectObject));
+        error = helpers::format(_("No more %1% in range"), obj ? obj->title : std::string());
+    } else
         return;
 
     SendPostMessage(

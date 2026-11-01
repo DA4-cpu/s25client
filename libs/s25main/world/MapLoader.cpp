@@ -11,6 +11,9 @@
 #include "RttrForeachPt.h"
 #include "addons/const_addons.h"
 #include "buildings/nobHQ.h"
+#include "civ/Content.h"
+#include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "factories/BuildingFactory.h"
 #include "helpers/IdRange.h"
 #include "helpers/Range.h"
@@ -21,6 +24,7 @@
 #include "random/Random.h"
 #include "world/World.h"
 #include "nodeObjs/noAnimal.h"
+#include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noEnvObject.h"
 #include "nodeObjs/noGranite.h"
 #include "nodeObjs/noStaticObject.h"
@@ -454,11 +458,30 @@ void MapLoader::PlaceObjects(const libsiedler2::ArchivItem_Map& map)
             case 0: break;
 
             default:
+            {
+                // Objects defined in lua (civilization mode, e.g. loam deposits): type 0xD0 + index, info = size
+                const unsigned objType = map.getMapDataAt(MapLayer::ObjectType, pt.x, pt.y);
+                if(objType >= civ::FIRST_CUSTOM_MAP_OBJECT_TYPE
+                   && objType < civ::FIRST_CUSTOM_MAP_OBJECT_TYPE + civ::MAX_CUSTOM_MAP_OBJECTS)
+                {
+                    // Without the civilization mode they don't exist
+                    if(civ::isEnabled(world_))
+                    {
+                        const unsigned objIdx = objType - civ::FIRST_CUSTOM_MAP_OBJECT_TYPE;
+                        const civ::CustomMapObject* customObj = world_.GetTechTree().GetContent().GetMapObject(objIdx);
+                        if(customObj && lc >= 1 && lc <= customObj->sizes)
+                            obj = new noDeposit(objIdx, lc - 1u);
+                        else
+                            LOG.write(_("Unknown map object at %1%: (0x%2$x: 0x%3$x)\n")) % pt % objType % unsigned(lc);
+                    }
+                    break;
+                }
 #ifndef NDEBUG
                 unsigned unknownObj = map.getMapDataAt(MapLayer::ObjectType, pt.x, pt.y);
                 LOG.write(_("Unknown object at %1%: (0x%2$x: 0x%3$x)\n")) % pt % unknownObj % unsigned(lc);
 #endif // !NDEBUG
                 break;
+            }
         }
 
         world_.GetNodeInt(pt).obj = obj;

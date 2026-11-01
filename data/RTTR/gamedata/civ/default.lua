@@ -5,6 +5,7 @@
 -- Game data of the civilization mode (addon "Zivilisationsmodus").
 -- Loaded only when the addon is enabled.
 include "wares.lua"
+include "mapobjects.lua"
 include "workshops.lua"
 include "knowledge.lua"
 include "techtree.lua"

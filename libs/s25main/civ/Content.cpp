@@ -145,6 +145,22 @@ Content::Content(const WorldDescription& desc) : Content()
         SetTags(*good, entry.second.kind, entry.second.properties);
     }
 
+    // Map objects
+    if(desc.mapObjects.size() > MAX_CUSTOM_MAP_OBJECTS)
+        throw GameDataError("At most " + std::to_string(MAX_CUSTOM_MAP_OBJECTS) + " map objects can be defined");
+    for(const MapObjectDesc& objDesc : desc.mapObjects)
+    {
+        if(FindMapObject(objDesc.name))
+            throw GameDataError("Map object '" + objDesc.name + "' is defined twice");
+        CustomMapObject obj;
+        obj.name = objDesc.name;
+        obj.title = objDesc.title;
+        obj.sizes = objDesc.sizes;
+        obj.lookGranite = objDesc.look == "Granite2" ? 1u : 0u;
+        obj.tint = objDesc.tint;
+        mapObjects_.push_back(obj);
+    }
+
     // Workshops
     if(desc.workshops.size() > NUM_CUSTOM_BUILDINGS)
         throw GameDataError("At most " + std::to_string(NUM_CUSTOM_BUILDINGS) + " workshops can be defined");
@@ -223,6 +239,16 @@ Content::Content(const WorldDescription& desc) : Content()
             buildings_.push_back(std::move(bld));
             workers_.push_back(std::move(worker));
             continue;
+        }
+
+        if(!wsDesc.collectObject.empty())
+        {
+            const auto objIdx = FindMapObject(wsDesc.collectObject);
+            if(!objIdx)
+                throw GameDataError(context + ": unknown map object '" + wsDesc.collectObject
+                                    + "' to collect (define it with rttr:AddMapObject)");
+            bld.collectObject = static_cast<int>(*objIdx);
+            bld.collectRadius = wsDesc.collectRadius;
         }
 
         // Inputs
@@ -429,6 +455,16 @@ std::optional<BuildingType> Content::FindBuilding(const std::string& identifier,
     return std::nullopt;
 }
 
+std::optional<unsigned> Content::FindMapObject(const std::string& identifier) const
+{
+    for(unsigned i = 0; i < mapObjects_.size(); ++i)
+    {
+        if(mapObjects_[i].name == identifier)
+            return i;
+    }
+    return std::nullopt;
+}
+
 std::vector<std::string> Content::GetSignature() const
 {
     std::vector<std::string> result;
@@ -436,23 +472,33 @@ std::vector<std::string> Content::GetSignature() const
         result.push_back("W:" + ware.name);
     for(const CustomBuilding& bld : buildings_)
         result.push_back("B:" + bld.name);
+    for(const CustomMapObject& obj : mapObjects_)
+        result.push_back("O:" + obj.name);
     return result;
 }
 
 bool Content::IsCompatibleTo(const std::vector<std::string>& savedSignature) const
 {
-    std::vector<std::string> savedWares, savedBuildings;
+    std::vector<std::string> savedWares, savedBuildings, savedObjects;
     for(const std::string& entry : savedSignature)
     {
         if(entry.compare(0, 2, "W:") == 0)
             savedWares.push_back(entry.substr(2));
         else if(entry.compare(0, 2, "B:") == 0)
             savedBuildings.push_back(entry.substr(2));
+        else if(entry.compare(0, 2, "O:") == 0)
+            savedObjects.push_back(entry.substr(2));
         else
             return false;
     }
-    if(savedWares.size() > wares_.size() || savedBuildings.size() > buildings_.size())
+    if(savedWares.size() > wares_.size() || savedBuildings.size() > buildings_.size()
+       || savedObjects.size() > mapObjects_.size())
         return false;
+    for(unsigned i = 0; i < savedObjects.size(); ++i)
+    {
+        if(savedObjects[i] != mapObjects_[i].name)
+            return false;
+    }
     for(unsigned i = 0; i < savedWares.size(); ++i)
     {
         if(savedWares[i] != wares_[i].name)
