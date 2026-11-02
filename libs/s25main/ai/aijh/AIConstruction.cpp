@@ -39,7 +39,7 @@ namespace AIJH {
 
 namespace {
     /// Expansion: At most this many military building sites at the same time (incl. just ordered ones)
-    constexpr unsigned MAX_MILITARY_SITES = 6;
+    constexpr unsigned MAX_MILITARY_SITES = 20;
     /// Expansion: Soldiers that must be in the warehouses for each military building site (incl. the new one)
     constexpr unsigned MIN_SOLDIERS_PER_MILITARY_SITE = 1;
     /// Buildings that are handled before all others. If material is short, it is kept free for them

@@ -27,7 +27,7 @@ Ohne Zivilisationsmodus gibt es diese Objekte im Spiel nicht (sie werden beim La
 rttr:AddMapObject{
     name = "LoamDeposit",
     title = "Lehmvorkommen",
-    sizes = 16,         
+    sizes = 8,         
     look = "Granite1",
     tint = 0xC08050,    
 }
@@ -35,9 +35,9 @@ rttr:AddMapObject{
 rttr:AddMapObject{
     name = "PapyrusDeposit",
     title = "Papyrusvorkommen",
-    sizes = 16,          
+    sizes = 8,          
     look = "Granite1",
-    tint = 0xC01010,    
+    tint = 0xc0ba10,    
 }
 
 rttr:AddMapObject{

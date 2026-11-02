@@ -229,11 +229,16 @@ rttr:AddMapResource{
 	object = "trees",
 	amount = "forest",
 	terrain = { "land", "mountain" },
+	height = {0, 80},
 	cluster = 12, -- PLATZHALTER
 	density = 85, -- PLATZHALTER
 	-- In heißen, trockenen Gebieten weniger Wald. PLATZHALTER
 	weights = {
-		{ temperature = {70, 100}, humidity = {0, 30}, factor = 0.3 }
+		{ humidity = {80, 100}, factor = 1 }, 
+		{ humidity = {60, 80}, factor = 0.75}, 
+		{ humidity = {40, 60}, factor = 0.5 },                           
+		{ humidity = {20, 40}, factor = 0.25 },                           
+		{ humidity = {0, 20}, factor = 0 }                            
 	}
 }
 
@@ -242,7 +247,7 @@ rttr:AddMapResource{
 	object = "stones",
 	amount = "stonePiles",
 	terrain = { "land", "mountain" },
-	cluster = 8, -- PLATZHALTER
+	cluster = 1, 
 	density = 80, -- PLATZHALTER
 	-- Im feuchten, warmen Gebiet sind Steine selten, weil sie von der Vegetation verdeckt werden (Konzept).
 	weights = {
@@ -254,29 +259,29 @@ rttr:AddMapResource{
 rttr:AddMapResource{
 	name = "Lehm",
 	object = "LoamDeposit",
-	amount = 1.5, -- PLATZHALTER
+	amount = 10,
 	terrain = { "land" },
 	cluster = 6, -- PLATZHALTER
 	density = 60, -- PLATZHALTER
 	weights = {
-		{ humidity = {66, 100}, factor = 4 }, 
-		{ humidity = {33, 66}, factor = 1 },                           
+		{ humidity = {66, 100}, factor = 1 }, 
+		{ humidity = {33, 66}, factor = 0.5 },                           
 		{ humidity = {0, 33}, factor = 0.0 }                            
 	}
 }
 rttr:AddMapResource{
 	name = "Papyrusvorkommen",
 	object = "PapyrusDeposit",
-	amount = 2, 
+	amount = 50, 
 	terrain = { "shore_fresh" },
-	temperature = {67, 100}
-	zone = { "Afrika"}
-	cluster = 10, -- PLATZHALTER
+	temperature = {50, 100},
+	zones = { "Afrika" },
+	cluster = 1, -- PLATZHALTER
 	density = 100, -- PLATZHALTER
 	weights = {
-		{ humidity = {67, 100}, factor = 4 }, 
-		{ humidity = {33, 67}, factor = 2 },                           
-		{ humidity = {0, 33}, factor = 0.3 }                            
+		{ humidity = {67, 100}, factor = 1 }, 
+		{ humidity = {33, 67}, factor = 0.5 },                           
+		{ humidity = {0, 33}, factor = 0 }                            
 	}
 }
 rttr:AddMapResource{
