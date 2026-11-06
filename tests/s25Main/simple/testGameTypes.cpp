@@ -73,14 +73,14 @@ BOOST_AUTO_TEST_CASE(ResourceValues)
     BOOST_TEST(res2.getAmount() < 17u);
 }
 
-BOOST_AUTO_TEST_CASE(ResourceConvertToFromUInt8)
+BOOST_AUTO_TEST_CASE(ResourceConvertToFromUInt16)
 {
     for(const auto type : helpers::enumRange<ResourceType>())
     {
         for(auto amount : {1u, 5u, 15u})
         {
             const Resource res(type, amount);
-            const Resource res2(static_cast<uint8_t>(res));
+            const Resource res2(static_cast<uint16_t>(res));
             BOOST_TEST(res2.getType() == type);
             if(type == ResourceType::Nothing)
                 amount = 0u;
@@ -91,6 +91,9 @@ BOOST_AUTO_TEST_CASE(ResourceConvertToFromUInt8)
     const Resource res(0xFF);
     BOOST_TEST(res.getType() == ResourceType::Nothing);
     BOOST_TEST(res.getAmount() == 0u);
+    const Resource res2(0xFF05);
+    BOOST_TEST(res2.getType() == ResourceType::Nothing);
+    BOOST_TEST(res2.getAmount() == 0u);
 }
 
 BOOST_AUTO_TEST_CASE(AIResourcesMatchValues)

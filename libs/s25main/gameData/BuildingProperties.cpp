@@ -4,6 +4,7 @@
 
 #include "BuildingProperties.h"
 #include "helpers/EnumRange.h"
+#include "gameData/BuildingConsts.h"
 
 const std::array<BuildingType, 4> BuildingProperties::militaryBldTypes = []() {
     std::array<BuildingType, 4> result{};
@@ -38,7 +39,8 @@ bool BuildingProperties::IsMine(BuildingType bld)
         case BuildingType::CoalMine:
         case BuildingType::IronMine:
         case BuildingType::GoldMine: return true;
-        default: return false;
+        // Mines of the civilization mode (workshops with size = "mine")
+        default: return isCustomBuilding(bld) && BUILDING_SIZE[bld] == BuildingQuality::Mine;
     }
 }
 

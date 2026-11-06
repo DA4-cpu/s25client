@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "RttrForeachPt.h"
+#include "civ/MapCodes.h"
 #include "mapGenFixtures.h"
 #include "mapGenerator/Resources.h"
 #include "mapGenerator/TextureHelper.h"
@@ -222,6 +223,36 @@ BOOST_AUTO_TEST_CASE(PlaceResources_places_map_objects_of_the_civilization_mode)
             BOOST_TEST_REQUIRE(map.objectTypes[pt] != 0xD0);
     }
     BOOST_TEST(numDeposits > 20u);
+}
+
+BOOST_AUTO_TEST_CASE(PlaceResources_places_ores_of_the_civilization_mode)
+{
+    MapResourceDesc coal = makeRule("coal", 30, toFlag(MapGenTerrain::Mountain));
+    coal.cluster = 4;
+    desc.resources.push_back(coal);
+    MapResourceDesc copper = makeRule("Copper", 30, toFlag(MapGenTerrain::Mountain));
+    copper.cluster = 4;
+    desc.resources.push_back(copper);
+    // Ores are numbered separately from the map objects: Copper is ore 1
+    const std::vector<CustomMapObjectInfo> customObjects{
+      {"LoamDeposit", 4, false}, {"Tin", 0, true}, {"Copper", 0, true}};
+    RandomUtility rnd(5);
+    PlaceResources(map, rnd, settings, desc, customObjects);
+    unsigned numCoal = 0, numCopper = 0;
+    RTTR_FOREACH_PT(MapPoint, size)
+    {
+        const uint8_t resource = map.resources[pt];
+        if(resource > R_Coal && resource < R_Coal + 8)
+            ++numCoal;
+        else if(const auto ore = civ::decodeOre(resource))
+        {
+            BOOST_TEST_REQUIRE(ore->idx == 1u);
+            BOOST_TEST_REQUIRE(map.textureMap.All(pt, IsMinableMountain));
+            ++numCopper;
+        }
+    }
+    BOOST_TEST(numCoal > 10u);
+    BOOST_TEST(numCopper > 10u);
 }
 
 BOOST_AUTO_TEST_CASE(PlaceResources_places_clusters)

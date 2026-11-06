@@ -155,10 +155,44 @@ Content::Content(const WorldDescription& desc) : Content()
         CustomMapObject obj;
         obj.name = objDesc.name;
         obj.title = objDesc.title;
-        obj.sizes = objDesc.sizes;
+        obj.sizes = std::min(objDesc.sizes, MAX_MAP_OBJECT_SIZES);
         obj.lookGranite = objDesc.look == "Granite2" ? 1u : 0u;
         obj.tint = objDesc.tint;
+        obj.growGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(objDesc.growTime)));
+        if(objDesc.growTime > 0 && obj.growGFs == 0)
+            obj.growGFs = 1;
+        obj.plantSize = objDesc.plantSize > 0 ? objDesc.plantSize : obj.sizes;
+        // Where it grows naturally: The rules of the map generator for this object
+        for(const MapResourceDesc& rule : desc.mapGen.resources)
+        {
+            if(rule.object == obj.name)
+                obj.growRules.push_back(rule);
+        }
         mapObjects_.push_back(obj);
+    }
+
+    // Ores
+    if(desc.ores.size() > NUM_CUSTOM_ORES)
+        throw GameDataError("At most " + std::to_string(NUM_CUSTOM_ORES) + " ores can be defined");
+    for(const OreDesc& oreDesc : desc.ores)
+    {
+        const std::string context = "Ore '" + oreDesc.name + "'";
+        if(FindOre(oreDesc.name) || FindMapObject(oreDesc.name)
+           || helpers::contains(getMapGenObjectNames(), oreDesc.name))
+            throw GameDataError(context + " is defined twice (or is the name of a map object)");
+        CustomOre ore;
+        ore.name = oreDesc.name;
+        ore.title = oreDesc.title;
+        if(oreDesc.look == "Gold")
+            ore.look = ResourceType::Gold;
+        else if(oreDesc.look == "Coal")
+            ore.look = ResourceType::Coal;
+        else if(oreDesc.look == "Granite")
+            ore.look = ResourceType::Granite;
+        else
+            ore.look = ResourceType::Iron;
+        ore.tint = oreDesc.tint;
+        ores_.push_back(ore);
     }
 
     // Workshops
@@ -180,6 +214,8 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.size = BuildingQuality::Hut;
         else if(wsDesc.size == "medium")
             bld.size = BuildingQuality::House;
+        else if(wsDesc.size == "mine")
+            bld.size = BuildingQuality::Mine;
         else
             bld.size = BuildingQuality::Castle;
 
@@ -250,6 +286,26 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.collectObject = static_cast<int>(*objIdx);
             bld.collectRadius = wsDesc.collectRadius;
         }
+        if(!wsDesc.plantObject.empty())
+        {
+            const auto objIdx = FindMapObject(wsDesc.plantObject);
+            if(!objIdx)
+                throw GameDataError(context + ": unknown map object '" + wsDesc.plantObject
+                                    + "' to plant (define it with rttr:AddMapObject)");
+            if(!mapObjects_[*objIdx].CanBePlanted())
+                throw GameDataError(context + ": the map object '" + wsDesc.plantObject
+                                    + "' can not be planted (it needs growTime in rttr:AddMapObject)");
+            bld.plantObject = static_cast<int>(*objIdx);
+            bld.plantRadius = wsDesc.plantRadius;
+        }
+        if(!wsDesc.mineResource.empty())
+        {
+            const auto ore = FindOre(wsDesc.mineResource);
+            if(!ore)
+                throw GameDataError(context + ": unknown ore '" + wsDesc.mineResource
+                                    + "' to mine (define it with rttr:AddOre)");
+            bld.mineResource = *ore;
+        }
 
         // Inputs
         std::vector<GoodType> inputWares;
@@ -275,8 +331,14 @@ Content::Content(const WorldDescription& desc) : Content()
             throw GameDataError(context + ": the inputs match more than 3 different wares");
 
         // Output
-        const std::vector<GoodType> outputMatches = FindWares(wsDesc.output);
-        if(outputMatches.empty())
+        const std::vector<GoodType> outputMatches =
+          wsDesc.output.empty() ? std::vector<GoodType>() : FindWares(wsDesc.output);
+        if(wsDesc.output.empty())
+        {
+            // Plantation that only plants (like the forester)
+            if(wsDesc.inheritProperties || !wsDesc.outputChoice.empty())
+                throw GameDataError(context + ": inheritProperties and outputChoice need an output");
+        } else if(outputMatches.empty())
             throw GameDataError(context + ": output " + joinTags(wsDesc.output) + " matches no ware");
         if(wsDesc.inheritProperties)
         {
@@ -321,7 +383,7 @@ Content::Content(const WorldDescription& desc) : Content()
             }
             bld.productChoices = outputMatches;
             bld.product = outputMatches.front();
-        } else
+        } else if(!wsDesc.output.empty())
         {
             if(outputMatches.size() != 1u)
             {
@@ -333,7 +395,10 @@ Content::Content(const WorldDescription& desc) : Content()
         }
 
         bld.workDesc.job = getCustomJob(i);
-        bld.workDesc.producedWare = bld.GetProduct(std::nullopt);
+        if(wsDesc.output.empty())
+            bld.workDesc.producedWare = std::nullopt;
+        else
+            bld.workDesc.producedWare = bld.GetProduct(std::nullopt);
         bld.workDesc.waresNeeded = makeWaresNeeded(inputWares);
         bld.workDesc.numSpacesPerWare = static_cast<uint8_t>(wsDesc.storage);
         bld.workDesc.useOneWareEach = wsDesc.consumeEach;
@@ -465,6 +530,24 @@ std::optional<unsigned> Content::FindMapObject(const std::string& identifier) co
     return std::nullopt;
 }
 
+const CustomOre* Content::GetOre(ResourceType type) const
+{
+    if(!isCustomOre(type))
+        return nullptr;
+    const unsigned idx = getCustomOreIdx(type);
+    return idx < ores_.size() ? &ores_[idx] : nullptr;
+}
+
+std::optional<ResourceType> Content::FindOre(const std::string& identifier) const
+{
+    for(unsigned i = 0; i < ores_.size(); ++i)
+    {
+        if(ores_[i].name == identifier)
+            return getCustomOre(i);
+    }
+    return std::nullopt;
+}
+
 std::vector<std::string> Content::GetSignature() const
 {
     std::vector<std::string> result;
@@ -474,12 +557,14 @@ std::vector<std::string> Content::GetSignature() const
         result.push_back("B:" + bld.name);
     for(const CustomMapObject& obj : mapObjects_)
         result.push_back("O:" + obj.name);
+    for(const CustomOre& ore : ores_)
+        result.push_back("R:" + ore.name);
     return result;
 }
 
 bool Content::IsCompatibleTo(const std::vector<std::string>& savedSignature) const
 {
-    std::vector<std::string> savedWares, savedBuildings, savedObjects;
+    std::vector<std::string> savedWares, savedBuildings, savedObjects, savedOres;
     for(const std::string& entry : savedSignature)
     {
         if(entry.compare(0, 2, "W:") == 0)
@@ -488,12 +573,19 @@ bool Content::IsCompatibleTo(const std::vector<std::string>& savedSignature) con
             savedBuildings.push_back(entry.substr(2));
         else if(entry.compare(0, 2, "O:") == 0)
             savedObjects.push_back(entry.substr(2));
+        else if(entry.compare(0, 2, "R:") == 0)
+            savedOres.push_back(entry.substr(2));
         else
             return false;
     }
     if(savedWares.size() > wares_.size() || savedBuildings.size() > buildings_.size()
-       || savedObjects.size() > mapObjects_.size())
+       || savedObjects.size() > mapObjects_.size() || savedOres.size() > ores_.size())
         return false;
+    for(unsigned i = 0; i < savedOres.size(); ++i)
+    {
+        if(savedOres[i] != ores_[i].name)
+            return false;
+    }
     for(unsigned i = 0; i < savedObjects.size(); ++i)
     {
         if(savedObjects[i] != mapObjects_[i].name)

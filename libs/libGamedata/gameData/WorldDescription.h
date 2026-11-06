@@ -41,6 +41,8 @@ struct WorldDescription
     std::map<std::string, WareTagsDesc> wareTags;
     /// Objects on the map that workshops can collect (civilization mode) in order of definition
     std::vector<MapObjectDesc> mapObjects;
+    /// Ores in the mountains (civilization mode) in order of definition
+    std::vector<OreDesc> ores;
     /// Workshops (simple production buildings) of the civilization mode in order of definition
     std::vector<WorkshopDesc> workshops;
     /// Byproducts of buildings in the civilization mode in order of definition

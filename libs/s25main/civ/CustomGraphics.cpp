@@ -133,8 +133,16 @@ WorkAnimation getLookWorkAnimation(Job look)
     {
         case Job::Planer: return WorkAnimation{253, 20, 80, DrawPoint(0, 0), 76, 5, 200};
         case Job::Woodcutter: return WorkAnimation{24, 8, 64, DrawPoint(-9, 0), 53, 3, 255};
-        default: return WorkAnimation{40, 8, 64, DrawPoint(0, 0), 56, 5, 255}; // Stonemason
+        case Job::Farmer: return WorkAnimation{140, 8, 88, DrawPoint(0, 0), 64, 3, 255}; // Harvest with the scythe
+        default: return WorkAnimation{40, 8, 64, DrawPoint(0, 0), 56, 5, 255};           // Stonemason
     }
+}
+
+WorkAnimation getLookPlantAnimation(Job look)
+{
+    if(look == Job::Farmer)
+        return WorkAnimation{132, 8, 88, DrawPoint(0, 0), 0, 0, 0}; // Sow (no sound)
+    return WorkAnimation{48, 36, 36, DrawPoint(0, 0), 76, 7, 200};  // Forester: Dig with the shovel and plant
 }
 
 const char* getDirectionName(Direction dir)
@@ -324,6 +332,7 @@ void CustomGraphics::clear(Loader& loader)
     wares_ = {};
     buildings_ = {};
     mapObjects_.clear();
+    oreSigns_.clear();
     sprites_.clear();
     bitmaps_.clear();
     numLoaded_ = numTemplates_ = 0;
@@ -350,13 +359,18 @@ void CustomGraphics::fillCaches(Loader& loader, glTexturePacker* stp, const Cont
         const BuildingType bld = getCustomBuilding(i);
         const CustomBuilding& building = *content.GetBuilding(bld);
         const CustomWorker* worker = content.GetWorker(getCustomJob(i));
-        loadBuilding(loader, stp, bld, building.name, building.look, worker ? worker->look : Job::Helper);
+        loadBuilding(loader, stp, bld, building.name, building.look, worker ? worker->look : Job::Helper,
+                     building.IsPlanter());
     }
     mapObjects_.resize(content.GetMapObjects().size());
     for(unsigned i = 0; i < content.GetMapObjects().size(); ++i)
         loadMapObject(loader, stp, i, content.GetMapObjects()[i]);
+    oreSigns_.resize(content.GetOres().size());
+    for(unsigned i = 0; i < content.GetOres().size(); ++i)
+        loadOre(loader, i, content.GetOres()[i]);
 
-    if(content.GetNumWares() > 0 || content.GetNumBuildings() > 0 || !content.GetMapObjects().empty())
+    if(content.GetNumWares() > 0 || content.GetNumBuildings() > 0 || !content.GetMapObjects().empty()
+       || !content.GetOres().empty())
     {
         LOG.write("Civilization mode: %1% own images loaded from %2%, %3% new templates written to %4%\n") % numLoaded_
           % settings_.folder % numTemplates_ % settings_.templateFolder;
@@ -575,7 +589,7 @@ void CustomGraphics::loadWare(Loader& loader, glTexturePacker* stp, GoodType goo
 }
 
 void CustomGraphics::loadBuilding(Loader& loader, glTexturePacker* stp, BuildingType bld, const std::string& name,
-                                  BuildingType look, Job lookJob)
+                                  BuildingType look, Job lookJob, bool plants)
 {
     const bfs::path templatePath = settings_.templateFolder.empty() ? bfs::path() : settings_.templateFolder / name;
     const Folder folder(settings_.folder / name, templatePath);
@@ -709,24 +723,34 @@ void CustomGraphics::loadBuilding(Loader& loader, glTexturePacker* stp, Building
         }
     }
 
-    // Work animation (collectors): Templates of all images of the placeholder, own images 0, 1, 2, ... as long as
-    // they exist
-    const WorkAnimation lookWork = getLookWorkAnimation(lookJob);
-    const auto getLookFrame = [&loader, &lookWork](unsigned frame) -> const ArchivItem_BitmapBase* {
+    // Work animation (collectors, plantations): Templates of all images of the placeholder, own images 0, 1, 2, ...
+    // as long as they exist
+    gfx.workFrames = loadAnimation(loader, folder, "Arbeiter_Arbeit", getLookWorkAnimation(lookJob));
+    if(plants)
+        gfx.plantFrames = loadAnimation(loader, folder, "Arbeiter_Pflanzen", getLookPlantAnimation(lookJob));
+}
+
+std::vector<glArchivItem_Bitmap_Player*> CustomGraphics::loadAnimation(Loader& loader, const Folder& folder,
+                                                                       const std::string& name,
+                                                                       const WorkAnimation& lookAnim)
+{
+    const auto getLookFrame = [&loader, &lookAnim](unsigned frame) -> const ArchivItem_BitmapBase* {
         return static_cast<const libsiedler2::ArchivItem_Bitmap_Player*>(
-          loader.GetPlayerImage("rom_bobs", lookWork.firstImage + frame % lookWork.numImages));
+          loader.GetPlayerImage("rom_bobs", lookAnim.firstImage + frame % lookAnim.numImages));
     };
-    for(unsigned frame = 0; frame < lookWork.numImages; ++frame)
-        writeTemplate(folder, withNumber("Arbeiter_Arbeit", frame), getLookFrame(frame), false, lookWork.offset);
+    for(unsigned frame = 0; frame < lookAnim.numImages; ++frame)
+        writeTemplate(folder, withNumber(name, frame), getLookFrame(frame), false, lookAnim.offset);
+    std::vector<glArchivItem_Bitmap_Player*> frames;
     for(unsigned frame = 0;; ++frame)
     {
         // Anchor relative to the figure (the placeholder is drawn with an offset)
-        glArchivItem_Bitmap_Player* image = loadPlayerImage(folder, withNumber("Arbeiter_Arbeit", frame),
-                                                            getAnchorRef(getLookFrame(frame), lookWork.offset));
+        glArchivItem_Bitmap_Player* image =
+          loadPlayerImage(folder, withNumber(name, frame), getAnchorRef(getLookFrame(frame), lookAnim.offset));
         if(!image)
             break;
-        gfx.workFrames.push_back(image);
+        frames.push_back(image);
     }
+    return frames;
 }
 
 void CustomGraphics::loadMapObject(Loader& loader, glTexturePacker* stp, unsigned objIdx, const CustomMapObject& obj)
@@ -760,6 +784,26 @@ void CustomGraphics::loadMapObject(Loader& loader, glTexturePacker* stp, unsigne
         sprites[state] = sprite.get();
         sprites_.push_back(std::move(sprite));
     }
+}
+
+void CustomGraphics::loadOre(Loader& loader, unsigned oreIdx, const CustomOre& ore)
+{
+    const Folder folder(settings_.folder / ore.name,
+                        settings_.templateFolder.empty() ? bfs::path() : settings_.templateFolder / ore.name);
+    for(unsigned amountIdx = 0; amountIdx < oreSigns_[oreIdx].size(); ++amountIdx)
+    {
+        const ArchivItem_BitmapBase* lookImage = loader.GetMapImage(getOreSignImage(ore.look, amountIdx));
+        const std::string imageName = "Schild" + std::to_string(amountIdx);
+        oreSigns_[oreIdx][amountIdx] = loadImage(folder, imageName, getAnchorRef(lookImage));
+        writeTemplate(folder, imageName, lookImage, false, DrawPoint(0, 0), ore.tint);
+    }
+}
+
+glArchivItem_Bitmap* CustomGraphics::GetOreSign(unsigned oreIdx, unsigned amountIdx) const
+{
+    if(oreIdx >= oreSigns_.size() || amountIdx >= oreSigns_[oreIdx].size())
+        return nullptr;
+    return oreSigns_[oreIdx][amountIdx];
 }
 
 glArchivItem_Bitmap* CustomGraphics::GetWareIcon(GoodType good) const
@@ -801,6 +845,12 @@ const std::vector<glArchivItem_Bitmap_Player*>& CustomGraphics::GetWorkFrames(Jo
 {
     static const std::vector<glArchivItem_Bitmap_Player*> empty;
     return isCustomJob(job) ? buildings_[getCustomJobIdx(job)].workFrames : empty;
+}
+
+const std::vector<glArchivItem_Bitmap_Player*>& CustomGraphics::GetPlantFrames(Job job) const
+{
+    static const std::vector<glArchivItem_Bitmap_Player*> empty;
+    return isCustomJob(job) ? buildings_[getCustomJobIdx(job)].plantFrames : empty;
 }
 
 glSmartBitmap* CustomGraphics::GetMapObject(unsigned objIdx, unsigned state) const

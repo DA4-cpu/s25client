@@ -23,6 +23,7 @@
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
+#include "figures/nofCustomPlanter.h"
 #include "figures/nofPassiveSoldier.h"
 #include "helpers/EnumRange.h"
 #include "helpers/IdRange.h"
@@ -1207,10 +1208,15 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             break;
         }
         default:
-            // Civilization mode: Workshops collecting map objects (e.g. loam pit) go next to the objects
+            // Civilization mode: Workshops collecting map objects (e.g. loam pit) go next to the objects, mines to
+            // their ore, plantations where they can plant
             if(const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(type);
                custom && custom->IsCollector())
                 foundPos = FindCollectorPosition(around, type, *custom, searchRadius);
+            else if(custom && custom->IsMine())
+                foundPos = FindCustomMinePosition(around, type, *custom, searchRadius);
+            else if(custom && custom->IsPlanter())
+                foundPos = FindPlantationPosition(around, type, *custom, searchRadius);
             else
                 foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
             break;
@@ -1243,6 +1249,68 @@ MapPoint AIPlayerJH::FindCollectorPosition(const MapPoint& around, BuildingType 
         if(numObjects > bestNumObjects)
         {
             bestNumObjects = numObjects;
+            bestPos = curPt;
+        }
+    }
+    return bestPos;
+}
+
+MapPoint AIPlayerJH::FindCustomMinePosition(const MapPoint& around, BuildingType type,
+                                            const civ::CustomBuilding& building, unsigned radius) const
+{
+    // Most ore in range of the miner (like the resource maps for the built-in mines)
+    MapPoint bestPos = MapPoint::Invalid();
+    unsigned bestAmount = 0;
+    for(const MapPoint& curPt : gwb.GetPointsInRadius(around, radius))
+    {
+        if(!aiMap[curPt].reachable || !aii.IsOwnTerritory(curPt)
+           || !canUseBq(aii.GetBuildingQuality(curPt), BuildingQuality::Mine))
+            continue;
+        if(aii.isBuildingNearby(type, curPt, MINER_RADIUS))
+            continue;
+        unsigned amount = 0;
+        for(const MapPoint& pt : gwb.GetPointsInRadiusWithCenter(curPt, MINER_RADIUS))
+        {
+            const Resource res = gwb.GetNode(pt).resources;
+            if(res.getType() == building.mineResource)
+                amount += res.getAmount();
+        }
+        if(amount > bestAmount)
+        {
+            bestAmount = amount;
+            bestPos = curPt;
+        }
+    }
+    return bestPos;
+}
+
+MapPoint AIPlayerJH::FindPlantationPosition(const MapPoint& around, BuildingType type,
+                                            const civ::CustomBuilding& building, unsigned radius) const
+{
+    // Most places to plant (and grown objects to harvest) in range, but the worker should not walk too far
+    const unsigned plantRadius = std::max(1u, std::min(building.plantRadius, 6u));
+    constexpr unsigned minPlaces = 3;
+    MapPoint bestPos = MapPoint::Invalid();
+    unsigned bestNumPlaces = minPlaces - 1u;
+    for(const MapPoint& curPt : gwb.GetPointsInRadius(around, radius))
+    {
+        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || !aii.IsOwnTerritory(curPt)
+           || aii.isHarborPosClose(curPt, 2, true) || !canUseBq(aii.GetBuildingQuality(curPt), BUILDING_SIZE[type]))
+            continue;
+        if(aii.isBuildingNearby(type, curPt, plantRadius * 2u))
+            continue;
+        unsigned numPlaces = 0;
+        for(const MapPoint& pt : gwb.GetPointsInRadius(curPt, plantRadius))
+        {
+            const auto* deposit = gwb.GetSpecObj<noDeposit>(pt);
+            if(deposit && static_cast<int>(deposit->GetObjectIdx()) == building.plantObject)
+                ++numPlaces;
+            else if(nofCustomPlanter::CanPlantAt(gwb, pt, building))
+                ++numPlaces;
+        }
+        if(numPlaces > bestNumPlaces)
+        {
+            bestNumPlaces = numPlaces;
             bestPos = curPt;
         }
     }

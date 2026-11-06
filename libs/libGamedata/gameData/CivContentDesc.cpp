@@ -92,8 +92,8 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     title = luaData.getOrDefault("title", name);
     description = luaData.getOrDefault("description", std::string());
     luaData.getOrThrow(size, "size");
-    if(size != "small" && size != "medium" && size != "large")
-        throw GameDataError(context + ": size must be \"small\", \"medium\" or \"large\"");
+    if(size != "small" && size != "medium" && size != "large" && size != "mine")
+        throw GameDataError(context + ": size must be \"small\", \"medium\", \"large\" or \"mine\"");
     cost = luaData.getOrDefault("cost", std::map<std::string, unsigned>());
     luaData.getOrThrow(look, "look");
 
@@ -138,6 +138,31 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         if(!inputs.empty() || isLibrary)
             throw GameDataError(context + ": a workshop that collects map objects has no inputs and is no library");
     }
+    if(auto plantTable = luaData.getOptional<kaguya::LuaTable>("plant"))
+    {
+        CheckedLuaTable plantData(*plantTable);
+        plantData.getOrThrow(plantObject, "object");
+        plantData.getOrThrow(plantRadius, "radius");
+        plantData.checkUnused();
+        if(plantRadius == 0 || plantRadius > 20)
+            throw GameDataError(context + ": plant radius must be in [1, 20] (nodes)");
+        if(isLibrary || !collectObject.empty())
+            throw GameDataError(context
+                                + ": a plantation is no library and does not collect (it harvests its own "
+                                  "objects if it has an output)");
+    }
+    if(auto mineTable = luaData.getOptional<kaguya::LuaTable>("mine"))
+    {
+        CheckedLuaTable mineData(*mineTable);
+        mineData.getOrThrow(mineResource, "resource");
+        mineData.checkUnused();
+        if(isLibrary || !collectObject.empty() || !plantObject.empty())
+            throw GameDataError(context + ": a mine is no library, collector or plantation");
+    }
+    if((size == "mine") != !mineResource.empty())
+        throw GameDataError(context + ": size = \"mine\" and mine = { resource = ... } belong together");
+    if(const auto knowledgeTable = luaData.getOptional<kaguya::LuaTable>("knowledge"))
+        knowledge = parseKnowledge(*knowledgeTable, true, context + ", knowledge");
     if(isLibrary && !inputs.empty())
     {
         throw GameDataError(context
@@ -148,10 +173,10 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     {
         if(outputValue)
             throw GameDataError(context + ": a library produces nothing (no output)");
-    } else if(!outputValue)
-        throw GameDataError(context + ": output is missing");
-    else
+    } else if(outputValue)
         output = parseTagQuery(*outputValue, context + ", output");
+    else if(plantObject.empty())
+        throw GameDataError(context + ": output is missing (only a plantation may have none: then it only plants)");
     inheritProperties = luaData.getOrDefault("inheritProperties", false);
     outputChoice = luaData.getOrDefault("outputChoice", std::string());
     if(!outputChoice.empty() && outputChoice != "knowledge")
@@ -187,6 +212,29 @@ MapObjectDesc::MapObjectDesc(const kaguya::LuaTable& luaTable)
     luaData.getOrThrow(look, "look");
     if(look != "Granite1" && look != "Granite2")
         throw GameDataError(context + ": look must be \"Granite1\" or \"Granite2\"");
+    tint = luaData.getOrDefault("tint", tint);
+    if(tint > 0xFFFFFF)
+        throw GameDataError(context + ": tint must be a color like 0xB07040");
+    growTime = luaData.getOrDefault("growTime", growTime);
+    if(growTime > 3600)
+        throw GameDataError(context + ": growTime must be at most 3600 (seconds)");
+    plantSize = luaData.getOrDefault("plantSize", plantSize);
+    if(plantSize > sizes)
+        throw GameDataError(context + ": plantSize must be in [1, sizes]");
+    if(plantSize > 0 && growTime == 0)
+        throw GameDataError(context + ": plantSize needs growTime (only planted objects grow)");
+    luaData.checkUnused();
+}
+
+OreDesc::OreDesc(const kaguya::LuaTable& luaTable)
+{
+    CheckedLuaTable luaData(luaTable);
+    name = readIdentifier(luaData, "Ore");
+    const std::string context = "Ore '" + name + "'";
+    title = luaData.getOrDefault("title", name);
+    luaData.getOrThrow(look, "look");
+    if(look != "Iron" && look != "Gold" && look != "Coal" && look != "Granite")
+        throw GameDataError(context + ": look must be \"Iron\", \"Gold\", \"Coal\" or \"Granite\"");
     tint = luaData.getOrDefault("tint", tint);
     if(tint > 0xFFFFFF)
         throw GameDataError(context + ": tint must be a color like 0xB07040");

@@ -6,6 +6,7 @@
 
 #include "helpers/OptionalEnum.h"
 #include "nofWorkman.h"
+#include "gameTypes/Resource.h"
 
 class SerializedGameData;
 class nobUsual;
@@ -21,8 +22,10 @@ class nofCustomWorker : public nofWorkman
     unsigned short GetCarryID() const override;
     helpers::OptionalEnum<GoodType> ProduceWare() override;
     bool StartWorking() override;
-    /// A librarian never "works": the library only stores media
+    /// A librarian never "works": the library only stores media. A miner needs the ore in range, too
     bool AreWaresAvailable() const override;
+    /// Ore of the mine of the worker or Nothing if the workshop is no mine
+    ResourceType GetMineResource() const;
 
 public:
     nofCustomWorker(Job job, MapPoint pos, unsigned char player, nobUsual* workplace);

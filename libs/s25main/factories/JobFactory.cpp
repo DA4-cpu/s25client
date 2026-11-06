@@ -22,6 +22,7 @@
 #include "figures/nofCatapultMan.h"
 #include "figures/nofCharburner.h"
 #include "figures/nofCustomCollector.h"
+#include "figures/nofCustomPlanter.h"
 #include "figures/nofCustomWorker.h"
 #include "figures/nofDonkeybreeder.h"
 #include "figures/nofFarmer.h"
@@ -64,6 +65,8 @@ std::unique_ptr<noFigure> JobFactory::CreateJob(const Job job_id, const MapPoint
     {
         if(nofCustomCollector::GetCollectRadius(job_id) > 0)
             return std::make_unique<nofCustomCollector>(job_id, pt, player, &checkedCast<nobUsual>(goal));
+        if(nofCustomPlanter::GetPlantRadius(job_id) > 0)
+            return std::make_unique<nofCustomPlanter>(job_id, pt, player, &checkedCast<nobUsual>(goal));
         return std::make_unique<nofCustomWorker>(job_id, pt, player, &checkedCast<nobUsual>(goal));
     }
     switch(job_id)

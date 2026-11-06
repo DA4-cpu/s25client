@@ -16,6 +16,7 @@
 #include "buildings/noBuildingSite.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "drivers/VideoDriverWrapper.h"
 #include "helpers/EnumArray.h"
 #include "helpers/Range.h"
@@ -607,6 +608,21 @@ void GameWorldView::DrawResource(const MapPoint& pt, DrawPoint curPos, const Che
             gt = GoodType::Fish;
             break;
         case ResourceType::Nothing: return;
+        default:
+        {
+            // Ore of the civilization mode: Like its look ore
+            const civ::CustomOre* ore = civ::getActiveContent().GetOre(res.getType());
+            if(!ore)
+                return;
+            switch(ore->look)
+            {
+                case ResourceType::Gold: gt = GoodType::Gold; break;
+                case ResourceType::Coal: gt = GoodType::Coal; break;
+                case ResourceType::Granite: gt = GoodType::Stones; break;
+                default: gt = GoodType::IronOre; break;
+            }
+            break;
+        }
     }
 
     if(auto* bm = LOADER.GetWareTex(gt))

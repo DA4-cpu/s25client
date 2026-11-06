@@ -86,8 +86,9 @@ enum class GO_Type : uint16_t
     NofCustomWorker,
     Deposit,
     NofCustomCollector,
+    NofCustomPlanter,
 };
 constexpr auto maxEnumValue(GO_Type)
 {
-    return GO_Type::NofCustomCollector;
+    return GO_Type::NofCustomPlanter;
 }

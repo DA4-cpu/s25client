@@ -542,8 +542,12 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
             const bool needMore = numWaiting > freeSpace;
             const unsigned wanted = numExisting + (needMore ? 1u : 0u);
             buildingsWanted[bld] = std::min({wanted, potentialWorkers, 10u});
-        } else if(building.workDesc.waresNeeded.empty())
+        } else if(building.workDesc.waresNeeded.empty() || building.IsMine() || building.IsPlanter())
+        {
+            // Also mines and plantations of the civilization mode (their inputs are food or e.g. water): 1 if there is
+            // a place for it (the position search requires ore or places to plant)
             buildingsWanted[bld] = std::min(1u, potentialWorkers);
+        }
 
         else if(building.name == "BoneCarver")
         {

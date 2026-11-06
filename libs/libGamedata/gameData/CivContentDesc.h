@@ -71,9 +71,29 @@ struct MapObjectDesc
     std::string look;
     /// Placeholder graphics are tinted with this color (0xRRGGBB), 0xFFFFFF = unchanged
     unsigned tint = 0xFFFFFF;
+    /// Seconds until a planted object is grown (plantations). 0: Can not be planted
+    unsigned growTime = 0;
+    /// Size of a grown planted object (1..sizes). 0: sizes
+    unsigned plantSize = 0;
 
     MapObjectDesc() = default;
     explicit MapObjectDesc(const kaguya::LuaTable& luaData);
+};
+
+/// Ore in the mountains which mines can dig and the geologist finds (rttr:AddOre), like coal, iron, gold and granite
+struct OreDesc
+{
+    /// Unique identifier, used in workshops (mine), the map generator, map files and savegames
+    std::string name;
+    /// Displayed name
+    std::string title;
+    /// Placeholder graphics (sign of the geologist): "Iron", "Gold", "Coal" or "Granite"
+    std::string look;
+    /// The sign is tinted with this color (0xRRGGBB), 0xFFFFFF = unchanged
+    unsigned tint = 0xFFFFFF;
+
+    OreDesc() = default;
+    explicit OreDesc(const kaguya::LuaTable& luaData);
 };
 
 /// Simple production building of the civilization mode as read from lua (rttr:AddWorkshop):
@@ -83,7 +103,7 @@ struct WorkshopDesc
     std::string name;
     std::string title;
     std::string description;
-    /// "small", "medium" or "large"
+    /// "small", "medium", "large" or "mine"
     std::string size;
     /// Construction costs: ware identifier -> amount (currently only Boards and Stones)
     std::map<std::string, unsigned> cost;
@@ -113,6 +133,15 @@ struct WorkshopDesc
     std::string collectObject;
     /// Collector: Maximum distance of the map objects in nodes
     unsigned collectRadius = 0;
+    /// Plantation: Identifier of the map object the worker plants (rttr:AddMapObject with growTime). With an output he
+    /// also harvests grown objects of this kind. Empty: no plantation
+    std::string plantObject;
+    /// Plantation: Maximum distance of the planted objects in nodes
+    unsigned plantRadius = 0;
+    /// Mine: Identifier of the ore (rttr:AddOre) the worker digs. Empty: no mine
+    std::string mineResource;
+    /// Knowledge points of the finished building (like rttr:SetBuildingKnowledge)
+    std::optional<KnowledgeValues> knowledge;
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);

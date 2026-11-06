@@ -8,6 +8,7 @@
 #include "SerializedGameData.h"
 #include "addons/AddonDurableGeologistSigns.h"
 #include "addons/const_addons.h"
+#include "civ/Graphics.h"
 #include "ogl/glArchivItem_Bitmap.h"
 #include "ogl/glArchivItem_Bitmap_Player.h"
 #include "world/GameWorld.h"
@@ -34,11 +35,13 @@ void noSign::Serialize(SerializedGameData& sgd) const
 {
     noDisappearingEnvObject::Serialize(sgd);
 
-    sgd.PushUnsignedChar(resource.getValue());
+    sgd.PushUnsignedShort(resource.getValue());
 }
 
 noSign::noSign(SerializedGameData& sgd, const unsigned obj_id)
-    : noDisappearingEnvObject(sgd, obj_id), resource(sgd.PopUnsignedChar())
+    : noDisappearingEnvObject(sgd, obj_id),
+      resource(sgd.GetGameDataVersion() < 21 ? Resource::fromLegacyValue(sgd.PopUnsignedChar()) :
+                                               Resource(sgd.PopUnsignedShort()))
 {}
 
 /**
@@ -47,19 +50,27 @@ noSign::noSign(SerializedGameData& sgd, const unsigned obj_id)
 void noSign::Draw(DrawPoint drawPt)
 {
     // Schild selbst
-    unsigned imgId;
-    switch(resource.getType())
+    const unsigned amountIdx = std::min(resource.getAmount() / 3u, 2u);
+    if(isCustomOre(resource.getType()))
     {
-        case ResourceType::Iron: imgId = 680; break;
-        case ResourceType::Gold: imgId = 683; break;
-        case ResourceType::Coal: imgId = 686; break;
-        case ResourceType::Granite: imgId = 689; break;
-        case ResourceType::Water: imgId = 692; break;
-        case ResourceType::Nothing: imgId = 695; break;
-        default: return;
+        // Ore of the civilization mode: Own image or the sign of the look ore, tinted
+        civ::drawOreSign(getCustomOreIdx(resource.getType()), amountIdx, drawPt, GetDrawColor());
+    } else
+    {
+        unsigned imgId;
+        switch(resource.getType())
+        {
+            case ResourceType::Iron: imgId = 680; break;
+            case ResourceType::Gold: imgId = 683; break;
+            case ResourceType::Coal: imgId = 686; break;
+            case ResourceType::Granite: imgId = 689; break;
+            case ResourceType::Water: imgId = 692; break;
+            case ResourceType::Nothing: imgId = 695; break;
+            default: return;
+        }
+        imgId += amountIdx;
+        LOADER.GetMapTexture(imgId)->DrawFull(drawPt, GetDrawColor());
     }
-    imgId += std::min(resource.getAmount() / 3u, 2u);
-    LOADER.GetMapTexture(imgId)->DrawFull(drawPt, GetDrawColor());
 
     // Schatten des Schildes
     LOADER.GetMapTexture(700)->DrawFull(drawPt, GetDrawShadowColor());

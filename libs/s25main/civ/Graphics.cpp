@@ -6,6 +6,8 @@
 #include "Loader.h"
 #include "civ/Content.h"
 #include "civ/CustomGraphics.h"
+#include "ogl/ITexture.h"
+#include "ogl/glArchivItem_Bitmap.h"
 #include "ogl/glSmartBitmap.h"
 #include "gameTypes/FlagType.h"
 #include <algorithm>
@@ -48,6 +50,33 @@ void drawMapObject(unsigned objIdx, unsigned state, DrawPoint drawPt, unsigned c
     const auto type = obj->lookGranite == 1 ? GraniteType::Two : GraniteType::One;
     LOADER.granite_cache[type][getPlaceholderGraniteState(state, obj->sizes)].draw(
       drawPt, multiplyColors(0xFF000000u | obj->tint, colorMod));
+}
+
+unsigned getOreSignImage(ResourceType look, unsigned amountIdx)
+{
+    unsigned imgId;
+    switch(look)
+    {
+        case ResourceType::Gold: imgId = 683; break;
+        case ResourceType::Coal: imgId = 686; break;
+        case ResourceType::Granite: imgId = 689; break;
+        default: imgId = 680; break;
+    }
+    return imgId + std::min(amountIdx, 2u);
+}
+
+void drawOreSign(unsigned oreIdx, unsigned amountIdx, DrawPoint drawPt, unsigned colorMod)
+{
+    if(glArchivItem_Bitmap* image = LOADER.GetCivGraphics().GetOreSign(oreIdx, amountIdx))
+    {
+        image->DrawFull(drawPt, colorMod);
+        return;
+    }
+    const CustomOre* ore = getActiveContent().GetOre(getCustomOre(oreIdx));
+    if(!ore)
+        return;
+    if(ITexture* image = LOADER.GetMapTexture(getOreSignImage(ore->look, amountIdx)))
+        image->DrawFull(drawPt, multiplyColors(0xFF000000u | ore->tint, colorMod));
 }
 
 } // namespace civ

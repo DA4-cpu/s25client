@@ -260,13 +260,14 @@ void nobUsual::Draw(DrawPoint drawPt)
     else if(BuildingProperties::IsMine(bldType_) && worker && nation == Nation::Africans)
     {
         DrawPoint offset;
-        switch(bldType_)
+        // Mines of the civilization mode look like their look building
+        switch(civ::getLook(bldType_))
         {
             case BuildingType::GraniteMine: offset = NUBIAN_MINE_FIRE[0]; break;
             case BuildingType::CoalMine: offset = NUBIAN_MINE_FIRE[1]; break;
             case BuildingType::IronMine: offset = NUBIAN_MINE_FIRE[2]; break;
             case BuildingType::GoldMine: offset = NUBIAN_MINE_FIRE[3]; break;
-            default: RTTR_Assert_Msg(false, "Not a mine");
+            default: return; // Custom mine looking like another building: No fire
         }
         LOADER.GetMapTexture(740 + GAMECLIENT.GetGlobalAnimation(8, 5, 2, GetObjId() + GetX() + GetY()))
           ->DrawFull(drawPt + offset);

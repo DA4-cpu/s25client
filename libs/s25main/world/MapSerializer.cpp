@@ -7,6 +7,7 @@
 #include "Game.h"
 #include "SerializedGameData.h"
 #include "buildings/noBuildingSite.h"
+#include "civ/Climate.h"
 #include "helpers/IdRange.h"
 #include "helpers/Range.h"
 #include "lua/GameDataLoader.h"
@@ -58,6 +59,11 @@ void MapSerializer::Serialize(const GameWorldBase& world, SerializedGameData& sg
     }
 
     sgd.PushObjectContainer(world.harbor_building_sites_from_sea, true);
+
+    // Climate of the civilization mode (only if it was loaded with the map or used)
+    sgd.PushBool(world.HasClimate());
+    if(world.HasClimate())
+        world.GetClimate().Serialize(sgd);
 
     if(!world.HasLua())
         sgd.PushLongString("");
@@ -223,6 +229,13 @@ void MapSerializer::Deserialize(GameWorldBase& world, SerializedGameData& sgd, G
     }
 
     sgd.PopObjectContainer(world.harbor_building_sites_from_sea, GO_Type::Buildingsite);
+
+    if(sgd.GetGameDataVersion() >= 21 && sgd.PopBool())
+    {
+        auto climate = std::make_unique<civ::ClimateMap>();
+        climate->Deserialize(sgd, world);
+        world.SetClimate(std::move(climate));
+    }
 
     const std::string luaScript = sgd.PopLongString();
     if(!luaScript.empty())

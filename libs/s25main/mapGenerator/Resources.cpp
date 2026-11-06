@@ -5,7 +5,7 @@
 
 #include "mapGenerator/Resources.h"
 #include "RttrForeachPt.h"
-#include "civ/Content.h"
+#include "civ/MapCodes.h"
 #include "helpers/containerUtils.h"
 #include "mapGenerator/Algorithms.h"
 #include "mapGenerator/Noise.h"
@@ -231,7 +231,7 @@ public:
         bool minesDone = false;
         for(const MapResourceDesc& rule : desc_.resources)
         {
-            const ObjectKind kind = GetObjectKind(rule.object);
+            const ObjectKind kind = GetRuleKind(rule);
             if(kind == ObjectKind::Mine)
             {
                 // All mine resources are placed together, so they share the mountains according to their amounts
@@ -273,14 +273,47 @@ private:
     NodeMapBase<uint8_t> allWater_;
     NodeMapBase<unsigned> hqDistance_;
 
+    /// Index of the map object or ore of the rule among the entries of the same kind
     std::optional<unsigned> FindCustomObject(const MapResourceDesc& rule) const
     {
-        for(unsigned i = 0; i < customObjects_.size(); ++i)
+        unsigned objIdx = 0, oreIdx = 0;
+        for(const CustomMapObjectInfo& info : customObjects_)
         {
-            if(customObjects_[i].name == rule.object)
-                return i;
+            if(info.name == rule.object)
+                return info.isOre ? oreIdx : objIdx;
+            ++(info.isOre ? oreIdx : objIdx);
         }
         return std::nullopt;
+    }
+
+    const CustomMapObjectInfo* FindCustomInfo(const MapResourceDesc& rule) const
+    {
+        for(const CustomMapObjectInfo& info : customObjects_)
+        {
+            if(info.name == rule.object)
+                return &info;
+        }
+        return nullptr;
+    }
+
+    /// Kind of the rule: Ores of the civilization mode are mine resources
+    ObjectKind GetRuleKind(const MapResourceDesc& rule) const
+    {
+        const ObjectKind kind = GetObjectKind(rule.object);
+        if(kind == ObjectKind::Custom)
+        {
+            const CustomMapObjectInfo* info = FindCustomInfo(rule);
+            if(info && info->isOre)
+                return ObjectKind::Mine;
+        }
+        return kind;
+    }
+
+    uint8_t GetMineResourceCode(const MapResourceDesc& rule) const
+    {
+        if(GetObjectKind(rule.object) == ObjectKind::Mine)
+            return GetMineResourceBase(rule.object);
+        return civ::ORE_MAP_CODES[*FindCustomObject(rule)];
     }
 
     bool Matches(const MapResourceDesc& rule, const std::vector<unsigned>& zones, const MapPoint& pt) const
@@ -374,8 +407,22 @@ private:
             {
                 if(!objectFree_[pt] || map_.objectTypes[pt] != OT_Empty)
                     return false;
-                map_.objectTypes[pt] = static_cast<uint8_t>(civ::FIRST_CUSTOM_MAP_OBJECT_TYPE + customIdx_);
-                map_.objectInfos[pt] = static_cast<uint8_t>(rnd_.RandomValue(1u, customObjects_[customIdx_].sizes));
+                const CustomMapObjectInfo* info = nullptr;
+                unsigned objIdx = 0;
+                for(const CustomMapObjectInfo& curInfo : customObjects_)
+                {
+                    if(curInfo.isOre)
+                        continue;
+                    if(objIdx++ == customIdx_)
+                    {
+                        info = &curInfo;
+                        break;
+                    }
+                }
+                RTTR_Assert(info);
+                const auto code = civ::encodeMapObject(customIdx_, rnd_.RandomValue(1u, info->sizes));
+                map_.objectTypes[pt] = code.type;
+                map_.objectInfos[pt] = code.info;
                 return true;
             }
             case ObjectKind::Mine: break;
@@ -426,12 +473,12 @@ private:
         std::vector<MineRule> rules;
         for(const MapResourceDesc& rule : desc_.resources)
         {
-            if(GetObjectKind(rule.object) != ObjectKind::Mine)
+            if(GetRuleKind(rule) != ObjectKind::Mine)
                 continue;
             const double amount = GetResourceAmount(rule, settings_);
             if(amount > 0.)
-                rules.push_back(MineRule{&rule, GetZoneIndices(rule), amount, GetMineResourceBase(rule.object),
-                                         rule.cluster / 2u});
+                rules.push_back(
+                  MineRule{&rule, GetZoneIndices(rule), amount, GetMineResourceCode(rule), rule.cluster / 2u});
         }
         if(rules.empty() || globalFactor_ <= 0.)
             return;
@@ -519,8 +566,10 @@ private:
 void PlaceResources(Map& map, RandomUtility& rnd, const MapSettings& settings, const MapGenDesc& desc,
                     const std::vector<CustomMapObjectInfo>& customObjects)
 {
-    if(customObjects.size() > civ::MAX_CUSTOM_MAP_OBJECTS)
-        throw std::runtime_error("Too many map objects of the civilization mode");
+    const auto numOres = static_cast<unsigned>(
+      std::count_if(customObjects.begin(), customObjects.end(), [](const auto& info) { return info.isOre; }));
+    if(customObjects.size() - numOres > civ::MAX_CUSTOM_MAP_OBJECTS || numOres > civ::ORE_MAP_CODES.size())
+        throw std::runtime_error("Too many map objects or ores of the civilization mode");
     ResourcePlacer placer(map, rnd, settings, desc, customObjects);
     placer.PlaceAll();
 }

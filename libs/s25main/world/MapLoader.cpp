@@ -11,7 +11,9 @@
 #include "RttrForeachPt.h"
 #include "addons/const_addons.h"
 #include "buildings/nobHQ.h"
+#include "civ/Climate.h"
 #include "civ/Content.h"
+#include "civ/MapCodes.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
 #include "factories/BuildingFactory.h"
@@ -59,6 +61,13 @@ bool MapLoader::Load(const libsiedler2::ArchivItem_Map& map, Exploration explora
 
     if(!InitNodes(map, exploration))
         return false;
+    // Climate of generated maps (civilization mode: where plantations can plant)
+    if(civ::isEnabled(world_))
+    {
+        auto climate = std::make_unique<civ::ClimateMap>();
+        climate->Init(world_, &map);
+        world_.SetClimate(std::move(climate));
+    }
     PlaceObjects(map);
     PlaceAnimals(map);
     if(!InitSeasAndHarbors(world_))
@@ -278,6 +287,12 @@ bool MapLoader::InitNodes(const libsiedler2::ArchivItem_Map& map, Exploration ex
             resource = Resource(ResourceType::Granite, mapResource - 0x58);
         else if(mapResource > 0x80 && mapResource < 0x90) // fish
             resource = Resource(ResourceType::Fish, 4);   // Use 4 fish
+        else if(const auto ore = civ::decodeOre(mapResource))
+        {
+            // Ores defined in lua (civilization mode). Without it or the definition there is nothing
+            if(civ::isEnabled(world_) && world_.GetTechTree().GetContent().GetOre(getCustomOre(ore->idx)))
+                resource = Resource(getCustomOre(ore->idx), static_cast<uint8_t>(ore->amount));
+        }
         node.resources = resource;
 
         node.reserved = false;
@@ -459,20 +474,21 @@ void MapLoader::PlaceObjects(const libsiedler2::ArchivItem_Map& map)
 
             default:
             {
-                // Objects defined in lua (civilization mode, e.g. loam deposits): type 0xD0 + index, info = size
-                const unsigned objType = map.getMapDataAt(MapLayer::ObjectType, pt.x, pt.y);
-                if(objType >= civ::FIRST_CUSTOM_MAP_OBJECT_TYPE
-                   && objType < civ::FIRST_CUSTOM_MAP_OBJECT_TYPE + civ::MAX_CUSTOM_MAP_OBJECTS)
+                // Objects defined in lua (civilization mode, e.g. loam deposits), see civ/MapCodes.h
+                const uint8_t objType = map.getMapDataAt(MapLayer::ObjectType, pt.x, pt.y);
+                if(civ::isCustomMapObjectType(objType))
                 {
                     // Without the civilization mode they don't exist
                     if(civ::isEnabled(world_))
                     {
-                        const unsigned objIdx = objType - civ::FIRST_CUSTOM_MAP_OBJECT_TYPE;
-                        const civ::CustomMapObject* customObj = world_.GetTechTree().GetContent().GetMapObject(objIdx);
-                        if(customObj && lc >= 1 && lc <= customObj->sizes)
-                            obj = new noDeposit(objIdx, lc - 1u);
+                        const auto decoded = civ::decodeMapObject(objType, lc);
+                        const civ::CustomMapObject* customObj =
+                          decoded ? world_.GetTechTree().GetContent().GetMapObject(decoded->idx) : nullptr;
+                        if(customObj && decoded->size <= customObj->sizes)
+                            obj = new noDeposit(decoded->idx, decoded->size - 1u);
                         else
-                            LOG.write(_("Unknown map object at %1%: (0x%2$x: 0x%3$x)\n")) % pt % objType % unsigned(lc);
+                            LOG.write(_("Unknown map object at %1%: (0x%2$x: 0x%3$x)\n")) % pt % unsigned(objType)
+                              % unsigned(lc);
                     }
                     break;
                 }

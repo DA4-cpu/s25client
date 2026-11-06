@@ -13,6 +13,7 @@
 #include "addons/const_addons.h"
 #include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
+#include "civ/Climate.h"
 #include "civ/TechTree.h"
 #include "figures/nofPassiveSoldier.h"
 #include "helpers/EnumRange.h"
@@ -69,11 +70,27 @@ void GameWorldBase::SetTechTree(std::unique_ptr<civ::TechTree> techTree)
         civ::setActiveContent(techTree_->GetContentPtr());
 }
 
+const civ::ClimateMap& GameWorldBase::GetClimate() const
+{
+    if(!climate_)
+    {
+        climate_ = std::make_unique<civ::ClimateMap>();
+        climate_->Init(*this, nullptr);
+    }
+    return *climate_;
+}
+
+void GameWorldBase::SetClimate(std::unique_ptr<civ::ClimateMap> climate)
+{
+    climate_ = std::move(climate);
+}
+
 void GameWorldBase::Init(const MapExtent& mapSize, DescIdx<LandscapeDesc> lt)
 {
     RTTR_Assert(GetDescription().terrain.size() > 0); // Must have game data initialized
     World::Init(mapSize, lt);
     freePathFinder->Init(mapSize);
+    climate_.reset();
 }
 
 void GameWorldBase::InitAfterLoad()

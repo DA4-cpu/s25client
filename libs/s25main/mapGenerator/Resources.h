@@ -36,12 +36,15 @@ double GetResourceAmount(const MapResourceDesc& resource, const MapSettings& set
 /// Package (plants and animals) of the zone of the node for its climate or nullptr if none matches
 const MapZonePackageDesc* GetZonePackage(const Map& map, const MapGenDesc& desc, const MapPoint& pt);
 
-/// Map object of the civilization mode (rttr:AddMapObject) the generator can place: stored as object type
-/// civ::FIRST_CUSTOM_MAP_OBJECT_TYPE + index with the size (1..sizes) as object info
+/// Map object (rttr:AddMapObject) or ore (rttr:AddOre) of the civilization mode the generator can place, stored as
+/// described in civ/MapCodes.h. The index of an object/ore is its position among the entries of the same kind.
 struct CustomMapObjectInfo
 {
     std::string name;
+    /// Map objects: Number of sizes
     unsigned sizes = 1;
+    /// True: Ore in the mountains (placed together with coal, iron, gold and granite)
+    bool isOre = false;
 };
 
 /**
