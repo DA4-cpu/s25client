@@ -6,12 +6,15 @@
 
 #include "civ/Knowledge.h"
 #include "civ/Looks.h"
+#include "civ/MapCodes.h"
 #include "helpers/EnumArray.h"
 #include "gameTypes/BuildingQuality.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/BuildingTypes.h"
 #include "gameTypes/GoodTypes.h"
 #include "gameTypes/JobTypes.h"
+#include "gameTypes/Resource.h"
+#include "gameData/MapGenDesc.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -58,12 +61,25 @@ struct CustomMapObject
     unsigned lookGranite = 0;
     /// Color of the placeholder graphics (0xRRGGBB)
     unsigned tint = 0xFFFFFF;
+    /// GFs until a planted object is grown. 0: Can not be planted
+    unsigned growGFs = 0;
+    /// Size of a grown planted object (1..sizes)
+    unsigned plantSize = 0;
+    /// Rules of the map generator for this object (world/mapgen.lua): Where it grows naturally (plantations)
+    std::vector<MapResourceDesc> growRules;
+
+    bool CanBePlanted() const { return growGFs > 0; }
 };
 
-/// Maximum number of map objects defined in lua (they are stored as object types 0xD0..0xDF in map files)
-constexpr unsigned MAX_CUSTOM_MAP_OBJECTS = 16;
-/// Object type in map files for the first map object
-constexpr uint8_t FIRST_CUSTOM_MAP_OBJECT_TYPE = 0xD0;
+/// Ore in the mountains (rttr:AddOre), uses the slots ResourceType::Custom0...
+struct CustomOre
+{
+    std::string name, title;
+    /// Built-in ore whose sign is used (placeholder): Iron, Gold, Coal or Granite
+    ResourceType look = ResourceType::Iron;
+    /// Color of the sign (0xRRGGBB)
+    unsigned tint = 0xFFFFFF;
+};
 
 /// Workshop defined in lua (rttr:AddWorkshop)
 struct CustomBuilding
@@ -96,9 +112,19 @@ struct CustomBuilding
     int collectObject = -1;
     /// Collector: Maximum distance of the map objects
     unsigned collectRadius = 0;
+    /// Plantation: Index of the map object the worker plants (and harvests if there is a product). -1: none
+    int plantObject = -1;
+    /// Plantation: Maximum distance of the planted objects
+    unsigned plantRadius = 0;
+    /// Mine: Ore the worker digs. Nothing: no mine
+    ResourceType mineResource = ResourceType::Nothing;
 
     bool IsLibrary() const { return libraryCapacity > 0; }
     bool IsCollector() const { return collectObject >= 0; }
+    bool IsPlanter() const { return plantObject >= 0; }
+    /// Plantation which also harvests its objects (has a product)
+    bool HarvestsPlants() const { return IsPlanter() && product != GoodType::Nothing; }
+    bool IsMine() const { return mineResource != ResourceType::Nothing; }
 };
 
 /// Wares, workshops and tags of the civilization mode which are defined in lua.
@@ -126,6 +152,12 @@ public:
     }
     /// Index of the map object with the given identifier
     std::optional<unsigned> FindMapObject(const std::string& identifier) const;
+    /// Ores in the mountains, in order of definition (ResourceType::Custom0 + index)
+    const std::vector<CustomOre>& GetOres() const { return ores_; }
+    /// Ore of the resource type or nullptr if it is no (defined) custom ore
+    const CustomOre* GetOre(ResourceType type) const;
+    /// Resource type of the ore with the given identifier
+    std::optional<ResourceType> FindOre(const std::string& identifier) const;
 
     /// True if the ware exists in this game (built-in or defined custom ware)
     bool IsUsed(GoodType good) const;
@@ -168,6 +200,7 @@ private:
 
     std::vector<CustomWare> wares_;
     std::vector<CustomMapObject> mapObjects_;
+    std::vector<CustomOre> ores_;
     std::vector<CustomBuilding> buildings_;
     std::vector<CustomWorker> workers_;
     helpers::EnumArray<std::vector<std::string>, GoodType> tags_, properties_;

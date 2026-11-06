@@ -1,6 +1,25 @@
 Zivilisationsmodus (Humankind-Schicht) - Branch "humankind" einspielen
 ======================================================================
 
+UPDATE 2026-11-06: Erze, Minen und Plantagen
+--------------------------------------------
+Neue Dateien: libs/s25main/civ/Climate.*, civ/MapCodes.h, figures/nofCustomPlanter.* -> falls Visual Studio sie nicht
+findet: CMake neu konfigurieren.
+
+Neu (alles in data/RTTR/gamedata/civ/*.lua erklärt):
+- Erze: rttr:AddOre{...} in mapobjects.lua (Kupfer ist jetzt ein Erz statt eines Kartenobjekts). Verteilt vom
+  Kartengenerator im Gebirge (Regel in world/mapgen.lua mit object = "Copper"), der Geologe findet sie.
+- Minen: Werkstatt mit size = "mine" und mine = { resource = "Copper" } (Reiter "Minen" im Baumenü).
+- Plantagen: Werkstatt mit plant = { object = "...", radius = ... }. Pflanzt nur dort, wo das Objekt laut mapgen.lua
+  natürlich wächst (ohne Zonen), verbraucht pro Pflanzung die Eingänge (z.B. Wasser), erntet mit output selbst.
+  Kartenobjekte brauchen dafür growTime (und optional plantSize) in mapobjects.lua.
+- Beispiele: Kupfermine (Kupfererz) und Papyrusplantage (Papyruspflanze), Werte nach Eisenmine bzw. Bauernhof.
+- Kartenobjekte: bis zu 256 statt 16. knowledge = { ... } geht jetzt auch direkt in rttr:AddWorkshop.
+- Zufallskarten speichern Temperatur und Feuchtigkeit mit (für den Pflanzfilter). Ältere Zufallskarten und
+  Originalkarten: dort zählt nur das Terrain.
+- Spielstände: Version 21. Ältere laden weiter. Ein Spielstand mit dem alten Kartenobjekt "CopperDeposit" lädt nicht
+  mehr (es gibt das Objekt nicht mehr).
+
 UPDATE 2026-10-21 (2): Neue Waren und Werkstätten aus Lua
 ----------------------------------------------------------
 Holen wie unten (git pull origin humankind), dann bauen. Neue Dateien unter libs/s25main/civ, libs/libGamedata/gameData

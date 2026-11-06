@@ -29,8 +29,9 @@ class nofPassiveSoldier;
 class RoadPathFinder;
 class SoundManager;
 namespace civ {
+class ClimateMap;
 class TechTree;
-}
+} // namespace civ
 
 constexpr Direction getOppositeDir(const RoadDir roadDir) noexcept
 {
@@ -67,6 +68,8 @@ class GameWorldBase : public World
     LuaInterfaceGame* lua;
     /// Tech tree of the civilization mode, loaded on first use
     mutable std::unique_ptr<civ::TechTree> techTree_;
+    /// Climate and terrain types of the nodes (civilization mode), computed from the terrain on first use if not set
+    mutable std::unique_ptr<civ::ClimateMap> climate_;
 
 protected:
     /// Interface zum GUI
@@ -94,6 +97,12 @@ public:
     const civ::TechTree& GetTechTree() const;
     /// Use the given tech tree instead of the one from the game data (scenarios, tests)
     void SetTechTree(std::unique_ptr<civ::TechTree> techTree);
+    /// Climate and terrain types of the nodes (civilization mode, e.g. where plantations can plant). Without climate
+    /// from the map (set when loading a generated map) it is computed from the terrain on first use
+    const civ::ClimateMap& GetClimate() const;
+    void SetClimate(std::unique_ptr<civ::ClimateMap> climate);
+    /// True if the climate was set or computed already (it is saved then)
+    bool HasClimate() const { return climate_ != nullptr; }
 
     /// Can a node be used for a road (no flag/bld, no other road, no danger...)
     /// Should only be used for the points between the 2 flags of a road

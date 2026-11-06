@@ -226,7 +226,9 @@ std::vector<CustomMapObjectInfo> LoadCivMapObjects()
     {
         const civ::TechTree techTree = civ::loadDefaultTechTree();
         for(const civ::CustomMapObject& obj : techTree.GetContent().GetMapObjects())
-            result.push_back(CustomMapObjectInfo{obj.name, obj.sizes});
+            result.push_back(CustomMapObjectInfo{obj.name, obj.sizes, false});
+        for(const civ::CustomOre& ore : techTree.GetContent().GetOres())
+            result.push_back(CustomMapObjectInfo{ore.name, 0, true});
     } catch(const std::exception& e)
     {
         LOG.write("Map generator: could not load the map objects of the civilization mode: %1%\n") % e.what();

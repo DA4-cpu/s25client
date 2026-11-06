@@ -88,7 +88,8 @@ AISubSurfaceResource AIInterface::GetSubsurfaceResource(const MapPoint pt) const
         case ResourceType::Granite: return AISubSurfaceResource::Granite;
         case ResourceType::Fish: return AISubSurfaceResource::Fish;
         case ResourceType::Nothing:
-        case ResourceType::Water: break;
+        case ResourceType::Water:
+        default: break; // Also the ores of the civilization mode
     }
     return AISubSurfaceResource::Nothing;
 }

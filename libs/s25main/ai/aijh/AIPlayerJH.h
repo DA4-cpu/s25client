@@ -147,6 +147,12 @@ public:
     /// Position for a workshop collecting map objects (civilization mode) with the most objects in its range
     MapPoint FindCollectorPosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
                                    unsigned radius) const;
+    /// Position for a mine of the civilization mode with the most of its ore in range of the miner
+    MapPoint FindCustomMinePosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
+                                    unsigned radius) const;
+    /// Position for a plantation of the civilization mode with the most places to plant (and harvest) in its range
+    MapPoint FindPlantationPosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
+                                    unsigned radius) const;
     /// Find a position for a specific building around a given point
     MapPoint FindPositionForBuildingAround(BuildingType type, const MapPoint& around);
     /// Returns the position of the forester (finished or still under construction) that is

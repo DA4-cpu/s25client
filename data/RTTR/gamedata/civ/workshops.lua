@@ -10,7 +10,7 @@ rttr:AddWorkshop{...}:
               verwendet.
   title       Anzeigename
   description optional: Hilfetext
-  size        "small", "medium" oder "large"
+  size        "small", "medium", "large" oder "mine" (Minenplatz im Gebirge, nur zusammen mit mine)
   cost        Baukosten, vorerst nur Bretter und Steine: { Boards = 2, Stones = 1 }
   look        Platzhaltergrafik: Das Gebäude sieht aus wie dieses eingebaute Gebäude (z.B. "Sawmill")
   worker      Arbeiter: { title = "...", tool = "Hammer" (oder "none"), look = "Carpenter" }
@@ -36,12 +36,31 @@ rttr:AddWorkshop{...}:
               (mapobjects.lua) im Umkreis radius, arbeitet dort workTime Sekunden und bringt output nach Hause:
               collect = { object = "LoamDeposit", radius = 8 }. Ohne inputs.
               Arbeitsanimation je nach worker.look: "Planer" gräbt mit der Schaufel, "Woodcutter" hackt,
-              sonst klopft er wie der Steinmetz.
-  plant       (fehlt aktuell noch) optional: macht die Werkstatt zum Anbauer wie der Farm oder dem Köhler. 
-  workTime    Arbeitszeit pro Produkt in Sekunden
+              "Farmer" mäht mit der Sense, sonst klopft er wie der Steinmetz.
+              Noch wachsende Objekte (von einer Plantage gepflanzt) sammelt er erst, wenn sie ausgewachsen sind.
+  plant       optional: macht die Werkstatt zur Plantage wie den Bauernhof, den Förster oder den Köhler. Der Arbeiter
+              pflanzt ein Kartenobjekt (mapobjects.lua, braucht dort growTime) im Umkreis radius:
+              plant = { object = "PapyrusDeposit", radius = 4 }.
+              Gepflanzt wird nur dort, wo das Objekt auch natürlich wächst (Regeln in world/mapgen.lua, aber ohne die
+              Zonen), auf freien Plätzen ohne Straße und nicht direkt neben Gebäuden, Fahnen, Feldern und anderen
+              Objekten (damit Wege frei bleiben).
+              Jedes Pflanzen verbraucht die Eingänge (inputs, consume wie oben), z.B. inputs = { "Water" } zum Gießen.
+              Ohne inputs braucht er dafür nichts.
+              Mit output erntet er außerdem selbst wie der Bauer: ausgewachsene Objekte dieser Art im Umkreis (auch
+              natürlich gewachsene), eine Ware pro Gang; Ernten geht vor Pflanzen. Ohne output pflanzt er nur (wie der
+              Förster), ernten kann dann z.B. ein Sammler (collect).
+              Arbeitsanimation beim Pflanzen: worker.look "Farmer" sät, sonst pflanzt er wie der Förster.
+              Beim Ernten wie beim Sammler (siehe collect).
+              Eigene Bilder fürs Pflanzen: Arbeiter_Pflanzen_<n> (siehe data/RTTR/assets/civ/LIESMICH.txt).
+  mine        optional: macht die Werkstatt zur Mine für ein Erz aus mapobjects.lua (rttr:AddOre):
+              mine = { resource = "Copper" }. Nur mit size = "mine". Der Arbeiter baut wie in den eingebauten Minen
+              pro Produkt eine Einheit des Erzes im Umkreis von 2 Knoten ab. Ist nichts mehr da, kommt die Meldung
+              "Diese Mine ist erschöpft". Eingänge wie bei den eingebauten Minen, z.B.
+              inputs = { "Fish", "Meat", "Bread" }, consume = "any".
+  workTime    Arbeitszeit pro Produkt in Sekunden (Sammler und Plantagen: pro Gang)
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
-
-  Es fehlt der Wissenswert pro Gebäude!!! knowledge =  ...
+  knowledge   optional: Wissenspunkte des fertigen Gebäudes wie in knowledge.lua, z.B. knowledge = { IWP = 2 }.
+              Ein Gebäude darf nur an einer der beiden Stellen Wissenspunkte bekommen.
 
 Freischalten: In techtree.lua unter unlocks = { buildings = { "Name" } } eintragen. Wird eine Werkstatt von keiner
 Technologie freigeschaltet, ist sie von Anfang an baubar.
@@ -128,3 +147,43 @@ rttr:AddWorkshop{
     waitTime = 40,                   
 }
 
+-------------------------------------------------------------------------------
+-- Kupfermine: baut das Erz Kupfer (mapobjects.lua) ab wie die Eisenmine das Eisenerz.
+-------------------------------------------------------------------------------
+
+rttr:AddWorkshop{
+    name = "CopperMine",
+    title = "Kupfermine",
+    size = "mine",
+    cost = { Boards = 4 },
+    look = "IronMine",
+    worker = { title = "Kupferbergmann", tool = "PickAxe", look = "Miner" },
+    inputs = { "Fish", "Meat", "Bread" },
+    consume = "any",
+    storage = 2,
+    mine = { resource = "Copper" },
+    output = "CopperOre",
+    workTime = 28,
+    waitTime = 29,
+    knowledge = { IWP = 1 },
+}
+
+-------------------------------------------------------------------------------
+-- Papyrusplantage: pflanzt Papyrus (mapobjects.lua) dort, wo er auch natürlich wächst (am Süßwasser, siehe
+-- world/mapgen.lua), gießt ihn mit Wasser und erntet ihn selbst.
+-------------------------------------------------------------------------------
+
+rttr:AddWorkshop{
+    name = "PapyrusPlantation",
+    title = "Papyrusplantage",
+    size = "small",
+    cost = { Boards = 2 },
+    look = "Farm",
+    worker = { title = "Papyrusbauer", tool = "Scythe", look = "Farmer" },
+    inputs = { "Water" },
+    plant = { object = "PapyrusDeposit", radius = 4 },
+    output = "PapyrusPlant",
+    workTime = 6,
+    waitTime = 6,
+    knowledge = { LWP = 2 },
+}

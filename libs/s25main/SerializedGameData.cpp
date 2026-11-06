@@ -35,6 +35,7 @@
 #include "figures/nofCatapultMan.h"
 #include "figures/nofCharburner.h"
 #include "figures/nofCustomCollector.h"
+#include "figures/nofCustomPlanter.h"
 #include "figures/nofCustomWorker.h"
 #include "figures/nofDefender.h"
 #include "figures/nofDonkeybreeder.h"
@@ -120,7 +121,8 @@
 ///     signature of the lua content
 /// 19: Civilization mode: Regulator "Wissen" of players, knowledge media stored in libraries
 /// 20: Civilization mode: Map objects defined in lua (deposits) and their collectors, map objects in the signature
-static const unsigned currentGameDataVersion = 20;
+/// 21: Civilization mode: Ores defined in lua (resources with 16 bit), growing deposits and plantations, climate
+static const unsigned currentGameDataVersion = 21;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)
@@ -204,6 +206,7 @@ std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type 
         RTTR_CREATE_GO(GO_Type::NofCustomWorker, nofCustomWorker);
         RTTR_CREATE_GO(GO_Type::Deposit, noDeposit);
         RTTR_CREATE_GO(GO_Type::NofCustomCollector, nofCustomCollector);
+        RTTR_CREATE_GO(GO_Type::NofCustomPlanter, nofCustomPlanter);
 
         case GO_Type::Nothing: RTTR_Assert(false); break;
 #undef RTTR_CREATE_GO

@@ -122,6 +122,7 @@ iwAction::iwAction(GameInterface& gi, GameWorldView& gwv, const Tabs& tabs, MapP
                 case BuildingQuality::Hut: building_icons[BuildTab::Hut].push_back(bld); break;
                 case BuildingQuality::House: building_icons[BuildTab::House].push_back(bld); break;
                 case BuildingQuality::Castle: building_icons[BuildTab::Castle].push_back(bld); break;
+                case BuildingQuality::Mine: building_icons[BuildTab::Mine].push_back(bld); break;
                 default: break;
             }
         }

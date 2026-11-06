@@ -220,8 +220,13 @@ rttr:AddMapZone{
 --   "coal", "iron", "gold", "granite"   Bodenschätze im Gebirge
 --   Bezeichner aus civ/mapobjects.lua (rttr:AddMapObject), z.B. "LoamDeposit": Objekte des Zivilisationsmodus
 --                  wie Lehmvorkommen. Ohne Zivilisationsmodus werden sie beim Laden der Karte weggelassen.
+--                  Diese Regeln legen auch fest, wo eine Plantage das Objekt pflanzen kann: überall, wo die Regel
+--                  passt (terrain, temperature, humidity, height, weights mit Faktor größer 0), aber ohne zones.
+--   Erze aus civ/mapobjects.lua (rttr:AddOre), z.B. "Copper": Bodenschätze im Gebirge, sie teilen sich das Gebirge
+--                  mit Kohle, Eisen, Gold und Granit nach ihren Mengen. Ohne Zivilisationsmodus werden sie beim Laden
+--                  der Karte weggelassen.
 -- Die Regeln werden in dieser Reihenfolge abgearbeitet; ein Knoten bekommt höchstens ein Objekt (Bäume, Steine, Deko)
--- und höchstens einen Bodenschatz (Kohle, Eisen, Gold, Granit, Fische, Grundwasser).
+-- und höchstens einen Bodenschatz (Kohle, Eisen, Gold, Granit, Erze, Fische, Grundwasser).
 -- Der Regler "Ressourcenmenge" im Generatorfenster vervielfacht alle Mengen (100 % = Werte aus dieser Datei).
 
 rttr:AddMapResource{
@@ -286,7 +291,7 @@ rttr:AddMapResource{
 }
 rttr:AddMapResource{
 	name = "Kupfer",
-	object = "CopperDeposit", -- Soll als Bodenressourcen vorkommen
+	object = "Copper", -- Erz aus civ/mapobjects.lua (rttr:AddOre), wird mit Kohle, Eisen, Gold und Granit verteilt
 	amount = 1.5, -- PLATZHALTER
 	terrain = { "mountain" },
 	cluster = 6, 

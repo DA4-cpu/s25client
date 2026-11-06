@@ -35,6 +35,7 @@ private:
     void SetWareTags(const kaguya::LuaTable& data);
     void AddWorkshop(const kaguya::LuaTable& data);
     void AddMapObject(const kaguya::LuaTable& data);
+    void AddOre(const kaguya::LuaTable& data);
     void AddByproduct(const kaguya::LuaTable& data);
     void SetKnowledgeDistribution(const kaguya::LuaTable& data);
     void SetMapClimate(const kaguya::LuaTable& data);

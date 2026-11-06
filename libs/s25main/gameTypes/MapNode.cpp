@@ -24,7 +24,7 @@ void MapNode::Serialize(SerializedGameData& sgd, const unsigned numPlayers, cons
     sgd.PushUnsignedChar(shadow);
     sgd.PushString(desc.get(t1).name);
     sgd.PushString(desc.get(t2).name);
-    sgd.PushUnsignedChar(resources.getValue());
+    sgd.PushUnsignedShort(resources.getValue());
     sgd.PushBool(reserved);
     sgd.PushUnsignedChar(owner);
     helpers::pushContainer(sgd, boundary_stones);
@@ -61,7 +61,11 @@ void MapNode::Deserialize(SerializedGameData& sgd, const unsigned numPlayers, co
         if(!t2)
             throw SerializedGameData::Error("Terrain with name '" + sName + "' not found");
     }
-    resources = Resource(sgd.PopUnsignedChar());
+    // Before version 21 (ores of the civilization mode) resources had only 8 bits
+    if(sgd.GetGameDataVersion() < 21)
+        resources = Resource::fromLegacyValue(sgd.PopUnsignedChar());
+    else
+        resources = Resource(sgd.PopUnsignedShort());
     reserved = sgd.PopBool();
     owner = sgd.PopUnsignedChar();
     helpers::popContainer(sgd, boundary_stones);

@@ -55,6 +55,7 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
         .addFunction("AddMapObject", &GameDataLoader::AddMapObject)
+        .addFunction("AddOre", &GameDataLoader::AddOre)
         .addFunction("AddByproduct", &GameDataLoader::AddByproduct)
         .addFunction("SetKnowledgeDistribution", &GameDataLoader::SetKnowledgeDistribution)
         .addFunction("SetMapClimate", &GameDataLoader::SetMapClimate)
@@ -153,12 +154,21 @@ void GameDataLoader::SetWareTags(const kaguya::LuaTable& data)
 
 void GameDataLoader::AddWorkshop(const kaguya::LuaTable& data)
 {
-    worldDesc_.workshops.emplace_back(data);
+    WorkshopDesc workshop(data);
+    // Knowledge points can also be given here instead of rttr:SetBuildingKnowledge
+    if(workshop.knowledge && !worldDesc_.buildingKnowledge.emplace(workshop.name, *workshop.knowledge).second)
+        throw GameDataError("Knowledge of building '" + workshop.name + "' is defined twice");
+    worldDesc_.workshops.push_back(std::move(workshop));
 }
 
 void GameDataLoader::AddMapObject(const kaguya::LuaTable& data)
 {
     worldDesc_.mapObjects.emplace_back(data);
+}
+
+void GameDataLoader::AddOre(const kaguya::LuaTable& data)
+{
+    worldDesc_.ores.emplace_back(data);
 }
 
 void GameDataLoader::AddByproduct(const kaguya::LuaTable& data)

@@ -3,9 +3,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "mapGenerator/Map.h"
+#include "civ/MapCodes.h"
 #include "helpers/containerUtils.h"
+#include "mapGenerator/Zones.h"
 #include "gameData/MaxPlayers.h"
 #include "libsiedler2/enumTypes.h"
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -86,6 +89,25 @@ libsiedler2::Archiv Map::CreateArchiv() const
         {
             objectType[this->objectTypes.GetIdx(hqPositions[i])] = libsiedler2::OT_HeadquarterMask;
             objectInfo[this->objectInfos.GetIdx(hqPositions[i])] = i;
+        }
+    }
+
+    // Climate for the civilization mode (where plantations can plant), see civ/MapCodes.h
+    {
+        auto& temperatureLayer = map->getLayer(MapLayer::Unknown7);
+        auto& humidityLayer = map->getLayer(MapLayer::Unknown9);
+        auto& waterLayer = map->getLayer(MapLayer::Unknown10);
+        const auto info = GetTerrainInfo(*this);
+        for(unsigned i = 0; i < numNodes; i++)
+        {
+            temperatureLayer[i] = static_cast<uint8_t>(civ::CLIMATE_MARKER | std::min<uint8_t>(temperature[i], 100));
+            humidityLayer[i] = std::min<uint8_t>(climate[i], 100);
+            uint8_t water = 0;
+            if(info[i] & TERRAIN_INFO_FRESH)
+                water |= civ::WATER_FRESH;
+            if(info[i] & TERRAIN_INFO_RIVER)
+                water |= civ::WATER_RIVER;
+            waterLayer[i] = water;
         }
     }
 

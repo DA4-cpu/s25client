@@ -11,6 +11,8 @@
 #include "SerializedGameData.h"
 #include "SoundManager.h"
 #include "addons/const_addons.h"
+#include "civ/Content.h"
+#include "civ/TechTree.h"
 #include "helpers/EnumRange.h"
 #include "lua/LuaInterfaceGame.h"
 #include "network/GameClient.h"
@@ -43,6 +45,8 @@ void nofGeologist::Serialize(SerializedGameData& sgd) const
     }
 
     helpers::pushPoint(sgd, node_goal);
+    // With size: The number of resource types grows with the ores of the civilization mode
+    sgd.PushVarSize(resAlreadyFound.size());
     helpers::pushContainer(sgd, resAlreadyFound);
 }
 
@@ -58,15 +62,26 @@ nofGeologist::nofGeologist(SerializedGameData& sgd, const unsigned obj_id)
 
     node_goal = sgd.PopMapPoint();
 
+    std::fill(resAlreadyFound.begin(), resAlreadyFound.end(), false);
     if(sgd.GetGameDataVersion() < 6)
     {
         for(const auto res : helpers::enumRange<ResourceType>())
         {
-            if(res != ResourceType::Fish && res != ResourceType::Water)
+            if(res != ResourceType::Fish && res != ResourceType::Water && !isCustomOre(res))
                 resAlreadyFound[res] = sgd.PopBool();
         }
     } else
-        helpers::popContainer(sgd, resAlreadyFound);
+    {
+        // Before version 21 there were only the built-in resources (up to fish)
+        const unsigned numSaved =
+          sgd.GetGameDataVersion() < 21 ? static_cast<unsigned>(ResourceType::Fish) + 1u : sgd.PopVarSize();
+        for(unsigned i = 0; i < numSaved; ++i)
+        {
+            const bool found = sgd.PopBool();
+            if(i < resAlreadyFound.size())
+                resAlreadyFound[ResourceType(i)] = found;
+        }
+    }
 }
 
 void nofGeologist::Draw(DrawPoint drawPt)
@@ -429,7 +444,7 @@ void nofGeologist::SetSign(Resource resources)
 
     if(!resAlreadyFound[resources.getType()] && !IsSignInArea(resources.getType()))
     {
-        const char* msg;
+        std::string msg;
         switch(resources.getType())
         {
             case ResourceType::Iron: msg = _("Found iron ore"); break;
@@ -437,7 +452,16 @@ void nofGeologist::SetSign(Resource resources)
             case ResourceType::Coal: msg = _("Found coal"); break;
             case ResourceType::Granite: msg = _("Found granite"); break;
             case ResourceType::Water: msg = _("Found water"); break;
-            default: RTTR_Assert(false); return;
+            default:
+                // Ore of the civilization mode
+                if(const civ::CustomOre* ore = world->GetTechTree().GetContent().GetOre(resources.getType()))
+                    msg = ore->title + " gefunden";
+                else
+                {
+                    RTTR_Assert(false);
+                    return;
+                }
+                break;
         }
 
         if(resources.getType() != ResourceType::Water || world->GetGGS().getSelection(AddonId::EXHAUSTIBLE_WATER) != 1)

@@ -285,20 +285,83 @@ Die Beispiele zeigen nur das Format; welche Waren und Werkstätten es gibt, legt
 `civ/mapobjects.lua` definiert Objekte, die eine Werkstatt einsammelt (`rttr:AddMapObject{ name, title, sizes, look,
 tint }`), z. B. `LoamDeposit`. Im Spiel ist das ein `noDeposit` mit Objektindex und Größe (0 = kleinste); jedes
 Einsammeln macht es eine Größe kleiner, nach der kleinsten verschwindet es. In Karten stehen sie als Objekttyp
-`0xD0 + Index` mit der Größe als Info-Byte (nur im Zivilisationsmodus geladen). Der Kartengenerator setzt sie über
-eine Regel in `world/mapgen.lua` (`object = "LoamDeposit"`).
+`0xD0 + Index % 32` mit dem Info-Byte `Größe + 32 * (Index / 32)` (bis zu 256 Objekte; Karten mit höchstens 16
+Objekten sehen aus wie vorher: Typ `0xD0 + Index`, Info = Größe), nur im Zivilisationsmodus geladen. Kodierung in
+`civ/MapCodes.h`. Der Kartengenerator setzt sie über eine Regel in `world/mapgen.lua` (`object = "LoamDeposit"`).
 
 Eine Werkstatt mit `collect = { object = "LoamDeposit", radius = 8 }` ist ein **Sammler** (`nofCustomCollector`, wie
 der Steinmetz): Der Arbeiter geht zum nächsten Objekt im Umkreis, arbeitet `workTime` und bringt das Produkt zurück.
 Gibt es keins mehr, kommt die Meldung „Kein … mehr im Umkreis“. Die KI baut Sammler in die Nähe der Objekte und
 reißt sie ab, wenn nichts mehr da ist (wie Steinbrüche).
 
+### Plantagen (Stand 2026-11-06)
+
+- Kartenobjekte mit `growTime = <Sekunden>` (und optional `plantSize`, Standard `sizes`) können gepflanzt werden.
+  Ein gepflanztes `noDeposit` (`noDeposit::CreatePlanted`) beginnt mit Größe 0 und wächst in gleichen Schritten bis
+  `plantSize - 1` (Ereignis, gespeichert). Solange es wächst (`IsGrowing`), sammeln und ernten es weder Sammler noch
+  Plantagen. Die Größen-Bilder (`Groesse<N>`) zeigen das Wachsen.
+- Werkstatt mit `plant = { object = "PapyrusDeposit", radius = 4 }` = **Plantage** (`nofCustomPlanter`, Mischung aus
+  Bauer, Förster und Köhler): Mit `output` erntet der Arbeiter ausgewachsene Objekte dieser Art im Umkreis (auch
+  natürliche, eine Ware pro Gang, Klasse 1) und pflanzt sonst ein neues (Klasse 2). Ohne `output` pflanzt er nur.
+  Die Eingänge (`inputs`, `consume` wie bisher, z. B. Wasser) werden beim Losgehen zum Pflanzen verbraucht (wie beim
+  Köhler); Ernten braucht nichts. Wird die Stelle unterwegs unbrauchbar, sind die Waren verloren.
+- **Wo gepflanzt wird** (`nofCustomPlanter::CanPlantAt`): freier Platz (nur Deko/Schilder werden entfernt), kein
+  Grenzstein, keine Straße, kein Gebäude, keine Baustelle, Fahne, Feld, Köhlerhaufen oder anderes Kartenobjekt
+  direkt daneben (damit Wege frei bleiben, da Objekte Wege sperren), und das Objekt **wächst dort natürlich**
+  (`GrowsNaturallyAt`): eine Regel in `world/mapgen.lua` mit diesem Objekt passt mit `terrain`, `temperature`,
+  `humidity`, `height` und hat dort ein Gewicht > 0. `zones`, `amount`, `hqDistance` zählen nicht (Wunsch des
+  Nutzers: kein Zonen-Zwang). Ohne Regel wächst es auf jedem Land.
+- Animation: Pflanzen wie der Förster bzw. säen wie der Bauer (`worker.look = "Farmer"`), Ernten wie der Sammler
+  (zusätzlich Sense für `"Farmer"`). Eigene Bilder `Arbeiter_Pflanzen_<n>`. Beim Ernten keine „Kein … mehr“-Meldung
+  (wie Bauer).
+- KI: Plantagen und Minen will sie je 1 (wie Werkstätten ohne Eingang, begrenzt durch Arbeiter/Werkzeug).
+  Plantage: Platz mit den meisten pflanzbaren Stellen und eigenen Objekten im Umkreis (mindestens 3, nicht neben einer
+  gleichen Plantage), `AIPlayerJH::FindPlantationPosition`.
+
+### Klima im Spiel (`civ/Climate.*`)
+
+- Damit der Pflanzfilter Temperatur und Feuchtigkeit kennt, schreibt der Generator das Klima in drei Ebenen der
+  .swd, die S2 nicht benutzt (`MapCodes.h`): Ebene 7 = `0x80 | Temperatur`, Ebene 9 = Feuchtigkeit, Ebene 10 =
+  Bits Süßwasser/Fluss. S2-Karten haben dort 0 / 7 / 0–1, ohne die Markierung 0x80 gibt es kein Klima.
+- `civ::ClimateMap` (in `GameWorldBase`, `GetClimate()`): beim Laden einer Karte im Zivilisationsmodus aus der Datei,
+  sonst beim ersten Gebrauch aus dem Terrain. Höhe in Prozent wie im Generator aus den Höhen beim Laden.
+  Die Terrain-Merkmale (`land`, `shore_fresh`, …) berechnet dieselbe Funktion wie im Generator
+  (`mapGenerator::ComputeTerrainFlags(info, nearWaterDistance)`); ohne Klima (Originalkarten, alte Zufallskarten)
+  sind Gewässer bis `lakeMaxSize` Knoten Seen und es gibt keine Flüsse; Klimagrenzen und Gewichte gelten dann nicht.
+- Spielstand: Klima, Höhe und Wasser-Bits (wenn vorhanden), die Merkmale werden beim Laden neu berechnet.
+
+### Erze (Bodenschätze)
+
+- `rttr:AddOre{ name = "Copper", title = "Kupfer", look = "Iron", tint = 0xC01080 }` in `civ/mapobjects.lua`.
+  `ResourceType` hat 24 Plätze `Custom0…` (wie Waren). `Resource` hat dafür jetzt 16 Bit (Typ im oberen Byte,
+  Menge 0–15 wie bisher); alte Spielstände (8 Bit) werden umgerechnet (`Resource::fromLegacyValue`).
+- Karten: Ressourcen-Byte = Code des Erzes + Menge 1–7, Codes aus von S2 nicht benutzten Werten (`ORE_MAP_CODES`:
+  0x90–0xF8, 0x60–0x78, 0x28–0x38, 0x08–0x18). Ohne Zivilisationsmodus oder ohne Definition: kein Bodenschatz.
+- Generator: Regel mit `object = "Copper"` wird mit Kohle, Eisen, Gold und Granit zusammen verteilt
+  (`PlaceMineResources`, Anteile nach Mengen); `amount` als Zahl.
+- Geologe: findet sie, Schild = eigenes Bild (`<Erz>/Schild0..2`) oder Schild des `look`-Erzes eingefärbt, Meldung
+  „<Titel> gefunden“, Lua-Ereignis wie bisher. Bodenschatz-Anzeige (Cheat) mit der Ware des `look`-Erzes.
+- **Minen:** Werkstatt mit `size = "mine"` und `mine = { resource = "Copper" }` (`BuildingQuality::Mine`, Reiter
+  Minen im Baumenü, `BuildingProperties::IsMine`). Der Arbeiter (`nofCustomWorker`) baut wie `nofMiner` pro Produkt
+  eine Einheit im Umkreis `MINER_RADIUS` ab (Addon „Unerschöpfliche Minen“ gilt), sonst „Diese Mine ist erschöpft“,
+  die KI reißt sie dann ab. KI-Platz: meiste Erzmenge im Umkreis (`FindCustomMinePosition`).
+- Signatur des Spielstands: `R:<Erz>` (anhängen erlaubt, sonst nicht).
+
+### Wissenspunkte in `rttr:AddWorkshop`
+
+`knowledge = { IWP = 2 }` in einer Werkstatt trägt die Punkte wie `rttr:SetBuildingKnowledge` ein. Steht dieselbe
+Werkstatt auch in `knowledge.lua`, ist das ein Fehler („defined twice“).
+
+Spielstand-Version 21: 16-Bit-Ressourcen (Knoten, Schilder), Geologe mit Anzahl der Ressourcenarten, wachsende
+Objekte, `nofCustomPlanter` (GO_Type), Klima.
+
 ### Eigene Grafiken (`civ/CustomGraphics.cpp`)
 
 - Ordner `data/RTTR/assets/civ/<Bezeichner>/`, Dateinamen siehe `data/RTTR/assets/civ/LIESMICH.txt`:
   Ware (`Symbol`, `Fahne`, `Esel`, `Traeger_<Richtung>`), Werkstatt (`Gebaeude`, `Baustelle`, je mit `_Schatten`,
   `Tuer`, `Icon`, je Volk überschreibbar), Arbeiter (`Arbeiter_Symbol`, `Arbeiter_<Richtung>_<0-7>`,
-  `Arbeiter_Arbeit_<n>`), Kartenobjekt (`Groesse<N>` mit `_Schatten`). Landschafts-Varianten mit `_Winter` usw.
+  `Arbeiter_Arbeit_<n>`, Plantagen `Arbeiter_Pflanzen_<n>`), Kartenobjekt (`Groesse<N>` mit `_Schatten`), Erz
+  (`Schild0..2`). Landschafts-Varianten mit `_Winter` usw.
 - PNG (über `external/stb`, Public Domain/MIT) oder BMP; Ankerpunkt `.nx<X>.ny<Y>` im Namen, sonst an derselben
   relativen Stelle wie im Platzhalter. Pixel in den vier blauen Spielerfarben (PAL5 128–131) werden Spielerfarbe.
 - Gelesen in `Loader::fillCaches` (beim Laden eines Spiels). Eigene Bilder füllen die Cache-Plätze der Lua-Typen
@@ -395,7 +458,8 @@ rttr:AddMapResource{ name = "Steinhaufen", object = "stones", amount = "stonePil
     weights = { { temperature = {60, 100}, humidity = {60, 100}, factor = 0.3 } } }
 ```
 
-- Objekte: `trees`, `stones`, `animals`, `decoration`, `fish`, `groundwater`, `coal`, `iron`, `gold`, `granite`.
+- Objekte: `trees`, `stones`, `animals`, `decoration`, `fish`, `groundwater`, `coal`, `iron`, `gold`, `granite`,
+  dazu Kartenobjekte (`rttr:AddMapObject`) und Erze (`rttr:AddOre`) des Zivilisationsmodus.
   Baum- und Tierarten kommen aus dem Paket der Zone (erstes passendes Paket). Enten nur auf Wasser.
 - Terrain: `land`, `mountain`, `freshwater`, `saltwater`, `river`, `shore_fresh`, `shore_salt`, `shore_river`,
   `near_fresh`, `near_salt`, `near_river` (mehrere = eines muss passen).
@@ -416,8 +480,10 @@ Böden je Landschaft (6 Bit); „world“ hat jetzt 62.
 ### Grenzen
 
 - Neue Pflanzen und Tiere (Mahagoni, Schimpanse …) brauchen erst eigene Kartenobjekte und ein Speicherformat
-  (das S2-Format kennt nur 9 Baumarten und 6 Tierarten). Bis dahin stehen vorhandene Arten in den Paketen. Lehm nutzt
-  schon die Kartenobjekte des Zivilisationsmodus (siehe oben).
+  (das S2-Format kennt nur 9 Baumarten und 6 Tierarten). Bis dahin stehen vorhandene Arten in den Paketen. Lehm und
+  Papyrus nutzen schon die Kartenobjekte des Zivilisationsmodus, Kupfer die Erze (siehe oben).
+- Die Zonen werden nicht in der Karte gespeichert (Plantagen ignorieren sie ohnehin), Temperatur, Feuchtigkeit und
+  Süßwasser/Flüsse schon (siehe „Klima im Spiel“).
 - Eisbären lassen sich im Kartenformat nicht speichern.
 - Originalkarten werden nicht verändert.
 

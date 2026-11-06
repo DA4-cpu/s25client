@@ -1,12 +1,13 @@
 Eigene Grafiken für den Zivilisationsmodus
 ==========================================
 
-Für jede Ware, Werkstatt und jedes Kartenobjekt aus gamedata/civ/*.lua gibt es hier einen Ordner mit dem
-Bezeichner (name = "...") als Namen, z.B. für Lehm:
+Für jede Ware, Werkstatt, jedes Kartenobjekt und jedes Erz aus gamedata/civ/*.lua gibt es hier einen Ordner mit
+dem Bezeichner (name = "...") als Namen, z.B. für Lehm und Kupfer:
 
   Loam/          Ware "Lehm"                      (civ/wares.lua)
   LoamPit/       Werkstatt "Lehmgrube" und ihr Arbeiter "Lehmstecher"  (civ/workshops.lua)
   LoamDeposit/   Kartenobjekt "Lehmvorkommen"     (civ/mapobjects.lua)
+  Copper/        Erz "Kupfer" (Schilder des Geologen)  (civ/mapobjects.lua, rttr:AddOre)
 
 Jedes Bild ist freiwillig. Fehlt eines, zeichnet das Spiel wie bisher die Platzhaltergrafik (look = "..." in der
 Lua-Datei). Man kann also mit einem einzigen Bild anfangen. Groß-/Kleinschreibung der Dateinamen ist egal.
@@ -99,8 +100,12 @@ Werkstatt  (Ordner = Bezeichner der Werkstatt, z.B. LoamPit)
   Arbeiter_Symbol.png               Symbol in den Fenstern
   Arbeiter_<Richtung>_<0-7>.png     Laufen: die ganze Figur, 8 Bilder je Richtung (Richtungen wie oben).
                                     Eine Richtung wird nur benutzt, wenn alle 8 Bilder da sind.
-  Arbeiter_Arbeit_<0,1,2,...>.png   Arbeitsanimation am Kartenobjekt (z.B. Lehm stechen): beliebig viele Bilder,
-                                    ab 0 ohne Lücke. Sie laufen in Schleife im Takt der Platzhalter-Animation.
+  Arbeiter_Arbeit_<0,1,2,...>.png   Arbeitsanimation am Kartenobjekt (z.B. Lehm stechen, Papyrus ernten):
+                                    beliebig viele Bilder, ab 0 ohne Lücke. Sie laufen in Schleife im Takt der
+                                    Platzhalter-Animation.
+  Arbeiter_Pflanzen_<0,1,2,...>.png Nur Plantagen (plant in workshops.lua): Animation beim Pflanzen, wie oben.
+                                    Platzhalter: säen wie der Bauer (worker.look = "Farmer"), sonst pflanzen wie
+                                    der Förster.
   Trägt der Arbeiter etwas, sieht er aus wie ein Träger mit dieser Ware (Traeger_-Bilder der Ware).
 
 
@@ -109,6 +114,17 @@ Kartenobjekt  (Ordner = Bezeichner des Objekts, z.B. LoamDeposit)
   Groesse<N>.png               N = 0 (kleinstes, kurz vor dem Verschwinden) bis sizes-1 (volles Vorkommen),
   Groesse<N>_Schatten.png      sizes steht in mapobjects.lua (Lehmvorkommen: 0 bis 5).
   Fehlt eine Größe, wird für sie der eingefärbte Platzhalter gezeichnet. Die Vorlagen sind schon eingefärbt.
+  Von einer Plantage gepflanzte Objekte wachsen durch die Größen: Sie beginnen mit Groesse0 und werden bis zur
+  Größe plantSize-1 (mapobjects.lua) größer.
+
+
+Erz  (Ordner = Bezeichner des Erzes, z.B. Copper)
+-------------------------------------------------
+  Schild0.png      Schild des Geologen: wenig Erz (Menge 1-2)
+  Schild1.png      mittel (Menge 3-5)
+  Schild2.png      viel (ab Menge 6)
+  Der Schatten des Schildes ist für alle Schilder gleich und wird dazugezeichnet. Die Vorlagen sind die Schilder
+  des Platzhalter-Erzes (look in mapobjects.lua), schon eingefärbt.
 
 
 Checkliste Lehm (alles, was es im Spiel zu sehen gibt)

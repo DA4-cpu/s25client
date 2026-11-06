@@ -36,6 +36,7 @@ namespace civ {
 
 class Content;
 struct CustomMapObject;
+struct CustomOre;
 
 /// Folder with the graphics drawn for the civilization mode: <folder>/<identifier>/<file>
 constexpr auto graphicsFolder = "<RTTR_RTTR>/assets/civ";
@@ -55,6 +56,9 @@ struct WorkAnimation
     uint8_t soundVolume;
 };
 WorkAnimation getLookWorkAnimation(Job look);
+/// Animation of a planter (plantation) without own graphics: Sowing like the farmer for the look "Farmer", otherwise
+/// planting like the forester
+WorkAnimation getLookPlantAnimation(Job look);
 
 /// German names used in the file names
 const char* getDirectionName(Direction dir);
@@ -120,8 +124,12 @@ public:
     bool HasWalking(Job job) const;
     /// Own work animation (empty: placeholder)
     const std::vector<glArchivItem_Bitmap_Player*>& GetWorkFrames(Job job) const;
+    /// Own planting animation of a plantation (empty: placeholder)
+    const std::vector<glArchivItem_Bitmap_Player*>& GetPlantFrames(Job job) const;
     /// Own sprite of the map object in the state (size) or nullptr
     glSmartBitmap* GetMapObject(unsigned objIdx, unsigned state) const;
+    /// Own sign of the geologist for the ore (index) and amount (0..2) or nullptr
+    glArchivItem_Bitmap* GetOreSign(unsigned oreIdx, unsigned amountIdx) const;
 
     /// Number of images loaded (for tests and the log)
     unsigned GetNumLoaded() const { return numLoaded_; }
@@ -137,13 +145,17 @@ private:
         helpers::EnumArray<glArchivItem_Bitmap*, Nation> icon{}, image{};
         glArchivItem_Bitmap* jobIcon = nullptr;
         bool hasWalking = false;
-        std::vector<glArchivItem_Bitmap_Player*> workFrames;
+        std::vector<glArchivItem_Bitmap_Player*> workFrames, plantFrames;
     };
 
     void loadWare(Loader& loader, glTexturePacker* stp, GoodType good, const std::string& name, GoodType look);
     void loadBuilding(Loader& loader, glTexturePacker* stp, BuildingType bld, const std::string& name,
-                      BuildingType look, Job lookJob);
+                      BuildingType look, Job lookJob, bool plants);
     void loadMapObject(Loader& loader, glTexturePacker* stp, unsigned objIdx, const CustomMapObject& obj);
+    void loadOre(Loader& loader, unsigned oreIdx, const CustomOre& ore);
+    /// Own animation frames <name>_0, _1, ... as long as they exist and templates of the placeholder animation
+    std::vector<glArchivItem_Bitmap_Player*> loadAnimation(Loader& loader, const Folder& folder,
+                                                           const std::string& name, const WorkAnimation& lookAnim);
 
     /// Load the image (with the landscape variant) or nullptr if it does not exist or is invalid
     glArchivItem_Bitmap* loadImage(const Folder& folder, const std::string& name,
@@ -166,6 +178,8 @@ private:
     std::array<BuildingGfx, NUM_CUSTOM_BUILDINGS> buildings_;
     /// Map object -> state -> sprite (nullptr: placeholder)
     std::vector<std::vector<glSmartBitmap*>> mapObjects_;
+    /// Ore -> amount index -> sign (nullptr: placeholder)
+    std::vector<std::array<glArchivItem_Bitmap*, 3>> oreSigns_;
     unsigned numLoaded_ = 0, numTemplates_ = 0;
 };
 

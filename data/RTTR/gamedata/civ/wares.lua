@@ -105,3 +105,22 @@ rttr:AddWare{
     transport = "Stones", -- PLATZHALTER
     knowledge = { MWP = 1 },
 }
+
+-------------------------------------------------------------------------------
+-- Kupfererz aus der Kupfermine und Papyruspflanzen aus der Papyrusplantage (workshops.lua)
+-------------------------------------------------------------------------------
+
+rttr:AddWare{
+    name = "CopperOre",
+    title = "Kupfererz",
+    kind = "Erz",
+    look = "IronOre",
+    transport = "IronOre",
+}
+
+rttr:AddWare{
+    name = "PapyrusPlant",
+    title = "Papyruspflanze",
+    look = "Grain",
+    transport = "Grain",
+}

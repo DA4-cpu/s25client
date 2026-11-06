@@ -4,7 +4,9 @@
 
 #include "nofCustomWorker.h"
 #include "GamePlayer.h"
+#include "GlobalGameSettings.h"
 #include "SerializedGameData.h"
+#include "addons/const_addons.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
 #include "civ/TechTree.h"
@@ -40,15 +42,35 @@ unsigned short nofCustomWorker::GetCarryID() const
     return CARRY_ID_CARRIER_OFFSET + static_cast<unsigned short>(ware ? *ware : GoodType::Stones);
 }
 
+ResourceType nofCustomWorker::GetMineResource() const
+{
+    const civ::CustomBuilding* building = civ::getActiveContent().GetBuilding(workplace->GetBuildingType());
+    return building ? building->mineResource : ResourceType::Nothing;
+}
+
 bool nofCustomWorker::AreWaresAvailable() const
 {
     if(workplace->IsLibrary())
+        return false;
+    // Mine: Also the ore must be there (like nofMiner)
+    const ResourceType ore = GetMineResource();
+    if(ore != ResourceType::Nothing && !FindPointWithResource(ore).isValid())
         return false;
     return nofWorkman::AreWaresAvailable();
 }
 
 bool nofCustomWorker::StartWorking()
 {
+    const ResourceType ore = GetMineResource();
+    if(ore != ResourceType::Nothing)
+    {
+        // Mine: Dig one unit of the ore like nofMiner (unless mines are inexhaustible)
+        const MapPoint resPt = FindPointWithResource(ore);
+        if(!resPt.isValid())
+            return false;
+        if(!world->GetGGS().isEnabled(AddonId::INEXHAUSTIBLE_MINES))
+            world->ReduceResource(resPt);
+    }
     if(!nofWorkman::StartWorking())
         return false;
     consumedInput_ = workplace->GetLastConsumedWare();

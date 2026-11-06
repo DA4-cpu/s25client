@@ -8,6 +8,7 @@
 #include "SoundManager.h"
 #include "buildings/nobUsual.h"
 #include "figures/nofCustomCollector.h"
+#include "figures/nofCustomPlanter.h"
 #include "notifications/BuildingNote.h"
 #include "random/Random.h"
 #include "world/GameWorld.h"
@@ -17,6 +18,7 @@
 #include "addons/AddonForesterReachRadius.h"
 #include "addons/AddonStonemasonReachRadius.h"
 #include "addons/AddonWoodcutterReachRadius.h"
+#include <algorithm>
 
 nofFarmhand::nofFarmhand(const Job job, const MapPoint pos, const unsigned char player, nobUsual* workplace)
     : nofBuildingWorker(job, pos, player, workplace), dest(0, 0)
@@ -35,9 +37,9 @@ nofFarmhand::nofFarmhand(SerializedGameData& sgd, const unsigned obj_id)
 
 unsigned nofFarmhand::GetWorkRadius(const Job job)
 {
-    // Collectors of workshops defined in lua (civilization mode)
+    // Collectors and plantations of workshops defined in lua (civilization mode)
     if(isCustomJob(job))
-        return nofCustomCollector::GetCollectRadius(job);
+        return std::max(nofCustomCollector::GetCollectRadius(job), nofCustomPlanter::GetPlantRadius(job));
     switch(job)
     {
         case Job::Carpenter: return 0;
@@ -102,7 +104,8 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
             // I.e. 0 => Don't search for points further away than ones already found
             const unsigned additionalRadiiToFind = [](Job job) {
                 if(isCustomJob(job))
-                    return 0u; // Collector: like the stonemason
+                    return nofCustomPlanter::GetPlantRadius(job) > 0 ? 1u : 0u; // Plantation like the farmer,
+                                                                                // collector like the stonemason
                 switch(job)
                 {
                     case Job::Woodcutter:
@@ -141,7 +144,7 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
                             {
                                 available_points[quality].push_back(pt);
                                 pointFound = true;
-                            } else if(job_ == Job::Stonemason || isCustomJob(job_))
+                            } else if(job_ == Job::Stonemason || nofCustomCollector::GetCollectRadius(job_) > 0)
                                 wait = true;
                         }
                     }
@@ -180,9 +183,11 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
                 WalkingStarted();
             } else
             {
-                if(!wait && isCustomJob(job_))
+                // Collectors of the civilization mode are out of resources, plantations (custom jobs, too) just have
+                // nothing to do at the moment like the farmer
+                if(!wait && nofCustomCollector::GetCollectRadius(job_) > 0)
                     workplace->OnOutOfResources();
-                else if(!wait)
+                else if(!wait && !isCustomJob(job_))
                 {
                     switch(job_)
                     {

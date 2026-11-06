@@ -138,29 +138,54 @@ void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity, unsig
     }
 }
 
+NodeMapBase<uint8_t> GetTerrainInfo(const Map& map)
+{
+    const auto& textures = map.textureMap;
+    NodeMapBase<uint8_t> info;
+    info.Resize(map.size, 0);
+    RTTR_FOREACH_PT(MapPoint, map.size)
+    {
+        uint8_t curInfo = 0;
+        if(textures.All(pt, IsWater))
+        {
+            curInfo |= TERRAIN_INFO_ALL_WATER;
+            // Lakes are fresh water, the sea salt water (see MarkLakes). Water from rivers on land nodes is fresh, too
+            if(map.nodeKind[pt] != NodeKind::Water || map.lakes[pt])
+                curInfo |= TERRAIN_INFO_FRESH;
+        }
+        if(textures.Any(pt, IsWater))
+            curInfo |= TERRAIN_INFO_ANY_WATER;
+        if(textures.Any(pt, IsMountainOrSnowOrLava))
+            curInfo |= TERRAIN_INFO_ANY_MOUNTAIN;
+        if(textures.All(pt, IsLand))
+            curInfo |= TERRAIN_INFO_ALL_LAND;
+        if(map.riverCourse[pt])
+            curInfo |= TERRAIN_INFO_RIVER | TERRAIN_INFO_FRESH;
+        info[pt] = curInfo;
+    }
+    return info;
+}
+
 void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance)
 {
-    const MapExtent size = map.size;
-    const auto& textures = map.textureMap;
+    map.terrainFlags = ComputeTerrainFlags(GetTerrainInfo(map), nearWaterDistance);
+}
 
-    NodeMapBase<uint8_t> isWater; // All triangles water
-    isWater.Resize(size, 0);
-    RTTR_FOREACH_PT(MapPoint, size)
-    {
-        isWater[pt] = textures.All(pt, IsWater) ? 1 : 0;
-    }
-
-    // Lakes are fresh water, the sea salt water (see MarkLakes). Water from rivers on land nodes is fresh water, too
-    const auto isFresh = [&map](const MapPoint& pt) { return map.nodeKind[pt] != NodeKind::Water || map.lakes[pt]; };
+NodeMapBase<uint16_t> ComputeTerrainFlags(const NodeMapBase<uint8_t>& info, unsigned nearWaterDistance)
+{
+    const MapExtent size = info.GetSize();
+    const auto isWater = [&info](const MapPoint& pt) { return (info[pt] & TERRAIN_INFO_ALL_WATER) != 0; };
+    const auto isRiver = [&info](const MapPoint& pt) { return (info[pt] & TERRAIN_INFO_RIVER) != 0; };
+    const auto isFresh = [&info](const MapPoint& pt) { return (info[pt] & TERRAIN_INFO_FRESH) != 0; };
 
     std::vector<MapPoint> freshNodes, saltNodes, riverNodes;
     RTTR_FOREACH_PT(MapPoint, size)
     {
-        if(map.riverCourse[pt])
+        if(isRiver(pt))
         {
             riverNodes.push_back(pt);
             freshNodes.push_back(pt);
-        } else if(isWater[pt])
+        } else if(isWater(pt))
         {
             if(isFresh(pt))
                 freshNodes.push_back(pt);
@@ -193,21 +218,21 @@ void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance)
         RTTR_FOREACH_PT(MapPoint, size)
         {
             MapGenTerrainFlags& curFlags = flags[pt];
-            if(map.riverCourse[pt])
+            if(isRiver(pt))
             {
                 curFlags |= toFlag(MapGenTerrain::River) | toFlag(MapGenTerrain::Freshwater);
                 continue;
             }
-            if(isWater[pt])
+            if(isWater(pt))
             {
                 curFlags |= toFlag(isFresh(pt) ? MapGenTerrain::Freshwater : MapGenTerrain::Saltwater);
                 continue;
             }
-            if(!textures.Any(pt, IsWater))
+            if(!(info[pt] & TERRAIN_INFO_ANY_WATER))
             {
-                if(textures.Any(pt, IsMountainOrSnowOrLava))
+                if(info[pt] & TERRAIN_INFO_ANY_MOUNTAIN)
                     curFlags |= toFlag(MapGenTerrain::Mountain);
-                else if(textures.All(pt, IsLand))
+                else if(info[pt] & TERRAIN_INFO_ALL_LAND)
                     curFlags |= toFlag(MapGenTerrain::Land);
                 continue;
             }
@@ -236,18 +261,16 @@ void ComputeTerrainFlags(Map& map, unsigned nearWaterDistance)
     const auto nearRiver = distanceTo(nearRiverSources);
     RTTR_FOREACH_PT(MapPoint, size)
     {
-        MapGenTerrainFlags curFlags = flags[pt];
-        if(!isWater[pt] && !map.riverCourse[pt])
-        {
-            if(isNear(nearFresh[pt], nearWaterDistance))
-                curFlags |= toFlag(MapGenTerrain::NearFresh);
-            if(isNear(nearSalt[pt], nearWaterDistance))
-                curFlags |= toFlag(MapGenTerrain::NearSalt);
-            if(isNear(nearRiver[pt], nearWaterDistance))
-                curFlags |= toFlag(MapGenTerrain::NearRiver);
-        }
-        map.terrainFlags[pt] = curFlags;
+        if(isWater(pt) || isRiver(pt))
+            continue;
+        if(isNear(nearFresh[pt], nearWaterDistance))
+            flags[pt] |= toFlag(MapGenTerrain::NearFresh);
+        if(isNear(nearSalt[pt], nearWaterDistance))
+            flags[pt] |= toFlag(MapGenTerrain::NearSalt);
+        if(isNear(nearRiver[pt], nearWaterDistance))
+            flags[pt] |= toFlag(MapGenTerrain::NearRiver);
     }
+    return flags;
 }
 
 } // namespace rttr::mapGenerator
