@@ -155,6 +155,13 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
         // building wanted usually limited by profession workers+tool for profession with some arbitrary limit. Some
         // buildings which are linked to others in a chain / profession-tool-rivalry have additional limits.
         const Inventory& inventory = aijh.player.GetInventory();
+        // Tool reform (civilization mode): Workers are recruited without tools, so there are no idle workers in the
+        // warehouses. Count the pickaxes in stock instead, each can be used by a miner or stonemason
+        const bool hasToolReform = civ::isEnabled(aijh.GetWorld()) && civ::getActiveContent().HasToolReform();
+        const unsigned numMiners =
+          inventory.people[Job::Miner] + (hasToolReform ? inventory.goods[GoodType::PickAxe] : 0u);
+        const unsigned numStonemasons =
+          inventory.people[Job::Stonemason] + (hasToolReform ? inventory.goods[GoodType::PickAxe] : 0u);
 
         unsigned numMines = GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::IronMine)
                             + GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::GraniteMine);
@@ -205,19 +212,17 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
 
         // quarry: low ware games start at 2 otherwise build as many as we have stonemasons, higher ware games up to 6
         // quarries
-        if(inventory.goods[GoodType::PickAxe] + inventory.people[Job::Miner] < 7
-           && inventory.people[Job::Stonemason] > 0 && inventory.people[Job::Miner] < 3)
+        if(inventory.goods[GoodType::PickAxe] + inventory.people[Job::Miner] < 7 && numStonemasons > 0 && numMiners < 3)
         {
-            buildingsWanted[BuildingType::Quarry] =
-              std::max(std::min(inventory.people[Job::Stonemason], numMilitaryBlds), 2u);
+            buildingsWanted[BuildingType::Quarry] = std::max(std::min(numStonemasons, numMilitaryBlds), 2u);
         } else
         {
             //>6miners = build up to 6 depending on resources, else max out at miners/2
-            if(inventory.people[Job::Miner] > 6)
+            if(numMiners > 6)
                 buildingsWanted[BuildingType::Quarry] =
                   std::min(inventory.goods[GoodType::PickAxe] + inventory.people[Job::Stonemason], 6u);
             else
-                buildingsWanted[BuildingType::Quarry] = inventory.people[Job::Miner] / 2;
+                buildingsWanted[BuildingType::Quarry] = numMiners / 2;
 
             if(buildingsWanted[BuildingType::Quarry] > numMilitaryBlds)
                 buildingsWanted[BuildingType::Quarry] = numMilitaryBlds;
@@ -444,7 +449,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
                      > GetNumBuildings(BuildingType::CoalMine) + GetNumBuildings(BuildingType::GoldMine) + 1
                    && numFoodProducers > 4) ? 2 : 1;
 
-                buildingsWanted[BuildingType::GoldMine] = (inventory.people[Job::Miner] > 2) ? 1 : 0;
+                buildingsWanted[BuildingType::GoldMine] = (numMiners > 2) ? 1 : 0;
                 if(aijh.ggs.isEnabled(AddonId::CHARBURNER) && GetNumBuildings(BuildingType::Farm) > 2)
                 {
                     resourcelimit = inventory.people[Job::CharBurner] + inventory.goods[GoodType::Shovel];
@@ -466,7 +471,7 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
             if(GetNumBuildings(BuildingType::Quarry) + 1 < buildingsWanted[BuildingType::Quarry]
                && aijh.AmountInStorage(GoodType::Stones) < 100) // no quarry and low stones -> try granitemines.
             {
-                if(inventory.people[Job::Miner] > 6)
+                if(numMiners > 6)
                 {
                     buildingsWanted[BuildingType::GraniteMine] = std::min<int>(
                       numMilitaryBlds / 15 + 1, // limit granite mines to military / 15 + 1

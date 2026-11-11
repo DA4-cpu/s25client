@@ -12,9 +12,12 @@
 #include "SerializedGameData.h"
 #include "Ware.h"
 #include "WineLoader.h"
+#include "civ/Content.h"
+#include "civ/Research.h"
 #include "commonDefines.h"
 #include "factories/JobFactory.h"
 #include "figures/nofAggressiveDefender.h"
+#include "figures/nofBuildingWorker.h"
 #include "figures/nofCarrier.h"
 #include "figures/nofDefender.h"
 #include "figures/nofPassiveSoldier.h"
@@ -849,7 +852,25 @@ void nobBaseWarehouse::AddFigure(std::unique_ptr<noFigure> figure, const bool in
     if(IsDependentFigure(*figure))
         RemoveDependentFigure(*figure);
 
-    CheckJobsForNewFigure(figure->GetJobType());
+    Job job = figure->GetJobType();
+    // Tool reform: Workers of buildings are helpers again when they come back, so they can take any job
+    if(!figure->MemberOfWarehouse() && job != Job::Helper && IsRecruitedWithoutTool(job))
+    {
+        ConvertToHelpers(job, 1);
+        job = Job::Helper;
+    }
+    // Tool reform: Tools the worker saved from his demolished workplace
+    if(auto* buildingWorker = dynamic_cast<nofBuildingWorker*>(figure.get()))
+    {
+        for(const GoodType tool : buildingWorker->ReleaseTools())
+        {
+            inventory.Add(tool);
+            world->GetPlayer(player).IncreaseInventoryWare(tool, 1);
+            CheckUsesForNewWare(tool);
+        }
+    }
+
+    CheckJobsForNewFigure(job);
     GetEvMgr().AddToKillList(std::move(figure));
 }
 
@@ -1204,12 +1225,19 @@ void nobBaseWarehouse::AddToInventory(const PeopleCounts& people, bool addToPlay
     }
 }
 
+bool nobBaseWarehouse::IsRecruitedWithoutTool(const Job job) const
+{
+    // Tool reform (civilization mode): Every helper can take a job in a building, the tools are used in the buildings
+    return civ::isEnabled(*world) && civ::getActiveContent().IsRecruitedWithoutTool(job);
+}
+
 bool nobBaseWarehouse::CanRecruit(const Job job) const
 {
     if(const auto& requiredTool = JOB_CONSTS[job].tool)
     {
         // Do we have a helper and a tool (if required)?
-        return inventory[Job::Helper] > 0 && (*requiredTool == GoodType::Nothing || inventory[*requiredTool] > 0);
+        return inventory[Job::Helper] > 0
+               && (*requiredTool == GoodType::Nothing || IsRecruitedWithoutTool(job) || inventory[*requiredTool] > 0);
         // Für den Bauarbeiter mind. 2 Hämmer verlangen, damit einer für
         // Armorer/Geologist/Shipwright reserviert bleibt
         const unsigned requiredAmount = (job == Job::Builder) ? 2u : 1u;
@@ -1227,7 +1255,7 @@ bool nobBaseWarehouse::TryRecruitJob(const Job job)
     auto& owner = world->GetPlayer(player);
 
     const GoodType requiredTool = *JOB_CONSTS[job].tool; // Validity checked in CanRecruit
-    if(requiredTool != GoodType::Nothing)
+    if(requiredTool != GoodType::Nothing && !IsRecruitedWithoutTool(job))
     {
         inventory.Remove(requiredTool);
         owner.DecreaseInventoryWare(requiredTool, 1);
@@ -1239,6 +1267,41 @@ bool nobBaseWarehouse::TryRecruitJob(const Job job)
     inventory.Add(job);
     owner.IncreaseInventoryJob(job, 1);
     return true;
+}
+
+void nobBaseWarehouse::ConvertToHelpers(const Job job, const unsigned count)
+{
+    RTTR_Assert(inventory.real[job] >= count);
+    GamePlayer& owner = world->GetPlayer(player);
+    inventory.real.Remove(job, count);
+    inventory.real.Add(Job::Helper, count);
+    // Workers who are about to leave are still part of the visual inventory
+    const unsigned visualCount = std::min(count, inventory.visual[job]);
+    inventory.visual.Remove(job, visualCount);
+    inventory.visual.Add(Job::Helper, visualCount);
+    owner.DecreaseInventoryJob(job, count);
+    owner.IncreaseInventoryJob(Job::Helper, count);
+}
+
+void nobBaseWarehouse::ConvertWorkersForToolReform()
+{
+    if(!civ::isEnabled(*world) || !civ::getActiveContent().HasToolReform())
+        return;
+    GamePlayer& owner = world->GetPlayer(player);
+    for(const auto job : helpers::enumRange<Job>())
+    {
+        const unsigned count = inventory.real[job];
+        if(count == 0 || job == Job::Helper || !IsRecruitedWithoutTool(job))
+            continue;
+        // The workers came with their tools: These are used in the buildings now
+        const GoodType tool = *JOB_CONSTS[job].tool;
+        ConvertToHelpers(job, count);
+        if(tool != GoodType::Nothing)
+        {
+            inventory.Add(tool, count);
+            owner.IncreaseInventoryWare(tool, count);
+        }
+    }
 }
 
 InventorySetting nobBaseWarehouse::GetInventorySettingVisual(const Job job) const

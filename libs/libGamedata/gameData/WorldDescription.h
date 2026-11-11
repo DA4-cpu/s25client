@@ -47,6 +47,13 @@ struct WorldDescription
     std::vector<WorkshopDesc> workshops;
     /// Byproducts of buildings in the civilization mode in order of definition
     std::vector<ByproductDesc> byproducts;
+    /// Tool reform (civilization mode): materials and tools in order of definition
+    std::vector<ToolMaterialDesc> toolMaterials;
+    std::vector<ToolDesc> tools;
+    /// Tools of built-in buildings: Building identifier -> tools
+    std::map<std::string, BuildingToolsDesc> buildingTools;
+    /// A replacement is ordered when a tool has at most this many percent of its durability left
+    unsigned toolReorderPercent = 10;
     /// Default setting of the regulator "Wissen" (weights 0..10 for LWP, IWP, MWP). Not set: all equal
     std::optional<KnowledgeValues> knowledgeDistribution;
     /// Random map generator: climate, zones and resource rules (gamedata/world/mapgen.lua)

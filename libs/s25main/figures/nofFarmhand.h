@@ -31,6 +31,7 @@ protected:
 
     /// Stop work as workplace becomes unavailable
     void WorkAborted() override;
+    unsigned GetOutsideWorkLength() const override;
 
     /// Start walking to work point
     void WalkToWorkpoint();

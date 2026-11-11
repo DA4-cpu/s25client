@@ -49,4 +49,10 @@ private:
     bool knowledgeChanged = false;
     unsigned GetKnowledgeTabId() const { return static_cast<unsigned>(groups.size()); }
     void SetKnowledgeValues(const std::array<uint8_t, 3>& values);
+
+    /// Civilization mode, tool reform: Tab "Werkzeuge" (priority of the tool materials) after the tab "Wissen"
+    bool hasToolTab = false;
+    bool toolsChanged = false;
+    unsigned GetToolTabId() const { return static_cast<unsigned>(groups.size()) + (hasKnowledgeTab ? 1u : 0u); }
+    void SetToolValues(const std::vector<uint8_t>& values);
 };

@@ -44,6 +44,9 @@ bool canResearch(const GameWorldBase& world, unsigned playerId, TechIdx tech);
 void applyBuildingAvailability(GamePlayer& player);
 /// Initialize the civilization mode for all players at game start (new game or loaded). Noop if not enabled
 void startGame(GameWorld& world);
+/// Tool reform: Call once when a new game starts (not after loading). The workers in the warehouses become helpers and
+/// their tools wares, as every helper can take a job and the tools are used in the buildings
+void startNewGame(GameWorld& world);
 
 /// Set the current research of the player (nullopt to stop researching). Returns false if not possible
 bool setResearch(GameWorld& world, unsigned playerId, std::optional<TechIdx> tech);

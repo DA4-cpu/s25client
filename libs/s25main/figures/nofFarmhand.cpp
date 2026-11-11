@@ -274,6 +274,11 @@ void nofFarmhand::WalkHome()
     }
 }
 
+unsigned nofFarmhand::GetOutsideWorkLength() const
+{
+    return JOB_CONSTS[job_].work_length;
+}
+
 void nofFarmhand::WorkAborted()
 {
     // Platz freigeben, falls man gerade arbeitet

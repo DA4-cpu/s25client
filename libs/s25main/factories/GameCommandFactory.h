@@ -78,6 +78,8 @@ public:
     bool SetResearch(std::optional<unsigned> techIdx);
     /// Civilization mode: Regulator "Wissen", weights 0..10 for LWP, IWP, MWP
     bool SetKnowledgeDistribution(const std::array<uint8_t, 3>& values);
+    /// Civilization mode, tool reform: Set the regulator "Werkzeuge" (priority 0..10 per tool material)
+    bool SetToolMaterialPriorities(const std::vector<uint8_t>& values);
     /// Starts Preparation of an sea expedition in a habor
     bool StartStopExpedition(MapPoint pt, bool start);
     /// Lets a ship found a colony

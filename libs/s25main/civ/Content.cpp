@@ -6,7 +6,10 @@
 #include "civ/Identifiers.h"
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
+#include "gameData/BuildingConsts.h"
+#include "gameData/BuildingProperties.h"
 #include "gameData/GameConsts.h"
+#include "gameData/JobConsts.h"
 #include "gameData/ShieldConsts.h"
 #include "gameData/WorldDescription.h"
 #include <algorithm>
@@ -79,6 +82,11 @@ GoodType CustomBuilding::GetProduct(std::optional<GoodType> consumedInput) const
     }
     return productByInput.front().second;
 }
+
+namespace {
+    /// Jobs without a building of their own which are still recruited with their tool in the tool reform
+    constexpr std::array<Job, 4> TOOL_RECRUITED_JOBS = {Job::Builder, Job::Planer, Job::Geologist, Job::Scout};
+} // namespace
 
 Content::Content()
 {
@@ -403,6 +411,133 @@ Content::Content(const WorldDescription& desc) : Content()
         buildings_.push_back(std::move(bld));
         workers_.push_back(std::move(worker));
     }
+
+    // Tool reform: materials, tools and the tools of the buildings
+    if(desc.toolMaterials.empty())
+    {
+        if(!desc.tools.empty() || !desc.buildingTools.empty())
+            throw GameDataError("Tools need tool materials (rttr:AddToolMaterial)");
+        for(const WorkshopDesc& wsDesc : desc.workshops)
+        {
+            if(wsDesc.tools)
+                throw GameDataError("Workshop '" + wsDesc.name + "': tools need tool materials (rttr:AddToolMaterial)");
+        }
+        return;
+    }
+    toolReorderPercent_ = desc.toolReorderPercent;
+    for(const ToolMaterialDesc& materialDesc : desc.toolMaterials)
+    {
+        ToolMaterial material;
+        material.name = materialDesc.name;
+        material.title = materialDesc.title;
+        material.defaultPriority = static_cast<uint8_t>(materialDesc.priority);
+        toolMaterials_.push_back(std::move(material));
+    }
+    for(const ToolDesc& toolDesc : desc.tools)
+    {
+        const std::string context = "Tool '" + toolDesc.ware + "'";
+        const auto good = FindGood(toolDesc.ware);
+        if(!good)
+            throw GameDataError(context + ": unknown ware");
+        const auto itMaterial =
+          helpers::find_if(toolMaterials_, [&](const ToolMaterial& mat) { return mat.name == toolDesc.material; });
+        if(itMaterial == toolMaterials_.end())
+            throw GameDataError(context + ": unknown material '" + toolDesc.material
+                                + "' (define it with rttr:AddToolMaterial)");
+        ToolInfo tool;
+        tool.material = static_cast<unsigned>(itMaterial - toolMaterials_.begin());
+        tool.durability = toolDesc.durability;
+        tool.speed = toolDesc.speed;
+        tools_[*good] = tool;
+    }
+    const auto resolveTools = [this](const BuildingToolsDesc& toolsDesc, const std::string& context) {
+        BuildingTools result;
+        result.baseSpeed = toolsDesc.baseSpeed;
+        for(const TagQuery& query : toolsDesc.tools)
+        {
+            BuildingTools::Slot slot;
+            slot.query = query;
+            for(const GoodType good : FindWares(query))
+            {
+                if(tools_[good])
+                    slot.wares.push_back(good);
+            }
+            if(slot.wares.empty())
+                throw GameDataError(context + ": no tool (rttr:AddTool) matches '" + query.front() + "'");
+            for(const BuildingTools::Slot& other : result.slots)
+            {
+                for(const GoodType good : slot.wares)
+                {
+                    if(helpers::contains(other.wares, good))
+                        throw GameDataError(context + ": the tool '" + getIdentifierOf(good)
+                                            + "' fits to several of its tool entries");
+                }
+            }
+            result.slots.push_back(std::move(slot));
+        }
+        return result;
+    };
+    // Default: The tool of the worker and no work without it. Workers without a tool work as before
+    const auto makeDefaultTools = [this](const GoodType workerTool) {
+        BuildingToolsDesc toolsDesc;
+        if(workerTool != GoodType::Nothing && tools_[workerTool])
+            toolsDesc.tools.push_back(TagQuery{getIdentifierOf(workerTool)});
+        else
+            toolsDesc.baseSpeed = 100;
+        return toolsDesc;
+    };
+    std::set<BuildingType> definedBuildings;
+    for(const auto& entry : desc.buildingTools)
+    {
+        const std::string context = "Tools of building '" + entry.first + "'";
+        const auto bld = buildingFromIdentifier(entry.first);
+        if(!bld || !BuildingProperties::IsUsual(*bld) || !BUILTIN_BLD_WORK_DESC[static_cast<unsigned>(*bld)].job)
+            throw GameDataError(context
+                                + ": not a built-in building with a worker (workshops get their tools in "
+                                  "rttr:AddWorkshop)");
+        buildingTools_[*bld] = resolveTools(entry.second, context);
+        definedBuildings.insert(*bld);
+    }
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        if(isCustomBuilding(bld) || definedBuildings.count(bld) || !BuildingProperties::IsUsual(bld))
+            continue;
+        const auto job = BUILTIN_BLD_WORK_DESC[static_cast<unsigned>(bld)].job;
+        if(!job || isCustomJob(*job))
+            continue;
+        const auto workerTool = JOB_CONSTS[*job].tool;
+        // The scout of the lookout tower is still recruited with his tool
+        const bool usesTool = workerTool && !helpers::contains(TOOL_RECRUITED_JOBS, *job);
+        buildingTools_[bld] = resolveTools(makeDefaultTools(usesTool ? *workerTool : GoodType::Nothing),
+                                           std::string("Tools of building '") + getIdentifier(bld) + "'");
+    }
+    for(unsigned i = 0; i < buildings_.size(); ++i)
+    {
+        const WorkshopDesc& wsDesc = desc.workshops[i];
+        buildingTools_[getCustomBuilding(i)] = resolveTools(
+          wsDesc.tools ? *wsDesc.tools : makeDefaultTools(workers_[i].tool), "Workshop '" + wsDesc.name + "'");
+    }
+}
+
+const ToolInfo* Content::GetTool(const GoodType good) const
+{
+    return tools_[good] ? &*tools_[good] : nullptr;
+}
+
+unsigned Content::GetToolReorderSteps(const GoodType tool) const
+{
+    const ToolInfo* info = GetTool(tool);
+    if(!info)
+        return 0;
+    return std::max(1u, info->durability * toolReorderPercent_ / 100u);
+}
+
+bool Content::IsRecruitedWithoutTool(const Job job) const
+{
+    if(!HasToolReform() || helpers::contains(TOOL_RECRUITED_JOBS, job))
+        return false;
+    // Only jobs which are recruited from helpers at all
+    return JOB_CONSTS[job].tool.has_value();
 }
 
 std::string Content::getIdentifierOf(GoodType good) const

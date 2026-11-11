@@ -607,6 +607,39 @@ public:
     }
 };
 
+/// Civilization mode, tool reform: Set the regulator "Werkzeuge" (priority 0..10 per tool material)
+class SetToolMaterialPriorities : public GameCommand
+{
+    GC_FRIEND_DECL;
+    const std::vector<uint8_t> values;
+
+protected:
+    SetToolMaterialPriorities(std::vector<uint8_t> values)
+        : GameCommand(GCType::SetToolMaterialPriorities), values(std::move(values))
+    {}
+    SetToolMaterialPriorities(Serializer& ser) : GameCommand(GCType::SetToolMaterialPriorities), values(popValues(ser))
+    {}
+
+public:
+    void Execute(GameWorld& world, uint8_t playerId) override;
+    void Serialize(Serializer& ser) const override
+    {
+        GameCommand::Serialize(ser);
+        ser.PushUnsignedChar(static_cast<uint8_t>(values.size()));
+        for(const uint8_t value : values)
+            ser.PushUnsignedChar(value);
+    }
+
+private:
+    static std::vector<uint8_t> popValues(Serializer& ser)
+    {
+        std::vector<uint8_t> result(ser.PopUnsignedChar());
+        for(uint8_t& value : result)
+            value = ser.PopUnsignedChar();
+        return result;
+    }
+};
+
 /// Civilization mode: Set the regulator "Wissen" (weight 0..10 for LWP, IWP, MWP)
 class SetKnowledgeDistribution : public GameCommand
 {

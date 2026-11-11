@@ -135,6 +135,8 @@ public:
     void InitStoreAndMilitarylists();
     // set default start values for the ai for distribution
     void InitDistribution();
+    /// Tool reform (civilization mode): True while the distribution prefers the metalworks because tools are missing
+    bool toolShortageDistribution_ = false;
     // returns true if we can get to the startflag in <maxlen without turning back
     bool IsFlagPartofCircle(const noFlag& startFlag, unsigned maxlen, const noFlag& curFlag,
                             helpers::OptionalEnum<Direction> excludeDir, std::vector<const noFlag*> oldFlags);

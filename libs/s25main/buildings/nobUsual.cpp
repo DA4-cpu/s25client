@@ -11,6 +11,8 @@
 #include "Ware.h"
 #include "addons/const_addons.h"
 #include "civ/Content.h"
+#include "civ/PlayerResearch.h"
+#include "civ/Research.h"
 #include "figures/nofBuildingWorker.h"
 #include "figures/nofPigbreeder.h"
 #include "helpers/containerUtils.h"
@@ -24,6 +26,7 @@
 #include "world/GameWorld.h"
 #include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
+#include <algorithm>
 #include <numeric>
 
 /// Number of GFs after which the productivity is recalculated, i.e. productivity is averaged over intervals of this
@@ -35,9 +38,11 @@ constexpr unsigned isWorkingMarker = 0xFFFFFFFF;
 nobUsual::nobUsual(BuildingType type, MapPoint pos, unsigned char player, Nation nation)
     : noBuilding(type, pos, player, nation), worker(nullptr), disableProduction(false), disableProductionVirtual(false),
       lastOrderedWare(0), orderware_ev(nullptr), productivity_ev(nullptr), numGfNotWorking(0),
-      sinceNotWorking(isWorkingMarker), outOfRessourcesMsgSent(false), is_working(false)
+      sinceNotWorking(isWorkingMarker), outOfRessourcesMsgSent(false), ordertool_ev(nullptr), stepSpeed_(100),
+      is_working(false)
 {
     std::fill(numWares.begin(), numWares.end(), 0);
+    toolSlots_.resize(GetToolsDesc().slots.size());
 
     orderedWares.resize(BLD_WORK_DESC[bldType_].waresNeeded.size());
 
@@ -56,7 +61,7 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
       disableProduction(sgd.PopBool()), disableProductionVirtual(disableProduction),
       lastOrderedWare(sgd.PopUnsignedChar()), orderware_ev(sgd.PopEvent()), productivity_ev(sgd.PopEvent()),
       numGfNotWorking(sgd.PopUnsignedShort()), sinceNotWorking(sgd.PopUnsignedInt()),
-      outOfRessourcesMsgSent(sgd.PopBool()), is_working(sgd.PopBool())
+      outOfRessourcesMsgSent(sgd.PopBool()), ordertool_ev(nullptr), stepSpeed_(100), is_working(sgd.PopBool())
 {
     helpers::popContainer(sgd, numWares);
 
@@ -77,6 +82,29 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
         }
         sgd.PopObjectContainer(libraryOrderedMedia_, GO_Type::Ware);
     }
+
+    // Civilization mode: tool reform
+    if(sgd.GetGameDataVersion() >= 22)
+    {
+        toolSlots_.resize(sgd.PopUnsignedInt());
+        for(ToolSlot& slot : toolSlots_)
+        {
+            slot.tool = sgd.PopOptionalEnum<GoodType>().value_or(GoodType::Nothing);
+            slot.stepsLeft = sgd.PopUnsignedShort();
+            slot.spare = sgd.PopOptionalEnum<GoodType>().value_or(GoodType::Nothing);
+            slot.ordered = sgd.PopObject<Ware>(GO_Type::Ware);
+        }
+        ordertool_ev = sgd.PopEvent();
+        stepSpeed_ = sgd.PopUnsignedShort();
+    }
+    // The lua files may have changed (and older savegames have no tools): Buildings start without the new tools
+    const std::size_t numSlots = GetToolsDesc().slots.size();
+    for(std::size_t i = numSlots; i < toolSlots_.size(); ++i)
+    {
+        if(toolSlots_[i].ordered)
+            throw SerializedGameData::Error("Tools of a building in the savegame do not fit the lua files");
+    }
+    toolSlots_.resize(numSlots);
 }
 
 void nobUsual::Serialize(SerializedGameData& sgd) const
@@ -112,6 +140,23 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
         }
         sgd.PushObjectContainer(libraryOrderedMedia_, true);
     }
+
+    // Civilization mode: tool reform
+    sgd.PushUnsignedInt(static_cast<unsigned>(toolSlots_.size()));
+    for(const ToolSlot& slot : toolSlots_)
+    {
+        // GoodType::Nothing is no valid value in savegames
+        const auto toOptional = [](const GoodType good) {
+            return good == GoodType::Nothing ? helpers::OptionalEnum<GoodType>() :
+                                               helpers::OptionalEnum<GoodType>(good);
+        };
+        sgd.PushOptionalEnum<uint8_t>(toOptional(slot.tool));
+        sgd.PushUnsignedShort(slot.stepsLeft);
+        sgd.PushOptionalEnum<uint8_t>(toOptional(slot.spare));
+        sgd.PushObject(slot.ordered, true);
+    }
+    sgd.PushEvent(ordertool_ev);
+    sgd.PushUnsignedShort(stepSpeed_);
 }
 
 nobUsual::~nobUsual() = default;
@@ -121,6 +166,19 @@ void nobUsual::DestroyBuilding()
     // Arbeiter Bescheid sagen
     if(worker)
     {
+        // Tool reform: The worker takes the tools along which are still good (at least half of their durability
+        // left) and brings them to a warehouse. The others are lost with the building
+        std::vector<GoodType> tools;
+        for(const ToolSlot& slot : toolSlots_)
+        {
+            const civ::ToolInfo* info = civ::getActiveContent().GetTool(slot.tool);
+            if(info && slot.stepsLeft * 2u >= info->durability)
+                tools.push_back(slot.tool);
+            if(slot.spare != GoodType::Nothing)
+                tools.push_back(slot.spare);
+        }
+        if(!tools.empty())
+            worker->TakeTools(std::move(tools));
         worker->LostWork();
         worker = nullptr;
     } else
@@ -136,8 +194,16 @@ void nobUsual::DestroyBuilding()
     for(Ware* ware : libraryOrderedMedia_)
         WareNotNeeded(ware);
     libraryOrderedMedia_.clear();
+    // Tools in the building are lost with it (they are not part of the inventory anymore)
+    for(ToolSlot& slot : toolSlots_)
+    {
+        if(slot.ordered)
+            WareNotNeeded(slot.ordered);
+        slot = ToolSlot();
+    }
 
     // Events löschen
+    GetEvMgr().RemoveEvent(ordertool_ev);
     GetEvMgr().RemoveEvent(orderware_ev);
     GetEvMgr().RemoveEvent(productivity_ev);
 
@@ -276,7 +342,12 @@ void nobUsual::Draw(DrawPoint drawPt)
 
 void nobUsual::HandleEvent(const unsigned id)
 {
-    if(id)
+    if(id == 2)
+    {
+        // Tool reform: order tools regularly (they may not have been in stock)
+        OrderTools();
+        ordertool_ev = GetEvMgr().AddEvent(this, 210, 2);
+    } else if(id)
     {
         const unsigned short currentProductivity = CalcCurrentProductivity();
         // Sum over all last productivities and current (as start value)
@@ -323,6 +394,27 @@ void nobUsual::HandleEvent(const unsigned id)
 
 void nobUsual::AddWare(std::unique_ptr<Ware> ware)
 {
+    for(ToolSlot& slot : toolSlots_)
+    {
+        if(slot.ordered != ware.get())
+            continue;
+        // A tool arrived: Use it or keep it as replacement. Tools in buildings are not part of the inventory
+        slot.ordered = nullptr;
+        if(slot.tool == GoodType::Nothing)
+        {
+            const civ::ToolInfo* info = civ::getActiveContent().GetTool(ware->type);
+            slot.tool = ware->type;
+            slot.stepsLeft = static_cast<uint16_t>(info ? info->durability : 1u);
+        } else
+            slot.spare = ware->type;
+        GamePlayer& owner = world->GetPlayer(player);
+        owner.DecreaseInventoryWare(ware->type, 1);
+        owner.RemoveWare(*ware);
+        if(worker)
+            worker->GotWareOrProductionAllowed();
+        return;
+    }
+
     if(IsLibrary())
     {
         // Knowledge medium arrived: store it (it stays in the inventory of the player)
@@ -365,6 +457,15 @@ bool nobUsual::FreePlaceAtFlag()
 
 void nobUsual::WareLost(Ware& ware)
 {
+    for(ToolSlot& slot : toolSlots_)
+    {
+        if(slot.ordered == &ware)
+        {
+            slot.ordered = nullptr;
+            return;
+        }
+    }
+
     if(IsLibrary())
     {
         RTTR_Assert(helpers::contains(libraryOrderedMedia_, &ware));
@@ -388,6 +489,7 @@ void nobUsual::WareLost(Ware& ware)
 void nobUsual::GotWorker(Job /*job*/, noFigure& worker)
 {
     this->worker = checkedCast<nofBuildingWorker*>(&worker);
+    StartToolOrderEvent();
 
     if(!BLD_WORK_DESC[bldType_].waresNeeded.empty() || IsLibrary())
         // erste Ware bestellen
@@ -409,6 +511,7 @@ void nobUsual::WorkerLost()
 
     // Waren-Bestell-Event abmelden
     GetEvMgr().RemoveEvent(orderware_ev);
+    GetEvMgr().RemoveEvent(ordertool_ev);
 
     // neuen Arbeiter bestellen
     worker = nullptr;
@@ -540,6 +643,13 @@ unsigned nobUsual::CalcDistributionPoints(const GoodType type)
 
 void nobUsual::TakeWare(Ware* ware)
 {
+    if(orderingToolSlot_ >= 0)
+    {
+        // Ordered tool (see OrderTools)
+        toolSlots_[static_cast<unsigned>(orderingToolSlot_)].ordered = ware;
+        return;
+    }
+
     if(IsLibrary())
     {
         RTTR_Assert(!helpers::contains(libraryOrderedMedia_, ware));
@@ -563,7 +673,144 @@ void nobUsual::TakeWare(Ware* ware)
 bool nobUsual::AreThereAnyOrderedWares() const
 {
     return !libraryOrderedMedia_.empty()
-           || helpers::contains_if(orderedWares, [](const auto& wareList) { return !wareList.empty(); });
+           || helpers::contains_if(orderedWares, [](const auto& wareList) { return !wareList.empty(); })
+           || helpers::contains_if(toolSlots_, [](const ToolSlot& slot) { return slot.ordered != nullptr; });
+}
+
+const civ::BuildingTools& nobUsual::GetToolsDesc() const
+{
+    static const civ::BuildingTools noTools;
+    return civ::isEnabled(*world) ? civ::getActiveContent().GetBuildingTools(bldType_) : noTools;
+}
+
+unsigned nobUsual::GetWorkSpeed() const
+{
+    if(toolSlots_.empty())
+        return civ::isEnabled(*world) ? GetToolsDesc().baseSpeed : 100u;
+    const civ::Content& content = civ::getActiveContent();
+    unsigned speed = GetToolsDesc().baseSpeed;
+    for(const ToolSlot& slot : toolSlots_)
+    {
+        if(const civ::ToolInfo* info = content.GetTool(slot.tool))
+            speed += info->speed;
+    }
+    return speed;
+}
+
+bool nobUsual::BeginWorkStep()
+{
+    if(toolSlots_.empty())
+    {
+        stepSpeed_ = static_cast<uint16_t>(GetWorkSpeed());
+        return stepSpeed_ > 0;
+    }
+    // Savegames from before the tool reform have no event yet
+    StartToolOrderEvent();
+    const unsigned speed = GetWorkSpeed();
+    if(speed == 0)
+        return false;
+    stepSpeed_ = static_cast<uint16_t>(std::min(speed, 60000u));
+    // Every work step wears the tools out. A broken tool is replaced by the replacement waiting in the building
+    const civ::Content& content = civ::getActiveContent();
+    bool needsOrder = false;
+    for(ToolSlot& slot : toolSlots_)
+    {
+        if(slot.tool == GoodType::Nothing)
+            continue;
+        if(slot.stepsLeft > 0)
+            --slot.stepsLeft;
+        if(slot.stepsLeft == 0)
+        {
+            slot.tool = slot.spare;
+            slot.spare = GoodType::Nothing;
+            const civ::ToolInfo* info = content.GetTool(slot.tool);
+            slot.stepsLeft = static_cast<uint16_t>(info ? info->durability : 0u);
+        }
+        needsOrder |= NeedsToolOrder(slot);
+    }
+    if(needsOrder)
+        OrderTools();
+    return true;
+}
+
+unsigned nobUsual::ScaleWorkDuration(const unsigned gfs) const
+{
+    if(stepSpeed_ == 100 || stepSpeed_ == 0 || gfs == 0)
+        return gfs;
+    return std::max(1u, (gfs * 100u + stepSpeed_ / 2u) / stepSpeed_);
+}
+
+unsigned nobUsual::GetNumMissingTools(const GoodType tool) const
+{
+    if(toolSlots_.empty())
+        return 0;
+    const auto& slotDescs = GetToolsDesc().slots;
+    unsigned result = 0;
+    for(unsigned i = 0; i < toolSlots_.size(); ++i)
+    {
+        if(NeedsToolOrder(toolSlots_[i]) && helpers::contains(slotDescs[i].wares, tool))
+            ++result;
+    }
+    return result;
+}
+
+bool nobUsual::NeedsToolOrder(const ToolSlot& slot) const
+{
+    if(slot.ordered || slot.spare != GoodType::Nothing)
+        return false;
+    if(slot.tool == GoodType::Nothing)
+        return true;
+    // Order the replacement shortly before the tool breaks
+    return slot.stepsLeft <= civ::getActiveContent().GetToolReorderSteps(slot.tool);
+}
+
+void nobUsual::OrderTools()
+{
+    if(toolSlots_.empty() || disableProduction)
+        return;
+    const civ::Content& content = civ::getActiveContent();
+    const auto& slotDescs = GetToolsDesc().slots;
+    GamePlayer& owner = world->GetPlayer(player);
+    const auto priorities = owner.GetResearch().GetToolMaterialPriorities(content);
+    for(unsigned i = 0; i < toolSlots_.size(); ++i)
+    {
+        ToolSlot& slot = toolSlots_[i];
+        if(!NeedsToolOrder(slot))
+            continue;
+        // Tools by the priority of their material (regulator "Werkzeuge"), then by speed. Priority 0: never
+        std::vector<GoodType> candidates;
+        for(const GoodType good : slotDescs[i].wares)
+        {
+            if(priorities[content.GetTool(good)->material] > 0)
+                candidates.push_back(good);
+        }
+        std::stable_sort(candidates.begin(), candidates.end(), [&](const GoodType lhs, const GoodType rhs) {
+            const civ::ToolInfo& lhsInfo = *content.GetTool(lhs);
+            const civ::ToolInfo& rhsInfo = *content.GetTool(rhs);
+            if(priorities[lhsInfo.material] != priorities[rhsInfo.material])
+                return priorities[lhsInfo.material] > priorities[rhsInfo.material];
+            return lhsInfo.speed > rhsInfo.speed;
+        });
+        for(const GoodType good : candidates)
+        {
+            orderingToolSlot_ = static_cast<int>(i);
+            Ware* ware = owner.OrderWare(good, *this);
+            orderingToolSlot_ = -1;
+            if(ware)
+            {
+                slot.ordered = ware;
+                break;
+            }
+        }
+    }
+}
+
+void nobUsual::StartToolOrderEvent()
+{
+    if(toolSlots_.empty() || ordertool_ev)
+        return;
+    OrderTools();
+    ordertool_ev = GetEvMgr().AddEvent(this, 210, 2);
 }
 
 bool nobUsual::IsLibrary() const

@@ -38,6 +38,10 @@ private:
     void AddOre(const kaguya::LuaTable& data);
     void AddByproduct(const kaguya::LuaTable& data);
     void SetKnowledgeDistribution(const kaguya::LuaTable& data);
+    void AddToolMaterial(const kaguya::LuaTable& data);
+    void AddTool(const kaguya::LuaTable& data);
+    void SetBuildingTools(const kaguya::LuaTable& data);
+    void SetToolReorder(unsigned percent);
     void SetMapClimate(const kaguya::LuaTable& data);
     void AddMapZone(const kaguya::LuaTable& data);
     void AddMapResource(const kaguya::LuaTable& data);

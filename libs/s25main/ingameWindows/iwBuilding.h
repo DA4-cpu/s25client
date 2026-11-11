@@ -23,6 +23,8 @@ public:
 private:
     void Msg_PaintBefore() override;
     void Msg_PaintAfter() override;
+    /// Civilization mode, tool reform: Draw the tools of the building and its work speed
+    void DrawTools();
 
 protected:
     void Msg_ButtonClick(unsigned ctrl_id) override;

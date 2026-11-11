@@ -48,10 +48,51 @@ struct WareTagsDesc
 };
 
 /// Worker of a workshop
+/// Material of tools (rttr:AddToolMaterial), e.g. iron
+struct ToolMaterialDesc
+{
+    /// Unique identifier, also a property tag of the tools made of it
+    std::string name;
+    /// Displayed name
+    std::string title;
+    /// Default priority 0..10 of the regulator "Werkzeuge": Buildings order the tool with the highest priority that is
+    /// in stock, 0 = never
+    unsigned priority = 5;
+
+    ToolMaterialDesc() = default;
+    explicit ToolMaterialDesc(const kaguya::LuaTable& luaData);
+};
+
+/// Makes a ware a tool used in buildings (rttr:AddTool)
+struct ToolDesc
+{
+    /// Identifier of the ware (built-in or rttr:AddWare)
+    std::string ware;
+    /// Identifier of the material (rttr:AddToolMaterial)
+    std::string material;
+    /// Number of work steps until the tool is broken
+    unsigned durability = 0;
+    /// Bonus to the work speed of the building in percent of the normal speed
+    unsigned speed = 0;
+
+    ToolDesc() = default;
+    explicit ToolDesc(const kaguya::LuaTable& luaData);
+};
+
+/// Tools used in a building (rttr:SetBuildingTools or in rttr:AddWorkshop)
+struct BuildingToolsDesc
+{
+    /// Work speed without any tool in percent of the normal speed. 0: does not work without tools
+    unsigned baseSpeed = 0;
+    /// One slot per entry: Tag query of the tools that fit (e.g. "Scythe" for all scythes)
+    std::vector<TagQuery> tools;
+};
+
 struct WorkerDesc
 {
     std::string title;
-    /// Identifier of the tool required to recruit the worker or "none"
+    /// Identifier of the tool of the worker or "none". Without the tool reform the tool required to recruit the worker,
+    /// with it the tool used in the workshop unless the workshop lists its tools
     std::string tool;
     /// Identifier of an existing job whose graphics are used (placeholder)
     std::string look;
@@ -144,6 +185,8 @@ struct WorkshopDesc
     std::optional<KnowledgeValues> knowledge;
     /// True: The AI may build it near a land border (otherwise that space is kept free for military buildings)
     bool aiNearBorder = false;
+    /// Tools used in the workshop. Not set: the tool of the worker (if any) with base speed 0
+    std::optional<BuildingToolsDesc> tools;
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);
@@ -170,3 +213,9 @@ struct ByproductDesc
 
 /// Read a tag query from lua: Either a single string or a list of strings
 TagQuery parseTagQuery(const kaguya::LuaRef& value, const std::string& context);
+/// Parse { baseSpeed = 0, tools = { "Axe", ... } } (both optional)
+BuildingToolsDesc parseBuildingTools(const kaguya::LuaTable& luaData, const std::string& context);
+/// Maximum number of tool slots of a building
+constexpr unsigned MAX_BUILDING_TOOLS = 4;
+/// Maximum number of tool materials
+constexpr unsigned MAX_TOOL_MATERIALS = 8;

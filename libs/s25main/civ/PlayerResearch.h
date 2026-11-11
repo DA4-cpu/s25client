@@ -52,6 +52,13 @@ public:
     KnowledgeDistribution GetKnowledgeDistribution(const TechTree& techTree) const;
     void SetKnowledgeDistribution(const KnowledgeDistribution& distribution);
 
+    /// Tool reform: Priority 0..10 per tool material (same order as Content::GetToolMaterials) of the regulator
+    /// "Werkzeuge". Buildings order the tool of the material with the highest priority that is in stock, 0 = never.
+    /// Default (from lua) until the player changes it
+    using ToolMaterialPriorities = std::vector<uint8_t>;
+    ToolMaterialPriorities GetToolMaterialPriorities(const Content& content) const;
+    void SetToolMaterialPriorities(const ToolMaterialPriorities& priorities);
+
     void Serialize(SerializedGameData& sgd, const TechTree& techTree) const;
     void Deserialize(SerializedGameData& sgd, const TechTree& techTree);
 
@@ -62,6 +69,7 @@ private:
     KnowledgePoints spentKnowledge_{};
     /// Set by the player, otherwise the default of the tech tree is used
     std::optional<KnowledgeDistribution> knowledgeDistribution_;
+    std::optional<ToolMaterialPriorities> toolMaterialPriorities_;
 };
 
 } // namespace civ

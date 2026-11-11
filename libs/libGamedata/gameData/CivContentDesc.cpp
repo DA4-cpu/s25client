@@ -69,6 +69,52 @@ TagQuery parseTagQuery(const kaguya::LuaRef& value, const std::string& context)
     return result;
 }
 
+BuildingToolsDesc parseBuildingTools(const kaguya::LuaTable& luaTable, const std::string& context)
+{
+    CheckedLuaTable luaData(luaTable);
+    BuildingToolsDesc result;
+    result.baseSpeed = luaData.getOrDefault("baseSpeed", 0u);
+    if(result.baseSpeed > 1000)
+        throw GameDataError(context + ": baseSpeed must be in [0, 1000] (percent)");
+    if(const auto toolTable = luaData.getOptional<kaguya::LuaTable>("tools"))
+    {
+        for(const kaguya::LuaRef& entry : toolTable->values())
+            result.tools.push_back(parseTagQuery(entry, context + ", tools"));
+    }
+    if(result.tools.size() > MAX_BUILDING_TOOLS)
+        throw GameDataError(context + ": at most " + std::to_string(MAX_BUILDING_TOOLS) + " tools are possible");
+    if(result.tools.empty() && result.baseSpeed == 0)
+        throw GameDataError(context + ": without tools baseSpeed must be > 0 (otherwise it never works)");
+    luaData.checkUnused();
+    return result;
+}
+
+ToolMaterialDesc::ToolMaterialDesc(const kaguya::LuaTable& luaTable)
+{
+    CheckedLuaTable luaData(luaTable);
+    name = readIdentifier(luaData, "Tool material");
+    title = luaData.getOrDefault("title", name);
+    priority = luaData.getOrDefault("priority", 5u);
+    if(priority > 10)
+        throw GameDataError("Tool material '" + name + "': priority must be in [0, 10]");
+    luaData.checkUnused();
+}
+
+ToolDesc::ToolDesc(const kaguya::LuaTable& luaTable)
+{
+    CheckedLuaTable luaData(luaTable);
+    luaData.getOrThrow(ware, "ware");
+    const std::string context = "Tool '" + ware + "'";
+    luaData.getOrThrow(material, "material");
+    luaData.getOrThrow(durability, "durability");
+    luaData.getOrThrow(speed, "speed");
+    if(durability == 0 || durability > 60000)
+        throw GameDataError(context + ": durability must be in [1, 60000] (work steps)");
+    if(speed > 1000)
+        throw GameDataError(context + ": speed must be in [0, 1000] (percent)");
+    luaData.checkUnused();
+}
+
 WareDesc::WareDesc(const kaguya::LuaTable& luaTable)
 {
     CheckedLuaTable luaData(luaTable);
@@ -198,6 +244,8 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     }
     waitTime = luaData.getOrDefault("waitTime", 0u);
     aiNearBorder = luaData.getOrDefault("aiNearBorder", false);
+    if(const auto toolsTable = luaData.getOptional<kaguya::LuaTable>("tools"))
+        tools = parseBuildingTools(*toolsTable, context);
     luaData.checkUnused();
 }
 

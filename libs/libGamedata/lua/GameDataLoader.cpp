@@ -44,23 +44,26 @@ bool GameDataLoader::Load()
 
 void GameDataLoader::Register(kaguya::State& state)
 {
-    state["RTTRGameData"].setClass(
-      kaguya::UserdataMetatable<GameDataLoader, LuaInterfaceBase>()
-        .addFunction("AddLandscape", &GameDataLoader::AddLandscape)
-        .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
-        .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
-        .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
-        .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
-        .addFunction("AddWare", &GameDataLoader::AddWare)
-        .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
-        .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
-        .addFunction("AddMapObject", &GameDataLoader::AddMapObject)
-        .addFunction("AddOre", &GameDataLoader::AddOre)
-        .addFunction("AddByproduct", &GameDataLoader::AddByproduct)
-        .addFunction("SetKnowledgeDistribution", &GameDataLoader::SetKnowledgeDistribution)
-        .addFunction("SetMapClimate", &GameDataLoader::SetMapClimate)
-        .addFunction("AddMapZone", &GameDataLoader::AddMapZone)
-        .addFunction("AddMapResource", &GameDataLoader::AddMapResource));
+    state["RTTRGameData"].setClass(kaguya::UserdataMetatable<GameDataLoader, LuaInterfaceBase>()
+                                     .addFunction("AddLandscape", &GameDataLoader::AddLandscape)
+                                     .addFunction("AddTerrainEdge", &GameDataLoader::AddTerrainEdge)
+                                     .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
+                                     .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
+                                     .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
+                                     .addFunction("AddWare", &GameDataLoader::AddWare)
+                                     .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
+                                     .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
+                                     .addFunction("AddMapObject", &GameDataLoader::AddMapObject)
+                                     .addFunction("AddOre", &GameDataLoader::AddOre)
+                                     .addFunction("AddByproduct", &GameDataLoader::AddByproduct)
+                                     .addFunction("SetKnowledgeDistribution", &GameDataLoader::SetKnowledgeDistribution)
+                                     .addFunction("AddToolMaterial", &GameDataLoader::AddToolMaterial)
+                                     .addFunction("AddTool", &GameDataLoader::AddTool)
+                                     .addFunction("SetBuildingTools", &GameDataLoader::SetBuildingTools)
+                                     .addFunction("SetToolReorder", &GameDataLoader::SetToolReorder)
+                                     .addFunction("SetMapClimate", &GameDataLoader::SetMapClimate)
+                                     .addFunction("AddMapZone", &GameDataLoader::AddMapZone)
+                                     .addFunction("AddMapResource", &GameDataLoader::AddMapResource));
 }
 
 class LuaIncludeError : public std::runtime_error
@@ -188,6 +191,51 @@ void GameDataLoader::SetKnowledgeDistribution(const kaguya::LuaTable& data)
             throw GameDataError(context + ": values must be in [0, 10]");
     }
     worldDesc_.knowledgeDistribution = values;
+}
+
+void GameDataLoader::AddToolMaterial(const kaguya::LuaTable& data)
+{
+    ToolMaterialDesc material(data);
+    for(const ToolMaterialDesc& other : worldDesc_.toolMaterials)
+    {
+        if(other.name == material.name)
+            throw GameDataError("Tool material '" + material.name + "' is defined twice");
+    }
+    if(worldDesc_.toolMaterials.size() >= MAX_TOOL_MATERIALS)
+        throw GameDataError("At most " + std::to_string(MAX_TOOL_MATERIALS) + " tool materials are possible");
+    worldDesc_.toolMaterials.push_back(std::move(material));
+}
+
+void GameDataLoader::AddTool(const kaguya::LuaTable& data)
+{
+    ToolDesc tool(data);
+    for(const ToolDesc& other : worldDesc_.tools)
+    {
+        if(other.ware == tool.ware)
+            throw GameDataError("Tool '" + tool.ware + "' is defined twice");
+    }
+    worldDesc_.tools.push_back(std::move(tool));
+}
+
+void GameDataLoader::SetBuildingTools(const kaguya::LuaTable& data)
+{
+    for(const std::string& building : data.keys<std::string>())
+    {
+        const kaguya::LuaRef value = data[building];
+        const std::string context = "Tools of building '" + building + "'";
+        if(value.type() != kaguya::LuaRef::TYPE_TABLE)
+            throw GameDataError(context + " must be a table like { baseSpeed = 0, tools = { \"Axe\" } }");
+        if(!worldDesc_.buildingTools.emplace(building, parseBuildingTools(value.get<kaguya::LuaTable>(), context))
+              .second)
+            throw GameDataError(context + " are defined twice");
+    }
+}
+
+void GameDataLoader::SetToolReorder(unsigned percent)
+{
+    if(percent > 100)
+        throw GameDataError("rttr:SetToolReorder: the value must be in [0, 100] (percent of the durability)");
+    worldDesc_.toolReorderPercent = percent;
 }
 
 void GameDataLoader::SetMapClimate(const kaguya::LuaTable& data)

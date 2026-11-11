@@ -37,6 +37,7 @@ void Game::Start(bool startFromSave)
         CheckObjective();
     else
     {
+        civ::startNewGame(world_);
         if(ggs_.objective == GameObjective::EconomyMode)
         {
             unsigned int selection = ggs_.getSelection(AddonId::ECONOMY_MODE_GAME_LENGTH);

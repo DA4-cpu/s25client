@@ -14,7 +14,9 @@ rttr:AddWorkshop{...}:
   cost        Baukosten, vorerst nur Bretter und Steine: { Boards = 2, Stones = 1 }
   look        Platzhaltergrafik: Das Gebäude sieht aus wie dieses eingebaute Gebäude (z.B. "Sawmill")
   worker      Arbeiter: { title = "...", tool = "Hammer" (oder "none"), look = "Carpenter" }
-              tool: Werkzeug, das ein Helfer braucht, um Arbeiter zu werden. look: Platzhaltergrafik (eingebauter Beruf)
+              tool: Werkzeug, das ein Helfer braucht, um Arbeiter zu werden. Mit der Werkzeugreform (tools.lua)
+              braucht der Helfer kein Werkzeug mehr; tool ist dann das Werkzeug, das in der Werkstatt liegen muss
+              (siehe tools). look: Platzhaltergrafik (eingebauter Beruf)
               Eigene Bilder für Gebäude und Arbeiter: Ordner data/RTTR/assets/civ/<name>/,
               siehe data/RTTR/assets/civ/LIESMICH.txt
   inputs      optional: bis zu 3 Eingänge, jeder eine Tag-Abfrage, z.B. { "Bones" } oder { { "Bretter", "Nadelholz" } }
@@ -61,6 +63,10 @@ rttr:AddWorkshop{...}:
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
   knowledge   optional: Wissenspunkte des fertigen Gebäudes wie in knowledge.lua, z.B. knowledge = { IWP = 2 }.
               Ein Gebäude darf nur an einer der beiden Stellen Wissenspunkte bekommen.
+  tools       optional, nur mit der Werkzeugreform (tools.lua): Werkzeuge der Werkstatt und ihr Tempo ohne Werkzeug,
+              z.B. tools = { baseSpeed = 25, tools = { "Scythe", "Plough" } }. baseSpeed in Prozent (Standard 0 = ohne
+              Werkzeug keine Arbeit), tools = Werkzeugtypen als Tag-Abfragen (höchstens 4).
+              Ohne diese Angabe gilt worker.tool mit baseSpeed = 0 (bei tool = "none": kein Werkzeug, Tempo 100).
   aiNearBorder optional (Standard false): true erlaubt der KI, die Werkstatt in Grenznähe zu bauen (höchstens 4 Knoten
               von einer Landgrenze entfernt). Sonst hält die KI diesen Platz für Militärgebäude frei, wie bei allen
               eingebauten Gebäuden außer Holzfäller, Steinbruch, Fischer, Minen, Hafen und Katapult

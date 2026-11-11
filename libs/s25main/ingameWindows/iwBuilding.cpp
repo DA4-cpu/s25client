@@ -7,6 +7,7 @@
 #include "Loader.h"
 #include "WindowManager.h"
 #include "buildings/nobShipYard.h"
+#include "civ/Content.h"
 #include "controls/ctrlImageButton.h"
 #include "controls/ctrlPercent.h"
 #include "controls/ctrlText.h"
@@ -173,6 +174,54 @@ void iwBuilding::Msg_PaintAfter()
             curPos.y += 29;
         }
     }
+    DrawTools();
+}
+
+void iwBuilding::DrawTools()
+{
+    // Civilization mode, tool reform: Tools of the building (left of the inputs) with their durability and the
+    // work speed (below the product)
+    const auto& slots = building->GetToolSlots();
+    if(slots.empty())
+        return;
+    const civ::Content& content = civ::getActiveContent();
+    const civ::BuildingTools& toolsDesc = content.GetBuildingTools(building->GetBuildingType());
+    constexpr Extent boxSize(24, 24);
+    for(unsigned i = 0; i < slots.size() && i < toolsDesc.slots.size(); ++i)
+    {
+        const nobUsual::ToolSlot& slot = slots[i];
+        // 3 tools in a column on the left, more on the right
+        const DrawPoint boxPos =
+          GetDrawPos()
+          + ((i < 3) ? DrawPoint(16, 62 + static_cast<int>(i) * 28) :
+                       DrawPoint(GetSize().x - 16 - static_cast<int>(boxSize.x), 62 + static_cast<int>(i - 3) * 28));
+        DrawRectangle(Rect(boxPos, boxSize), 0x80000000);
+        const bool hasTool = slot.tool != GoodType::Nothing;
+        const GoodType shownTool = hasTool ? slot.tool : toolsDesc.slots[i].wares.front();
+        LOADER.GetWareTex(shownTool)->DrawFull(boxPos + DrawPoint(12, 12), hasTool ? COLOR_WHITE : 0xFF404040);
+        if(hasTool)
+        {
+            // Durability: green to red bar below the tool
+            const civ::ToolInfo* info = content.GetTool(slot.tool);
+            const unsigned durability = info ? std::max(1u, info->durability) : 1u;
+            const unsigned left = std::min<unsigned>(slot.stepsLeft, durability);
+            const unsigned width = std::max(1u, boxSize.x * left / durability);
+            const unsigned color =
+              (left * 2 >= durability) ? 0xFF00C000 : (left * 5 >= durability) ? 0xFFE0C000 : 0xFFE00000;
+            DrawRectangle(Rect(boxPos + DrawPoint(0, boxSize.y), Extent(boxSize.x, 3)), 0xFF000000);
+            DrawRectangle(Rect(boxPos + DrawPoint(0, boxSize.y), Extent(width, 3)), color);
+        }
+        // A replacement is waiting or on its way
+        if(slot.spare != GoodType::Nothing)
+            SmallFont->Draw(boxPos + DrawPoint(boxSize.x + 2, 2), "+1", FontStyle::LEFT, COLOR_YELLOW);
+        else if(slot.ordered)
+            SmallFont->Draw(boxPos + DrawPoint(boxSize.x + 2, 2), "...", FontStyle::LEFT, COLOR_YELLOW);
+    }
+    const unsigned speed = building->GetWorkSpeed();
+    const DrawPoint speedPos = GetDrawPos() + DrawPoint(196, 66);
+    SmallFont->Draw(speedPos, _("Tempo"), FontStyle::CENTER, COLOR_YELLOW);
+    SmallFont->Draw(speedPos + DrawPoint(0, 10), std::to_string(speed) + "%", FontStyle::CENTER,
+                    speed == 0 ? COLOR_RED : COLOR_YELLOW);
 }
 
 void iwBuilding::Msg_ButtonClick(const unsigned ctrl_id)

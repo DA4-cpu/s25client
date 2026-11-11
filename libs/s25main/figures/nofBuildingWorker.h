@@ -54,6 +54,8 @@ protected:
 
     /// Hat der Bauarbeiter bei seiner Arbeit Sounds von sich gegeben (zu Optimeriungszwecken)
     bool was_sounding;
+    /// Tool reform (civilization mode): Tools of the demolished workplace the worker brings back to a warehouse
+    std::vector<GoodType> carriedTools_;
 
     /// wird von abgeleiteten Klassen aufgerufen, wenn sie die Ware an der Fahne vorm Gebäude ablegen wollen (oder auch
     /// nicht) also fertig mit Arbeiten sind
@@ -66,6 +68,9 @@ protected:
     /// Returns true, when there are enough wares available for working.
     /// Note: On false, we will wait for the next ware or production change till checking again
     virtual bool AreWaresAvailable() const;
+    /// Duration of the work outside of the building which is not changed by the work speed of the building (tool
+    /// reform). The waiting time before is changed for it instead. 0: the worker works in the building
+    virtual unsigned GetOutsideWorkLength() const { return 0; }
 
 private:
     /// Wares to put at the flag when carrying out `ware`: the ware itself and its byproducts (civilization mode)
@@ -99,6 +104,10 @@ protected:
     virtual void DrawOtherStates(DrawPoint drawPt);
 
 public:
+    /// Tool reform: Take the tools of the demolished workplace along
+    void TakeTools(std::vector<GoodType> tools);
+    /// Tool reform: Hand over the tools taken along (called by the warehouse he arrives at)
+    std::vector<GoodType> ReleaseTools();
     State GetState() const { return state; }
 
     nofBuildingWorker(Job job, MapPoint pos, unsigned char player, nobUsual* workplace);

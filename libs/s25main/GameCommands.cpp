@@ -282,6 +282,16 @@ void SetKnowledgeDistribution::Execute(GameWorld& world, uint8_t playerId)
     world.GetPlayer(playerId).GetResearch().SetKnowledgeDistribution(distribution);
 }
 
+void SetToolMaterialPriorities::Execute(GameWorld& world, uint8_t playerId)
+{
+    if(!civ::isEnabled(world))
+        return;
+    const auto numMaterials = world.GetTechTree().GetContent().GetToolMaterials().size();
+    if(values.size() != numMaterials)
+        return;
+    world.GetPlayer(playerId).GetResearch().SetToolMaterialPriorities(values);
+}
+
 void SetArmorAllowed::Execute(GameWorld& world, uint8_t playerId)
 {
     auto* const bld = world.GetSpecObj<nobMilitary>(pt_);

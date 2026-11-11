@@ -124,6 +124,8 @@ protected:
     void TryStopRecruiting();
     /// Recruts a worker of the given job if possible
     bool TryRecruitJob(Job job);
+    /// Tool reform: Make workers of the job in the warehouse helpers again
+    void ConvertToHelpers(Job job, unsigned count);
 
     void RemoveFromVisualInventory(const noFigure& figure);
     void AddToVisualInventory(const noFigure& figure);
@@ -198,6 +200,11 @@ public:
     Ware* OrderWare(GoodType good, noBaseBuilding& goal);
     /// Returns true, if the given job can be recruited. Excludes soldiers and carriers!
     bool CanRecruit(Job job) const;
+    /// Tool reform (civilization mode): True if a helper can take the job without a tool
+    bool IsRecruitedWithoutTool(Job job) const;
+    /// Tool reform, start of a new game: Workers of buildings in the warehouse become helpers and their tools wares,
+    /// as the tools are used in the buildings now
+    void ConvertWorkersForToolReform();
 
     /// Wird von den Lagerhaus-Arbeitern aufgerufen, wenn sie ein Ware wieder zurückbringen, die sie vorne nicht ablegen
     /// konnten

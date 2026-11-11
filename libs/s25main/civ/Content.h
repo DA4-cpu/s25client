@@ -126,6 +126,40 @@ struct CustomBuilding
     bool IsMine() const { return mineResource != ResourceType::Nothing; }
 };
 
+/// Material of tools (rttr:AddToolMaterial)
+struct ToolMaterial
+{
+    std::string name, title;
+    /// Default priority 0..10 of the regulator "Werkzeuge"
+    uint8_t defaultPriority = 5;
+};
+
+/// Properties of a ware which is a tool used in buildings (rttr:AddTool)
+struct ToolInfo
+{
+    /// Index into Content::GetToolMaterials
+    unsigned material = 0;
+    /// Number of work steps until it is broken
+    unsigned durability = 0;
+    /// Bonus to the work speed of the building in percent
+    unsigned speed = 0;
+};
+
+/// Tools used in a building
+struct BuildingTools
+{
+    struct Slot
+    {
+        TagQuery query;
+        /// All tools matching the query
+        std::vector<GoodType> wares;
+    };
+    /// Work speed without tools in percent of the normal speed
+    unsigned baseSpeed = 100;
+    /// One tool per slot can be in the building (plus a replacement)
+    std::vector<Slot> slots;
+};
+
 /// Wares, workshops and tags of the civilization mode which are defined in lua.
 /// They use the reserved custom slots of the GoodType/BuildingType/Job enums in order of definition.
 class Content
@@ -181,6 +215,20 @@ public:
     /// All usable wares which match the query
     std::vector<GoodType> FindWares(const TagQuery& query) const;
 
+    /// Tool reform: True if tools are used in the buildings (tool materials are defined). Then workers of buildings
+    /// are recruited without tools, the buildings order their tools, the tools wear out and set the work speed
+    bool HasToolReform() const { return !toolMaterials_.empty(); }
+    const std::vector<ToolMaterial>& GetToolMaterials() const { return toolMaterials_; }
+    /// Properties of the tool or nullptr if the ware is no tool used in buildings
+    const ToolInfo* GetTool(GoodType good) const;
+    /// Tools of the building. Without the tool reform: none and normal speed
+    const BuildingTools& GetBuildingTools(BuildingType bld) const { return buildingTools_[bld]; }
+    /// A replacement is ordered when a tool has at most this many work steps left
+    unsigned GetToolReorderSteps(GoodType tool) const;
+    /// True if a helper can take this job without a tool (tool reform: all jobs of buildings).
+    /// Builder, planer, geologist and scout still need their tool
+    bool IsRecruitedWithoutTool(Job job) const;
+
     /// Ware (built-in or custom) for the identifier
     std::optional<GoodType> FindGood(const std::string& identifier) const;
     /// Building (built-in usable building or custom) for the identifier
@@ -205,6 +253,10 @@ private:
     helpers::EnumArray<std::vector<std::string>, GoodType> tags_, properties_;
     std::vector<GoodType> knowledgeMedia_;
     helpers::EnumArray<uint8_t, KnowledgeType> defaultKnowledgeDistribution_;
+    std::vector<ToolMaterial> toolMaterials_;
+    helpers::EnumArray<std::optional<ToolInfo>, GoodType> tools_;
+    helpers::EnumArray<BuildingTools, BuildingType> buildingTools_;
+    unsigned toolReorderPercent_ = 10;
 };
 
 /// Content of the running game. Empty unless a game in the civilization mode is running.

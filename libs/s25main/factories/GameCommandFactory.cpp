@@ -164,6 +164,11 @@ bool GameCommandFactory::SetKnowledgeDistribution(const std::array<uint8_t, 3>& 
     return AddGC(new gc::SetKnowledgeDistribution(values));
 }
 
+bool GameCommandFactory::SetToolMaterialPriorities(const std::vector<uint8_t>& values)
+{
+    return AddGC(new gc::SetToolMaterialPriorities(values));
+}
+
 bool GameCommandFactory::SetResearch(std::optional<unsigned> techIdx)
 {
     RTTR_Assert(!techIdx || *techIdx < gc::SetResearch::STOP_RESEARCH);

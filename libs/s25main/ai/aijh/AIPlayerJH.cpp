@@ -2642,8 +2642,8 @@ void AIPlayerJH::InitDistribution()
     goodSettings[8] = 10; // grain brewery
     goodSettings[9] = 10; // grain charburner
 
-    goodSettings[10] = 10; // iron armory
-    goodSettings[11] = 10; // iron metalworks
+    goodSettings[10] = toolShortageDistribution_ ? 3 : 10; // iron armory
+    goodSettings[11] = 10;                                 // iron metalworks
 
     goodSettings[12] = 10; // coal armory
     goodSettings[13] = 10; // coal ironsmelter
@@ -2654,7 +2654,7 @@ void AIPlayerJH::InitDistribution()
     goodSettings[17] = 2;  // wood vineyard
 
     goodSettings[18] = 10; // boards new buildings
-    goodSettings[19] = 4;  // boards metalworks
+    goodSettings[19] = toolShortageDistribution_ ? 10 : 4; // boards metalworks
     goodSettings[20] = 2;  // boards shipyard
     goodSettings[21] = 1;  // boards tannery
 
@@ -3002,6 +3002,37 @@ void AIPlayerJH::AdjustSettings()
                 toolsettings[Tool::Axe] = (toolsettings[Tool::Axe] == 0) ? 4 : 7;
             }
         }*/
+
+        // Civilization mode, tool reform: The tools are used in the buildings and wear out. Make the tools the
+        // buildings are missing first, and the more of a tool is missing the more of it
+        bool toolShortage = false;
+        if(civ::isEnabled(gwb) && gwb.GetTechTree().GetContent().HasToolReform())
+        {
+            for(const auto tool : helpers::enumRange<Tool>())
+            {
+                const GoodType good = TOOL_TO_GOOD[tool];
+                unsigned numMissing = 0;
+                for(const auto bldType : helpers::enumRange<BuildingType>())
+                {
+                    if(!BuildingProperties::IsUsual(bldType))
+                        continue;
+                    for(const nobUsual* bld : aii.GetBuildings(bldType))
+                        numMissing += bld->GetNumMissingTools(good);
+                }
+                if(numMissing > inventory[good])
+                {
+                    toolShortage = true;
+                    const unsigned priority = std::min(10u, 3u + numMissing - inventory[good]);
+                    toolsettings[tool] = std::max<unsigned>(toolsettings[tool], priority);
+                }
+            }
+        }
+        // While tools are missing the metalworks get the iron and boards before the armories
+        if(toolShortage != toolShortageDistribution_)
+        {
+            toolShortageDistribution_ = toolShortage;
+            InitDistribution();
+        }
 
         for(const auto tool : helpers::enumRange<Tool>())
         {

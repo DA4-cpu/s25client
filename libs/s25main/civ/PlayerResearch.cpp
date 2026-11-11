@@ -70,6 +70,29 @@ void PlayerResearch::SetKnowledgeDistribution(const KnowledgeDistribution& distr
     knowledgeDistribution_ = clamped;
 }
 
+PlayerResearch::ToolMaterialPriorities PlayerResearch::GetToolMaterialPriorities(const Content& content) const
+{
+    const auto& materials = content.GetToolMaterials();
+    ToolMaterialPriorities result(materials.size());
+    for(unsigned i = 0; i < materials.size(); ++i)
+    {
+        // Materials added to the lua files after the player changed the setting get their default
+        if(toolMaterialPriorities_ && i < toolMaterialPriorities_->size())
+            result[i] = (*toolMaterialPriorities_)[i];
+        else
+            result[i] = materials[i].defaultPriority;
+    }
+    return result;
+}
+
+void PlayerResearch::SetToolMaterialPriorities(const ToolMaterialPriorities& priorities)
+{
+    ToolMaterialPriorities clamped = priorities;
+    for(uint8_t& value : clamped)
+        value = std::min(value, static_cast<uint8_t>(10));
+    toolMaterialPriorities_ = clamped;
+}
+
 void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree) const
 {
     std::vector<TechIdx> researchedTechs;
@@ -105,6 +128,14 @@ void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree
     if(knowledgeDistribution_)
     {
         for(const uint8_t value : *knowledgeDistribution_)
+            sgd.PushUnsignedChar(value);
+    }
+
+    sgd.PushBool(toolMaterialPriorities_.has_value());
+    if(toolMaterialPriorities_)
+    {
+        sgd.PushUnsignedInt(static_cast<unsigned>(toolMaterialPriorities_->size()));
+        for(const uint8_t value : *toolMaterialPriorities_)
             sgd.PushUnsignedChar(value);
     }
 }
@@ -179,6 +210,15 @@ void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTr
         for(uint8_t& value : distribution)
             value = sgd.PopUnsignedChar();
         SetKnowledgeDistribution(distribution);
+    }
+
+    // Regulator "Werkzeuge" (older savegames: default)
+    if(sgd.GetGameDataVersion() >= 22 && sgd.PopBool())
+    {
+        ToolMaterialPriorities priorities(sgd.PopUnsignedInt());
+        for(uint8_t& value : priorities)
+            value = sgd.PopUnsignedChar();
+        SetToolMaterialPriorities(priorities);
     }
 }
 

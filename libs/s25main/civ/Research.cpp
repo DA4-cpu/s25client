@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "civ/Research.h"
+#include "BuildingRegister.h"
 #include "EventManager.h"
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
@@ -122,6 +123,17 @@ void startGame(GameWorld& world)
                     player.AddWareClient(medium, bld);
             }
         }
+    }
+}
+
+void startNewGame(GameWorld& world)
+{
+    if(!isEnabled(world) || !world.GetTechTree().GetContent().HasToolReform())
+        return;
+    for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
+    {
+        for(nobBaseWarehouse* wh : world.GetPlayer(i).GetBuildingRegister().GetStorehouses())
+            wh->ConvertWorkersForToolReform();
     }
 }
 

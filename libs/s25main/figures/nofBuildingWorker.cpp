@@ -14,6 +14,7 @@
 #include "buildings/nobUsual.h"
 #include "civ/Research.h"
 #include "helpers/MaxEnumValue.h"
+#include "helpers/serializeEnums.h"
 #include "world/GameWorld.h"
 #include "nodeObjs/noFlag.h"
 #include "gameData/JobConsts.h"
@@ -39,6 +40,21 @@ void nofBuildingWorker::Serialize(SerializedGameData& sgd) const
         sgd.PushOptionalEnum<uint8_t>(ware);
         sgd.PushBool(was_sounding);
     }
+    sgd.PushUnsignedInt(static_cast<unsigned>(carriedTools_.size()));
+    for(const GoodType tool : carriedTools_)
+        helpers::pushEnum<uint8_t>(sgd, tool);
+}
+
+void nofBuildingWorker::TakeTools(std::vector<GoodType> tools)
+{
+    carriedTools_ = std::move(tools);
+}
+
+std::vector<GoodType> nofBuildingWorker::ReleaseTools()
+{
+    std::vector<GoodType> result;
+    result.swap(carriedTools_);
+    return result;
 }
 
 nofBuildingWorker::nofBuildingWorker(SerializedGameData& sgd, const unsigned obj_id)
@@ -64,6 +80,12 @@ nofBuildingWorker::nofBuildingWorker(SerializedGameData& sgd, const unsigned obj
         workplace = nullptr;
         ware = std::nullopt;
         was_sounding = false;
+    }
+    if(sgd.GetGameDataVersion() >= 22)
+    {
+        carriedTools_.resize(sgd.PopUnsignedInt());
+        for(GoodType& tool : carriedTools_)
+            tool = helpers::popEnum<GoodType>(sgd);
     }
 }
 
@@ -201,11 +223,20 @@ void nofBuildingWorker::PutWareAtFlag(const GoodType good)
 
 void nofBuildingWorker::TryToWork()
 {
-    if(!workplace->IsProductionDisabled() && AreWaresAvailable())
+    // Tool reform (civilization mode): Without the tools the building may not work at all, with them the tools wear
+    // out with every work step and set its speed
+    if(!workplace->IsProductionDisabled() && AreWaresAvailable() && workplace->BeginWorkStep())
     {
         state = State::Waiting1;
-        current_ev = GetEvMgr().AddEvent(
-          this, (GetGOT() == GO_Type::NofCatapultman) ? CATAPULT_WAIT1_LENGTH : JOB_CONSTS[job_].wait1_length, 1);
+        // Work outside the building keeps its duration (it fits to animations and objects like falling trees), so
+        // the waiting time is changed for both
+        const unsigned outsideWork = GetOutsideWorkLength();
+        const unsigned scaledLength = workplace->ScaleWorkDuration(JOB_CONSTS[job_].wait1_length + outsideWork);
+        current_ev = GetEvMgr().AddEvent(this,
+                                         (GetGOT() == GO_Type::NofCatapultman) ?
+                                           CATAPULT_WAIT1_LENGTH :
+                                           std::max(scaledLength, outsideWork + 1u) - outsideWork,
+                                         1);
         workplace->StopNotWorking();
     } else
     {

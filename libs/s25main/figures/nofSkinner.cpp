@@ -175,7 +175,8 @@ void nofSkinner::HandleStateWalkingHome()
 
 void nofSkinner::TryStartSkinning()
 {
-    if(workplace->IsProductionDisabled())
+    // Tool reform: No skinning without the tools of the building
+    if(workplace->IsProductionDisabled() || workplace->GetWorkSpeed() == 0)
     {
         current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].wait1_length, 1);
         workplace->StartNotWorking();
@@ -209,6 +210,8 @@ void nofSkinner::TryStartSkinning()
         if(!available_animals.empty())
         {
             animal = RANDOM_ELEMENT(available_animals);
+            // Skinning a carcass is a work step, too (the tools wear out)
+            workplace->BeginWorkStep();
             state = State::SkinnerWalkingToCarcass;
             workplace->is_working = true;
             animal->BeginSkinning(this);

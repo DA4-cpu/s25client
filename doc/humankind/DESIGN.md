@@ -55,6 +55,11 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-30 | **Lehm** ist zunächst nur Rohstoff: Lehmvorkommen auf der Karte (vor allem feucht-warm), **Lehmgrube** mit Lehmstecher baut sie ab wie der Steinbruch, Lagern/Tragen/Statistik, die KI baut Lehmgruben. Ton, Ziegel und Stampflehm kommen später. |
 | 2026-10-30 | **Eigene Grafiken:** Der Nutzer legt selbst gezeichnete Bilder (PNG/BMP) unter festen Namen in `data/RTTR/assets/civ/<Bezeichner>/` ab; fehlende Bilder bleiben Platzhalter. Das Spiel schreibt die Platzhalter als Vorlagen mit Namen, Größe und Ankerpunkt in den Benutzerordner (`civ-vorlagen`, nicht in Git). |
 | 2026-10-23 | Medien-WP zählen aus dem **echten Bestand**: in Lagerhaus/HQ/Hafen 0,5-fach, in der Bibliothek 1-fach. Medien unterwegs oder an Flaggen zählen nicht. Die Bibliothek nimmt **alle** Waren mit `knowledge` an (keine Grenze von 3 Eingängen) und bestellt erst, wenn der Bibliothekar da ist. |
+| 2026-11-11 | **Werkzeugreform** (Konzept des Nutzers): Jeder freie Helfer nimmt ohne Werkzeug einen Beruf in einem Gebäude an. Werkzeuge liegen in den Gebäuden (eigener Werkzeugplatz), nutzen sich pro Arbeitsschritt ab und bestimmen das Arbeitstempo. Es gibt sie in mehreren Materialien. |
+| 2026-11-11 | Bauarbeiter, Planierer, Geologe und Späher (Berufe ohne eigenes Gebäude) brauchen **weiter ihr Werkzeug im Lager**. |
+| 2026-11-11 | Welches Material ein Gebäude bestellt, **stellt der Spieler ein** (Regler „Werkzeuge“ im Verteilungsfenster, Wert 0–10 je Material). |
+| 2026-11-11 | Ersatz wird **kurz vor dem Bruch** bestellt und wartet als zweites Werkzeug im Gebäude (Abweichung von „nur ein Werkzeug je Typ“). |
+| 2026-11-11 | Erster Schritt: nur die 12 vorhandenen Werkzeuge (Material Eisen) plus das System; weitere Materialien trägt der Nutzer in Lua ein. |
 
 ## Zuordnung Humankind → Siedler
 
@@ -374,6 +379,53 @@ Objekte, `nofCustomPlanter` (GO_Type), Klima.
   (`building_cache`, `bob_jobs_cache`, `carrier_cache`); leere Plätze fallen auf den Platzhalter (`look`) zurück.
 - Vorlagen: Fehlende Dateien in `<Benutzerordner>/civ-vorlagen/<Bezeichner>/` werden aus den Platzhaltern geschrieben
   (Original-S2-Grafik, darum nicht in Git).
+
+## Werkzeugreform (Stand 2026-11-11)
+
+Daten in `data/RTTR/gamedata/civ/tools.lua`. Aktiv, sobald dort mindestens ein Material steht (`Content::HasToolReform`),
+sonst gilt das alte System.
+
+### Regeln
+
+- **Berufe ohne Werkzeug:** Im Lager wird aus einem Helfer ohne Werkzeug ein Arbeiter (`nobBaseWarehouse::CanRecruit`,
+  `Content::IsRecruitedWithoutTool`). Ausnahmen: Bauarbeiter, Planierer, Geologe, Späher. Kommt ein Arbeiter ins Lager
+  zurück, ist er wieder Helfer (`ConvertToHelpers`).
+- **Spielstart:** Die Arbeiter im Lager werden zu Helfern, ihre Werkzeuge kommen als Waren ins Lager
+  (`civ::startNewGame`, nur bei neuem Spiel).
+- **Werkzeugplätze:** Jedes Gebäude hat je Werkzeugtyp einen Platz (`nobUsual::ToolSlot`: Werkzeug in Gebrauch,
+  verbleibende Schritte, Ersatz, bestelltes Werkzeug). Höchstens 4 Typen je Gebäude.
+- **Werkzeugtyp** = Tag-Abfrage wie bei Eingängen. `"Axe"` trifft die eingebaute Axt (Name-Tag) und jede neue Ware mit
+  `kind = "Axe"`.
+- **Tempo** in Prozent = `baseSpeed` des Gebäudes + `speed` aller Werkzeuge in Gebrauch. 100 = bisheriges Tempo, 0 = keine
+  Arbeit. Im Gebäude werden Warten und Arbeiten skaliert. Bei Arbeitern, die draußen arbeiten (Holzfäller, Bauer …),
+  bleibt die Arbeit draußen gleich lang (Animationen, fallende Bäume); die Wartezeit davor gleicht das aus.
+- **Abnutzung:** Mit jedem Arbeitsschritt (`nobUsual::BeginWorkStep`, aufgerufen in `nofBuildingWorker::TryToWork`)
+  verliert jedes Werkzeug 1 Haltbarkeit. Bei 0 ist es weg, der Ersatz rückt nach.
+- **Bestellen:** Das Gebäude bestellt selbst aus den Lagern, sobald es einen Arbeiter hat, dann alle 210 GF und nach
+  jedem Schritt (`OrderTools`). Ersatz, wenn höchstens `rttr:SetToolReorder(n)` Prozent Haltbarkeit übrig sind.
+  Werkzeuge haben eine niedrige Transportpriorität; bei vollen Straßen dauert die Lieferung.
+- **Material:** Regler „Werkzeuge“ je Spieler (`PlayerResearch::GetToolMaterialPriorities`, Befehl
+  `gc::SetToolMaterialPriorities`). Bestellt wird das vorrätige Werkzeug mit dem höchsten Wert, bei Gleichstand das
+  schnellere; 0 = nie.
+- **Inventar:** Werkzeuge im Gebäude zählen nicht mehr zum Inventar des Spielers (wie verbrauchte Waren). So stimmen
+  die Formeln der KI „Werkzeuge + Arbeiter“ weiter.
+- **Abriss:** Der Arbeiter nimmt Werkzeuge mit mindestens halber Haltbarkeit und den Ersatz mit ins Lager
+  (`nofBuildingWorker::TakeTools`). Abgenutztere gehen verloren. Ohne Arbeiter im Gebäude gehen alle verloren.
+- **Fenster:** Gebäudefenster zeigt links die Werkzeuge mit Haltbarkeitsbalken, „+1“ für Ersatz, „...“ für bestellt und
+  rechts das Tempo. Verteilungsfenster hat den Reiter „Werkzeuge“.
+- **KI:** Stellt zuerst die Werkzeuge her, die ihren Gebäuden fehlen (`AdjustSettings`), und gibt der Schlosserei so
+  lange Eisen und Bretter vor der Waffenschmiede. Der Bauplaner zählt Spitzhacken im Lager als mögliche Bergleute und
+  Steinmetze.
+- **Spielstand:** Version 22. Ältere Spielstände im Zivilisationsmodus laden; die Gebäude haben dann keine Werkzeuge und
+  bestellen sie.
+
+### Startwerte in `tools.lua` (von Claude gesetzt, der Nutzer balanciert)
+
+- Material Eisen (Vorrang 5), alle 12 Werkzeuge: Haltbarkeit 150 Schritte, Tempo +100.
+- `baseSpeed` 0 für alle Gebäude mit Werkzeug, außer der Kette, die neue Werkzeuge ermöglicht: Holzfäller, Sägewerk,
+  Steinbruch, alle Minen und Eisenschmelze 25, Schlosserei 50. Sonst gäbe es nach dem Bruch des letzten Werkzeugs nie
+  wieder welche.
+- Ersatz bei 10 % Resthaltbarkeit.
 
 ## Welt: Kartengenerator mit Klima und Zonen (Stufe 1)
 

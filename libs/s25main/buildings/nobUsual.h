@@ -14,6 +14,9 @@
 
 class Ware;
 class nofBuildingWorker;
+namespace civ {
+struct BuildingTools;
+}
 class SerializedGameData;
 class noFigure;
 class noRoadNode;
@@ -22,6 +25,20 @@ class GameEvent;
 // Gewöhnliches Gebäude mit einem Arbeiter und Waren
 class nobUsual : public noBuilding
 {
+public:
+    /// Civilization mode, tool reform: One tool of the building (see civ::BuildingTools)
+    struct ToolSlot
+    {
+        /// Tool in use or Nothing
+        GoodType tool = GoodType::Nothing;
+        /// Work steps until the tool in use is broken
+        uint16_t stepsLeft = 0;
+        /// Replacement waiting in the building or Nothing
+        GoodType spare = GoodType::Nothing;
+        /// Tool on its way to the building or nullptr
+        Ware* ordered = nullptr;
+    };
+
 protected:
     /// Der Typ, der hier arbeitet
     nofBuildingWorker* worker;
@@ -53,6 +70,14 @@ protected:
     /// Civilization mode, library: stored knowledge media (count per ware) and ordered media
     std::map<GoodType, unsigned> libraryMedia_;
     std::list<Ware*> libraryOrderedMedia_;
+    /// Tool reform: Tools of the building (same order as civ::BuildingTools::slots). Empty without the tool reform
+    std::vector<ToolSlot> toolSlots_;
+    /// Tool reform: Event to order tools
+    const GameEvent* ordertool_ev;
+    /// Tool reform: Work speed in percent of the current work step
+    uint16_t stepSpeed_;
+    /// Tool reform: Slot a tool is ordered for right now (not serialized), -1: none
+    int orderingToolSlot_ = -1;
 
     friend class SerializedGameData;
     friend class BuildingFactory;
@@ -120,6 +145,18 @@ public:
     /// Library: Number of media on the way to the library
     unsigned GetNumOrderedLibraryMedia() const { return static_cast<unsigned>(libraryOrderedMedia_.size()); }
 
+    /// Tool reform: Tools of the building (empty without the tool reform)
+    const std::vector<ToolSlot>& GetToolSlots() const { return toolSlots_; }
+    /// Work speed in percent of the normal speed with the tools in the building. Always 100 without the tool reform
+    unsigned GetWorkSpeed() const;
+    /// Called by the worker when he wants to start a work step. Returns false if the building can not work with its
+    /// tools (speed 0). Otherwise the tools wear out and the speed of this step is set
+    bool BeginWorkStep();
+    /// Duration of a part of the current work step at its work speed
+    unsigned ScaleWorkDuration(unsigned gfs) const;
+    /// Number of tools of this ware the building is missing (nothing in use or ordered)
+    unsigned GetNumMissingTools(GoodType tool) const;
+
     /// Gibt Pointer auf Produktivität zurück
     const unsigned short* GetProductivityPointer() const { return &productivity; }
     unsigned short GetProductivity() const { return productivity; }
@@ -147,4 +184,12 @@ private:
     void OrderLibraryMedium();
     /// Library: True if the ware is a knowledge medium
     static bool IsKnowledgeMedium(GoodType good);
+    /// Tool reform: Tools of this building type (none without the tool reform)
+    const civ::BuildingTools& GetToolsDesc() const;
+    /// Tool reform: True if a tool should be ordered for the slot
+    bool NeedsToolOrder(const ToolSlot& slot) const;
+    /// Tool reform: Order missing tools and replacements for tools which are nearly broken
+    void OrderTools();
+    /// Tool reform: Start the event which orders tools if there are tools and it is not running
+    void StartToolOrderEvent();
 };

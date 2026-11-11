@@ -41,9 +41,15 @@ iwDistribution::iwDistribution(const GameWorldViewer& gwv, GameCommandFactory& g
     CreateGroups();
     // Civilization mode: Tab "Wissen" for the regulator of knowledge media (only if there are media)
     hasKnowledgeTab = civ::isEnabled(gwv.GetWorld()) && !civ::getActiveContent().GetKnowledgeMedia().empty();
-    const unsigned numTabs = groups.size() + (hasKnowledgeTab ? 1u : 0u);
+    // Civilization mode, tool reform: Tab "Werkzeuge" for the priority of the tool materials
+    hasToolTab = civ::isEnabled(gwv.GetWorld()) && civ::getActiveContent().HasToolReform();
+    const unsigned numTabs = groups.size() + (hasKnowledgeTab ? 1u : 0u) + (hasToolTab ? 1u : 0u);
+    // More than 5 materials need a higher window
+    const unsigned numMaterials =
+      hasToolTab ? static_cast<unsigned>(civ::getActiveContent().GetToolMaterials().size()) : 0u;
+    const unsigned height = std::max(312u, 60u + numMaterials * 40u + 80u);
 
-    Resize(Extent(numTabs * TAB_ICON_SIZE + TAB_ICON_SIZE / 2 + 20, 312));
+    Resize(Extent(numTabs * TAB_ICON_SIZE + TAB_ICON_SIZE / 2 + 20, height));
 
     // Tab Control
     ctrlTab* tab = AddTabCtrl(0, DrawPoint(10, 20), numTabs * TAB_ICON_SIZE + TAB_ICON_SIZE / 2);
@@ -91,6 +97,29 @@ iwDistribution::iwDistribution(const GameWorldViewer& gwv, GameCommandFactory& g
                         FontStyle::CENTER | FontStyle::BOTTOM, SmallFont);
     }
 
+    if(hasToolTab)
+    {
+        const auto& materials = civ::getActiveContent().GetToolMaterials();
+        // Icon: hammer
+        glArchivItem_Bitmap* img = nullptr;
+        if(LOADER.HasMapGraphics())
+            img = dynamic_cast<glArchivItem_Bitmap*>(LOADER.GetWareTex(GoodType::Hammer));
+        if(!img)
+            img = LOADER.GetImageN("io", 225);
+        ctrlGroup* tabGrp = tab->AddTab(img, _("Werkzeuge: Vorrang der Materialien"), GetToolTabId());
+        txtPos.y = progPos.y = 60;
+        for(unsigned i = 0; i < materials.size(); ++i)
+        {
+            tabGrp->AddText(static_cast<unsigned>(materials.size()) + i, txtPos, materials[i].title, COLOR_YELLOW,
+                            FontStyle::CENTER | FontStyle::BOTTOM, SmallFont);
+            tabGrp->AddProgress(i, progPos, progSize, TextureColor::Grey, 139, 138, 10);
+            txtPos.y = progPos.y += progSize.y * 2;
+        }
+        tabGrp->AddText(2 * static_cast<unsigned>(materials.size()), DrawPoint(txtPos.x, txtPos.y + 10),
+                        _("Gebäude bestellen das vorrätige Werkzeug mit dem höchsten Wert (0 = nie)"), COLOR_YELLOW,
+                        FontStyle::CENTER | FontStyle::BOTTOM, SmallFont);
+    }
+
     // Gruppe auswählen
     tab->SetSelection(0);
 
@@ -117,6 +146,15 @@ void iwDistribution::TransmitSettings()
             values[i] = static_cast<uint8_t>(tab->GetCtrl<ctrlProgress>(i)->GetPosition());
         if(gcFactory.SetKnowledgeDistribution(values))
             knowledgeChanged = false;
+    }
+    if(hasToolTab && toolsChanged)
+    {
+        ctrlGroup* tab = GetCtrl<ctrlTab>(0)->GetGroup(GetToolTabId());
+        std::vector<uint8_t> values(civ::getActiveContent().GetToolMaterials().size());
+        for(unsigned i = 0; i < values.size(); ++i)
+            values[i] = static_cast<uint8_t>(tab->GetCtrl<ctrlProgress>(i)->GetPosition());
+        if(gcFactory.SetToolMaterialPriorities(values))
+            toolsChanged = false;
     }
     if(settings_changed)
     {
@@ -153,6 +191,8 @@ void iwDistribution::Msg_Group_ProgressChange(const unsigned /*group_id*/, const
     // Note: The tab control reports its own id as group id, so check which tab is shown (only that one can be changed)
     if(hasKnowledgeTab && GetCtrl<ctrlTab>(0)->GetCurrentTab() == GetKnowledgeTabId())
         knowledgeChanged = true;
+    else if(hasToolTab && GetCtrl<ctrlTab>(0)->GetCurrentTab() == GetToolTabId())
+        toolsChanged = true;
     else
         settings_changed = true;
 }
@@ -162,6 +202,15 @@ void iwDistribution::SetKnowledgeValues(const std::array<uint8_t, 3>& values)
     if(!hasKnowledgeTab)
         return;
     ctrlGroup* tab = GetCtrl<ctrlTab>(0)->GetGroup(GetKnowledgeTabId());
+    for(unsigned i = 0; i < values.size(); ++i)
+        tab->GetCtrl<ctrlProgress>(i)->SetPosition(values[i]);
+}
+
+void iwDistribution::SetToolValues(const std::vector<uint8_t>& values)
+{
+    if(!hasToolTab)
+        return;
+    ctrlGroup* tab = GetCtrl<ctrlTab>(0)->GetGroup(GetToolTabId());
     for(unsigned i = 0; i < values.size(); ++i)
         tab->GetCtrl<ctrlProgress>(i)->SetPosition(values[i]);
 }
@@ -191,6 +240,8 @@ void iwDistribution::UpdateSettings()
         SetKnowledgeValues({distribution[civ::KnowledgeType::Agriculture], distribution[civ::KnowledgeType::Industry],
                             distribution[civ::KnowledgeType::Military]});
     }
+    if(hasToolTab && !toolsChanged)
+        SetToolValues(gwv.GetPlayer().GetResearch().GetToolMaterialPriorities(civ::getActiveContent()));
 }
 
 void iwDistribution::Msg_ButtonClick(const unsigned ctrl_id)
@@ -220,6 +271,14 @@ void iwDistribution::Msg_ButtonClick(const unsigned ctrl_id)
                 SetKnowledgeValues({defaults[civ::KnowledgeType::Agriculture], defaults[civ::KnowledgeType::Industry],
                                     defaults[civ::KnowledgeType::Military]});
                 knowledgeChanged = true;
+            }
+            if(hasToolTab)
+            {
+                std::vector<uint8_t> defaults;
+                for(const civ::ToolMaterial& material : civ::getActiveContent().GetToolMaterials())
+                    defaults.push_back(material.defaultPriority);
+                SetToolValues(defaults);
+                toolsChanged = true;
             }
         }
         break;
