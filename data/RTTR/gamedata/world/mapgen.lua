@@ -56,20 +56,20 @@ rttr:SetMapClimate{
 	-- 68 % der Karte liegen innerhalb Mittelwert +- Streuung, 95 % innerhalb +- doppelter Streuung.
 	temperatureSpread = 33, -- PLATZHALTER
 	humiditySpread = 33, -- PLATZHALTER
-	-- Abstand in Knoten für "near_fresh", "near_salt" und "near_river". So weit reicht auch die höhere Feuchtigkeit an
-	-- Seen und Flüssen (waterHumidity)
-	nearWaterDistance = 5, -- PLATZHALTER
+	-- Abstand in Knoten für "near_fresh", "near_salt" und "near_river" (Gelände in den Ressourcenregeln). Die höhere
+	-- Feuchtigkeit an Seen und Flüssen (waterHumidity) hängt nicht davon ab
+	nearWaterDistance = 1, -- PLATZHALTER
 	-- Gewässer bis zu dieser Größe (Anzahl Knoten, unabhängig von der Kartengröße) sind Seen (Süßwasser, ohne Strand),
 	-- größere sind Meer (Salzwasser, mit Sandstrand)
 	lakeMaxSize = 500,
-	-- So viele Punkte steigt die Feuchtigkeit direkt an Seen und Flüssen (0 = keine Änderung). Ab nearWaterDistance + 1
-	-- Knoten Abstand gar nichts mehr.
-	waterHumidity = 50, -- PLATZHALTER
-	-- Abnahme mit dem Abstand: alle waterHumidityStep Knoten um waterHumidityFalloff Punkte weniger.
-	-- Beispiele: Falloff 0 = überall bis nearWaterDistance gleich feucht; Falloff 10, Step 1 = 50, 40, 30, ... ;
-	-- Falloff 10, Step 2 = 50, 50, 40, 40, 30, 30.
-	waterHumidityFalloff = 10, -- PLATZHALTER
-	waterHumidityStep = 1, -- PLATZHALTER
+	-- So viele Punkte steigt die Feuchtigkeit direkt an Seen und Flüssen (0 = keine Änderung). Mit dem Abstand nimmt das
+	-- ab (waterHumidityFalloff) und reicht so weit, bis nichts mehr übrig ist. Nicht am Meer.
+	waterHumidity = 75,
+	-- Abnahme mit dem Abstand: alle waterHumidityStep Knoten um waterHumidityFalloff Punkte weniger (größer als 0, wenn
+	-- waterHumidity gesetzt ist). Beispiele mit waterHumidity = 50: Falloff 10, Step 1 = 50, 40, 30, 20, 10, ab 5 Knoten
+	-- nichts mehr; Falloff 10, Step 2 = 50, 50, 40, 40, 30, 30, 20, 20, 10, 10, ab 10 Knoten nichts mehr.
+	waterHumidityFalloff = 25,
+	waterHumidityStep = 3, 
 	-- Flüsse entspringen nur ab dieser Höhe (Prozent des höchsten Punkts der Karte), meist also im Gebirge
 	riverMinHeight = 30,
 	-- Kürzere Flüsse werden nicht angelegt (Schritte entlang der Kanten, etwa Knoten)
@@ -83,7 +83,7 @@ rttr:SetMapClimate{
 	},
 	-- Abstand in Knoten zwischen den kleinen Bauflächen im Gebirge (für Militärgebäude, wie im Online-Generator).
 	-- 0 = keine
-	mountainBuildSpacing = 6,
+	mountainBuildSpacing = 8,
 	-- Vorschaubilder (Zonen, Temperatur, Feuchtigkeit, Höhe) neben der erzeugten Karte speichern
 	-- (Ordner der gespielten Karten, Datei "Random_Vorschau.bmp")
 	previewImages = true

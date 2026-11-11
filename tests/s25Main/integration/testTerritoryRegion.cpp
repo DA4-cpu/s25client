@@ -14,6 +14,7 @@
 #include "worldFixtures/WorldFixture.h"
 #include "world/GameWorld.h"
 #include "world/TerritoryRegion.h"
+#include "gameData/MilitaryConsts.h"
 #include <boost/range/algorithm_ext/push_back.hpp>
 #include <boost/test/unit_test.hpp>
 #include <array>
@@ -356,7 +357,7 @@ BOOST_FIXTURE_TEST_CASE(CreateTerritoryRegionForDestroyedHQ, WorldFixtureEmpty2P
     world.DestroyNO(hq1Pos);
     world.DestroyNO(hq1Pos);
 
-    auto hq0Region = world.GetPointsInRadiusWithCenter(hq0Pos, 9);
+    auto hq0Region = world.GetPointsInRadiusWithCenter(hq0Pos, HQ_RADIUS);
     RTTR_FOREACH_PT(MapPoint, world.GetSize())
     {
         auto owner = std::find(std::begin(hq0Region), std::end(hq0Region), pt) != std::end(hq0Region) ? 1 : 0;

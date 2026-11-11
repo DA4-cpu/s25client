@@ -157,8 +157,8 @@ void RandomMap::Create(const MapSettings& settings)
     riverSettings.minLength = desc_.climate.riverMinLength;
     const auto rivers = CreateRivers(map_, rnd_, riverSettings);
     ComputeHeightPercent(map_);
-    ApplyWaterHumidity(map_, desc_.climate.nearWaterDistance, desc_.climate.waterHumidity,
-                       desc_.climate.waterHumidityFalloff, desc_.climate.waterHumidityStep);
+    ApplyWaterHumidity(map_, desc_.climate.waterHumidity, desc_.climate.waterHumidityFalloff,
+                       desc_.climate.waterHumidityStep);
     ApplyHeightCooling(map_, desc_.climate.heightCooling);
 
     // 3) Textures by kind of node, mountain height and climate. Sand beaches only at the sea: Rivers have grass banks

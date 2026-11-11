@@ -291,15 +291,17 @@ BOOST_FIXTURE_TEST_CASE(ExplorationExpedition, ShipReadyFixture<>)
     BOOST_TEST_REQUIRE(!ship.GetTargetHarbor());
     BOOST_TEST_REQUIRE(!ship.GetHomeHarbor());
 
-    // We want the ship to only scout unexplored harbors, so set all but one to visible
-    world.GetNodeWriteable(world.GetHarborPoint(HarborId(6))).fow[curPlayer].visibility = Visibility::Visible; //-V807
+    // We want the ship to only scout unexplored harbors, so set all but one to visible.
+    // Harbor 8 is close to the home harbor across the map border, the exploration ship may already see it from there
+    // (VISUALRANGE_EXPLORATION_SHIP). So it scouts harbor 6 on the other side first
+    world.GetNodeWriteable(world.GetHarborPoint(HarborId(8))).fow[curPlayer].visibility = Visibility::Visible; //-V807
     // Team visibility, so set one to own team
     world.GetPlayer(curPlayer).team = Team::Team1;
     world.GetPlayer(1).team = Team::Team1;
     world.GetPlayer(curPlayer).MakeStartPacts();
     world.GetPlayer(1).MakeStartPacts();
     world.GetNodeWriteable(world.GetHarborPoint(HarborId(3))).fow[1].visibility = Visibility::Visible;
-    HarborId targetHbId(8);
+    HarborId targetHbId(6);
 
     // Start again (everything is here)
     this->StartStopExplorationExpedition(hbPos, true);
@@ -316,7 +318,7 @@ BOOST_FIXTURE_TEST_CASE(ExplorationExpedition, ShipReadyFixture<>)
     BOOST_TEST_REQUIRE(ship.IsOnExplorationExpedition());
     BOOST_TEST_REQUIRE(world.CalcDistance(world.GetHarborPoint(targetHbId), ship.GetPos()) <= 2u);
     // Now the ship waits and will select the next harbor. We allow another one:
-    HarborId nextHbId(6);
+    HarborId nextHbId(8);
     world.GetNodeWriteable(world.GetHarborPoint(nextHbId)).fow[curPlayer].visibility = Visibility::FogOfWar;
     RTTR_EXEC_TILL(350, ship.IsMoving());
     BOOST_TEST_REQUIRE(ship.GetHomeHarbor() == hbId);
@@ -366,9 +368,11 @@ BOOST_FIXTURE_TEST_CASE(DestroyHomeOnExplExp, ShipReadyFixture<2>)
     world.GetPlayer(curPlayer).MakeStartPacts();
     world.GetPlayer(1).MakeStartPacts();
 
-    world.GetNodeWriteable(world.GetHarborPoint(HarborId(6))).fow[1].visibility = Visibility::Visible;
+    // Harbor 8 is close to the home harbor across the map border, the exploration ship may already see it from there
+    // (VISUALRANGE_EXPLORATION_SHIP). So it scouts harbor 6 on the other side
+    world.GetNodeWriteable(world.GetHarborPoint(HarborId(8))).fow[1].visibility = Visibility::Visible;
     world.GetNodeWriteable(world.GetHarborPoint(HarborId(3))).fow[1].visibility = Visibility::Visible;
-    HarborId targetHbId(8);
+    HarborId targetHbId(6);
     this->StartStopExplorationExpedition(hbPos, true);
 
     // Start it

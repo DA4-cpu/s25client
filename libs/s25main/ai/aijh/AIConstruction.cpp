@@ -17,6 +17,7 @@
 #include "buildings/nobHarborBuilding.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "helpers/containerUtils.h"
 #include "nodeObjs/noFlag.h"
 #include "nodeObjs/noRoadNode.h"
@@ -47,6 +48,16 @@ namespace {
       BuildingType::Armory,   BuildingType::Metalworks, BuildingType::Ironsmelter, BuildingType::Mint,
       BuildingType::CoalMine, BuildingType::IronMine,   BuildingType::GoldMine,    BuildingType::Sawmill,
       BuildingType::Brewery};
+    /// Near the border: Within this distance (in nodes) of a land border the AI only builds military buildings and the
+    /// buildings in BUILDINGS_NEAR_BORDER (civilization mode: also workshops with aiNearBorder = true in
+    /// workshops.lua), so the space stays free for the next military buildings. A border counts only if there is land
+    /// behind it within the same distance (see AIInterface::IsLandBorder)
+    constexpr unsigned BORDER_RESERVE_RADIUS = 4;
+    /// Buildings which may also be built near the border
+    constexpr std::array<BuildingType, 9> BUILDINGS_NEAR_BORDER = {
+      BuildingType::Woodcutter,  BuildingType::Quarry,         BuildingType::Fishery,
+      BuildingType::GoldMine,    BuildingType::CoalMine,       BuildingType::IronMine,
+      BuildingType::GraniteMine, BuildingType::HarborBuilding, BuildingType::Catapult};
 } // namespace
 
 AIConstruction::AIConstruction(AIPlayerJH& aijh)
@@ -206,6 +217,29 @@ void AIConstruction::BuildingSiteOrdered(const MapPoint pt, const BuildingType t
 bool AIConstruction::IsImportantBuilding(const BuildingType type)
 {
     return helpers::contains(IMPORTANT_BUILDINGS, type);
+}
+
+bool AIConstruction::IsAllowedNearBorder(const BuildingType type)
+{
+    if(BuildingProperties::IsMilitary(type) || helpers::contains(BUILDINGS_NEAR_BORDER, type))
+        return true;
+    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(type);
+    return custom && custom->aiNearBorder;
+}
+
+unsigned AIConstruction::GetBorderReserve(const BuildingType type)
+{
+    return IsAllowedNearBorder(type) ? 0u : BORDER_RESERVE_RADIUS;
+}
+
+unsigned AIConstruction::GetMaxMilitarySites()
+{
+    return MAX_MILITARY_SITES;
+}
+
+unsigned AIConstruction::GetMinSoldiersPerMilitarySite()
+{
+    return MIN_SOLDIERS_PER_MILITARY_SITE;
 }
 
 ConstructionMaterial AIConstruction::GetFreeConstructionMaterial() const

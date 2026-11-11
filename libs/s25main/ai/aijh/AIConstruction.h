@@ -98,6 +98,15 @@ public:
 
     /// Buildings which are handled before all others (see IMPORTANT_BUILDINGS in AIConstruction.cpp)
     static bool IsImportantBuilding(BuildingType type);
+    /// Buildings which may be built near a land border (see BORDER_RESERVE_RADIUS in AIConstruction.cpp): military
+    /// buildings, the ones in BUILDINGS_NEAR_BORDER and workshops with aiNearBorder = true in lua
+    static bool IsAllowedNearBorder(BuildingType type);
+    /// Distance to land borders (in nodes) the building must keep. 0: it may be built next to the border
+    static unsigned GetBorderReserve(BuildingType type);
+    /// At most this many military building sites at the same time (MAX_MILITARY_SITES in AIConstruction.cpp)
+    static unsigned GetMaxMilitarySites();
+    /// Soldiers in the warehouses per military building site (MIN_SOLDIERS_PER_MILITARY_SITE in AIConstruction.cpp)
+    static unsigned GetMinSoldiersPerMilitarySite();
     /// Boards and stones in the warehouses minus what the existing and the just ordered building sites still need
     ConstructionMaterial GetFreeConstructionMaterial() const;
     /// True if the free material suffices for the building. For non-important buildings the material reserved for

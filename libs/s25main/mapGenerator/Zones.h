@@ -27,10 +27,10 @@ void ApplyHeightCooling(Map& map, unsigned cooling);
 
 /**
  * Raise map.climate (humidity) at lakes (map.lakes) and rivers (map.riverCourse): By `humidity` points at the water,
- * `falloff` points less every `step` nodes away from it (falloff 0 = the same everywhere), nothing from
- * maxDistance + 1 nodes on.
+ * `falloff` points less every `step` nodes away from it, as far as something is left (falloff 0 = the same on the
+ * whole map).
  */
-void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity, unsigned falloff, unsigned step);
+void ApplyWaterHumidity(Map& map, unsigned humidity, unsigned falloff, unsigned step);
 
 /// What ComputeTerrainFlags needs to know about a node (bit flags)
 enum TerrainInfo : uint8_t

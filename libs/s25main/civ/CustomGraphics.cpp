@@ -792,7 +792,8 @@ void CustomGraphics::loadOre(Loader& loader, unsigned oreIdx, const CustomOre& o
                         settings_.templateFolder.empty() ? bfs::path() : settings_.templateFolder / ore.name);
     for(unsigned amountIdx = 0; amountIdx < oreSigns_[oreIdx].size(); ++amountIdx)
     {
-        const ArchivItem_BitmapBase* lookImage = loader.GetMapImage(getOreSignImage(ore.look, amountIdx));
+        // The signs are player bitmaps, not glArchivItem_Bitmap (so not GetMapImage)
+        const ArchivItem_BitmapBase* lookImage = asBitmap(loader.GetMapTexture(getOreSignImage(ore.look, amountIdx)));
         const std::string imageName = "Schild" + std::to_string(amountIdx);
         oreSigns_[oreIdx][amountIdx] = loadImage(folder, imageName, getAnchorRef(lookImage));
         writeTemplate(folder, imageName, lookImage, false, DrawPoint(0, 0), ore.tint);

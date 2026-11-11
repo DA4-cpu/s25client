@@ -26,10 +26,11 @@ public:
     void toggleCheatMode();
     /** Check if cheat mode is on (e.g. to draw special sprites or enable or all buildings).
      * Cheat mode needs to be on for any cheats to trigger.
+     * It is on from the start of a single player game (off in multiplayer), but never on when cheats are not allowed.
      *
      * @return true if cheat mode is on, false otherwise
      */
-    bool isCheatModeOn() const { return isCheatModeOn_; }
+    bool isCheatModeOn() const { return isCheatModeOn_ && areCheatsAllowed(); }
 
     // Classic S2 cheats
 

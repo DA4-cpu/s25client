@@ -263,10 +263,17 @@ void nofActiveSoldier::IncreaseRank()
 {
     if(GetRank() < world->GetGGS().GetMaxMilitaryRank())
     {
-        // Promote and adjust inventory accordingly
-        world->GetPlayer(player).DecreaseInventoryJob(job_, 1);
+        // Promote and adjust inventory accordingly. The armor stays with the soldier, so it moves to the new rank
+        GamePlayer& owner = world->GetPlayer(player);
+        const Job oldJob = job_;
         job_ = Job(rttr::enum_cast(job_) + 1);
-        world->GetPlayer(player).IncreaseInventoryJob(job_, 1);
+        owner.IncreaseInventoryJob(job_, 1);
+        if(hasArmor_)
+        {
+            owner.IncreaseInventoryJob(jobEnumToAmoredSoldierEnum(job_), 1);
+            owner.DecreaseInventoryJob(jobEnumToAmoredSoldierEnum(oldJob), 1);
+        }
+        owner.DecreaseInventoryJob(oldJob, 1);
     }
 }
 

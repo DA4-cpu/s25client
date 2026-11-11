@@ -142,6 +142,8 @@ struct WorkshopDesc
     std::string mineResource;
     /// Knowledge points of the finished building (like rttr:SetBuildingKnowledge)
     std::optional<KnowledgeValues> knowledge;
+    /// True: The AI may build it near a land border (otherwise that space is kept free for military buildings)
+    bool aiNearBorder = false;
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);

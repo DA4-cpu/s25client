@@ -51,6 +51,7 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-10-27 | Nach Test: Höhen abwechslungsreich (Ebenen und Hügel, flache und steile Berge, Berge nie unter dem Umland, Minen auf den Bergen möglich), Regler **Unebenheit**; **Bauflächen im Gebirge** in festem Abstand wie im Online-Generator; Klima um die Mitte statt zu Extremen; **Flüsse** neu (aus der Höhe bis ins Wasser, durchgehend, Mindesthöhe). |
 | 2026-10-27 | Flüsse wieder **wie im Original angeordnet** (2 Dreiecke je Schritt entlang einer Kante, Richtung ändert sich bei jedem Schritt um 60°: durchgehend und schmal), **keine Furten**. Seen ohne Strand, Süßwasser nach absoluter Größe (`lakeMaxSize`, nicht mehr Prozent der Karte), feuchter an Seen und Flüssen (`waterHumidity`), Strand halb so breit. |
 | 2026-10-30 | Flüsse ohne abstehende Wasserdreiecke; Feuchte an Seen/Flüssen mit einstellbarer Abnahme (`waterHumidityFalloff`, `waterHumidityStep`); im feucht-warmen Gebiet **weniger Gebirge** (`mountainWeights`, Regler „Gebirge %“ wird dort nur verringert) statt weniger Erz. |
+| 2026-11-10 | Feuchte an Seen und Flüssen reicht so weit, bis die Abnahme (`waterHumidityFalloff`, `waterHumidityStep`) sie aufgebraucht hat, ohne Grenze durch `nearWaterDistance` (das gilt nur noch für „near_fresh“, „near_salt“, „near_river“). Abnahme 0 bei gesetzter `waterHumidity` ist ein Ladefehler. |
 | 2026-10-30 | **Lehm** ist zunächst nur Rohstoff: Lehmvorkommen auf der Karte (vor allem feucht-warm), **Lehmgrube** mit Lehmstecher baut sie ab wie der Steinbruch, Lagern/Tragen/Statistik, die KI baut Lehmgruben. Ton, Ziegel und Stampflehm kommen später. |
 | 2026-10-30 | **Eigene Grafiken:** Der Nutzer legt selbst gezeichnete Bilder (PNG/BMP) unter festen Namen in `data/RTTR/assets/civ/<Bezeichner>/` ab; fehlende Bilder bleiben Platzhalter. Das Spiel schreibt die Platzhalter als Vorlagen mit Namen, Größe und Ankerpunkt in den Benutzerordner (`civ-vorlagen`, nicht in Git). |
 | 2026-10-23 | Medien-WP zählen aus dem **echten Bestand**: in Lagerhaus/HQ/Hafen 0,5-fach, in der Bibliothek 1-fach. Medien unterwegs oder an Flaggen zählen nicht. Die Bibliothek nimmt **alle** Waren mit `knowledge` an (keine Grenze von 3 Eingängen) und bestellt erst, wenn der Bibliothekar da ist. |
@@ -412,7 +413,8 @@ Kartenauswahlmenü).
    Fluss je 2000 Knoten.
 4. **Klima nach Höhe und Wasser:** Mit der Höhe wird es kälter (`heightCooling`). An Seen und Flüssen steigt die
    Feuchtigkeit um `waterHumidity` Punkte, alle `waterHumidityStep` Knoten Abstand um `waterHumidityFalloff` Punkte
-   weniger (0 = keine Abnahme), ab `nearWaterDistance` + 1 Knoten gar nicht mehr (nicht am Meer).
+   weniger, so weit, bis nichts mehr übrig ist (nicht am Meer). Die Abnahme muss größer als 0 sein. Seit 2026-11-10
+   begrenzt `nearWaterDistance` das nicht mehr; es gilt nur für die Gelände „near_fresh“, „near_salt“, „near_river“.
 5. **Texturen:** Dreieck = Wasser, wenn alle Ecken Wasser sind, Gebirge, wenn mindestens 2 Ecken Gebirge sind, sonst
    Land nach Klima. Gebirgstexturen nach Temperatur (Grönland/Ödland/Winter), innerhalb nach Höhe über dem Bergfuß;
    Schnee nur auf den höchsten 8 % der Gipfel der Karte. Sandstrand nur am Meer, in Dreiecksreihen ab dem Wasser
@@ -487,6 +489,209 @@ Böden je Landschaft (6 Bit); „world“ hat jetzt 62.
 - Eisbären lassen sich im Kartenformat nicht speichern.
 - Originalkarten werden nicht verändert.
 
+## Militär (Konzept, Stand 2026-11-07)
+
+Im Zivilisationsmodus wird das Militärsystem von S2 ersetzt. Ziel: ein Militär, das auf der Karte präsent ist, auch
+außerhalb der Grenzen handelt, Versorgung braucht und verschiedene Einheitentypen hat, ohne RTS-Steuerung einzelner
+Einheiten. Noch nichts umgesetzt.
+
+### Entscheidungen
+
+| Datum      | Entscheidung |
+|------------|--------------|
+| 2026-11-07 | Das alte Militärsystem wird im Zivilisationsmodus **komplett ersetzt** (Angriffsfenster, Militäreinstellungen, Verteidiger aus Nachbargebäuden, Seeangriffe, KI-Angriffslogik). Es bleibt nur: Soldaten besetzen Militärgebäude und halten so das Gebiet. |
+| 2026-11-07 | **Verbände:** Gruppen von Soldaten, sichtbar auf der Karte, beliebig groß (die Obergrenze ergibt sich aus der Versorgung). Man steuert sie über **Aufträge**, nicht über einzelne Einheiten. Drei Arten: **einfacher Trupp** (von Anfang an), **stehendes Heer** (erst mit der Forschung zum Armeelager, Ära 2), **Miliz** (mit den Wohnhäusern). |
+| 2026-11-07 | **Deaktivieren:** Beim einfachen Trupp heißt Deaktivieren Auflösen, Ränge und Erfahrung gehen verloren. Das stehende Heer kann man deaktivieren: Es behält seine Ränge und **trainiert**, solange es deaktiviert ist. Durch Training sammelt es Erfahrung, die Soldaten steigen im Rang auf. Erfahrung gibt es auch nach Kämpfen. |
+| 2026-11-07 | **Verbandsfenster** (Knopf in der Leiste unten am Bildschirmrand), das zentrale Fenster für alle Verbände: neue Verbände erstellen, Art (einfacher Trupp, stehendes Heer, Miliz) und Zusammensetzung aus Einheitentypen festlegen (auch bei bestehenden Verbänden), Liste aller Verbände, Auflösen, Aktivieren/Deaktivieren, Kamera zum Verband, Verband auswählen und ihm Befehle geben. Aus welchen Gebäuden Leute und Ausrüstung kommen, steuert man nicht; das ergibt sich daraus, was wo verfügbar ist. |
+| 2026-11-07 | **Befehlsverzögerung:** Ein Befehl wirkt erst nach einer Wartezeit, die mit dem Abstand des Verbands zur eigenen Gebietsgrenze wächst (Timer; im eigenen Gebiet keine Verzögerung). Was der Verband tut, sieht man live. Befehle, die unterwegs sind, lassen sich nicht abbrechen. |
+| 2026-11-07 | **Kampf** nur zwischen Verbänden (auch mehrere gegen einen), gleichzeitig auf der Karte, kein eigener Schlachtbildschirm. Das Ergebnis hängt an Stats und Position: Wald, Fluss, Höhe, Befestigung, Flanke, Hinterhalt. Die **Formation** ist wählbar und verändert die Stats. |
+| 2026-11-07 | **Befestigungsbonus** gibt es nur für die Soldaten im bzw. auf dem Militärgebäude, nicht im Umkreis. Das ist die Garnison: Soldaten im Gebäude gehören zu keinem Verband, ein Verband betritt kein Militärgebäude. Später gilt das genauso für die besetzbaren Mauern. |
+| 2026-11-07 | **Moral** ergibt sich aus Versorgung, eigener Truppenstärke und Stärke im Vergleich zum Gegner. Ein Gefecht endet, wenn die Moral einer Seite unter eine Schwelle fällt, nicht erst, wenn alle tot sind; der Verband zieht sich dann zurück, wenn er kann. Bei Versorgungsmangel sinkt die Moral und die Soldaten heilen nicht. |
+| 2026-11-07 | Kann ein geschlagener Verband sich nicht zurückziehen, kämpft er bis zum Ende oder gibt auf. Was davon, hängt von der **Kultur** ab (siehe „Notizen für Kulturtraits“). |
+| 2026-11-07 | **Deserteure:** Bleibt die Moral lange unter einer tieferen Schwelle, desertiert der ganze Verband und führt ein Eigenleben: Deserteure ziehen umher, plündern, greifen alle an und laufen evtl. zu einem anderen Spieler über. Zurückgewinnen kann man sie nicht. |
+| 2026-11-07 | **Versorgung** (Nahrung, Munition, Ausrüstung usw.) läuft nie von selbst. Ein Verband versorgt sich mit dem, was gerade da ist: Lager, Kartenobjekte (z. B. Beerenbüsche, Wild), Plünderung, Nachschub. Steht er **direkt an der Flagge** eines eigenen Lagers (Lagerhaus, HQ, Hafen), nimmt er sich den Bedarf direkt aus dem Bestand. Befehlseinstellung: „Vorrat reicht nur noch für X Minuten → zum nächsten Lager“. Wird der Vorrat knapp, kommt immer eine Nachricht. |
+| 2026-11-07 | **Versorgungsposten** schicken Karawanen (sichtbare, einfache Figuren) zu den Verbänden. Im Versorgungsposten wählt man aus, welche Verbände er versorgt; ein Posten kann mehrere Verbände versorgen, ein Verband kann von mehreren Linien versorgt werden. Das läuft automatisch, die Routen lassen sich über Wegpunkte nachsteuern. Versorgungslinien gibt es erst nach den Lasttieren (`pack_animals`). |
+| 2026-11-07 | **Armeelager** (Forschung in Ära 2, mit ihr kommt auch das stehende Heer): Unterkunft für ein stehendes Heer, solange es inaktiv ist; ein Verband im Lager wird direkt versorgt. |
+| 2026-11-07 | Auftrag **„Zurück“** ohne Armeelager: Der Verband geht zum nächsten eigenen Lagerhaus, HQ oder Hafen und steht dort bereit. |
+| 2026-11-07 | **Auflösen:** Der Verband geht zum nächsten Lagerhaus, legt seine Ausrüstung ab und wird wieder zu Helfern (Miliz: zurück in die Häuser und Berufe). Der Rang geht dabei verloren. |
+| 2026-11-07 | **Eroberung** (vorerst): Ein Verband greift ein Militärgebäude direkt an, nach der Übernahme bleibt **1 Soldat** im Gebäude. Mauern und Belagerung kommen später, das Katapult wird dafür umgebaut. |
+| 2026-11-07 | **Miliz:** Ausrüstungsplatz in den Wohnhäusern, Einberufen wie in Manor Lords, jeder Milizverband hat ein eigenes Milizlager. |
+| 2026-11-07 | **Feldlager** außerhalb der Grenze dienen als Befestigung und evtl. als Kolonie, nicht zur Versorgung. |
+| 2026-11-07 | **Schiffe:** Zivile Schiffe bleiben wie bisher. **Kampfschiffe** sind Verbände auf dem Wasser, führen Seekämpfe und nehmen Landverbände auf (Betreten und Verlassen wie in Siedler 4, an jeder Küste). Typen z. B. Kriegsschiff (stark im Seekampf), Landungsboot (schwach, viel Platz für Truppen) und Zwischenstufen. Keine Versorgungslinie, dafür ein großer Vorrat an Bord, aufgefüllt im Hafen. Das Schiff selbst braucht keine Versorgung, nur die Truppen an Bord; ein Schiff ohne Truppen verbraucht nichts. |
+
+### Technische Auslegung (Vorschlag)
+
+- Ein Verband ist **ein Kartenobjekt**, das von Knoten zu Knoten zieht und seine Soldaten in Formation zeichnet. Die
+  Soldaten (Typ, Rang, Lebenspunkte, Ausrüstung) sind Daten des Verbands.
+- Befehle sind GameCommands. Die Verzögerung wird beim Erteilen aus dem Abstand zum nächsten eigenen Gebietsknoten
+  berechnet: **20 GF pro Knoten**, so lange wie ein Läufer für die Strecke braucht (10 Knoten ≈ 10 s bei normaler
+  Geschwindigkeit). Befehle treffen in der Reihenfolge ein, in der sie erteilt wurden.
+- Drei Ebenen: **Auftrag** (verzögert, als Liste), **Haltung** (aggressiv, standhaft, ausweichen, verborgen),
+  **Regeln** (wirken sofort, z. B. Rückzug ab Moral, Verfolgungsweite, Vorrat für weniger als X Minuten → zum Lager).
+- Aufträge: Marschieren (Wegpunkte), Halten (Verschanzung wächst mit der Zeit), Patrouille, Erkunden, Angreifen
+  (Verband, Gebäude, Gebiet), Gebiet verteidigen, Geleitschutz, Feldlager, Zurück, Auffüllen, Vereinen/Teilen, Auflösen,
+  Ein-/Ausschiffen; später Belagern, Plündern.
+- Kampftakt etwa 1 s: Abstand ≤ Reichweite → Fernkampf (verbraucht Munition, Höhe gibt Reichweite und Schaden, Wald
+  gibt Deckung); Kontakt → Nahkampf, die Breite der Formation bestimmt, wie viele gleichzeitig kämpfen. Schaden trifft
+  die Seite, von der er kommt (Blickrichtung, 6 Richtungen). Ob es zum Nahkampf kommt, entscheidet die Haltung des
+  Beschossenen. Wasser dazwischen → nur Fernkampf.
+- Weil nur Verbände kämpfen, tritt die Garnison eines angegriffenen Militärgebäudes im Gefecht wie ein feststehender
+  Verband mit dem Befestigungsbonus an. Im Verbandsfenster erscheint sie nicht. Ihre Größe ist durch das Gebäude begrenzt
+  (`NUM_TROOPS`: Baracke 2, Wachstube 3, Wachturm 6, Festung 9).
+- Gerechnet wird nur mit Ganzzahlen, damit MSVC und GCC im Mehrspieler dasselbe Ergebnis haben.
+- Einheitentypen, Formationen, Geländewerte und der Bedarf je Einheitentyp kommen aus Lua.
+- Karawanen nach dem Vorbild von `nofTradeLeader`/`nofTradeDonkey`, die schon heute frei über die Karte laufen.
+- Schiffe fahren in RttR heute nur Hafenplätze an. Für Landungen an jeder Küste braucht es eine eigene Wegfindung auf
+  dem Wasser.
+
+### Notizen für Kulturtraits
+
+- Verhalten eines geschlagenen Verbands, der sich nicht zurückziehen kann: bis zum Ende kämpfen oder aufgeben.
+
+### Reihenfolge (Nutzer, 2026-11-07)
+
+1. **M1:** Verbandsfenster, Verbände (einfacher Trupp) gründen, auf der Karte bewegen, Aufträge, Befehlsverzögerung,
+   KI. Ohne Armeelager und Eroberung.
+2. **M3:** Einheitentypen und Ausrüstung über Lua und den Techtree. Die Kampfwerte werden hier angelegt und ab M2
+   benutzt.
+3. **M4:** Versorgung (Vorrat, Lager, Kartenobjekte, Versorgungsposten, Karawanen), Armeelager und stehendes Heer.
+4. **M2:** Gefechte (Gelände, Flanke, Formation, Moral, Fernkampf, schießende Garnisonen) und Eroberung.
+5. **M5:** restliche Aufträge.
+6. **M6:** Kampfschiffe.
+
+Bis M2 fertig ist, bleibt das alte Militärsystem im Modus aktiv, damit es zwischendurch Krieg gibt und `ai-battle`
+testbar bleibt; mit M2 wird es im Modus abgeschaltet (Vorschlag Claude, 2026-11-07).
+
+Später: Miliz (mit den Wohnhäusern), Feldlager und Kolonien, Mauern, Belagerung.
+
+## Geld und Finanzen (Konzept, Stand 2026-11-08)
+
+Geld bekommt in S2 erst Sinn, wenn es Gegenüber mit eigenen Interessen gibt: Haushalte, Soldaten, Händler, andere
+Spieler. Das Konzept hängt deshalb eng an den Wohnhäusern (Bedürfnisse wie in Anno, siehe Konzept des Nutzers) und am
+Militär (Sold). Noch nichts umgesetzt.
+
+### Entscheidungen
+
+| Datum      | Entscheidung |
+|------------|--------------|
+| 2026-11-08 | **Marktmodell:** Zwischen Wohnhäusern und Waren steht ein **Markt**. Wohnhäuser bestellen nicht selbst; liegt ein Haus an keinem Markt, wird es nicht versorgt. Jedes Haus gehört immer zum **nächsten Markt**. Der Markt bestellt den Bedarf seiner Häuser per Träger. |
+| 2026-11-08 | **Marktgänger:** Jedes Haus schickt regelmäßig einen Marktgänger zum Markt. Er läuft **auf den Straßen** (wie ein Soldat auf dem Weg zum Militärgebäude), bezahlt am Markt mit Münzen oder Tauschware und trägt die Ware heim. |
+| 2026-11-08 | **Geld ist physisch:** Die Staatskasse sind die Münzen in den Lagern (plünderbar). Zwischen Gebäuden reist Geld als Ware (Geldkisten zwischen Markt und Lager, Sold per Karawane), innerhalb des Marktumkreises trägt es der Marktgänger. Haushalte haben ein eigenes Vermögen. (Vorschlag Claude, vom Nutzer übernommen.) |
+| 2026-11-08 | **Tausch** ist der Normalfall ohne Münzen (Ära 0, Münzmangel): Ware gegen Ware im Verhältnis ihrer Werte. Dieselbe Regel gilt mit fremden Händlern und anderen Spielern. (Vorschlag Claude, vom Nutzer übernommen.) |
+| 2026-11-08 | **Preise** und alles andere Finanzielle werden **automatisch** berechnet. Die Hebel des Spielers: Gebäude bauen (damit formt er die Wirtschaft) und der **Steuersatz**. |
+| 2026-11-08 | **Lohn pro Arbeitsplatz**, berechnet als **Lohn pro produzierter Ware**: Ein schlecht versorgter Betrieb macht wenig Umsatz, seine Arbeiter können sich weniger leisten → Unzufriedenheit, geringeres Wachstum. Lohn pro Haus ist verworfen. |
+| 2026-11-08 | Lohn nach **Wertschöpfung** (Stufe 2, siehe unten). Einen Arbeitsmarkt (Stufe 3) gibt es nicht, er passt nicht zu Siedler 2. |
+| 2026-11-08 | **Luxusbedürfnisse** sind der Anreiz, Wohnhäuser zu verbessern: Sie holen Geld in die Staatskasse zurück. |
+| 2026-11-08 | **Heimarbeit** gibt es nur über spezielle Forschungen und Hausupgrades, nicht als Standard. Welche Waren (historisch korrekt), recherchiert der Nutzer; Vorschläge siehe unten. |
+| 2026-11-08 | **Selbstversorgung:** Manche Gebäude decken Bedürfnisse aus eigener Produktion, z. B. der Bäcker mit Wohnstube sein Brot oder der Bauernhof mit seinen Erträgen. Diese Bedürfnisse kaufen sie nicht am Markt. |
+| 2026-11-08 | **Zuhause:** Jeder Arbeiter wohnt in einem Haus. Häuser sind auf **Berufsgruppen** beschränkt (ein Minenarbeiter lebt nicht in einer Luxusvilla). Ein Arbeiter ohne freies Bett wird trotzdem einem Haus zugeordnet, weil er Bedürfnisse hat. |
+| 2026-11-08 | **Pendeln** wird nur gerechnet, nicht als Figur gezeigt. Während der Arbeiter pendelt, zeigt das Arbeitsgebäude eine Info. |
+
+### Technische Auslegung (Vorschlag)
+
+- Kassen sind Zähler in Haus, Markt und Lager (in Talern). Eine Münz-Ware steht für einen Beutel mit mehreren Talern, sonst
+  müsste die Münzerei Tausende Münzen prägen. Hat ein Markt zu viel Geld, schickt er eine Geldkiste ins Lager; hat er zu
+  wenig, bestellt er eine.
+- Der Lohn wird beim Markt des Wohnhauses gutgeschrieben, der Marktgänger holt ihn beim nächsten Besuch ab. Steuern werden
+  beim Marktbesuch fällig (Münzen oder Naturalien).
+- Jeder Markt berechnet alle paar Sekunden seine eigenen Preise je Ware aus der Nachfrage seiner Häuser und der
+  Verfügbarkeit der Ware. Sie gleiten zum Gleichgewicht und bleiben in einem Rahmen um den Grundpreis aus Lua.
+  Gerechnet wird nur mit Ganzzahlen.
+- Lohn = (Preis der Ware − Preis der verbrauchten Eingänge) × Lohnanteil (Wertschöpfung, entschieden). Verworfen:
+  reiner Stücklohn ohne Eingänge und ein Arbeitsmarkt je Berufsgruppe.
+- Der Lohn wird über einige Minuten geglättet und Haushalte haben Ersparnisse, damit nicht jeder Stau sofort das
+  Wachstum trifft. Berufe ohne Ware (Förster, Geologe, Späher, Bibliothekar) bekommen einen Zeitlohn aus dem
+  Durchschnittslohn.
+- Wohnort als Verweis Arbeiter → Haus, vergeben bei Arbeitsantritt (nächstes Haus der passenden Berufsgruppe), neu bei
+  Bau oder Abriss eines Hauses. Die Pendelzeit ergibt sich aus der Weglänge über die Straßen. Der Weg wird einmal
+  berechnet und gespeichert und nur neu berechnet, wenn sich das Straßennetz geändert hat (Zähler). Hintergrund: Eine
+  Figur auf Straßen rechnet heute an jeder Flagge `FindHumanPathOnRoads` neu (`noFigure::WalkToGoal`).
+- Selbstversorgung in Lua: welche Ware welches Bedürfnis deckt und wie viel; der Eigenverbrauch wird vor der Flagge
+  abgezweigt. Getreide ist heute keine Nahrung.
+- Der Markt bestellt wie die Bibliothek nach Tags, ohne Grenze von 3 Eingängen.
+- Geld fließt nur über Marktkäufe und Steuern in die Staatskasse zurück. Sparen die Haushalte, fehlt Geld im Umlauf →
+  Nachprägen → steigende Preise. Luxus und Steuern sind die Rückflüsse.
+
+### Heimarbeit: Vorschläge von Claude (vom Nutzer zu prüfen)
+
+- Spinnen: Wolle, Flachs oder Baumwolle → Garn
+- Weben: Garn → Tuch (Verlagssystem, ab dem Spätmittelalter)
+- Korbflechten: Weide oder Schilf → Körbe
+- Töpfern: Ton → einfache Gefäße
+- Hausbrauen: Getreide → Bier (im Mittelalter oft Arbeit der Frauen im Haushalt)
+- Schnitzen: Holz → Holzgeschirr; Knochen → Knochenschmuck
+- Kerzenziehen: Talg → Kerzen (Talg als Nebenprodukt der Fleischerei)
+- Nähen: Tuch → Kleidung
+- Strohflechten: Stroh → Matten (Stroh als Nebenprodukt des Bauernhofs)
+- Später: Klöppeln (Spitze, ab dem 16. Jh.), Nagelschmieden (17./18. Jh.)
+
+### Träger
+
+Siehe Abschnitt „Transport und Logistik“ (Stationsträger, keine Fron, keine Dauerträger).
+
+## Transport und Logistik (Konzept, Stand 2026-11-09)
+
+Im Zivilisationsmodus ersetzt ein System mit mehreren Transportarten den S2-Träger, der dauerhaft auf jedem
+Straßenabschnitt steht. Noch nichts umgesetzt.
+
+### Entscheidungen
+
+| Datum      | Entscheidung |
+|------------|--------------|
+| 2026-11-09 | **Mehrere Transportarten nebeneinander.** Für jede Lieferung wählt das Spiel automatisch die günstigste (geschätzte Zeit plus Frachtkosten). Der Spieler baut Gebäude, Straßen, Stationen und Linien; den Rest regelt das Spiel. |
+| 2026-11-09 | **Nahverkehr: Der Käufer holt.** Liegt die Quelle nah, holt ein Arbeiter des bestellenden Gebäudes die Ware selbst über die Straßen (der Bäcker das Mehl beim Müller, der Schmied das Eisen im Lager um die Ecke). Startwert für „nah“: **20 Knoten** (wird noch gebalanct). |
+| 2026-11-09 | **Mehrere Arbeiter pro Gebäude** mit verschiedenen Aufgaben, z. B. ein Träger (braucht kein Werkzeug, erhöht die Produktion, wenn er gerade nicht tragen muss) und ein Arbeiter mit Werkzeug, der den eigentlichen Beruf ausübt. |
+| 2026-11-09 | **Straßenverkehr über Trägerstationen** (Trägerhaus, später Poststation): Die Träger wohnen in der Station und warten dort. Liegt eine Ware an einer Flagge im Einzugsgebiet, schickt die Station einen freien Träger; er trägt sie über mehrere Abschnitte bis zum Ziel oder zur nächsten Station und kehrt zurück. Bezahlt pro Ware und Strecke. |
+| 2026-11-09 | **Die bisherigen Dauerträger** (ein fester Träger pro Straßenabschnitt) **entfallen** im Zivilisationsmodus. **Fron** gibt es nicht. |
+| 2026-11-09 | Zum Spielstart braucht es keine Trägerstationen, weil es noch keine weiten Strecken gibt. |
+| 2026-11-09 | **Lagerhäuser haben Träger als Arbeiter.** Sie sammeln alle herrenlosen Waren ein und beliefern die Baustellen mit Baumaterial. |
+| 2026-11-09 | **Fernverkehr über Umschlagplätze** (Karawanserei, Packstation, Anlegestelle, Bahnhof), die wie Häfen arbeiten: Waren für ein Ziel werden gesammelt, ein Fahrzeug bringt sie gebündelt zur Gegenstation, von dort geht es im Nah- oder Straßenverkehr weiter. Fahrzeuge je nach Forschung, Gelände und Tieren der Zone: Eselskarawane, Ochsenkarren (befestigte Straße), Kamelkarawane (Wüste, auch ohne Straße), Lamas (Gebirge), Flussboot, Schiff, Eisenbahn. Tiere müssen gezüchtet oder in ihrer Zone gefangen werden und fressen. |
+| 2026-11-09 | **Keine Händler** als eigene Figuren. **Jeder Markt berechnet seine eigenen Preise** aus der Nachfrage (den Bedürfnissen seiner Häuser) und der Verfügbarkeit der Waren. Preisregionen gibt es nicht. |
+
+### Technische Auslegung (Vorschlag)
+
+- Die Wegsuche kennt heute schon Schiffsetappen zwischen Häfen (`RoadPathDirection::Ship`). Dieses Prinzip wird um weitere
+  Etappenarten erweitert: Selbstabholung, Stationsträger, Linie zwischen Umschlagplätzen.
+- Nahverkehr: Bis zur Flagge vor dem Gebäude trägt der Arbeiter seine Ware heute schon selbst (`CarryoutWare` in
+  `nofBuildingWorker`). Neu läuft der Abholer über die Straßen bis zur Quelle und zurück. Die Höchstentfernung (Start
+  20 Knoten) steht in Lua und kann durch Forschungen steigen. Hat das Gebäude keinen eigenen Träger, holt der Arbeiter
+  selbst und der Betrieb steht so lange.
+- Lagerhausträger: Heute tragen Lagerarbeiter (`nofWarehouseWorker`) Waren nur zwischen Lager und Flagge. Neu laufen
+  sie über die Straßen, holen herrenlose Waren (Waren ohne Abnehmer, z. B. Produkte, die niemand bestellt hat) ins Lager
+  und bringen Bretter, Steine usw. zu den Baustellen.
+- Mehrere Arbeiter pro Gebäude in Lua, z. B. `workers = { { job = "Baker", tool = "Rollingpin" }, { job = "Helper",
+  role = "carrier" } }`. Heute hat ein Gebäude genau einen Arbeiter (`nobUsual`).
+- Trägerstationen: Straßen im Einzugsgebiet fordern keinen festen Träger mehr an; eine Ware an einer Flagge meldet sich
+  bei der nächsten Station. Die Suche nach einem freien Träger ist billig, weil es wenige Stationen gibt.
+- Umschlagplätze und Fahrzeuge nach dem Vorbild von Häfen und Schiffen sowie `nofTradeLeader`/`nofTradeDonkey`.
+  Fahrzeugtypen in Lua: Kapazität, Tempo, erlaubtes Gelände und Straßenart, benötigtes Tier bzw. Ware, Unterhalt,
+  Technologie.
+- Frachtkosten fließen in den Preis am Zielort; damit ist Transport Teil der Wertschöpfung.
+- Wege werden gespeichert wie beim Pendeln und nur bei geändertem Straßennetz neu berechnet.
+- Vorgeschlagene Reihenfolge: Nahverkehr → Umschlagplätze mit Eselskarawane → Trägerstationen → Tiere je Zone und
+  Straßenarten → Flussboote → Eisenbahn.
+
+### Historischer Hintergrund (Recherche 2026-11-08)
+
+- Kurze Wege trugen Erzeuger oder Käufer selbst: Der Bauer brachte sein Getreide zum Markt und zur Mühle, der Bäcker kaufte
+  Getreide, ließ es mahlen und zahlte dem Müller einen Mahllohn.
+- Fernhandel organisierten Kaufleute und Verleger; sie heuerten bezahlte Transporteure an: Schiffer, Fuhrleute, Säumer
+  (Genossenschaften mit Monopol auf ihrem Wegabschnitt, Umladen in Susten), Kameltreiber, in Mesoamerika Berufsträger in
+  Staffeln, in Indien die Banjaras mit Ochsenkarawanen.
+- Strategische Versorgung organisierte der Staat: Annona in Rom, Caoyun auf dem chinesischen Kaiserkanal, die Speicher der
+  Inka, die Proviantwidmung für den steirischen Erzberg.
+- Landtransport war sehr teuer: Weizen 100 römische Meilen über Land kostete etwa 55 % seines Werts, über See etwa 1,3 %
+  (nach Duncan-Jones).
+
+## Gebiet und Klima im Spiel (Notizen des Nutzers, 2026-11-09)
+
+- **Gebietsabhängige Bedürfnisse:** In kalten Gebieten hat jedes Haus das Bedürfnis nach Wärme, und Verbände brauchen
+  besondere Versorgungsgüter (z. B. Pelze oder Feuerholz).
+- **Gebietsabhängige Laufgeschwindigkeit** für Siedler und Verbände, veränderbar durch besondere Einheiten oder
+  Technologien (z. B. Kamele sind in der Wüste schneller, Schlitten in schneereichen Gebieten).
+- Technischer Anknüpfungspunkt: Temperatur und Feuchte je Knoten liefert schon `civ::ClimateMap`
+  (`GameWorldBase::GetClimate()`); Laufen kostet heute fest 20 GF pro Knoten (`noFigure::StartMoving(dir, 20)`).
+
 ## Phasen (Roadmap)
 
 1. **Fundament** – Addon, Lua-Technologiebaum, Forschung mit Warenkosten, Freischalten von S2-Gebäuden, Exklusivität,
@@ -510,10 +715,12 @@ Böden je Landschaft (6 Bit); „world“ hat jetzt 62.
    (`TEX_RUSTY_POLAR_RC2_neue_Landschaftsgrafiken.zip`), Ressourcenverteilung per Lua (Höhe/Temperatur/Feuchte,
    optional Zone, Terrain wie Süß-/Salzwasser, Land, Gebirge, Fluss- und Ufernähe), Gesamtmenge per Regler im UI.
 5. **Modifikatoren & Kulturen** – generisches Modifikatorsystem (Produktionstempo, Kampfkraft, Baukosten, Reichweiten,
-   WP-Werte …), Kulturen als exklusive Technologien mit stapelnden Traits.
+   WP-Werte …), Kulturen als exklusive Technologien mit stapelnden Traits. Ideen für Traits sammelt u. a. der Abschnitt
+   „Militär“ („Notizen für Kulturtraits“).
 6. **Emblematische Inhalte** – Kulturgebäude und -soldaten (Grafik der RttR-Völker wiederverwenden).
 7. **Gesellschaft** – Civics, Stabilität, Einfluss; Wunder.
-8. **Militär, Religion, Diplomatie, Ereignisse**; die KI wird in jeder Phase mitgezogen.
+8. **Militär** (siehe Abschnitt „Militär“, Reihenfolge M1–M6), **Religion, Diplomatie, Ereignisse**; die KI wird in
+   jeder Phase mitgezogen.
 
 ## Offene Fragen
 
@@ -526,32 +733,64 @@ Böden je Landschaft (6 Bit); „world“ hat jetzt 62.
 - Warenlimit für Lager (Idee des Nutzers, noch nicht ausgearbeitet).
 - Welt: Gelten Klimazonen und Rohstoffverteilung nur für generierte Karten oder auch für Originalkarten? (Stufe 1: nur
   generierte Karten)
+- Militär: Bleibt die Beförderung mit Goldmünzen aus S2 für die Garnisonen, oder steigen Soldaten nur noch durch
+  Erfahrung (Training, Kämpfe) im Rang auf?
+- Geld: Welche Folgen hat Überbelegung eines Hauses (Arbeiter ohne freies Bett)?
+- Geld: Was passiert, wenn es für eine Berufsgruppe gar kein passendes Haus gibt?
+- Transport: Welche Forschung schaltet die Trägerstationen frei?
+- Geld: Wofür gilt der Steuersatz (pro Bewohner, Anteil am Lohn, auf Marktkäufe)?
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 
-- **Expansion gebremst:** höchstens `MAX_MILITARY_SITES` = 3 Militär-Baustellen gleichzeitig (auch gerade beauftragte),
-  und nur wenn mindestens `MIN_SOLDIERS_PER_MILITARY_SITE` = 2 Soldaten je Militär-Baustelle (inkl. der neuen) in den
-  Lagern sind. Sonst wird der Militärauftrag verworfen (die KI plant regelmäßig neue).
+- **Expansion gebremst:** höchstens `MAX_MILITARY_SITES` (derzeit 20) Militär-Baustellen gleichzeitig (auch gerade
+  beauftragte), und nur wenn mindestens `MIN_SOLDIERS_PER_MILITARY_SITE` (derzeit 1) freie Soldaten je Militär-Baustelle
+  (inkl. der neuen) in den Lagern sind. Sonst wird der Militärauftrag verworfen (die KI plant regelmäßig neue).
 - **Material vor jedem Bauauftrag:** Bretter und Steine im echten Lagerbestand minus das, was bestehende und gerade
   beauftragte Baustellen noch brauchen, müssen für das Gebäude reichen. Sonst wartet der Auftrag (Militär: verworfen).
   Gilt auch für das Sägewerk, das die KI an neuen Lagern direkt setzt (sonst normaler Bauauftrag).
 - **Wichtige Gebäude zuerst:** `IMPORTANT_BUILDINGS` (Waffenschmiede, Schlosserei, Eisenschmelze, Münzprägerei,
   Kohle-, Eisen-, Goldmine) werden in jeder Runde vor allen anderen Aufträgen bearbeitet. Wartet eines davon auf
   Material, bleibt dieses Material für die anderen Gebäude gesperrt.
+- **Grenznähe frei für Militärgebäude (2026-11-09):** Bis `BORDER_RESERVE_RADIUS` = 4 Knoten an einer Landgrenze
+  setzt die KI nur Militärgebäude und `BUILDINGS_NEAR_BORDER` (Holzfäller, Steinbruch, Fischer, alle Minen, Hafen,
+  Katapult), im Zivilisationsmodus außerdem Werkstätten mit `aiNearBorder = true` in `workshops.lua` (gesetzt bei
+  Lehmgrube und Kupfermine). Eine Grenze zählt nur, wenn dahinter innerhalb von 4 Knoten Land liegt, das nicht der KI
+  gehört (`AIInterface::IsLandBorder`): Küsten mit nur Wasser davor bleiben normal bebaubar, Land hinter einem
+  schmalen Fluss zählt dagegen. Gilt in allen Platzsuchen der KI (`AIPlayerJH::FindPositionForBuildingAround`, auch
+  Sammler, Minen und Plantagen aus Lua und das Sägewerk am neuen Lager); bestehende Gebäude bleiben stehen,
+  Lua-Bauaufträge mit fester Position (`forced`) sind ausgenommen.
+  Vergleich 5 Karten (GreenPlains mit 2 Seeds, Bergstrasse, DerGrosseSee, Hochebene), 2 KI, 2 h Spielzeit: vorher
+  standen 273 von 1030 solchen Baustellen in Grenznähe, jetzt 0 von 1150. Land und Gebäude insgesamt eher etwas mehr
+  (49 060 statt 44 908 Knoten, 2029 statt 1814 Gebäude; nur ein Lauf je Karte, die Streuung ist groß).
 - Einstellbar oben in `libs/s25main/ai/aijh/AIConstruction.cpp`; Prüfung in `BuildJob::CheckLimitsAndMaterial`
   (`Jobs.cpp`).
 - Vergleich GreenPlains, 2 KI, 2 h, gleicher Seed: Militärgebäude 23/40 statt 50/61, höchstens 3 statt bis zu 10
   Militär-Baustellen, deutlich mehr Bretter/Steine im Lager. Die Zahl der Industriegebäude hängt weiter an den
   Bauwünschen in `BuildingPlanner.cpp` (z. B. Minen nur mit erreichten Bergen).
 
-## Bekannte Probleme im Fork (Stand 40aa9a2, nicht durch den Zivilisationsmodus verursacht)
+## Tests (Stand 2026-11-10)
 
-- `Test_gameData/LoadGameData` erwartet 14 Kanten, durch `world.lua` sind es 28 (seit Welt Stufe 1 mit den Böden des
-  Texturpakets 33).
-- 3 KI-Tests (`AI/BuildWoodIndustry`, `AI/ExpandWhenNoSpace`, `AI/DoBuildMilitaryBuildingsOutsideComputerBarrier`)
-  schlagen nach den eigenen KI-Änderungen fehl.
-- 22 Cheat-Tests (`CheatsTests/*`, `CheatCommandTrackerTests/*`) schlagen fehl.
-- `ResearchSuite/DefaultTechTreeIsValid` prüfte feste Zahlenwerte (HQ 5 WP …), die der Nutzer inzwischen in Lua
-  geändert hat. Seit 2026-10-23 prüft der Test nur noch die Struktur, keine Balancing-Werte.
-- `Test_UI/IwMapGenerator` kompilierte nicht mehr (Landschaftsauswahl entfernt) – im Branch `humankind` repariert.
-- `GamePlayer::IsBuildingEnabled` stürzte ohne GameInterface (Tests, Headless) bei gesperrten Gebäuden ab – repariert.
+Alle 20 Testprogramme (`ctest`) laufen grün, sowohl mit den Radien des Nutzers (HQ 10, Militär 10/12/14/16, größere
+Sichtweiten) als auch mit den alten Werten (HQ 9, Militär 8–11). Ohne Soundkarte (z. B. auf einem Server) braucht
+`Test_drivers` die Umgebungsvariable `SDL_AUDIODRIVER=dummy`.
+
+- Viele Tests stammen aus dem Original (RttR) und prüfen das Grundspiel. Wo der Fork Werte bewusst ändert, leiten die
+  Tests ihre Erwartung aus den Konstanten ab statt aus festen Zahlen: Radien (`HQ_RADIUS`, `MILITARY_RADIUS`,
+  `SEAATTACK_DISTANCE`, Testweltgrößen), KI-Grenzwerte (`AIConstruction::GetMaxMilitarySites`,
+  `GetMinSoldiersPerMilitarySite`, `GetBorderReserve`), Standard „HQ-Abstand Berg“ aus `MapSettings`.
+- KI-Tests geben dem Hauptquartier Startwaren (`addStartResources`), weil die KI ohne Bauarbeiter und Material keine
+  Baustelle eröffnet. `MilitarySitesNeedSoldiers` schaltet die HQ-Reserve ab (sonst hält das HQ 1 Soldaten je Rang
+  zurück).
+- `AIBuildsWorkshopsAndLibraries` nennt die Werkstatt `BoneCarver`: Von den Lua-Werkstätten mit Eingängen baut die KI
+  nur diese (`BuildingPlanner::UpdateCustomBuildingsWanted`).
+- Seefahrt: Die Erkundungsfahrt erkundet zuerst Hafen 6, weil Hafen 8 über den Kartenrand nur etwa 16 Knoten vom
+  Heimathafen entfernt ist und das Erkundungsschiff (`VISUALRANGE_EXPLORATION_SHIP`) ihn schon von dort sieht.
+- **Cheat-Modus (Entscheidung 2026-11-10):** Im Einzelspielerspiel von Anfang an an, im Mehrspielerspiel aus und nicht
+  einschaltbar (`Cheats::isCheatModeOn`). Vorher war er auch im Mehrspielerspiel an: Das Cheat-HQ wurde ohne Spielbefehl
+  gesetzt (asynchroner Spielstand) und die Spielerauswahl in Gebäude-, Forschungs- und Inventurfenster zeigte die Daten
+  der Gegner. Bleibt nach einem Mehrspielerstart nur ein Mensch übrig, schaltet er den Modus wie im Original mit
+  „winter“ ein. Die Cheat-Tests beginnen mit ausgeschaltetem Modus; `CheatModeIsOnAtStart` und
+  `CheatModeIsNeverOnInMultiplayer` prüfen den Standard.
+- Erledigt: `Test_UI/IwMapGenerator` kompilierte nach dem Entfernen der Landschaftsauswahl nicht mehr,
+  `GamePlayer::IsBuildingEnabled` stürzte ohne GameInterface ab, `ResearchSuite/DefaultTechTreeIsValid` prüft nur die
+  Struktur, keine Balancing-Werte.

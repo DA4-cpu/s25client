@@ -5,6 +5,7 @@
 #include "GamePlayer.h"
 #include "PointOutput.h"
 #include "RttrForeachPt.h"
+#include "ai/AIInterface.h"
 #include "ai/AIPlayer.h"
 #include "ai/aijh/AIConstruction.h"
 #include "ai/aijh/AIPlayerJH.h"
@@ -14,17 +15,20 @@
 #include "buildings/nobMilitary.h"
 #include "factories/AIFactory.h"
 #include "factories/BuildingFactory.h"
+#include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
 #include "network/GameMessage_Chat.h"
 #include "notifications/NodeNote.h"
 #include "worldFixtures/TestEventManager.h"
 #include "worldFixtures/WorldWithGCExecution.h"
+#include "worldFixtures/terrainHelpers.h"
 #include "nodeObjs/noFlag.h"
 #include "nodeObjs/noTree.h"
 #include "gameTypes/GameTypesOutput.h"
 #include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
 #include "gameData/MilitaryConsts.h"
+#include "gameData/TerrainDesc.h"
 #include "rttr/test/random.hpp"
 #include <boost/test/unit_test.hpp>
 #include <algorithm>
@@ -271,10 +275,13 @@ BOOST_FIXTURE_TEST_CASE(KeepBQUpdated, BiggerWorldWithGCExecution)
     assertBqEqualOnWholeMap(__LINE__);
 }
 
-BOOST_FIXTURE_TEST_CASE(BuildWoodIndustry, WorldWithGCExecution<1>)
+BOOST_FIXTURE_TEST_CASE(BuildWoodIndustry, BiggerWorldWithGCExecution)
 {
-    // Place a few trees
-    for(const MapPoint& pt : world.GetPointsInRadius(hqPos + MapPoint(4, 0), 2))
+    // The AI opens building sites only with builders and material in stock (AIConstruction)
+    addStartResources();
+    // Place a few trees. Not right next to the HQ: A forester is only built where there is little forest yet
+    // (AIPlayerJH::FindPositionForBuildingAround)
+    for(const MapPoint& pt : world.GetPointsInRadius(world.MakeMapPoint(hqPos + Position(6, 0)), 2))
     {
         if(!world.GetNode(pt).obj)
             world.SetNO(pt, new noTree(pt, 0, 3));
@@ -284,7 +291,7 @@ BOOST_FIXTURE_TEST_CASE(BuildWoodIndustry, WorldWithGCExecution<1>)
     const GamePlayer& player = world.GetPlayer(curPlayer);
     auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
     // Build a woodcutter, sawmill and forester at some point
-    for(unsigned gf = 0; gf < 2000;)
+    for(unsigned gf = 0; gf < 8000;)
     {
         std::vector<gc::GameCommandPtr> aiGcs = ai->FetchGameCommands();
         for(unsigned i = 0; i < 5; i++, gf++)
@@ -344,6 +351,7 @@ void runUntilMilitaryBuildingSiteFound(TestEventManager& em, unsigned curPlayer,
 
 BOOST_FIXTURE_TEST_CASE(ExpandWhenNoSpace, BiggerWorldWithGCExecution)
 {
+    addStartResources();
     const auto& player = world.GetPlayer(curPlayer);
     const auto& bldSites = player.GetBuildingRegister().GetBuildingSites();
 
@@ -356,6 +364,7 @@ BOOST_FIXTURE_TEST_CASE(ExpandWhenNoSpace, BiggerWorldWithGCExecution)
 
 BOOST_FIXTURE_TEST_CASE(DoNotBuildMilitaryBuildingsWithinComputerBarrier, BiggerWorldWithGCExecution)
 {
+    addStartResources();
     const auto& player = world.GetPlayer(curPlayer);
     const auto& bldSites = player.GetBuildingRegister().GetBuildingSites();
 
@@ -372,6 +381,7 @@ BOOST_FIXTURE_TEST_CASE(DoNotBuildMilitaryBuildingsWithinComputerBarrier, Bigger
 
 BOOST_FIXTURE_TEST_CASE(DoBuildMilitaryBuildingsOutsideComputerBarrier, BiggerWorldWithGCExecution)
 {
+    addStartResources();
     const auto& player = world.GetPlayer(curPlayer);
     const auto& bldSites = player.GetBuildingRegister().GetBuildingSites();
 
@@ -469,8 +479,9 @@ unsigned countMilitarySites(const GamePlayer& player)
 }
 } // namespace
 
-BOOST_FIXTURE_TEST_CASE(AtMost3MilitarySitesAtOnce, BiggerWorldWithGCExecution)
+BOOST_FIXTURE_TEST_CASE(MilitarySitesAtOnceAreLimited, BiggerWorldWithGCExecution)
 {
+    const unsigned maxSites = AIJH::AIConstruction::GetMaxMilitarySites();
     addStartResources();
     auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
     hq->AddToInventory(GoodCounts::make(GoodType::Boards, 100), true);
@@ -483,7 +494,7 @@ BOOST_FIXTURE_TEST_CASE(AtMost3MilitarySitesAtOnce, BiggerWorldWithGCExecution)
         const unsigned numSites = countMilitarySites(player);
         maxMilitarySites = std::max(maxMilitarySites, numSites);
         BOOST_TEST_INFO("GF " << gf);
-        BOOST_TEST_REQUIRE(numSites <= 3u);
+        BOOST_TEST_REQUIRE(numSites <= maxSites);
     });
     // It still expands
     BOOST_TEST(maxMilitarySites >= 1u);
@@ -491,13 +502,22 @@ BOOST_FIXTURE_TEST_CASE(AtMost3MilitarySitesAtOnce, BiggerWorldWithGCExecution)
 
 BOOST_FIXTURE_TEST_CASE(MilitarySitesNeedSoldiers, BiggerWorldWithGCExecution)
 {
-    // 3 soldiers: Enough for 1 military site (2 each, incl. the new one), not for 2
+    // Each military site needs this many soldiers in the warehouses (incl. the new one)
+    const unsigned minSoldiers = AIJH::AIConstruction::GetMinSoldiersPerMilitarySite();
+    if(minSoldiers == 0)
+    {
+        BOOST_TEST_MESSAGE("MIN_SOLDIERS_PER_MILITARY_SITE is 0: no soldiers needed, nothing to test");
+        return;
+    }
+    // Enough for 1 military site, not for 2. The HQ keeps no reserve (by default 1 soldier per rank), which the AI
+    // could not send
     auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
+    hq->SetRealReserve(0, 0);
     {
         GoodsAndPeopleCounts inv;
         inv[Job::Builder] = 5;
         inv[Job::Helper] = 30;
-        inv[Job::Private] = 3;
+        inv[Job::Private] = 2 * minSoldiers - 1;
         inv[GoodType::Boards] = 100;
         inv[GoodType::Stones] = 100;
         hq->AddToInventory(inv, true);
@@ -568,6 +588,188 @@ BOOST_FIXTURE_TEST_CASE(MaterialIsReservedForImportantBuildings, BiggerWorldWith
     BOOST_TEST(construction.GetFreeConstructionMaterial().boards
                == static_cast<int>(smelterCost.boards) - static_cast<int>(woodcutterCost.boards));
     BOOST_TEST(!construction.HasMaterialFor(BuildingType::Ironsmelter));
+}
+
+namespace {
+/// Enough space to expand several times
+using LargeWorldWithGCExecution = WorldWithGCExecution<1, 40, 40>;
+
+/// Buildings the AI may build near a land border (all others keep that space free for military buildings)
+bool mayBeNearBorder(BuildingType type)
+{
+    if(BuildingProperties::IsMilitary(type))
+        return true;
+    const std::vector<BuildingType> allowed{
+      BuildingType::Woodcutter,  BuildingType::Quarry,         BuildingType::Fishery,
+      BuildingType::GoldMine,    BuildingType::CoalMine,       BuildingType::IronMine,
+      BuildingType::GraniteMine, BuildingType::HarborBuilding, BuildingType::Catapult};
+    return helpers::contains(allowed, type);
+}
+
+/// Computed here independently of the AI: Is there a border node of the player within the radius which has land (not
+/// his territory, not only water) within the radius behind it?
+bool isNearLandBorder(const GameWorldBase& world, unsigned char playerId, const MapPoint pt, unsigned radius)
+{
+    const unsigned char owner = playerId + 1;
+    const auto isLandBorder = [&](const MapPoint borderPt, unsigned) {
+        if(world.GetNode(borderPt).owner != owner)
+            return false;
+        bool isBorder = false;
+        for(const MapPoint nb : world.GetNeighbours(borderPt))
+            isBorder |= world.GetNode(nb).owner != owner;
+        if(!isBorder)
+            return false;
+        return world.CheckPointsInRadius(
+          borderPt, radius,
+          [&](const MapPoint behindPt, unsigned) {
+              return world.GetNode(behindPt).owner != owner && !world.IsWaterPoint(behindPt);
+          },
+          false);
+    };
+    return world.CheckPointsInRadius(pt, radius, isLandBorder, true);
+}
+
+/// Set all 6 triangles around the point to the terrain
+void setTerrainAround(GameWorld& world, const MapPoint pt, DescIdx<TerrainDesc> terrain)
+{
+    MapNode& curNode = world.GetNodeWriteable(pt);
+    curNode.t1 = curNode.t2 = terrain;
+    world.GetNodeWriteable(world.GetNeighbour(pt, Direction::West)).t2 = terrain;
+    MapNode& nwNode = world.GetNodeWriteable(world.GetNeighbour(pt, Direction::NorthWest));
+    nwNode.t1 = nwNode.t2 = terrain;
+    world.GetNodeWriteable(world.GetNeighbour(pt, Direction::NorthEast)).t1 = terrain;
+}
+
+/// Only water outside the territory of the player
+void floodOutsideOfTerritory(GameWorld& world, unsigned char playerId)
+{
+    const DescIdx<TerrainDesc> tWater = GetWaterTerrain(world.GetDescription());
+    std::vector<MapPoint> outside;
+    RTTR_FOREACH_PT(MapPoint, world.GetSize())
+    {
+        if(world.GetNode(pt).owner != playerId + 1)
+            outside.push_back(pt);
+    }
+    for(const MapPoint& pt : outside)
+        setTerrainAround(world, pt, tWater);
+}
+
+/// First border node east of the point
+MapPoint findBorderEastOf(const AIInterface& aii, const GameWorldBase& world, MapPoint pt)
+{
+    for(unsigned i = 0; i < world.GetWidth() && !aii.IsBorder(pt); ++i)
+        pt = world.GetNeighbour(pt, Direction::East);
+    BOOST_TEST_REQUIRE(aii.IsBorder(pt));
+    return pt;
+}
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(LandBorderNeedsLandBehindIt, BiggerWorldWithGCExecution)
+{
+    std::vector<gc::GameCommandPtr> gcs;
+    const AIInterface aii(world, gcs, curPlayer);
+    const MapPoint borderPt = findBorderEastOf(aii, world, hqPos);
+    const MapPoint insidePt = world.GetNeighbour(world.GetNeighbour(borderPt, Direction::West), Direction::West);
+    BOOST_TEST(aii.IsLandBorder(borderPt, 4));
+    BOOST_TEST(!aii.IsLandBorder(insidePt, 4)); // No border
+    BOOST_TEST(aii.IsNearLandBorder(insidePt, 4));
+    BOOST_TEST(aii.IsNearLandBorder(borderPt, 4));
+    BOOST_TEST(!aii.IsNearLandBorder(hqPos, 4));
+    BOOST_TEST(isNearLandBorder(world, curPlayer, insidePt, 4));
+    BOOST_TEST(!isNearLandBorder(world, curPlayer, hqPos, 4));
+    // Exactly 4 nodes away still counts, 5 not
+    MapPoint pt = borderPt;
+    for(unsigned i = 0; i < 4; ++i)
+        pt = world.GetNeighbour(pt, Direction::West);
+    BOOST_TEST(aii.IsNearLandBorder(pt, 4));
+    BOOST_TEST(!aii.IsNearLandBorder(world.GetNeighbour(pt, Direction::West), 4));
+
+    // Only water behind the border (e.g. sea in front of the coast) -> no land border
+    floodOutsideOfTerritory(world, curPlayer);
+    BOOST_TEST(!aii.IsLandBorder(borderPt, 4));
+    BOOST_TEST(!aii.IsNearLandBorder(insidePt, 4));
+    BOOST_TEST(!isNearLandBorder(world, curPlayer, insidePt, 4));
+
+    // Land 2 nodes behind the border (e.g. on the other side of a river) -> land border again
+    const MapPoint landPt = world.GetNeighbour(world.GetNeighbour(borderPt, Direction::East), Direction::East);
+    BOOST_TEST_REQUIRE(!aii.IsOwnTerritory(landPt));
+    setTerrainAround(world, landPt, GetLandTerrain(world.GetDescription()));
+    BOOST_TEST(aii.IsLandBorder(borderPt, 4));
+    BOOST_TEST(aii.IsNearLandBorder(insidePt, 4));
+    BOOST_TEST(isNearLandBorder(world, curPlayer, insidePt, 4));
+}
+
+BOOST_FIXTURE_TEST_CASE(OnlyAllowedBuildingsNearLandBorder, BiggerWorldWithGCExecution)
+{
+    for(const auto type : helpers::enumRange<BuildingType>())
+    {
+        BOOST_TEST_INFO(type);
+        BOOST_TEST(AIJH::AIConstruction::IsAllowedNearBorder(type) == mayBeNearBorder(type));
+        BOOST_TEST(AIJH::AIConstruction::GetBorderReserve(type) == (mayBeNearBorder(type) ? 0u : 4u));
+    }
+
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    auto& aijh = static_cast<AIJH::AIPlayerJH&>(*ai);
+    const MapPoint borderPt = findBorderEastOf(aijh.GetInterface(), world, hqPos);
+    const MapPoint around = world.GetNeighbour(world.GetNeighbour(borderPt, Direction::West), Direction::West);
+    // A well keeps more than 4 nodes away from the border, a catapult may stand there
+    const MapPoint wellPos = aijh.FindPositionForBuildingAround(BuildingType::Well, around);
+    BOOST_TEST_REQUIRE(wellPos.isValid());
+    BOOST_TEST(!isNearLandBorder(world, curPlayer, wellPos, 4));
+    const MapPoint catapultPos = aijh.FindPositionForBuildingAround(BuildingType::Catapult, around);
+    BOOST_TEST_REQUIRE(catapultPos.isValid());
+    BOOST_TEST(isNearLandBorder(world, curPlayer, catapultPos, 4));
+    // Also when it is placed directly next to a warehouse (sawmill)
+    const MapPoint sawmillPos = aijh.FindPositionForBuildingAround(BuildingType::Sawmill, around);
+    BOOST_TEST_REQUIRE(sawmillPos.isValid());
+    BOOST_TEST(!isNearLandBorder(world, curPlayer, sawmillPos, 4));
+}
+
+BOOST_FIXTURE_TEST_CASE(BuildingsMayBeNearBorderWithOnlyWaterBehind, BiggerWorldWithGCExecution)
+{
+    floodOutsideOfTerritory(world, curPlayer);
+    world.InitAfterLoad();
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    auto& aijh = static_cast<AIJH::AIPlayerJH&>(*ai);
+    const MapPoint borderPt = findBorderEastOf(aijh.GetInterface(), world, hqPos);
+    const MapPoint around = world.GetNeighbour(world.GetNeighbour(borderPt, Direction::West), Direction::West);
+    const MapPoint wellPos = aijh.FindPositionForBuildingAround(BuildingType::Well, around);
+    BOOST_TEST_REQUIRE(wellPos.isValid());
+    // Close to the (water) border
+    BOOST_TEST(world.CalcDistance(wellPos, borderPt) <= 4u);
+}
+
+BOOST_FIXTURE_TEST_CASE(AIKeepsSpaceAtBorderFreeForMilitary, LargeWorldWithGCExecution)
+{
+    addStartResources();
+    auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
+    hq->AddToInventory(GoodCounts::make(GoodType::Boards, 100), true);
+    hq->AddToInventory(GoodCounts::make(GoodType::Stones, 100), true);
+    world.InitAfterLoad();
+    const GamePlayer& player = world.GetPlayer(curPlayer);
+    auto ai = AIFactory::Create(AI::Info(AI::Type::Default, AI::Level::Hard), curPlayer, world);
+    std::vector<MapPoint> seenSites;
+    unsigned numChecked = 0, numMilitary = 0;
+    runAIWithNWFs(em, world, *ai, curPlayer, 12000, [&](unsigned gf) {
+        for(const noBuildingSite* site : player.GetBuildingRegister().GetBuildingSites())
+        {
+            if(helpers::contains(seenSites, site->GetPos()))
+                continue;
+            seenSites.push_back(site->GetPos());
+            const BuildingType type = site->GetBuildingType();
+            if(BuildingProperties::IsMilitary(type))
+                ++numMilitary;
+            if(mayBeNearBorder(type))
+                continue;
+            ++numChecked;
+            // The border only moves away (no enemies), so it was not closer when the site was ordered
+            BOOST_TEST_INFO("GF " << gf << ": " << type << " at " << site->GetPos());
+            BOOST_TEST(!isNearLandBorder(world, curPlayer, site->GetPos(), 4));
+        }
+    });
+    // The AI did build other buildings and expanded
+    BOOST_TEST(numChecked >= 3u);
+    BOOST_TEST(numMilitary >= 1u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

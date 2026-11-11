@@ -22,6 +22,7 @@
 #include "nodeObjs/noStaticObject.h"
 #include "gameTypes/GameTypesOutput.h"
 #include "gameTypes/Resource.h"
+#include "gameData/MilitaryConsts.h"
 #include <boost/test/unit_test.hpp>
 
 // LCOV_EXCL_START
@@ -325,7 +326,12 @@ BOOST_FIXTURE_TEST_CASE(BQWithVisualRoad, EmptyWorldFixture1PBigger)
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(BQ_AtBorder, EmptyWorldFixture1PBiggest)
+namespace {
+// The territory of the HQ and the nodes behind its border fit into the map
+using EmptyWorldFixture1PHQFits = WorldFixture<CreateEmptyWorld, 1, 2 * HQ_RADIUS + 4, 2 * HQ_RADIUS + 2>;
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(BQ_AtBorder, EmptyWorldFixture1PHQFits)
 {
     GamePlayer& player = world.GetPlayer(0);
     const MapPoint hqPos = player.GetHQPos();

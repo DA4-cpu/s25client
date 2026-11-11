@@ -81,7 +81,8 @@ BOOST_AUTO_TEST_CASE(LoadGameData)
 {
     WorldDescription worldDesc;
     loadGameData(worldDesc);
-    BOOST_TEST(worldDesc.edges.size() == 3u * 5u - 1u);
+    // The original edges (3 landscapes with 5 edges, one less in winter) and those of the new soils (world.lua)
+    BOOST_TEST(worldDesc.edges.size() >= 3u * 5u - 1u);
     BOOST_TEST(worldDesc.terrain.size() >= 3u * NUM_TTS);
     for(unsigned l = 0; l < NUM_LTS; l++)
     {
@@ -451,6 +452,8 @@ BOOST_AUTO_TEST_CASE(DetectInvalidMapGenerator)
     expectLoadFailure(R"(rttr:SetMapClimate{ riverMinHeight = 101 })");
     expectLoadFailure(R"(rttr:SetMapClimate{ waterHumidity = 101 })");
     expectLoadFailure(R"(rttr:SetMapClimate{ waterHumidityStep = 0 })");
+    // Without a decrease the humidity of the water would reach the whole map
+    expectLoadFailure(R"(rttr:SetMapClimate{ waterHumidity = 10, waterHumidityFalloff = 0 })");
     expectLoadFailure(R"(rttr:SetMapClimate{ mountainWeights = { { height = {0, 50}, factor = 0.5 } } })");
     expectLoadFailure(R"(rttr:SetMapClimate{ mountainWeights = { { factor = -1 } } })");
     expectLoadFailure(R"(rttr:SetMapClimate{ mountainBuildSpacing = 1 })");

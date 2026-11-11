@@ -565,6 +565,55 @@ BOOST_FIXTURE_TEST_CASE(ArmoredSoldierLosesArmorInFight, AttackFixture<>)
     BOOST_TEST(milBld1->GetDefender()->GetHitpoints() == HITPOINTS[milBld1->GetDefender()->GetRank()]);
 }
 
+namespace {
+/// Attacker which can be promoted directly as after a won fight
+struct PromotableAttacker : nofAttacker
+{
+    using nofActiveSoldier::IncreaseRank;
+    using nofAttacker::nofAttacker;
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(BattlefieldPromotionMovesArmorToNewRank, AttackFixture<>)
+{
+    AddSoldiers(milBld0Pos, 2, Job::Sergeant, 1);
+    const auto troops = milBld0->GetTroops();
+    const auto itArmored = std::find_if(std::begin(troops), std::end(troops),
+                                        [](const nofPassiveSoldier& soldier) { return soldier.HasArmor(); });
+    BOOST_TEST_REQUIRE((itArmored != std::end(troops)));
+
+    const Inventory& inventory = world.GetPlayer(curPlayer).GetInventory();
+    const unsigned numSergeants = inventory[Job::Sergeant];
+    const unsigned numOfficers = inventory[Job::Officer];
+    const unsigned numGenerals = inventory[Job::General];
+    const unsigned numArmoredSergeants = inventory[ArmoredSoldier::Sergeant];
+    const unsigned numArmoredOfficers = inventory[ArmoredSoldier::Officer];
+    const unsigned numArmoredGenerals = inventory[ArmoredSoldier::General];
+
+    PromotableAttacker attacker(*itArmored, *milBld1);
+    BOOST_TEST_REQUIRE(attacker.HasArmor());
+    attacker.IncreaseRank();
+    BOOST_TEST(attacker.GetJobType() == Job::Officer);
+    BOOST_TEST(attacker.HasArmor());
+    BOOST_TEST(inventory[Job::Sergeant] == numSergeants - 1u);
+    BOOST_TEST(inventory[Job::Officer] == numOfficers + 1u);
+    // The armor moves with the soldier to the new rank
+    BOOST_TEST(inventory[ArmoredSoldier::Sergeant] == numArmoredSergeants - 1u);
+    BOOST_TEST(inventory[ArmoredSoldier::Officer] == numArmoredOfficers + 1u);
+
+    // Same for a soldier without armor: Only the soldier counts change
+    attacker.SetArmor(false);
+    world.GetPlayer(curPlayer).DecreaseInventoryJob(ArmoredSoldier::Officer, 1);
+    attacker.IncreaseRank();
+    BOOST_TEST(attacker.GetJobType() == Job::General);
+    BOOST_TEST(inventory[Job::Officer] == numOfficers);
+    BOOST_TEST(inventory[Job::General] == numGenerals + 1u);
+    BOOST_TEST(inventory[ArmoredSoldier::Officer] == numArmoredOfficers);
+    BOOST_TEST(inventory[ArmoredSoldier::General] == numArmoredGenerals);
+
+    milBld1->UnlinkAggressor(attacker);
+}
+
 BOOST_FIXTURE_TEST_CASE(TroopLimitKeepsOrderedRestrictedSoldier, AttackFixture<>)
 {
     MilitarySettings milSettings = MILITARY_SETTINGS_SCALE;

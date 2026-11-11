@@ -17,6 +17,7 @@
 #include "controls/ctrlText.h"
 #include "desktops/dskGameLobby.h"
 #include "drivers/VideoDriverWrapper.h"
+#include "helpers/containerUtils.h"
 #include "helpers/format.hpp"
 #include "ingameWindows/IngameWindow.h"
 #include "ingameWindows/iwConnecting.h"
@@ -34,6 +35,7 @@
 #include "s25util/StringConversion.h"
 #include <turtle/mock.hpp>
 #include <boost/test/unit_test.hpp>
+#include <array>
 #include <functional>
 
 // LCOV_EXCL_START
@@ -115,8 +117,16 @@ BOOST_AUTO_TEST_CASE(IwMapGenerator)
                == s25util::toStringClassic(settings.size.y));
     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapSizeX)->SetSelection(7);                              // 256
     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMapSizeY)->SetSelection(3);                              // 128
-    BOOST_TEST(wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMountainDist)->GetSelection().value() == 1u); // Normal
-    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMountainDist)->SetSelection(3);                          // VeryFar
+    {
+        using rttr::mapGenerator::MountainDistance;
+        // Order of the entries
+        const std::array<MountainDistance, 4> mountainDistances{MountainDistance::Close, MountainDistance::Normal,
+                                                                MountainDistance::Far, MountainDistance::VeryFar};
+        BOOST_TEST(static_cast<std::ptrdiff_t>(
+                     wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMountainDist)->GetSelection().value())
+                   == helpers::indexOf(mountainDistances, settings.mountainDistance));
+    }
+    wnd.GetCtrl<ctrlComboBox>(iwMapGenerator::ID_cbMountainDist)->SetSelection(3); // VeryFar
     // Number fields
     BOOST_TEST(wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtSeed)->GetText().empty()); // 0 = random
     wnd.GetCtrl<ctrlEdit>(iwMapGenerator::ID_edtSeed)->SetText(expectedSeed);

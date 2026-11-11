@@ -462,6 +462,18 @@ void Loader::LoadDummyMapFiles()
     pushRange(440, 484);
     pushRange(500, 527);
     pushRange(560, 561);
+    // Signs of the geologist: player bitmaps
+    {
+        map.alloc_inc(699 - map.size() + 1);
+        const libsiedler2::ArchivItem_Palette palette;
+        const libsiedler2::PixelBufferBGRA buffer(1, 1);
+        for(const auto i : helpers::range(680, 700))
+        {
+            auto bmp = std::make_unique<glArchivItem_Bitmap_Player>();
+            bmp->create(buffer, &palette);
+            map.set(i, std::move(bmp));
+        }
+    }
 
     for(const auto j : helpers::range(0, 6))
     {

@@ -11,7 +11,9 @@
 #include "worldFixtures/WorldFixture.h"
 #include "worldFixtures/terrainHelpers.h"
 #include "world/MapLoader.h"
+#include "gameData/MilitaryConsts.h"
 #include <boost/test/unit_test.hpp>
+#include <algorithm>
 #include <stdexcept>
 
 // LCOV_EXCL_START
@@ -52,9 +54,15 @@ struct FrontierWorld : public WorldFixture<T_WorldCreator, 2, T_width, T_height>
           BuildingFactory::CreateBuilding(world, BuildingType::Watchtower, milBld1Pos, 1, Nation::Vikings));
     }
 };
-using FrontierWorldSmall = FrontierWorld<34u, 20u>;
-using FrontierWorldMiddle = FrontierWorld<38u, 20u>;
-using FrontierWorldBig = FrontierWorld<60u, 20u>;
+// The barracks of player 0 and the watchtower of player 1 are half the map width apart.
+/// Up to this distance they are near each other (their military radii touch)
+constexpr unsigned NEAR_DISTANCE = MILITARY_RADIUS[0] + MILITARY_RADIUS[2];
+/// Below this distance the watchtower can attack the barracks (middle distance)
+constexpr unsigned MIDDLE_DISTANCE =
+  BASE_ATTACKING_DISTANCE + static_cast<unsigned>(NUM_TROOPS[Nation::Vikings][2] - 1) * EXTENDED_ATTACKING_DISTANCE;
+using FrontierWorldSmall = FrontierWorld<2u * (NEAR_DISTANCE - 1u), 20u>;
+using FrontierWorldMiddle = FrontierWorld<2u * (NEAR_DISTANCE + 1u), 20u>;
+using FrontierWorldBig = FrontierWorld<std::max(60u, 2u * (MIDDLE_DISTANCE + 1u)), 20u>;
 using FrontierWorldSea = FrontierWorld<SmallSeaWorldDefault<2>::width, SmallSeaWorldDefault<2>::height, CreateSeaWorld>;
 
 } // namespace
@@ -134,6 +142,8 @@ BOOST_FIXTURE_TEST_CASE(FrontierDistanceNearOtherFields, FrontierWorldSmall)
 
 BOOST_FIXTURE_TEST_CASE(FrontierDistanceMiddle, FrontierWorldMiddle)
 {
+    // There must be a middle distance between near and too far for an attack
+    BOOST_TEST_REQUIRE(NEAR_DISTANCE + 1u < MIDDLE_DISTANCE);
     const DescIdx<TerrainDesc> tWater = GetWaterTerrain(world.GetDescription());
 
     for(const auto y : helpers::range(1, +world.GetHeight()))
@@ -218,6 +228,8 @@ BOOST_FIXTURE_TEST_CASE(FrontierDistanceHarbor, FrontierWorldSea)
 
 BOOST_FIXTURE_TEST_CASE(FrontierDistanceIslandTest, FrontierWorldMiddle)
 {
+    // There must be a middle distance between near and too far for an attack
+    BOOST_TEST_REQUIRE(NEAR_DISTANCE + 1u < MIDDLE_DISTANCE);
     const DescIdx<TerrainDesc> tWater = GetWaterTerrain(world.GetDescription());
 
     // Little bit, but walkable water between the 2 buildings (middle of map)

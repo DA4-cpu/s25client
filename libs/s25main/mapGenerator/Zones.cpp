@@ -112,7 +112,7 @@ void ApplyHeightCooling(Map& map, unsigned cooling)
     }
 }
 
-void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity, unsigned falloff, unsigned step)
+void ApplyWaterHumidity(Map& map, unsigned humidity, unsigned falloff, unsigned step)
 {
     if(humidity == 0)
         return;
@@ -127,8 +127,6 @@ void ApplyWaterHumidity(Map& map, unsigned maxDistance, unsigned humidity, unsig
     const auto distance = DistancesTo(freshWater, map.size);
     RTTR_FOREACH_PT(MapPoint, map.size)
     {
-        if(distance[pt] > maxDistance)
-            continue;
         // Less by `falloff` points every `step` nodes
         const unsigned decrease = falloff * (distance[pt] / std::max(1u, step));
         if(decrease >= humidity)

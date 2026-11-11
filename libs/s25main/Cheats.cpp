@@ -12,7 +12,13 @@
 #include "network/GameClient.h"
 #include "world/GameWorldBase.h"
 
-Cheats::Cheats(GameWorldBase& world, GameCommandFactory& gcFactory) : world_(world), gcFactory_(gcFactory) {}
+Cheats::Cheats(GameWorldBase& world, GameCommandFactory& gcFactory) : world_(world), gcFactory_(gcFactory)
+{
+    // On from the start of a single player game, off in multiplayer (even if only one human player is left later, he
+    // has to turn it on like in the original)
+    if(!areCheatsAllowed())
+        isCheatModeOn_ = false;
+}
 
 bool Cheats::areCheatsAllowed() const
 {

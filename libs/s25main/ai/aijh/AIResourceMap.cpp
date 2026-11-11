@@ -74,7 +74,8 @@ void AIResourceMap::updateAround(const MapPoint& pt, int radius)
         updateAroundReplinishable(pt, radius);
 }
 
-MapPoint AIResourceMap::findBestPosition(const MapPoint& pt, BuildingQuality size, unsigned radius, int minimum) const
+MapPoint AIResourceMap::findBestPosition(const MapPoint& pt, BuildingQuality size, unsigned radius, int minimum,
+                                         unsigned borderReserve) const
 {
     MapPoint best = MapPoint::Invalid();
     int best_value = (minimum == std::numeric_limits<int>::min()) ? minimum : minimum - 1;
@@ -100,6 +101,9 @@ MapPoint AIResourceMap::findBestPosition(const MapPoint& pt, BuildingQuality siz
                 continue;
             // dont build next to empty harborspots
             if(aii.isHarborPosClose(curPt, 2, true))
+                continue;
+            // keep the space next to the border free for military buildings
+            if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
                 continue;
             best = curPt;
             best_value = map[idx];

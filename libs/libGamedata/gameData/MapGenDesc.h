@@ -142,14 +142,14 @@ struct MapClimateDesc
 {
     /// Temperature points subtracted at the highest point of the map (linear with height)
     unsigned heightCooling = 0;
-    /// Maximum distance in nodes for the terrain types "near_fresh", "near_salt" and "near_river" and for the higher
-    /// humidity at lakes and rivers
+    /// Maximum distance in nodes for the terrain types "near_fresh", "near_salt" and "near_river"
     unsigned nearWaterDistance = 4;
     /// Bodies of water up to this size (nodes) are lakes (fresh water), larger ones are the sea (salt water)
     unsigned lakeMaxSize = 500;
-    /// Humidity points added directly at lakes and rivers, up to nearWaterDistance nodes away
+    /// Humidity points added directly at lakes and rivers ...
     unsigned waterHumidity = 10;
-    /// ... decreasing by this many points every waterHumidityStep nodes (0 = no decrease)
+    /// ... decreasing by this many points every waterHumidityStep nodes, as far as something is left (must be > 0 if
+    /// waterHumidity is set)
     unsigned waterHumidityFalloff = 2;
     unsigned waterHumidityStep = 1;
     /// Save preview images (zones, climate) next to the generated map

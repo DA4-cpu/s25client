@@ -355,12 +355,22 @@ BOOST_FIXTURE_TEST_CASE(HarborsBlock, SeaAttackFixture)
     const MapPoint harborBot2 = world.GetHarborPoint(HarborId(8));
     BOOST_TEST_REQUIRE(world.GetNode(harborBot1).owner == 0u);
     BOOST_TEST_REQUIRE(world.GetNode(harborBot2).owner == 0u);
-    // Place military bld for player 1, first make some owned land
-    const MapPoint bldPos = (harborBot1 + harborBot2) / MapCoord(2) + MapPoint(6, 0);
-    // Distance: <= attack distance (+ reserve) but greater than range from military bld (current values)
-    BOOST_TEST_REQUIRE(world.CalcDistance(bldPos, harborBot2) <= 12u);
-    BOOST_TEST_REQUIRE(world.CalcDistance(bldPos, harborBot2) >= 9u);
-    BOOST_TEST_REQUIRE(world.GetNode(bldPos).bq == BuildingQuality::Castle);
+    // Place military bld for player 1, first make some owned land.
+    // Distance to the harbors: <= sea attack distance but greater than the radius of the military bld
+    const unsigned barracksRadius = MILITARY_RADIUS[0];
+    BOOST_TEST_REQUIRE(barracksRadius < SEAATTACK_DISTANCE);
+    const MapPoint middle = (harborBot1 + harborBot2) / MapCoord(2);
+    MapPoint bldPos = MapPoint::Invalid();
+    for(int offset = 6; offset < 20 && !bldPos.isValid(); ++offset)
+    {
+        const MapPoint pt = world.MakeMapPoint(Position(middle) + Position(offset, 0));
+        const unsigned distance1 = world.CalcDistance(pt, harborBot1);
+        const unsigned distance2 = world.CalcDistance(pt, harborBot2);
+        if(std::min(distance1, distance2) > barracksRadius && std::max(distance1, distance2) <= SEAATTACK_DISTANCE
+           && world.GetNode(pt).bq == BuildingQuality::Castle)
+            bldPos = pt;
+    }
+    BOOST_TEST_REQUIRE(bldPos.isValid());
     std::vector<MapPoint> pts = world.GetPointsInRadius(bldPos, 3);
     pts.push_back(bldPos);
     for(const MapPoint& pt : pts)

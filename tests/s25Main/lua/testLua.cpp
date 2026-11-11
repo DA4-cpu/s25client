@@ -21,6 +21,7 @@
 #include "nodeObjs/noStaticObject.h"
 #include "gameTypes/GameTypesOutput.h"
 #include "gameTypes/Resource.h"
+#include "gameData/MilitaryConsts.h"
 #include "gameData/ShieldConsts.h"
 #include "rttr/test/random.hpp"
 #include "s25util/Serializer.h"
@@ -438,7 +439,9 @@ BOOST_AUTO_TEST_CASE(IngamePlayer)
     BOOST_TEST(isLuaEqual("player:GetNumPeople(JOB_HELPER)", "33"));
     BOOST_TEST(isLuaEqual("player:GetNumPeople(JOB_FORESTER)", "2"));
 
-    BOOST_TEST(isLuaEqual("player:GetStatisticsValue(STAT_COUNTRY)", "271"));
+    // All nodes in the radius of the HQ
+    BOOST_TEST(
+      isLuaEqual("player:GetStatisticsValue(STAT_COUNTRY)", std::to_string(1u + 3u * HQ_RADIUS * (HQ_RADIUS + 1u))));
 
     BOOST_TEST(isLuaEqual("player:GetNumBuildings(BLD_WOODCUTTER)", "0"));
     BOOST_TEST(isLuaEqual("player:GetNumBuildings(BLD_HEADQUARTERS)", "1"));

@@ -743,10 +743,10 @@ void AIPlayerJH::SetFarmedNodes(const MapPoint pt, bool set)
 }
 
 MapPoint AIPlayerJH::FindBestPosition(const MapPoint& pt, AIResource res, BuildingQuality size, unsigned radius,
-                                      int minimum)
+                                      int minimum, unsigned borderReserve)
 {
     resourceMaps[res].updateAround(pt, radius);
-    return resourceMaps[res].findBestPosition(pt, size, radius, minimum);
+    return resourceMaps[res].findBestPosition(pt, size, radius, minimum, borderReserve);
 }
 
 void AIPlayerJH::ExecuteAIJob()
@@ -981,7 +981,8 @@ void AIPlayerJH::DistributeMaxRankSoldiersByBlocking(unsigned limit, nobBaseWare
         }
     }
 }
-MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius) const
+MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius,
+                                        unsigned borderReserve) const
 {
     std::vector<MapPoint> pts = gwb.GetPointsInRadius(pt, radius);
     for(const MapPoint& curPt : pts)
@@ -994,8 +995,12 @@ MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size
                 continue;
         }
         RTTR_Assert(aii.GetBuildingQuality(curPt) == GetAINode(curPt).bq);
-        if(canUseBq(aii.GetBuildingQuality(curPt), size)) //(*nodes)[idx].bq; TODO: Update nodes BQ and use that
-            return curPt;
+        if(!canUseBq(aii.GetBuildingQuality(curPt), size)) //(*nodes)[idx].bq; TODO: Update nodes BQ and use that
+            continue;
+        // keep the space next to the border free for military buildings
+        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
+            continue;
+        return curPt;
     }
 
     return MapPoint::Invalid();
@@ -1053,12 +1058,14 @@ unsigned AIPlayerJH::CountWoodcuttersServing(const MapPoint& foresterPos) const
 MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapPoint& around)
 {
     constexpr unsigned searchRadius = 15;
+    // Near a land border only military buildings and a few others (AIConstruction::IsAllowedNearBorder)
+    const unsigned borderReserve = AIConstruction::GetBorderReserve(type);
     MapPoint foundPos = MapPoint::Invalid();
     switch(type)
     {
         case BuildingType::Woodcutter:
         {
-            foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius);
+            foundPos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[type], searchRadius, 1, borderReserve);
             if(!foundPos.isValid())
                 break;
 
@@ -1087,8 +1094,9 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
         }
 
         case BuildingType::Forester:
-        { 
-            foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius);
+        {
+            foundPos =
+              FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 1, borderReserve);
             if(foundPos.isValid())
             {
                 if(GetBldPlanner().GetNumBuildings(BuildingType::Forester) < 4u)
@@ -1120,7 +1128,7 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
         }
         case BuildingType::Sawmill:
         {
-            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius, borderReserve);
             if (GetBldPlanner().GetNumBuildings(BuildingType::Sawmill) > 3)
             {
                 if(construction->OtherUsualBuildingInRadius(foundPos, 22u, BuildingType::Sawmill)
@@ -1133,14 +1141,14 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
         {
             // check if there are any animals in range
             if(HuntablesinRange(around, 9))
-                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius, borderReserve);
             break;
         }
         case BuildingType::Quarry:
         {
             unsigned numQuarries = GetBldPlanner().GetNumBuildings(BuildingType::Quarry);
             foundPos = FindBestPosition(around, AIResource::Stones, BUILDING_SIZE[type], searchRadius,
-                                        std::min(40u, 1 + numQuarries * 10));
+                                        std::min(40u, 1 + numQuarries * 10), borderReserve);
             if(foundPos.isValid() && !ValidStoneinRange(foundPos))
             {
                 resourceMaps[AIResource::Stones].avoidPosition(foundPos);
@@ -1152,22 +1160,27 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
         case BuildingType::Guardhouse:
         case BuildingType::Watchtower:
         case BuildingType::Fortress:
-            foundPos = FindBestPosition(around, AIResource::Borderland, BUILDING_SIZE[type], searchRadius);
+            foundPos =
+              FindBestPosition(around, AIResource::Borderland, BUILDING_SIZE[type], searchRadius, 1, borderReserve);
             break;
         case BuildingType::GoldMine:
-            foundPos = FindBestPosition(around, AIResource::Gold, BuildingQuality::Mine, searchRadius);
+            foundPos =
+              FindBestPosition(around, AIResource::Gold, BuildingQuality::Mine, searchRadius, 1, borderReserve);
             break;
         case BuildingType::CoalMine:
-            foundPos = FindBestPosition(around, AIResource::Coal, BuildingQuality::Mine, searchRadius);
+            foundPos =
+              FindBestPosition(around, AIResource::Coal, BuildingQuality::Mine, searchRadius, 1, borderReserve);
             break;
         case BuildingType::IronMine:
-            foundPos = FindBestPosition(around, AIResource::Ironore, BuildingQuality::Mine, searchRadius);
+            foundPos =
+              FindBestPosition(around, AIResource::Ironore, BuildingQuality::Mine, searchRadius, 1, borderReserve);
             break;
         case BuildingType::GraniteMine:
-            foundPos = FindBestPosition(around, AIResource::Granite, BuildingQuality::Mine, searchRadius);
+            foundPos =
+              FindBestPosition(around, AIResource::Granite, BuildingQuality::Mine, searchRadius, 1, borderReserve);
             break;
         case BuildingType::Fishery:
-            foundPos = FindBestPosition(around, AIResource::Fish, BUILDING_SIZE[type], searchRadius);
+            foundPos = FindBestPosition(around, AIResource::Fish, BUILDING_SIZE[type], searchRadius, 1, borderReserve);
             if(foundPos.isValid() && !ValidFishInRange(foundPos))
             {
                 resourceMaps[AIResource::Fish].avoidPosition(foundPos);
@@ -1176,32 +1189,35 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             break;
         case BuildingType::Storehouse:
             if(!construction->OtherStoreInRadius(around, 15))
-                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius, borderReserve);
             break;
         case BuildingType::HarborBuilding:
-            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius, borderReserve);
             if(foundPos.isValid()
                && !HarborPosRelevant(GetWorld().GetHarborPointID(foundPos))) // bad harborspot detected DO NOT USE
                 foundPos = MapPoint::Invalid();
             break;
         case BuildingType::Shipyard:
-            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius, borderReserve);
             if(foundPos.isValid() && IsInvalidShipyardPosition(foundPos))
                 foundPos = MapPoint::Invalid();
             break;
         case BuildingType::Farm:
-            foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 85);
+            foundPos =
+              FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 85, borderReserve);
             if(foundPos.isValid())
-                foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 85);
+                foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 85,
+                                            borderReserve);
             break;
         case BuildingType::Catapult:
-            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+            foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius, borderReserve);
             if(foundPos.isValid() && aii.isBuildingNearby(BuildingType::Catapult, foundPos, 7))
                 foundPos = MapPoint::Invalid();
             break;
         case BuildingType::Charburner:
         {
-            foundPos = FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 86);
+            foundPos =
+              FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 86, borderReserve);
             if(foundPos.isValid() && !BQsurroundcheck(foundPos, 4, true, 20)
                || aii.isBuildingNearby(BuildingType::Forester, foundPos, 8))
                 foundPos = MapPoint::Invalid();
@@ -1212,20 +1228,21 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             // their ore, plantations where they can plant
             if(const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(type);
                custom && custom->IsCollector())
-                foundPos = FindCollectorPosition(around, type, *custom, searchRadius);
+                foundPos = FindCollectorPosition(around, type, *custom, searchRadius, borderReserve);
             else if(custom && custom->IsMine())
-                foundPos = FindCustomMinePosition(around, type, *custom, searchRadius);
+                foundPos = FindCustomMinePosition(around, type, *custom, searchRadius, borderReserve);
             else if(custom && custom->IsPlanter())
-                foundPos = FindPlantationPosition(around, type, *custom, searchRadius);
+                foundPos = FindPlantationPosition(around, type, *custom, searchRadius, borderReserve);
             else
-                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius);
+                foundPos = SimpleFindPosition(around, BUILDING_SIZE[type], searchRadius, borderReserve);
             break;
     }
     return foundPos;
 }
 
 MapPoint AIPlayerJH::FindCollectorPosition(const MapPoint& around, BuildingType type,
-                                           const civ::CustomBuilding& building, unsigned radius) const
+                                           const civ::CustomBuilding& building, unsigned radius,
+                                           unsigned borderReserve) const
 {
     // Most objects to collect in range (but the worker should not walk too far)
     const unsigned collectRadius = std::max(1u, std::min(building.collectRadius, 6u));
@@ -1238,6 +1255,8 @@ MapPoint AIPlayerJH::FindCollectorPosition(const MapPoint& around, BuildingType 
             continue;
         // Not next to another one of the same kind
         if(aii.isBuildingNearby(type, curPt, collectRadius))
+            continue;
+        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
             continue;
         unsigned numObjects = 0;
         for(const MapPoint& pt : gwb.GetPointsInRadius(curPt, collectRadius))
@@ -1256,7 +1275,8 @@ MapPoint AIPlayerJH::FindCollectorPosition(const MapPoint& around, BuildingType 
 }
 
 MapPoint AIPlayerJH::FindCustomMinePosition(const MapPoint& around, BuildingType type,
-                                            const civ::CustomBuilding& building, unsigned radius) const
+                                            const civ::CustomBuilding& building, unsigned radius,
+                                            unsigned borderReserve) const
 {
     // Most ore in range of the miner (like the resource maps for the built-in mines)
     MapPoint bestPos = MapPoint::Invalid();
@@ -1267,6 +1287,8 @@ MapPoint AIPlayerJH::FindCustomMinePosition(const MapPoint& around, BuildingType
            || !canUseBq(aii.GetBuildingQuality(curPt), BuildingQuality::Mine))
             continue;
         if(aii.isBuildingNearby(type, curPt, MINER_RADIUS))
+            continue;
+        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
             continue;
         unsigned amount = 0;
         for(const MapPoint& pt : gwb.GetPointsInRadiusWithCenter(curPt, MINER_RADIUS))
@@ -1285,7 +1307,8 @@ MapPoint AIPlayerJH::FindCustomMinePosition(const MapPoint& around, BuildingType
 }
 
 MapPoint AIPlayerJH::FindPlantationPosition(const MapPoint& around, BuildingType type,
-                                            const civ::CustomBuilding& building, unsigned radius) const
+                                            const civ::CustomBuilding& building, unsigned radius,
+                                            unsigned borderReserve) const
 {
     // Most places to plant (and grown objects to harvest) in range, but the worker should not walk too far
     const unsigned plantRadius = std::max(1u, std::min(building.plantRadius, 6u));
@@ -1298,6 +1321,8 @@ MapPoint AIPlayerJH::FindPlantationPosition(const MapPoint& around, BuildingType
            || aii.isHarborPosClose(curPt, 2, true) || !canUseBq(aii.GetBuildingQuality(curPt), BUILDING_SIZE[type]))
             continue;
         if(aii.isBuildingNearby(type, curPt, plantRadius * 2u))
+            continue;
+        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
             continue;
         unsigned numPlaces = 0;
         for(const MapPoint& pt : gwb.GetPointsInRadius(curPt, plantRadius))
@@ -3103,7 +3128,8 @@ void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingTy
         AddBuildJob(bldToPlace, whPos);
         return;
     }
-    const MapPoint pos = SimpleFindPosition(whPos, BUILDING_SIZE[bldToPlace], /*enger Radius*/ 7);
+    const MapPoint pos = SimpleFindPosition(whPos, BUILDING_SIZE[bldToPlace], /*enger Radius*/ 7,
+                                            AIConstruction::GetBorderReserve(bldToPlace));
     if(!pos.isValid())
     {
         //std::cout << "Sawmill skip: no valid pos found around " << whPos.x << "/" << whPos.y << std::endl;

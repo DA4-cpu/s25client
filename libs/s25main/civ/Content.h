@@ -118,6 +118,8 @@ struct CustomBuilding
     unsigned plantRadius = 0;
     /// Mine: Ore the worker digs. Nothing: no mine
     ResourceType mineResource = ResourceType::Nothing;
+    /// The AI may build it near a land border (otherwise that space is kept free for military buildings)
+    bool aiNearBorder = false;
 
     bool IsLibrary() const { return libraryCapacity > 0; }
     bool IsCollector() const { return collectObject >= 0; }

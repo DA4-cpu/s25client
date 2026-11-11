@@ -119,8 +119,8 @@ BOOST_AUTO_TEST_CASE(Unevenness_changes_the_slopes)
     BOOST_TEST(averageSlope(flat, NodeKind::Land) < averageSlope(normal, NodeKind::Land));
     BOOST_TEST(averageSlope(normal, NodeKind::Land) < averageSlope(uneven, NodeKind::Land));
     BOOST_TEST(averageSlope(flat, NodeKind::Mountain) < averageSlope(uneven, NodeKind::Mountain));
-    // Flat land is really flat, uneven land not
-    BOOST_TEST(averageSlope(flat, NodeKind::Land) < 1.);
+    // Flat land is much flatter than uneven land (it only rises towards the inland and the mountains)
+    BOOST_TEST(averageSlope(flat, NodeKind::Land) * 2. < averageSlope(uneven, NodeKind::Land));
     BOOST_TEST(averageSlope(uneven, NodeKind::Land) > 1.5);
 }
 

@@ -139,20 +139,22 @@ public:
     bool IsFlagPartofCircle(const noFlag& startFlag, unsigned maxlen, const noFlag& curFlag,
                             helpers::OptionalEnum<Direction> excludeDir, std::vector<const noFlag*> oldFlags);
     /// Finds the best position for a specific resource in an area using the resource maps,
-    /// satisfying the minimum value, returns false if no such position is found
+    /// satisfying the minimum value, returns false if no such position is found.
+    /// borderReserve > 0: No land border within this distance (AIConstruction::GetBorderReserve)
     MapPoint FindBestPosition(const MapPoint& pt, AIResource res, BuildingQuality size, unsigned radius,
-                              int minimum = 1);
-    /// Finds a position for the desired building size
-    MapPoint SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius) const;
+                              int minimum = 1, unsigned borderReserve = 0);
+    /// Finds a position for the desired building size (borderReserve like in FindBestPosition)
+    MapPoint SimpleFindPosition(const MapPoint& pt, BuildingQuality size, unsigned radius,
+                                unsigned borderReserve = 0) const;
     /// Position for a workshop collecting map objects (civilization mode) with the most objects in its range
     MapPoint FindCollectorPosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
-                                   unsigned radius) const;
+                                   unsigned radius, unsigned borderReserve) const;
     /// Position for a mine of the civilization mode with the most of its ore in range of the miner
     MapPoint FindCustomMinePosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
-                                    unsigned radius) const;
+                                    unsigned radius, unsigned borderReserve) const;
     /// Position for a plantation of the civilization mode with the most places to plant (and harvest) in its range
     MapPoint FindPlantationPosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
-                                    unsigned radius) const;
+                                    unsigned radius, unsigned borderReserve) const;
     /// Find a position for a specific building around a given point
     MapPoint FindPositionForBuildingAround(BuildingType type, const MapPoint& around);
     /// Returns the position of the forester (finished or still under construction) that is

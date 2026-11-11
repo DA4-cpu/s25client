@@ -239,6 +239,7 @@ Content::Content(const WorldDescription& desc) : Content()
         if(!look)
             throw GameDataError(context + ": look must be a built-in building, not '" + wsDesc.look + "'");
         bld.look = *look;
+        bld.aiNearBorder = wsDesc.aiNearBorder;
 
         // Worker
         CustomWorker worker;

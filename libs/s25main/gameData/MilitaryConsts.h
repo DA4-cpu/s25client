@@ -47,10 +47,10 @@ constexpr helpers::EnumArray<std::array<int, NUM_MILITARY_BLDS>, Nation> NUM_ARM
   {{1, 2, 4, 6}, {1, 2, 4, 6}, {1, 2, 4, 6}, {1, 2, 4, 6}, {1, 2, 4, 6}}};
 
 /// Radien der Militärgebäude
-constexpr std::array<unsigned, NUM_MILITARY_BLDS> SUPPRESS_UNUSED MILITARY_RADIUS = {{8, 9, 10, 11}};
+constexpr std::array<unsigned, NUM_MILITARY_BLDS> SUPPRESS_UNUSED MILITARY_RADIUS = {{10, 12, 14, 16}};
 // Radius für einzelne Hafen(baustellen)
-constexpr unsigned HARBOR_RADIUS = 8;
-constexpr unsigned HQ_RADIUS = 9;
+constexpr unsigned HARBOR_RADIUS = 10;
+constexpr unsigned HQ_RADIUS = 10;
 
 /// Offset of the troop flag per nation and type from the buildings origin
 constexpr helpers::EnumArray<std::array<DrawPoint, NUM_MILITARY_BLDS>, Nation> TROOPS_FLAG_OFFSET = {
@@ -79,17 +79,17 @@ constexpr std::array<uint8_t, NUM_SOLDIER_RANKS> HITPOINTS = {3, 4, 5, 6, 7};
 constexpr unsigned MAX_FAR_AWAY_CAPTURING_DISTANCE = 15;
 
 /// Sichtweite der Militärgebäude (relativ); wird auf die normale Grenzweite draufaddiert
-constexpr unsigned VISUALRANGE_MILITARY = 3;
+constexpr unsigned VISUALRANGE_MILITARY = 5;
 /// Sichtweite von Spähtürmen (absolut)
 constexpr unsigned VISUALRANGE_LOOKOUTTOWER = 20;
 /// Sichtweite von Spähern
-constexpr unsigned VISUALRANGE_SCOUT = 3;
+constexpr unsigned VISUALRANGE_SCOUT = 5;
 /// Sichtweite von Soldaten
-constexpr unsigned VISUALRANGE_SOLDIER = 2;
+constexpr unsigned VISUALRANGE_SOLDIER = 3;
 /// Sichtweite von Schiffen
-constexpr unsigned VISUALRANGE_SHIP = 2;
+constexpr unsigned VISUALRANGE_SHIP = 5;
 /// Sichtweite von Erkundungs-Schiffen
-constexpr unsigned VISUALRANGE_EXPLORATION_SHIP = 12;
+constexpr unsigned VISUALRANGE_EXPLORATION_SHIP = 16;
 
 /// Beförderungszeit von Soldaten ( =UPGRADE_TIME + rand(UPGRADE_TIME_RANDOM) )
 constexpr unsigned UPGRADE_TIME = 100;

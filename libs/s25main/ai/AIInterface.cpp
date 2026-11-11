@@ -47,6 +47,21 @@ bool IsPointOK_RoadPathEvenStep(const GameWorldBase& gwb, const MapPoint pt, con
 }
 } // namespace
 
+bool AIInterface::IsLandBorder(const MapPoint pt, const unsigned radius) const
+{
+    if(!IsBorder(pt))
+        return false;
+    return gwb.CheckPointsInRadius(
+      pt, radius, [this](const MapPoint curPt, unsigned) { return !IsOwnTerritory(curPt) && !gwb.IsWaterPoint(curPt); },
+      false);
+}
+
+bool AIInterface::IsNearLandBorder(const MapPoint pt, const unsigned radius) const
+{
+    return gwb.CheckPointsInRadius(
+      pt, radius, [this, radius](const MapPoint curPt, unsigned) { return IsLandBorder(curPt, radius); }, true);
+}
+
 AIInterface::AIInterface(const GameWorldBase& gwb, std::vector<gc::GameCommandPtr>& gcs, unsigned char playerID)
     : gwb(gwb), player_(gwb.GetPlayer(playerID)), gcs(gcs), playerID_(playerID)
 {

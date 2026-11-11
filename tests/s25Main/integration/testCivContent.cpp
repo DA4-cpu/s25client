@@ -12,12 +12,14 @@
 #include "SerializedGameData.h"
 #include "addons/const_addons.h"
 #include "ai/AIPlayer.h"
+#include "ai/aijh/AIConstruction.h"
 #include "buildings/noBuildingSite.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobHQ.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
 #include "civ/CustomGraphics.h"
+#include "civ/Graphics.h"
 #include "civ/ImageFile.h"
 #include "civ/Knowledge.h"
 #include "civ/PlayerResearch.h"
@@ -515,6 +517,57 @@ rttr:AddWorkshop{ name = "LoamPit", title = "Lehmgrube", size = "small", cost = 
         WorldDescription desc;
         BOOST_TEST_INFO(invalid);
         BOOST_TEST(!load(invalid, desc));
+    }
+}
+
+BOOST_AUTO_TEST_CASE(WorkshopNearBorderFromLua)
+{
+    const std::string base = R"(
+rttr:AddWare{ name = "Loam", title = "Lehm", look = "Stones", transport = "Stones" }
+rttr:AddMapObject{ name = "LoamDeposit", title = "Lehmvorkommen", sizes = 4, look = "Granite2" }
+rttr:AddWorkshop{ name = "LoamPit", title = "Lehmgrube", size = "small", cost = { Boards = 2 }, look = "Quarry",
+    worker = { title = "Lehmstecher", tool = "Shovel", look = "Planer" },
+    collect = { object = "LoamDeposit", radius = 8 }, output = "Loam", workTime = 7 AI_NEAR_BORDER }
+)";
+    const auto load = [&base](const std::string& aiNearBorder, WorldDescription& desc) {
+        std::string content = base;
+        const std::string marker = " AI_NEAR_BORDER";
+        content.replace(content.find(marker), marker.size(), aiNearBorder);
+        rttr::test::TmpFolder tmp;
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << content;
+        }
+        GameDataLoader loader(desc, tmp);
+        rttr::test::LogAccessor logAcc;
+        return loader.Load();
+    };
+    // Default: The AI keeps the space at the border free for military buildings
+    {
+        WorldDescription desc;
+        BOOST_TEST_REQUIRE(load("", desc));
+        BOOST_TEST(!desc.workshops[0].aiNearBorder);
+        const ActiveContent active(desc);
+        BOOST_TEST(!civ::getActiveContent().GetBuilding(BuildingType::Custom0)->aiNearBorder);
+        BOOST_TEST(!AIJH::AIConstruction::IsAllowedNearBorder(BuildingType::Custom0));
+        BOOST_TEST(AIJH::AIConstruction::GetBorderReserve(BuildingType::Custom0) == 4u);
+    }
+    {
+        WorldDescription desc;
+        BOOST_TEST_REQUIRE(load(", aiNearBorder = true", desc));
+        BOOST_TEST(desc.workshops[0].aiNearBorder);
+        const ActiveContent active(desc);
+        BOOST_TEST(civ::getActiveContent().GetBuilding(BuildingType::Custom0)->aiNearBorder);
+        BOOST_TEST(AIJH::AIConstruction::IsAllowedNearBorder(BuildingType::Custom0));
+        BOOST_TEST(AIJH::AIConstruction::GetBorderReserve(BuildingType::Custom0) == 0u);
+    }
+    // Built-in buildings are not affected by the content
+    {
+        WorldDescription desc;
+        BOOST_TEST_REQUIRE(load(", aiNearBorder = true", desc));
+        const ActiveContent active(desc);
+        BOOST_TEST(!AIJH::AIConstruction::IsAllowedNearBorder(BuildingType::Sawmill));
+        BOOST_TEST(AIJH::AIConstruction::IsAllowedNearBorder(BuildingType::Quarry));
     }
 }
 
@@ -1277,7 +1330,11 @@ using BiggerCivWorldFixture = WorldWithGCExecution<1, 24, 22>;
 BOOST_FIXTURE_TEST_CASE(AIBuildsWorkshopsAndLibraries, BiggerCivWorldFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 1);
-    world.SetTechTree(std::make_unique<civ::TechTree>(makeLibraryDesc(20)));
+    WorldDescription desc = makeLibraryDesc(20);
+    // Of the workshops with inputs the AI only builds the bone carver (BuildingPlanner::UpdateCustomBuildingsWanted)
+    BOOST_TEST_REQUIRE(desc.workshops[0].name == "Carver");
+    desc.workshops[0].name = "BoneCarver";
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
     civ::startGame(world);
     addStartResources();
     auto& hqBld = *world.GetPlayer(curPlayer).GetHQ();
@@ -1597,6 +1654,45 @@ BOOST_AUTO_TEST_CASE(OwnGraphicsReplacePlaceholders)
     BOOST_TEST(!gfx.GetMapObject(0, 1));
     BOOST_TEST(gfx.GetWorkFrames(Job::Custom0).empty());
     BOOST_TEST(gfx.GetNumLoaded() == 0u);
+}
+
+BOOST_AUTO_TEST_CASE(OreSignsUseTheSignsOfTheLookOre)
+{
+    LOADER.LoadDummyGUIFiles();
+    LOADER.LoadDummyMapFiles();
+    // As in the original map graphics the signs of the geologist are player bitmaps (no glArchivItem_Bitmap)
+    const unsigned ironSign = civ::getOreSignImage(ResourceType::Iron, 0);
+    BOOST_TEST_REQUIRE(LOADER.GetMapTexture(ironSign));
+    BOOST_TEST_REQUIRE(!dynamic_cast<glArchivItem_Bitmap*>(LOADER.GetMapTexture(ironSign)));
+
+    WorldDescription desc;
+    OreDesc copper;
+    copper.name = "Copper";
+    copper.title = "Kupfer";
+    copper.look = "Iron";
+    copper.tint = 0xC07040;
+    desc.ores.push_back(copper);
+    const ActiveContent active(desc);
+    rttr::test::TmpFolder images, templates;
+    bfs::create_directories(images / "Copper");
+    civ::writePngFile(images / "Copper" / "Schild2.png", makeImage(4, 6, libsiedler2::ColorBGRA(40, 80, 160, 255)));
+
+    civ::CustomGraphics& gfx = LOADER.GetCivGraphics();
+    civ::CustomGraphics::Settings settings;
+    settings.folder = images.get();
+    settings.templateFolder = templates.get();
+    settings.landscape = "Gruenland";
+    gfx.fillCaches(LOADER, nullptr, *active.content, settings);
+    // Own image for much ore, otherwise the tinted sign of iron is drawn
+    BOOST_TEST(!gfx.GetOreSign(0, 0));
+    BOOST_TEST(!gfx.GetOreSign(0, 1));
+    BOOST_TEST_REQUIRE(gfx.GetOreSign(0, 2));
+    BOOST_TEST(gfx.GetOreSign(0, 2)->getWidth() == 4u);
+    // Templates from the player bitmaps
+    for(const std::string name : {"Schild0", "Schild1", "Schild2"})
+        BOOST_TEST(bfs::exists(templates / "Copper" / (name + ".nx0.ny0.png")));
+
+    gfx.fillCaches(LOADER, nullptr, civ::Content(), settings);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

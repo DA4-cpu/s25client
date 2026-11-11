@@ -197,6 +197,7 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
             throw GameDataError(context + ": workTime must be > 0");
     }
     waitTime = luaData.getOrDefault("waitTime", 0u);
+    aiNearBorder = luaData.getOrDefault("aiNearBorder", false);
     luaData.checkUnused();
 }
 

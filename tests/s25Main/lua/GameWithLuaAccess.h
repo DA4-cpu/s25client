@@ -19,12 +19,14 @@
 #include "worldFixtures/initGameRNG.hpp"
 #include "world/GameWorld.h"
 #include "world/MapLoader.h"
+#include "gameData/MilitaryConsts.h"
 #include "s25util/AvoidDuplicatesWriter.h"
 #include "s25util/Log.h"
 #include "s25util/StringStreamWriter.h"
 #include "s25util/colors.h"
 #include <rttr/test/LogAccessor.hpp>
 #include <boost/test/unit_test.hpp>
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -90,7 +92,8 @@ public:
         initGameRNG(0);
 
         loadGameData(world.GetDescriptionWriteable());
-        world.Init(MapExtent(24, 32));
+        // High enough that the territories of the HQs do not touch (the HQs are half the map height apart)
+        world.Init(MapExtent(24, std::max(32u, 4u * HQ_RADIUS + 2u)));
         hqPositions.push_back(MapPoint(0, 1));
         hqPositions.push_back(MapPoint(world.GetSize() / 2u + hqPositions[0]));
         std::vector<Nation> playerNations;

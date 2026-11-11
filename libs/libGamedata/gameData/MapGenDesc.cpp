@@ -300,6 +300,12 @@ MapClimateDesc::MapClimateDesc(const kaguya::LuaTable& luaTable)
     waterHumidityFalloff = luaData.getOrDefault("waterHumidityFalloff", waterHumidityFalloff);
     if(waterHumidityFalloff > 100)
         throw GameDataError(context + ": waterHumidityFalloff must be in [0, 100]");
+    if(waterHumidity > 0 && waterHumidityFalloff == 0)
+    {
+        throw GameDataError(context
+                            + ": waterHumidityFalloff must be > 0 if waterHumidity is set (the humidity of lakes and "
+                              "rivers reaches as far as something is left, without a decrease the whole map)");
+    }
     waterHumidityStep = luaData.getOrDefault("waterHumidityStep", waterHumidityStep);
     if(waterHumidityStep == 0 || waterHumidityStep > 30)
         throw GameDataError(context + ": waterHumidityStep must be in [1, 30] (nodes)");

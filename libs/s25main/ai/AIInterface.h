@@ -59,6 +59,11 @@ public:
     }
     /// Test whether a given point is part of own territory
     bool IsOwnTerritory(const MapPoint pt) const { return gwb.GetNode(pt).owner == (playerID_ + 1); }
+    /// Test whether a given point is part of the border and there is land behind it within the given distance (not
+    /// own territory and not only water), i.e. a military building next to it could gain land
+    bool IsLandBorder(MapPoint pt, unsigned radius) const;
+    /// Test whether a land border (IsLandBorder with the same distance) is within the given distance of a point
+    bool IsNearLandBorder(MapPoint pt, unsigned radius) const;
 
     bool IsRoad(const MapPoint pt, Direction dir) { return gwb.GetPointRoad(pt, dir) != PointRoad::None; }
     /// Test whether there is a object of a certain type on a spot

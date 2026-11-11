@@ -25,8 +25,10 @@ public:
     void updateAround(const MapPoint& pt, int radius);
 
     /// Finds the best position for a specific resource in an area using the resource maps,
-    /// satisfying the minimum value, returns false if no such position is found
-    MapPoint findBestPosition(const MapPoint& pt, BuildingQuality size, unsigned radius, int minimum) const;
+    /// satisfying the minimum value, returns false if no such position is found.
+    /// borderReserve > 0: No land border within this distance (see AIInterface::IsNearLandBorder)
+    MapPoint findBestPosition(const MapPoint& pt, BuildingQuality size, unsigned radius, int minimum,
+                              unsigned borderReserve = 0) const;
 
     /// Marks a position to be avoided.
     /// Only has an effect on diminishable resources where this blocks this point forever

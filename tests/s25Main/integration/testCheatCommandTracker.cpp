@@ -33,6 +33,13 @@ struct CheatCommandTrackerFixture : WorldFixture<CreateEmptyWorld, T_numPlayers>
     Cheats cheats_{this->world, gcFactory_};
     CheatCommandTracker tracker_{cheats_};
 
+    CheatCommandTrackerFixture()
+    {
+        // Cheat mode is on from the start of a single player game (never in multiplayer). These tests start without
+        if(cheats_.isCheatModeOn())
+            cheats_.toggleCheatMode();
+    }
+
     void trackString(const std::string& str)
     {
         for(char32_t c : str)

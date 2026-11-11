@@ -34,6 +34,9 @@ struct CheatsFixture : WorldFixture<CreateEmptyWorld, numPlayers, worldWidth, wo
     {
         p2.ps = PlayerState::AI;
         p3.ps = PlayerState::AI;
+        // Cheat mode is on from the start of a single player game (see CheatModeIsOnAtStart). These tests start without
+        if(cheats.isCheatModeOn())
+            cheats.toggleCheatMode();
     }
 
     const GameWorldViewer& getViewer() const { return viewer; }
@@ -78,6 +81,28 @@ private:
     GameWorldViewer viewer;
 };
 } // namespace
+
+BOOST_FIXTURE_TEST_CASE(CheatModeIsOnAtStart, CheatsFixture)
+{
+    // Single player (the other players are AIs): On from the start
+    BOOST_TEST_REQUIRE(world.IsSinglePlayer());
+    const Cheats newCheats(world, gcFactory);
+    BOOST_TEST(newCheats.isCheatModeOn());
+}
+
+BOOST_FIXTURE_TEST_CASE(CheatModeIsNeverOnInMultiplayer, CheatsFixture)
+{
+    p2.ps = PlayerState::Occupied;
+    BOOST_TEST_REQUIRE(!world.IsSinglePlayer());
+    Cheats newCheats(world, gcFactory);
+    BOOST_TEST(!newCheats.isCheatModeOn());
+    newCheats.toggleCheatMode();
+    BOOST_TEST(!newCheats.isCheatModeOn());
+    // Nothing that depends on the cheat mode works
+    BOOST_TEST(!newCheats.canPlaceCheatBuilding(unownedPt));
+    newCheats.toggleAllVisible();
+    BOOST_TEST(!newCheats.isAllVisible());
+}
 
 BOOST_FIXTURE_TEST_CASE(CanToggleCheatModeOnAndOffRepeatedly, CheatsFixture)
 {

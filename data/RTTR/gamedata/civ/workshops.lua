@@ -61,6 +61,10 @@ rttr:AddWorkshop{...}:
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
   knowledge   optional: Wissenspunkte des fertigen Gebäudes wie in knowledge.lua, z.B. knowledge = { IWP = 2 }.
               Ein Gebäude darf nur an einer der beiden Stellen Wissenspunkte bekommen.
+  aiNearBorder optional (Standard false): true erlaubt der KI, die Werkstatt in Grenznähe zu bauen (höchstens 4 Knoten
+              von einer Landgrenze entfernt). Sonst hält die KI diesen Platz für Militärgebäude frei, wie bei allen
+              eingebauten Gebäuden außer Holzfäller, Steinbruch, Fischer, Minen, Hafen und Katapult
+              (ai/aijh/AIConstruction.cpp, BORDER_RESERVE_RADIUS und BUILDINGS_NEAR_BORDER).
 
 Freischalten: In techtree.lua unter unlocks = { buildings = { "Name" } } eintragen. Wird eine Werkstatt von keiner
 Technologie freigeschaltet, ist sie von Anfang an baubar.
@@ -145,6 +149,7 @@ rttr:AddWorkshop{
     output = "Loam",
     workTime = 7,                    
     waitTime = 40,                   
+    aiNearBorder = true,
 }
 
 -------------------------------------------------------------------------------
@@ -166,11 +171,12 @@ rttr:AddWorkshop{
     workTime = 28,
     waitTime = 29,
     knowledge = { IWP = 1 },
+    aiNearBorder = true,
 }
 
 -------------------------------------------------------------------------------
--- Papyrusplantage: pflanzt Papyrus (mapobjects.lua) dort, wo er auch natürlich wächst (am Süßwasser, siehe
--- world/mapgen.lua), gießt ihn mit Wasser und erntet ihn selbst.
+-- Papyrusplantage: pflanzt Papyrus (mapobjects.lua) dort, wo er auch natürlich wächst (am Süßwasser mit passenden Temperatur und Feuchtigkeitswerten, siehe
+-- world/mapgen.lua(funkioniert nicht! Aktuell baut er Papyrus überall an! ich habe auch noch nie mehr als 1 Feld gesehen) (ohne Zonenbeschränkung), gießt ihn mit Wasser und erntet ihn selbst.
 -------------------------------------------------------------------------------
 
 rttr:AddWorkshop{
