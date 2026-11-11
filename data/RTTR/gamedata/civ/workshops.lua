@@ -25,8 +25,7 @@ rttr:AddWorkshop{...}:
   output      Tag-Abfrage der hergestellten Ware
   outputChoice optional: "knowledge" erlaubt, dass output mehrere Waren trifft (z.B. geritzte Knochen für LWP, IWP
               und MWP). Welche davon hergestellt wird, legt später der Regler "Wissen" im Verteilungsfenster fest;
-              bis es ihn gibt, wird zufällig gleich verteilt. Jede dieser Waren braucht knowledge in wares.lua.(falsch umgesetzt: Das sollte nicht nur Knowledge produkte betreffen sondern allgemein mehrere Outputs ermöglichen 
-              bspw. eine Kupferwerkstatt wo verschiedene Werkzeuge hergestellt werden)
+              bis es ihn gibt, wird zufällig gleich verteilt. Jede dieser Waren braucht knowledge in wares.lua.
   inheritProperties  optional (Standard false): Das Produkt hat dieselben Eigenschaften wie die verbrauchte Ware
               (z.B. Nadelholz -> Nadelholzbretter). Zu jeder möglichen Eingangsware muss es genau ein passendes Produkt
               geben.
@@ -124,7 +123,20 @@ rttr:AddWorkshop{
     outputChoice = "knowledge",
     workTime = 120,         
 }
-
+[[
+rttr:AddWorkshop{
+    name = "Copperworks",
+    title = "Copperworks",
+    size = "medium",
+    cost = { Boards = 2 }, 
+    look = "Metalworks",      
+    worker = { title = "Copperworker", tool = "Tongs", look = "Metalworker" },
+    inputs = { "CopperOre", "Coal" },
+    output = , -- mehrere Waren soll es hier als Output geben. Am besten als Liste  wie zB. {"CopperAxe", "CopperHammer" ...} wo halt alle möglichen Outputwaren drinnen stehen. Diese werden dann über die Verteilung OutputCoice gesteuert. Vorsicht: Es sollten aber trotzdem Warren mit mehreren Tags möglich sein.
+    outputChoice = "tools", --kann man hier irgendwie die Werkzeugverteilung verknüpfen, die Metalworks benutzt? Ein Verteilung.lua (Name gerne in Englisch) wäre auch sinnvoll. 
+    workTime = 120,         
+}
+]]
 -------------------------------------------------------------------------------
 -- Bibliothek (Schritt 4c). Entschieden: mittelgroß, fasst 20 Medien, Arbeiter "Bibliothekar" ohne Werkzeug, erst ab
 -- Ära 2 (Technologie "libraries" in techtree.lua).
