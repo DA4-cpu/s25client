@@ -44,7 +44,7 @@ rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nu
   hat. Es wartet im Gebäude, bis das alte kaputt ist.
 ]]
 
-rttr:AddToolMaterial{ name = "Iron", title = "Eisen", priority = 5 }
+rttr:AddToolMaterial{ name = "Iron", title = "Eisen", priority = 8 }
 
 rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 150, speed = 100 } -- Zange
 rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 150, speed = 100 } -- Hammer
@@ -58,6 +58,14 @@ rttr:AddTool{ ware = "Scythe",     material = "Iron", durability = 150, speed = 
 rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 150, speed = 100 } -- Beil
 rttr:AddTool{ ware = "Rollingpin", material = "Iron", durability = 150, speed = 100 } -- Nudelholz
 rttr:AddTool{ ware = "Bow",        material = "Iron", durability = 150, speed = 100 } -- Bogen
+
+rttr:AddToolMaterial{ name = "Copper", title = "Copper", priority = 5 }
+
+rttr:AddTool{ ware = "CopperTongs",      material = "Copper", durability = 100, speed = 50 } -- Zange
+rttr:AddTool{ ware = "CopperHammer",     material = "Copper", durability = 100, speed = 50 } -- Hammer
+rttr:AddTool{ ware = "CopperAxe",        material = "Copper", durability = 100, speed = 50 } -- Axt
+rttr:AddTool{ ware = "CopperSaw",        material = "Copper", durability = 100, speed = 50 } -- Säge
+rttr:AddTool{ ware = "CopperPickAxe",    material = "Copper", durability = 100, speed = 50 } -- Spitzhacke
 
 rttr:SetToolReorder(10)
 

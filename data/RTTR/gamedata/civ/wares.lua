@@ -106,10 +106,6 @@ rttr:AddWare{
     knowledge = { MWP = 1 },
 }
 
--------------------------------------------------------------------------------
--- Kupfererz aus der Kupfermine und Papyruspflanzen aus der Papyrusplantage (workshops.lua)
--------------------------------------------------------------------------------
-
 rttr:AddWare{
     name = "CopperOre",
     title = "Kupfererz",
@@ -117,6 +113,53 @@ rttr:AddWare{
     look = "IronOre",
     transport = "IronOre",
 }
+
+rttr:AddWare{
+    name = "CopperIngot",
+    title = "Copper Ingot",
+    kind = "Ingot",
+    look = "Iron",
+    transport = "Iron",
+}
+
+rttr:AddWare{
+    name = "CopperAxe",
+    title = "Copper Axe",
+    kind = "Axe",
+    look = "Axe",
+    transport = "Axe",
+}
+
+rttr:AddWare{
+    name = "CopperTongs",
+    title = "Copper Tongs",
+    kind = "Tongs",
+    look = "Tongs",
+    transport = "Tongs",
+}
+
+rttr:AddWare{
+    name = "CopperHammer",
+    title = "Copper Hammer",
+    kind = "Hammer",
+    look = "Hammer",
+    transport = "Hammer",
+}
+
+rttr:AddWare{
+    name = "CopperSaw",
+    title = "Copper Saw",
+    kind = "Saw",
+    look = "Saw",
+    transport = "Saw",
+}
+
+rttr:AddWare{name = "CopperPickAxe", title = "Copper PickAxe", kind = "PickAxe", look = "PickAxe", transport = "PickAxe"}
+rttr:AddWare{name = "CopperShovel", title = "Copper Shovel", kind = "Shovel", look = "Shovel", transport = "Shovel"}
+rttr:AddWare{name = "CopperCrucible", title = "Copper Crucible", kind = "Crucible", look = "Crucible", transport = "Crucible"}
+rttr:AddWare{name = "CopperScythe", title = "Copper Scythe", kind = "Scythe", look = "Scythe", transport = "Scythe"}
+rttr:AddWare{name = "CopperCleaver", title = "Copper Cleaver", kind = "Cleaver", look = "Cleaver", transport = "Cleaver"}
+
 
 rttr:AddWare{
     name = "PapyrusPlant",
