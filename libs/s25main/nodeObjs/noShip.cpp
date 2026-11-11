@@ -968,9 +968,12 @@ void noShip::StartDrivingToHarborPlace()
     else
     {
         // if we still have and are at the home harbor get route directly
+        const std::vector<Direction>* harborRoute = nullptr;
         if(homeHarbor && pos == world->GetCoastalPoint(homeHarbor, seaId_))
+            harborRoute = world->GetShipPathData().getHarborConnection(homeHarbor, goalHarbor, seaId_);
+        if(harborRoute)
         {
-            route_ = world->GetShipPathData().getHarborConnection(homeHarbor, goalHarbor, seaId_);
+            route_ = *harborRoute;
             RTTR_Assert(!route_.empty());
         } else
         {

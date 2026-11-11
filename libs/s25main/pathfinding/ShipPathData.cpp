@@ -4,7 +4,6 @@
 
 #include "ShipPathData.h"
 #include "EventManager.h"
-#include "helpers/IdRange.h"
 #include "helpers/containerUtils.h"
 #include "pathfinding/FreePathFinder.h"
 #include "pathfinding/PathConditionShip.h"
@@ -22,13 +21,15 @@ struct ShipPathData::HarborConnection::Matcher
     }
 };
 
-std::vector<Direction> ShipPathData::getHarborConnection(HarborId startHarbor, HarborId destHarbor, SeaId seaId)
+const std::vector<Direction>* ShipPathData::getHarborConnection(HarborId startHarbor, HarborId destHarbor, SeaId seaId)
 {
     if(harborConnections_.empty())
-        initHarborConnections();
-    const auto it = helpers::find_if(harborConnections_[startHarbor], HarborConnection::Matcher{destHarbor, seaId});
-    RTTR_Assert(it != harborConnections_[startHarbor].end());
-    return it->route;
+        harborConnections_.resize(world_.GetNumHarborPoints());
+    const auto& connections = harborConnections_[startHarbor];
+    const auto it = helpers::find_if(connections, HarborConnection::Matcher{destHarbor, seaId});
+    const HarborConnection* connection =
+      (it != connections.end()) ? &*it : calcHarborConnection(startHarbor, destHarbor, seaId);
+    return connection ? &connection->route : nullptr;
 }
 
 const std::vector<Direction>* ShipPathData::findCachedPath(MapPoint start, MapPoint dest, bool& reversed) const
@@ -65,33 +66,38 @@ void ShipPathData::addToCache(MapPoint start, MapPoint dest, std::vector<Directi
     }
 }
 
-void ShipPathData::initHarborConnections()
+const ShipPathData::HarborConnection* ShipPathData::calcHarborConnection(HarborId startHarbor, HarborId destHarbor,
+                                                                         SeaId seaId)
 {
-    harborConnections_.resize(world_.GetNumHarborPoints());
-    for(const auto startHbId : helpers::idRange<HarborId>(world_.GetNumHarborPoints()))
+    RTTR_Assert(startHarbor != destHarbor);
+    RTTR_Assert(seaId);
+    // Only neighbors are connected, they also tell the length of the shortest route
+    const HarborPos::Neighbor* neighbor = nullptr;
+    for(const auto dir : helpers::EnumRange<ShipDirection>{})
     {
-        auto& curConnections = harborConnections_[startHbId];
-        std::vector<HarborPos::Neighbor> neighbors;
-        for(const auto dir : helpers::EnumRange<ShipDirection>{})
+        for(const auto& nb : world_.GetHarborNeighbors(startHarbor, dir))
         {
-            const auto& curNbs = world_.GetHarborNeighbors(startHbId, dir);
-            neighbors.insert(neighbors.end(), curNbs.begin(), curNbs.end());
-        }
-        for(const auto& nb : neighbors)
-        {
-            RTTR_Assert(startHbId != nb.id);
-            RTTR_Assert(nb.sea);
-            // Connections are unique
-            RTTR_Assert(!helpers::contains_if(curConnections, HarborConnection::Matcher{nb.id, nb.sea}));
-            curConnections.push_back(HarborConnection{nb.id, nb.sea, {}});
-            unsigned len = 0;
-            const auto startPoint = world_.GetCoastalPoint(startHbId, nb.sea);
-            const auto nbPoint = world_.GetCoastalPoint(nb.id, nb.sea);
-            const bool found =
-              (startPoint == nbPoint)
-              || world_.FindShipPath(startPoint, nbPoint, nb.distance, &curConnections.back().route, &len);
-            RTTR_Assert(found);
-            RTTR_Assert(len == nb.distance);
+            if(nb.id == destHarbor && nb.sea == seaId)
+                neighbor = &nb;
         }
     }
+    if(!neighbor)
+        return nullptr;
+
+    HarborConnection connection{destHarbor, seaId, {}};
+    const auto startPoint = world_.GetCoastalPoint(startHarbor, seaId);
+    const auto destPoint = world_.GetCoastalPoint(destHarbor, seaId);
+    if(startPoint != destPoint)
+    {
+        unsigned len = 0;
+        if(!world_.FindShipPath(startPoint, destPoint, neighbor->distance, &connection.route, &len))
+        {
+            RTTR_Assert(false);
+            return nullptr;
+        }
+        RTTR_Assert(len == neighbor->distance);
+    }
+    auto& connections = harborConnections_[startHarbor];
+    connections.push_back(std::move(connection));
+    return &connections.back();
 }

@@ -48,6 +48,6 @@ public:
     /// this object (world/mapgen.lua) without the zones. Objects without a rule grow on land
     static bool GrowsNaturallyAt(const GameWorldBase& world, MapPoint pt, unsigned objIdx);
     /// True if the plantation can plant its map object at the point: The point is free (or has only decoration), no
-    /// road, no buildings, flags or other fields/objects next to it and the object grows naturally there
+    /// road, no buildings or other fields/objects next to it (flags are allowed) and the object grows naturally there
     static bool CanPlantAt(const GameWorldBase& world, MapPoint pt, const civ::CustomBuilding& building);
 };

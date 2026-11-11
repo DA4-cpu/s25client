@@ -12,6 +12,7 @@
 #include "helpers/IdRange.h"
 #include "helpers/Range.h"
 #include "pathfinding/FindPathForRoad.h"
+#include "pathfinding/ShipPathData.h"
 #include "postSystem/PostBox.h"
 #include "postSystem/ShipPostMsg.h"
 #include "worldFixtures/SeaWorldWithGCExecution.h"
@@ -132,6 +133,43 @@ BOOST_FIXTURE_TEST_CASE(ShipConnections, SmallSeaWorld)
     BOOST_TEST(toHarbors(hb3.GetShipConnections()) == harbors_t{&hb1});
     BOOST_TEST(toHarbors(hb4.GetShipConnections()) == (harbors_t{&hb2, &hb5}));
     BOOST_TEST(toHarbors(hb5.GetShipConnections()) == (harbors_t{&hb2, &hb4}));
+}
+
+BOOST_FIXTURE_TEST_CASE(HarborRoutes, SmallSeaWorld)
+{
+    // Same layout as in ShipConnections: 1 and 3 share sea 1, 2 and 4 share sea 2
+    constexpr SeaId sea1(1);
+    constexpr SeaId sea2(2);
+    const HarborId hb1(1), hb2(2), hb3(3), hb4(4);
+    ShipPathData& shipPathData = world.GetShipPathData();
+
+    const MapPoint startPt = world.GetCoastalPoint(hb1, sea1);
+    const MapPoint destPt = world.GetCoastalPoint(hb3, sea1);
+    const std::vector<Direction>* route = shipPathData.getHarborConnection(hb1, hb3, sea1);
+    BOOST_TEST_REQUIRE(route);
+    unsigned shortestLength = 0;
+    BOOST_TEST_REQUIRE(world.FindShipPath(startPt, destPt, unsigned(-1), nullptr, &shortestLength));
+    BOOST_TEST(route->size() == shortestLength);
+    MapPoint curPt = startPt;
+    for(const Direction dir : *route)
+        curPt = world.GetNeighbour(curPt, dir);
+    BOOST_TEST(curPt == destPt);
+    const std::vector<Direction> expectedRoute = *route;
+    // Calculated once, then reused
+    BOOST_TEST(*shipPathData.getHarborConnection(hb1, hb3, sea1) == expectedRoute);
+    BOOST_TEST(shipPathData.getHarborConnection(hb3, hb1, sea1)->size() == shortestLength);
+
+    // Starting at a harbor uses that route
+    std::vector<Direction> foundRoute;
+    unsigned foundLength = 0;
+    BOOST_TEST_REQUIRE(world.FindShipPathToHarbor(startPt, hb3, sea1, &foundRoute, &foundLength));
+    BOOST_TEST(foundRoute == expectedRoute);
+    BOOST_TEST(foundLength == shortestLength);
+
+    // No route to harbors at other seas
+    BOOST_TEST(!shipPathData.getHarborConnection(hb1, hb2, sea1));
+    BOOST_TEST(!shipPathData.getHarborConnection(hb1, hb3, sea2));
+    BOOST_TEST(shipPathData.getHarborConnection(hb2, hb4, sea2));
 }
 
 BOOST_FIXTURE_TEST_CASE(ShipBuilding, SeaWorldWithGCExecution<>)

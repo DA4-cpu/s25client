@@ -42,11 +42,11 @@ rttr:AddMapObject{
 rttr:AddMapObject{
     name = "PapyrusDeposit",
     title = "Papyrusvorkommen",
-    sizes = 8,          
+    sizes = 2,          
     look = "Granite1",
     tint = 0xc0ba10,    
-    growTime = 240,
-    plantSize = 4,
+    growTime = 300,
+    plantSize = 2,
 }
 
 --[[

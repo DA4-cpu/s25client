@@ -307,11 +307,16 @@ reißt sie ab, wenn nichts mehr da ist (wie Steinbrüche).
   Die Eingänge (`inputs`, `consume` wie bisher, z. B. Wasser) werden beim Losgehen zum Pflanzen verbraucht (wie beim
   Köhler); Ernten braucht nichts. Wird die Stelle unterwegs unbrauchbar, sind die Waren verloren.
 - **Wo gepflanzt wird** (`nofCustomPlanter::CanPlantAt`): freier Platz (nur Deko/Schilder werden entfernt), kein
-  Grenzstein, keine Straße, kein Gebäude, keine Baustelle, Fahne, Feld, Köhlerhaufen oder anderes Kartenobjekt
-  direkt daneben (damit Wege frei bleiben, da Objekte Wege sperren), und das Objekt **wächst dort natürlich**
-  (`GrowsNaturallyAt`): eine Regel in `world/mapgen.lua` mit diesem Objekt passt mit `terrain`, `temperature`,
-  `humidity`, `height` und hat dort ein Gewicht > 0. `zones`, `amount`, `hqDistance` zählen nicht (Wunsch des
-  Nutzers: kein Zonen-Zwang). Ohne Regel wächst es auf jedem Land.
+  Grenzstein, keine Straße, kein Gebäude, keine Baustelle, kein Feld, Köhlerhaufen oder anderes Kartenobjekt
+  direkt daneben (damit Wege frei bleiben, da Objekte Wege sperren). Fahnen dürfen daneben stehen wie bei Steinen
+  (`BlockingManner::FlagsAround`); sonst bleibt bei den dichten Straßennetzen (vor allem der KI) im Umkreis kaum ein
+  Platz (seit 2026-11-11). Das Objekt muss dort **natürlich wachsen** (`GrowsNaturallyAt`): eine Regel in
+  `world/mapgen.lua` mit diesem Objekt passt mit `terrain`, `temperature`, `humidity`, `height` und hat dort ein
+  Gewicht > 0. `zones`, `amount`, `hqDistance` zählen nicht (Wunsch des Nutzers: kein Zonen-Zwang). Ohne Regel wächst
+  es auf jedem Land.
+- Die Regeln kommen aus der Weltbeschreibung des Spiels (`world.GetDescription().mapGen.resources`). Der Inhalt des
+  Zivilisationsmodus (`loadDefaultTechTree`) wird nur aus `gamedata/civ` geladen und kennt `mapgen.lua` nicht; bis
+  2026-11-11 standen die Regeln dort und waren im Spiel leer, gepflanzt wurde deshalb auf jedem Land.
 - Animation: Pflanzen wie der Förster bzw. säen wie der Bauer (`worker.look = "Farmer"`), Ernten wie der Sammler
   (zusätzlich Sense für `"Farmer"`). Eigene Bilder `Arbeiter_Pflanzen_<n>`. Beim Ernten keine „Kein … mehr“-Meldung
   (wie Bauer).

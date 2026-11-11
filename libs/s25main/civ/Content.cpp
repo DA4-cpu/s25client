@@ -162,12 +162,6 @@ Content::Content(const WorldDescription& desc) : Content()
         if(objDesc.growTime > 0 && obj.growGFs == 0)
             obj.growGFs = 1;
         obj.plantSize = objDesc.plantSize > 0 ? objDesc.plantSize : obj.sizes;
-        // Where it grows naturally: The rules of the map generator for this object
-        for(const MapResourceDesc& rule : desc.mapGen.resources)
-        {
-            if(rule.object == obj.name)
-                obj.growRules.push_back(rule);
-        }
         mapObjects_.push_back(obj);
     }
 

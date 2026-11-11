@@ -59,10 +59,18 @@ bool nofCustomPlanter::GrowsNaturallyAt(const GameWorldBase& world, const MapPoi
     if(!obj)
         return false;
     const civ::ClimateMap& climate = world.GetClimate();
-    if(obj->growRules.empty())
-        return (climate.GetTerrain(pt) & toFlag(MapGenTerrain::Land)) != 0;
-    return std::any_of(obj->growRules.begin(), obj->growRules.end(),
-                       [&climate, pt](const MapResourceDesc& rule) { return climate.AllowsNaturally(pt, rule); });
+    // The rules of the map generator are part of the description of the world (world/mapgen.lua), the content of the
+    // civilization mode is loaded without them
+    bool hasRule = false;
+    for(const MapResourceDesc& rule : world.GetDescription().mapGen.resources)
+    {
+        if(rule.object != obj->name)
+            continue;
+        if(climate.AllowsNaturally(pt, rule))
+            return true;
+        hasRule = true;
+    }
+    return !hasRule && (climate.GetTerrain(pt) & toFlag(MapGenTerrain::Land)) != 0;
 }
 
 bool nofCustomPlanter::CanPlantAt(const GameWorldBase& world, const MapPoint pt, const civ::CustomBuilding& building)
@@ -80,14 +88,14 @@ bool nofCustomPlanter::CanPlantAt(const GameWorldBase& world, const MapPoint pt,
         if(world.GetPointRoad(pt, dir) != PointRoad::None)
             return false;
     }
-    // Not next to buildings, flags or other fields and objects which block the way: There must stay a way between them
+    // Not next to buildings or other fields and objects which block the way: There must stay a way between them.
+    // Flags are allowed next to it like next to stones
     for(const MapPoint nb : world.GetNeighbours(pt))
     {
         switch(world.GetNO(nb)->GetType())
         {
             case NodalObjectType::Building:
             case NodalObjectType::Buildingsite:
-            case NodalObjectType::Flag:
             case NodalObjectType::Grainfield:
             case NodalObjectType::Grapefield:
             case NodalObjectType::CharburnerPile:

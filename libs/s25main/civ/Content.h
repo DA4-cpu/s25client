@@ -14,7 +14,6 @@
 #include "gameTypes/GoodTypes.h"
 #include "gameTypes/JobTypes.h"
 #include "gameTypes/Resource.h"
-#include "gameData/MapGenDesc.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -65,8 +64,6 @@ struct CustomMapObject
     unsigned growGFs = 0;
     /// Size of a grown planted object (1..sizes)
     unsigned plantSize = 0;
-    /// Rules of the map generator for this object (world/mapgen.lua): Where it grows naturally (plantations)
-    std::vector<MapResourceDesc> growRules;
 
     bool CanBePlanted() const { return growGFs > 0; }
 };

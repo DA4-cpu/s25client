@@ -73,11 +73,14 @@ bool GameWorldBase::FindShipPathToHarbor(const MapPoint start, HarborId harborId
     {
         if(GetCoastalPoint(startHbId, seaId) == start)
         {
-            auto hbRoute = shipPathData.getHarborConnection(startHbId, harborId, seaId);
-            if(length)
-                *length = hbRoute.size();
-            if(route)
-                *route = std::move(hbRoute);
+            if(const auto* hbRoute = shipPathData.getHarborConnection(startHbId, harborId, seaId))
+            {
+                if(length)
+                    *length = hbRoute->size();
+                if(route)
+                    *route = *hbRoute;
+                return true;
+            }
         }
     }
 

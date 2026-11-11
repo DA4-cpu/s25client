@@ -42,8 +42,8 @@ rttr:AddWorkshop{...}:
               pflanzt ein Kartenobjekt (mapobjects.lua, braucht dort growTime) im Umkreis radius:
               plant = { object = "PapyrusDeposit", radius = 4 }.
               Gepflanzt wird nur dort, wo das Objekt auch natürlich wächst (Regeln in world/mapgen.lua, aber ohne die
-              Zonen), auf freien Plätzen ohne Straße und nicht direkt neben Gebäuden, Fahnen, Feldern und anderen
-              Objekten (damit Wege frei bleiben).
+              Zonen), auf freien Plätzen ohne Straße und nicht direkt neben Gebäuden, Feldern und anderen Objekten
+              (damit Wege frei bleiben). Fahnen dürfen daneben stehen wie bei Steinen.
               Jedes Pflanzen verbraucht die Eingänge (inputs, consume wie oben), z.B. inputs = { "Water" } zum Gießen.
               Ohne inputs braucht er dafür nichts.
               Mit output erntet er außerdem selbst wie der Bauer: ausgewachsene Objekte dieser Art im Umkreis (auch
@@ -175,8 +175,9 @@ rttr:AddWorkshop{
 }
 
 -------------------------------------------------------------------------------
--- Papyrusplantage: pflanzt Papyrus (mapobjects.lua) dort, wo er auch natürlich wächst (am Süßwasser mit passenden Temperatur und Feuchtigkeitswerten, siehe
--- world/mapgen.lua(funkioniert nicht! Aktuell baut er Papyrus überall an! ich habe auch noch nie mehr als 1 Feld gesehen) (ohne Zonenbeschränkung), gießt ihn mit Wasser und erntet ihn selbst.
+-- Papyrusplantage: pflanzt Papyrus (mapobjects.lua) dort, wo er auch natürlich wächst (am Süßwasser mit passenden
+-- Temperatur- und Feuchtigkeitswerten, siehe world/mapgen.lua, ohne Zonenbeschränkung), gießt ihn mit Wasser und
+-- erntet ihn selbst.
 -------------------------------------------------------------------------------
 
 rttr:AddWorkshop{
@@ -187,7 +188,7 @@ rttr:AddWorkshop{
     look = "Farm",
     worker = { title = "Papyrusbauer", tool = "Scythe", look = "Farmer" },
     inputs = { "Water" },
-    plant = { object = "PapyrusDeposit", radius = 4 },
+    plant = { object = "PapyrusDeposit", radius = 6 },
     output = "PapyrusPlant",
     workTime = 6,
     waitTime = 6,

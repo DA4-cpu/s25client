@@ -449,19 +449,17 @@ BOOST_FIXTURE_TEST_CASE(CollectorWaitsTillPlantsAreGrown, PlantWorldFixture)
 
 BOOST_FIXTURE_TEST_CASE(PlantationOnlyWhereItGrowsNaturally, PlantWorldFixture)
 {
-    // Rule of the map generator: Papyrus at the shore of fresh water, only in a zone and only where it is hot
-    WorldDescription desc = makeDesc();
+    // Rule of the map generator: Papyrus at the shore of fresh water, only in a zone and only where it is hot.
+    // It is part of the description of the world (world/mapgen.lua) like in the game, the content of the civilization
+    // mode is loaded from its own folder without it
     MapResourceDesc rule;
     rule.name = "Papyrus";
     rule.object = "Papyrus";
     rule.terrain = toFlag(MapGenTerrain::ShoreFresh);
     rule.zones = {"Afrika"};
     rule.climate.temperature = MapGenRange{50, 100};
-    desc.mapGen.resources.push_back(rule);
-    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
-    civ::startGame(world);
+    world.GetDescriptionWriteable().mapGen.resources.push_back(rule);
     const civ::CustomBuilding& plantation = *world.GetTechTree().GetContent().GetBuilding(PLANTATION);
-    BOOST_TEST_REQUIRE(world.GetTechTree().GetContent().GetMapObject(0)->growRules.size() == 1u);
 
     // Only land: Nowhere
     RTTR_FOREACH_PT(MapPoint, world.GetSize())
@@ -492,6 +490,29 @@ BOOST_FIXTURE_TEST_CASE(PlantationOnlyWhereItGrowsNaturally, PlantWorldFixture)
     RTTR_EXEC_TILL(20000, !findDeposits().empty());
     for(const MapPoint pt : findDeposits())
         BOOST_TEST((climate.GetTerrain(pt) & toFlag(MapGenTerrain::ShoreFresh)) != 0u);
+}
+
+BOOST_FIXTURE_TEST_CASE(PlantationPlantsNextToFlags, PlantWorldFixture)
+{
+    // Like next to stones flags are allowed next to planted objects, buildings and other planted objects are not
+    const civ::CustomBuilding& plantation = *world.GetTechTree().GetContent().GetBuilding(PLANTATION);
+    const MapPoint pt = world.MakeMapPoint(hqPos + Position(-4, 4));
+    BOOST_TEST_REQUIRE(nofCustomPlanter::CanPlantAt(world, pt, plantation));
+    BOOST_TEST_REQUIRE(this->SetFlag(world.GetNeighbour(pt, Direction::East)));
+    BOOST_TEST(nofCustomPlanter::CanPlantAt(world, pt, plantation));
+    // Not on the road of a flag
+    BOOST_TEST_REQUIRE(
+      this->BuildRoad(world.GetNeighbour(pt, Direction::East), false, std::vector<Direction>(2, Direction::West)));
+    BOOST_TEST(!nofCustomPlanter::CanPlantAt(world, pt, plantation));
+    // Next to it: allowed, but not next to another planted object
+    const MapPoint nextPt = world.GetNeighbour(pt, Direction::NorthEast);
+    BOOST_TEST_REQUIRE(nofCustomPlanter::CanPlantAt(world, nextPt, plantation));
+    world.SetNO(world.GetNeighbour(nextPt, Direction::NorthEast), noDeposit::CreatePlanted(0));
+    BOOST_TEST(!nofCustomPlanter::CanPlantAt(world, nextPt, plantation));
+    // Not next to buildings
+    const MapPoint nextToHQ = world.GetNeighbour(hqPos, Direction::East);
+    BOOST_TEST_REQUIRE((world.GetNO(nextToHQ)->GetType() == NodalObjectType::Nothing));
+    BOOST_TEST(!nofCustomPlanter::CanPlantAt(world, nextToHQ, plantation));
 }
 
 BOOST_FIXTURE_TEST_CASE(ClimateFromGeneratedMap, PlantWorldFixture)
