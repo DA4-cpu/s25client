@@ -292,10 +292,11 @@ private:
     /// every time MilUpgradeOptim runs while storage sits right at the threshold.
     bool recruitFunnelActive = false;
     AIEventManager eventManager;
+    /// Civilization mode: new AI (perception, economic model, plan of the production buildings). Declared before the
+    /// building planner, which asks it for the plan (also in its constructor)
+    std::unique_ptr<civai::CivAI> civAI_;
     std::unique_ptr<BuildingPlanner> bldPlanner;
     std::unique_ptr<AIConstruction> construction;
-    /// Civilization mode: new AI (step 1: perception and economic model, only reads and logs)
-    std::unique_ptr<civai::CivAI> civAI_;
 
 public:
     const civai::CivAI* GetCivAI() const { return civAI_.get(); }

@@ -6,11 +6,13 @@
 #include "AIPlayerJH.h"
 #include "GlobalGameSettings.h"
 #include "addons/const_addons.h"
+#include "ai/civ/CivAI.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
 #include "civ/Research.h"
+#include "helpers/EnumRange.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
 #include "gameTypes/Inventory.h"
@@ -501,6 +503,19 @@ void BuildingPlanner::UpdateBuildingsWanted(const AIPlayerJH& aijh)
     }
 
     UpdateCustomBuildingsWanted(aijh);
+
+    // Civilization mode: the new AI plans the production buildings from the demand (DESIGN.md, "Neue KI", step 2)
+    if(const civai::CivAI* civAI = aijh.GetCivAI())
+    {
+        if(const civai::ProductionPlan* plan = civAI->GetPlan())
+        {
+            for(const auto bld : helpers::enumRange<BuildingType>())
+            {
+                if(plan->managed[bld])
+                    buildingsWanted[bld] = plan->wanted[bld];
+            }
+        }
+    }
 }
 
 void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)

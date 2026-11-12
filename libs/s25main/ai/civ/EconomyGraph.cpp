@@ -71,6 +71,7 @@ EconomyGraph::EconomyGraph(const GameWorldBase& world)
         oreNames_.push_back(ore.title);
     AddBuiltinRecipes(world);
     AddCustomRecipes(world);
+    AddRenewers(world);
 }
 
 void EconomyGraph::AddBuiltinRecipes(const GameWorldBase& world)
@@ -147,6 +148,7 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
         if(byproduct.ware == GoodType::Nothing)
             continue;
         recipe.byproducts.push_back(byproduct.ware);
+        recipe.byproductAmounts.push_back(byproduct.amount);
         recipe.byproductTechs.push_back(byproduct.technology ? static_cast<int>(*byproduct.technology) : -1);
     }
     // GoodType::Nothing is no ware (some buildings use it for "no product")
@@ -164,7 +166,8 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
     }
     recipe.lockedAtStart = world.GetTechTree().IsLockedAtStart(recipe.building);
     const double gfsPerMinute = static_cast<double>(duration_to_gfs(std::chrono::minutes(1)));
-    recipe.waresPerMinute = gfsPerMinute / std::max(1u, cycleGFs) * content.GetOutputRatio(recipe.building) / 100.;
+    recipe.stepsPerMinute = gfsPerMinute / std::max(1u, cycleGFs);
+    recipe.waresPerMinute = recipe.stepsPerMinute * content.GetOutputRatio(recipe.building) / 100.;
 
     const auto idx = static_cast<unsigned>(recipes_.size());
     for(const GoodType good : recipe.outputs)
@@ -175,6 +178,18 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
             producers_[good].push_back(idx);
     }
     recipes_.push_back(std::move(recipe));
+}
+
+void EconomyGraph::AddRenewers(const GameWorldBase& world)
+{
+    // The forester is the only building which only makes a source grow (plantations of lua plant and harvest
+    // themselves and are recipes)
+    if(makeIsUnusedBuilding(world.GetGGS())(BuildingType::Forester))
+        return;
+    const JobConst jobConst = JOB_CONSTS[Job::Forester];
+    const unsigned cycle = jobConst.wait1_length + jobConst.work_length + jobConst.wait2_length + OUTSIDE_WALK_GFS;
+    const double gfsPerMinute = static_cast<double>(duration_to_gfs(std::chrono::minutes(1)));
+    renewers_.push_back({BuildingType::Forester, {SourceKind::Trees, 0}, gfsPerMinute / cycle});
 }
 
 std::string EconomyGraph::GetSourceName(const Source& source) const

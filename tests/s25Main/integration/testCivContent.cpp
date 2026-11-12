@@ -1338,9 +1338,13 @@ BOOST_FIXTURE_TEST_CASE(AIBuildsWorkshopsAndLibraries, BiggerCivWorldFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 1);
     WorldDescription desc = makeLibraryDesc(20);
-    // Of the workshops with inputs the AI only builds the bone carver (BuildingPlanner::UpdateCustomBuildingsWanted)
-    BOOST_TEST_REQUIRE(desc.workshops[0].name == "Carver");
-    desc.workshops[0].name = "BoneCarver";
+    // The research needs knowledge only media can give: the planner of the new AI wants a carver (bones in stock), the
+    // old rule for libraries one library for the media waiting in the warehouse
+    TechnologyDesc tech;
+    tech.name = "tech";
+    tech.title = "Tech";
+    tech.knowledge = {10, 0, 0};
+    desc.technologies.add(tech);
     world.SetTechTree(std::make_unique<civ::TechTree>(desc));
     civ::startGame(world);
     addStartResources();
@@ -1374,7 +1378,14 @@ BOOST_FIXTURE_TEST_CASE(AIBuildsWorkshopsAndLibraries, BiggerCivWorldFixture)
 BOOST_FIXTURE_TEST_CASE(AIBuildsCollectorNextToDeposits, BiggerCivWorldFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 1);
-    world.SetTechTree(std::make_unique<civ::TechTree>(makeCollectorDesc(4)));
+    // The research costs loam: the planner of the new AI wants a pit
+    WorldDescription desc = makeCollectorDesc(4);
+    TechnologyDesc tech;
+    tech.name = "pottery";
+    tech.title = "Pottery";
+    tech.cost = {{"Loam", 5}};
+    desc.technologies.add(tech);
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
     civ::startGame(world);
     addStartResources();
     auto& hqBld = *world.GetPlayer(curPlayer).GetHQ();

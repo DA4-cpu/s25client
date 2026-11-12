@@ -39,6 +39,10 @@ enum class SourceKind : uint8_t
     /// Places where a map object defined in lua grows naturally: index = map object (plantations)
     Plantable
 };
+constexpr auto maxEnumValue(SourceKind)
+{
+    return SourceKind::Plantable;
+}
 
 struct Source
 {
@@ -55,16 +59,29 @@ struct Recipe
     bool consumeEach = true;
     /// Products. Several: the building chooses one per product (e.g. the metalworks)
     std::vector<GoodType> outputs;
-    /// Byproducts (byproducts.lua) and the technology each needs (-1: none)
+    /// Byproducts (byproducts.lua), how many per product and the technology each needs (-1: none)
     std::vector<GoodType> byproducts;
+    std::vector<unsigned> byproductAmounts;
     std::vector<int> byproductTechs;
     Source source;
     /// Tool slots without which the building does not work (tool reform, base speed 0): any ware of each slot
     std::vector<std::vector<GoodType>> requiredTools;
     /// Not buildable at the start: one of these technologies unlocks it
     bool lockedAtStart = false;
-    /// Wares per minute of one building at normal speed (estimate: work cycle and output ratio)
+    /// Work steps per minute of one building at normal speed (estimate from the work cycle). Each step consumes the
+    /// inputs once
+    double stepsPerMinute = 0;
+    /// Wares per minute of one building at normal speed (work steps and output ratio)
     double waresPerMinute = 0;
+};
+
+/// Building which makes a source on the map grow again (e.g. the forester plants trees) and makes no wares
+struct Renewer
+{
+    BuildingType building;
+    Source source;
+    /// Pieces of the source per minute of one building (e.g. trees planted)
+    double perMinute = 0;
 };
 
 /// Production graph of the game: which buildings make which wares from what. Built once at the start of the game from
@@ -77,6 +94,7 @@ public:
     const std::vector<Recipe>& GetRecipes() const { return recipes_; }
     /// Indices of the recipes making the ware (as product or byproduct)
     const std::vector<unsigned>& GetProducers(GoodType good) const { return producers_[good]; }
+    const std::vector<Renewer>& GetRenewers() const { return renewers_; }
 
     /// Text for a source, e.g. "Bäume" or "Erz Copper"
     std::string GetSourceName(const Source& source) const;
@@ -85,8 +103,10 @@ private:
     void AddBuiltinRecipes(const GameWorldBase& world);
     void AddCustomRecipes(const GameWorldBase& world);
     void AddRecipe(const GameWorldBase& world, Recipe recipe, unsigned cycleGFs);
+    void AddRenewers(const GameWorldBase& world);
 
     std::vector<Recipe> recipes_;
+    std::vector<Renewer> renewers_;
     helpers::EnumArray<std::vector<unsigned>, GoodType> producers_;
     std::vector<std::string> mapObjectNames_;
     std::vector<std::string> oreNames_;

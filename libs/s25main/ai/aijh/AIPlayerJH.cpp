@@ -444,6 +444,16 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
                 if(construction->Wanted(bld))
                     AddBuildJobAroundEveryWarehouse(bld);
             }
+            // Built-in buildings of the plan the list above lacks (well, temple ...)
+            if(const civai::ProductionPlan* plan = civAI_ ? civAI_->GetPlan() : nullptr)
+            {
+                for(const auto bld : helpers::enumRange<BuildingType>())
+                {
+                    if(plan->managed[bld] && !isCustomBuilding(bld) && !helpers::contains(bldToTest, bld)
+                       && construction->Wanted(bld))
+                        AddBuildJobAroundEveryWarehouse(bld);
+                }
+            }
         }
         if(gf > 1500 || aii.GetInventory().goods[GoodType::Boards] > 11)
             AddMilitaryBuildJob(whPos);
@@ -463,6 +473,18 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
         if(construction->Wanted(bldToTest[i]))
         {
             AddBuildJobAroundEveryMilBld(bldToTest[i]);
+        }
+    }
+    // Civilization mode: all buildings of the plan taking something from the map also around military buildings
+    if(const civai::ProductionPlan* plan = civAI_ ? civAI_->GetPlan() : nullptr)
+    {
+        for(const civai::Recipe& recipe : civAI_->GetGraph().GetRecipes())
+        {
+            const auto resGatherEnd = bldToTest.begin() + numResGatherBlds;
+            if(plan->managed[recipe.building] && recipe.source.kind != civai::SourceKind::None
+               && std::find(bldToTest.begin(), resGatherEnd, recipe.building) == resGatherEnd
+               && construction->Wanted(recipe.building))
+                AddBuildJobAroundEveryMilBld(recipe.building);
         }
     }
     AddMilitaryBuildJob(bldPos);

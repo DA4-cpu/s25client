@@ -875,7 +875,7 @@ Straßenabschnitt steht. Noch nichts umgesetzt.
 
 ## Neue KI (Konzept, Stand 2026-11-12)
 
-Noch nichts umgesetzt. Ziel: Die KI hat kein Wissen über einzelne Gebäude oder Waren im Code. Sie leitet ihre Wirtschaft
+Schritte 1 und 2 umgesetzt (siehe „Stand Schritt 1“ und „Stand Schritt 2“). Ziel: Die KI hat kein Wissen über einzelne Gebäude oder Waren im Code. Sie leitet ihre Wirtschaft
 aus den Lua-Daten her und liest aus der Karte ab, was es gibt. Neue Rohstoffe und Warenketten funktionieren ohne
 Code-Änderung. Die bisherige KI (AIJH) hat feste Regeln („12 Holzfäller“, „Schlosserei ab …“) und versteht fehlende
 Rohstoffe nicht.
@@ -955,7 +955,8 @@ sein; nur ihre Befehle (Game Commands) gehen ins Spiel. Ziel: im Mittel deutlich
 
 1. Wahrnehmung und Wirtschaftsmodell, nur lesend: Graph und Regionsprofile berechnen und protokollieren, nichts im
    Spiel ändern. Prüfen, ob die KI die Karte versteht; Zeitmessung. *(umgesetzt 2026-11-12, siehe unten)*
-2. Planung ersetzt den Bauplaner (`BuildingPlanner`): Bauwünsche aus der Rückwärtsrechnung.
+2. Planung ersetzt den Bauplaner (`BuildingPlanner`): Bauwünsche aus der Rückwärtsrechnung. *(umgesetzt 2026-11-12,
+   siehe unten)*
 3. Gezielte Expansion über den Regionswert.
 4. Forschung über den Graphen.
 5. Ziele aus der Lage (Gewichte), danach Militär.
@@ -986,6 +987,73 @@ Code in `libs/s25main/ai/civ/`, Namensraum `civai`. Läuft im Zivilisationsmodus
 - Zeiten (Debug-Build, DerGrosseSee, 2 KI): Graph ~0,2 ms und Kartenprofil ~13 ms einmal beim Start, Analyse ~0,4 ms
   alle 3000 GF, Aktualisierung ~0,1 ms je NWF. Erste Fassung ohne Vorberechnung lag bei ~0,33 ms je NWF.
 - Tests: `CivAISuite` (Graph, fehlende Rohstoffe, Expansion, Forschung, schrittweise Aktualisierung).
+
+### Stand Schritt 2 (2026-11-12)
+
+Entscheidungen des Nutzers: Der Planer übernimmt nur Gebäude, die Waren herstellen (eingebaute und aus Lua) und den
+Förster; Militär, Lager, Hafen, Werft, Katapult, Eselzucht und Bibliothek plant weiter AIJH. Die Ziele kommen bis
+Schritt 5 aus dem aktuellen Bedarf plus kleinen Vorräten, die Gewichte stehen im Code (oben in
+`ai/civ/ProductionPlanner.cpp`).
+
+- **Bedarf** (`collectDemand`, je Eintrag „eine von diesen Waren“, z. B. ein Kosteneintrag nach Tags):
+  - Baustellen: Material, das noch nicht bestellt ist; Werkzeuge für die fertigen Gebäude.
+  - Werkzeugreform: leere Werkzeugplätze der Gebäude, dazu je Art Werkzeugplatz 1 Ersatz.
+  - Forschung: noch zu zahlende Waren der laufenden Technologie und das fehlende Wissen.
+  - Soldaten: fehlende Soldaten in Militärgebäuden (Schwert, Schild, Bier je Soldat, wie
+    `nobBaseWarehouse::CanRecruitSoldiers`), Vorrat 20 Soldaten im Lager.
+  - Militär: Münzen (wenn Ränge möglich) und Rüstungen (Leder-Addon), die Militärgebäude aufnehmen.
+  - Expansion als Fluss: alle 2 Minuten das billigste Militärgebäude und ein Soldat. Der Lagerbestand deckt das nicht ab,
+    sonst baut die KI mit den großen Startvorräten lange nichts. Ohne Sägewerk expandiert AIJH nicht.
+  - Vorrat: 15 je Kosteneintrag der Militärgebäude.
+  - Der Lagerbestand deckt den Bedarf in der Reihenfolge der Arten (`applyStock`). Menge / Horizont (5–20 min je Art) =
+    Waren je Minute.
+- **Planung** (`planProduction`, alle 200 GF, KIs versetzt):
+  1. Kosten je Ware über das billigste jetzt nutzbare Rezept (Bellman-Ford). Ein Rezept ist nutzbar, wenn:
+     - das Gebäude erlaubt ist,
+     - seine Quelle im Gebiet liegt,
+     - Baumaterial und Pflichtwerkzeug im Lager oder herstellbar sind,
+     - die Eingänge herstellbar sind.
+
+     Die Kosten sind (1 + Baukosten/10) / Rate + Eingänge. Nebenprodukte (wenn erforscht) zählen als Weg zur Ware.
+     Waren im Lager, die nicht herstellbar sind, gelten als Eingang mit festen Kosten (z. B. Knochen für den
+     Schnitzer).
+  2. Rückwärts durch die Wege: Waren je Minute → Gebäude → Eingänge. Jeder Weg nur so weit, wie seine Quelle reicht
+     (Stücke je Gebäude: Steinhaufen 15, Erz 50, Fisch 40, Tiere 8, Ackerland 20, Kartenobjekte und Anbauflächen 10;
+     Bäume und Wasser ohne Grenze). Der Rest geht auf den nächsten Weg. Nebenprodukte bereits geplanter Gebäude werden
+     angerechnet.
+  3. Förster nach verbrauchten Bäumen, halb so viele bei vielen Bäumen im Gebiet.
+  4. Wissen für die laufende Forschung: Fertige Gebäude geben Punkte (`knowledge.lua`). Baustellen und vom Plan
+     gewollte Gebäude zählen schon. Für den Rest kommen Gebäude mit dem billigsten Punkt dazu (Baukosten je Punkt, halb
+     für Gebäude ohne Eingänge oder mit Bedarf). Was so nicht reicht, kommt über Wissensträger (Schnitzer usw.).
+  5. Material und Werkzeuge der neuen Gebäude und die Wissensträger als zweiter Durchlauf.
+  6. Höchstens 2 Baustellen je Typ. Neue Gebäude insgesamt höchstens Gehilfen im Lager + 2, reihum je Typ eins, damit
+     jede Stufe einer Kette anfängt.
+- AIJH übernimmt `wanted` für alle Typen des Plans (`BuildingPlanner::UpdateBuildingsWanted`) und baut auch die
+  eingebauten Gebäude, die in seiner festen Liste fehlen (Brunnen, Tempel …). Gebäude mit Quelle setzt es auch an
+  Militärgebäuden.
+- Log: alle 6000 GF der Plan (Bedarf je Art, Waren direkt/gesamt, Gebäude gewollt mit Grund, nicht machbar), alle
+  36000 GF die Zeiten.
+- Zeit: Plan im Debug-Build ~0,3–0,8 ms alle 200 GF, Spitzen bis ~5 ms.
+- Vergleich mit der alten Planung (7 Karten, 2 KI, 2 h; je Karte ein Lauf, große Streuung):
+
+  | | alt | neu |
+  |---|---|---|
+  | Land | 82 334 | 75 067 |
+  | Gebäude | 2724 | 1402 |
+  | Militärgebäude | 1546 | 1193 |
+  | Forschung (Ø Technologien) | 15,5 | 14,6 |
+
+  Die neue KI baut nur, was gebraucht wird, also etwa halb so viele Gebäude. Die alte baut z. B. 23 Holzfäller und 15
+  Bauernhöfe auf Vorrat. Die Spiele sind ausgeglichener: Bei der alten KI hatte oft eine Seite 5× so viel Land.
+- Bekannte Grenzen:
+  - Die Raten sind geschätzt: Wirkungsgrad pauschal 0,6, keine gemessene Rückkopplung.
+  - Die Quellgrenzen sind grobe Stückzahlen je Gebäude.
+  - Gebäude, die nur für Wissen gebaut werden, arbeiten oft nicht.
+  - Die Werkzeugwahl der Schlosserei stellt weiter `AdjustSettings`.
+  - AIJH-Regeln, die Gebäude abreißen (Sägewerke, Holzfäller, Förster, Granitminen), laufen weiter.
+- Tests: `CivAISuite` (Kette rückwärts, keine Quelle, Weg nach Quelle und Kapazität, Nebenprodukt, Baustelle, Lager nach
+  Priorität, Förster, Wissen über Gebäude, Plan im Takt). Die KI-Tests in `CivContentSuite`, `CivOutputChoiceSuite`
+  und `CivPlantsAndOresSuite` geben der KI jetzt einen Bedarf (Forschung), statt dass sie Werkstätten pauschal baut.
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 

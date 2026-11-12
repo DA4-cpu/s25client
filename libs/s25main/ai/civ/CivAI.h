@@ -6,6 +6,7 @@
 
 #include "ai/civ/EconomyGraph.h"
 #include "ai/civ/MapProfile.h"
+#include "ai/civ/ProductionPlanner.h"
 #include "helpers/EnumArray.h"
 #include "gameTypes/GoodTypes.h"
 #include <cstdint>
@@ -48,13 +49,13 @@ helpers::EnumArray<WareAnalysis, GoodType> analyzeEconomy(const GameWorldBase& w
 /// Duration of the parts of the AI (microseconds) to keep it cheap
 struct AITimes
 {
-    double graphUs = 0, initialScanUs = 0, analysisUs = 0;
+    double graphUs = 0, initialScanUs = 0, analysisUs = 0, planUs = 0, planMaxUs = 0;
     double updateTotalUs = 0, updateMaxUs = 0;
     unsigned numUpdates = 0;
 };
 
-/// New AI of the civilization mode, step 1 (see DESIGN.md, "Neue KI"): perception and economic model. It only reads
-/// the game and writes what it understands to the log, it gives no commands yet
+/// New AI of the civilization mode (see DESIGN.md, "Neue KI"): perception, economic model (step 1) and the plan of the
+/// production buildings (step 2). It gives no commands itself, the old AI (AIJH) builds what the plan wants
 class CivAI
 {
 public:
@@ -67,11 +68,15 @@ public:
     const MapProfile& GetMap() const { return map_; }
     const helpers::EnumArray<WareAnalysis, GoodType>& GetAnalysis() const { return analysis_; }
     const AITimes& GetTimes() const { return times_; }
+    /// Latest plan of the production buildings, nullptr before the first one
+    const ProductionPlan* GetPlan() const { return hasPlan_ ? &plan_ : nullptr; }
 
     /// Text of the current state: resources, wares per state, times
     std::string GetReport() const;
-    /// Scan the whole map again and analyze (otherwise it is done bit by bit)
+    /// Scan the whole map again, analyze and plan (otherwise it is done bit by bit)
     void Refresh();
+    /// Plan the production buildings for the current demand
+    void Plan();
 
     /// Regions scanned again per NWF (the whole map of 512x512 nodes takes 4096 regions)
     static constexpr unsigned REGIONS_PER_NWF = 16;
@@ -79,6 +84,9 @@ public:
     static constexpr unsigned ANALYSIS_INTERVAL = 3000;
     /// GFs between two log lines with the times
     static constexpr unsigned TIMES_INTERVAL = 36000;
+    /// GFs between two plans (the AIs plan in different GFs) and between two plans in the log
+    static constexpr unsigned PLAN_INTERVAL = 200;
+    static constexpr unsigned PLAN_LOG_INTERVAL = 6000;
 
 private:
     void Analyze();
@@ -90,6 +98,8 @@ private:
     MapProfile map_;
     helpers::EnumArray<WareAnalysis, GoodType> analysis_;
     unsigned lastAnalysisGF_ = 0;
+    ProductionPlan plan_;
+    bool hasPlan_ = false;
 };
 
 } // namespace civai

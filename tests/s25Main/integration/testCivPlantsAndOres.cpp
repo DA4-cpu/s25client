@@ -726,7 +726,14 @@ using BiggerPlantWorldFixture = WorldWithGCExecution<1, 24, 22>;
 BOOST_FIXTURE_TEST_CASE(AIBuildsPlantation, BiggerPlantWorldFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 1);
-    world.SetTechTree(std::make_unique<civ::TechTree>(makeDesc()));
+    // The research costs papyrus: the planner of the new AI wants a plantation
+    WorldDescription desc = makeDesc();
+    TechnologyDesc tech;
+    tech.name = "writing";
+    tech.title = "Writing";
+    tech.cost = {{"PapyrusPlant", 2}};
+    desc.technologies.add(tech);
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
     civ::startGame(world);
     addStartResources();
     auto& hqBld = *world.GetPlayer(curPlayer).GetHQ();

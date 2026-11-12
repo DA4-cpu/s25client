@@ -423,10 +423,17 @@ using BiggerCivWorldFixture = WorldWithGCExecution<1, 24, 22>;
 BOOST_FIXTURE_TEST_CASE(AIBuildsToolWorkshop, BiggerCivWorldFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 1);
-    world.SetTechTree(std::make_unique<civ::TechTree>(makeDesc()));
+    // The research costs a copper saw: the planner of the new AI wants the copperworks
+    WorldDescription desc = makeDesc();
+    TechnologyDesc tech;
+    tech.name = "carpentry";
+    tech.title = "Carpentry";
+    tech.cost = {{"CopperSaw", 1}};
+    desc.technologies.add(tech);
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
     civ::startGame(world);
     addStartResources();
-    // Its input in stock -> the AI builds the copperworks
+    // Its input in stock (it cannot be made here)
     world.GetPlayer(curPlayer).GetHQ()->AddToInventory(GoodCounts::make(GoodType::Coal, 30), true);
     world.InitAfterLoad();
     const BuildingRegister& buildings = world.GetPlayer(curPlayer).GetBuildingRegister();
