@@ -66,6 +66,7 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-11-12 | KI baut Werkstätten mit `outputChoice = "tools"` wie die Schlosserei, sobald die Eingänge im Lager sind; ihre Werkzeug-Regler gelten dort mit. |
 | 2026-11-12 | **`outputRatio`** (Waren pro Arbeitsschritt, 0–8, Kommazahlen) für **alle Gebäude**: Werkstätten in `rttr:AddWorkshop`, eingebaute Gebäude mit `rttr:SetBuildingOutputRatio`, Werkzeuge geben einen Bonus (`outputRatio` in `rttr:AddTool`), der zum Grundwert addiert wird (0,5 + 1 = 1,5 = abwechselnd 1 und 2 Waren). |
 | 2026-11-12 | Mehrere Waren in einem Schritt: Mit `outputChoice` wird **jede Ware einzeln gewählt**; **Nebenprodukte je Ware**. |
+| 2026-11-12 | **Neue KI** (Konzept von Claude, vom Nutzer übernommen): datengetrieben in fünf Schichten (Wahrnehmung, Wirtschaftsmodell, Ziele, Planung, Ausführung), siehe Abschnitt „Neue KI“. Die KI **kennt die ganze Karte**; ihre **Ausrichtung ergibt sich nur aus Karte und Lage** (keine festen Persönlichkeiten); Schwierigkeitsgrade **ohne Boni**; Alternativen kommen über **abstrakte Tags** in den Daten. Alle Schritte so effizient wie möglich. |
 | 2026-11-12 | **Baukosten nach Tags**: jede Ware kann Baumaterial sein. Auch die eingebauten Gebäude bekommen ihre Kosten aus Lua (`rttr:SetBuildingCost`). Kurzform `{ Boards = 2 }` und Langform `{ { tags = ..., amount = ... } }`. Verbaut wird **nur nach Reihenfolge** (erste Hälfte des Fortschritts = Gerüst). Die Baustelle bestellt aus dem **nächsten Lager mit irgendeiner passenden Ware**. |
 
 ## Zuordnung Humankind → Siedler
@@ -871,6 +872,95 @@ Straßenabschnitt steht. Noch nichts umgesetzt.
 - Geld: Was passiert, wenn es für eine Berufsgruppe gar kein passendes Haus gibt?
 - Transport: Welche Forschung schaltet die Trägerstationen frei?
 - Geld: Wofür gilt der Steuersatz (pro Bewohner, Anteil am Lohn, auf Marktkäufe)?
+
+## Neue KI (Konzept, Stand 2026-11-12)
+
+Noch nichts umgesetzt. Ziel: Die KI hat kein Wissen über einzelne Gebäude oder Waren im Code. Sie leitet ihre Wirtschaft
+aus den Lua-Daten her und liest aus der Karte ab, was es gibt. Neue Rohstoffe und Warenketten funktionieren ohne
+Code-Änderung. Die bisherige KI (AIJH) hat feste Regeln („12 Holzfäller“, „Schlosserei ab …“) und versteht fehlende
+Rohstoffe nicht.
+
+### Entscheidungen des Nutzers
+
+- Die KI darf die ganze Karte kennen (kein Nebel, keine Erkundung nötig).
+- Keine festen Persönlichkeiten: Die Ausrichtung ergibt sich nur aus Karte und Lage.
+- Schwierigkeitsgrade ohne Boni, nur über die Qualität der Planung (z. B. wie oft und wie weit sie plant, Reaktionszeit,
+  ob sie Engpässe gezielt sucht).
+- Alternativen stehen in den Daten: Baukosten und Eingänge werden über abstrakte Tags definiert (z. B. „Mauerstein“, auf
+  den Steine, Lehmziegel und Stampflehm passen). Nur solche Alternativen kann die KI wählen.
+
+### Schichten
+
+1. **Wahrnehmung (was gibt es wo):** Karte in Regionen (z. B. Raster ~10×10 Knoten). Je Region ein Ressourcenprofil:
+   Bäume, Steinhaufen, Kartenobjekte aus Lua (Lehm …), Erze im Boden, Fisch, Wasser, Klima/Zone, Bauplätze nach Größe.
+   Die KI kennt die ganze Karte, braucht also keinen Geologen und keine Späher für ihr Wissen.
+2. **Wirtschaftsmodell (was ist machbar):** Beim Spielstart ein Produktionsgraph aus `civ::Content` und den eingebauten
+   Daten: Ware ← Gebäude ← Eingänge/Werkzeuge ← Rohstoffquelle (Kartenobjekt, Erz, Feld …), dazu Baukosten und die
+   Technologie, die das Gebäude freischaltet. Jede Kante hat eine Rate (Waren pro Minute und Gebäude aus Arbeitszeit,
+   `outputRatio`, Tempo, Werkzeugverschleiß). Abgeleitet: welche Waren auf dieser Karte erreichbar sind, welche erst nach
+   Forschung, welche gar nicht.
+3. **Ziele (was will ich):** Wenige Oberziele als Zielraten mit Gewichten, z. B. Baumaterial, Nahrung, Werkzeuge,
+   Soldaten, Wissenspunkte (LWP/IWP/MWP). Die Gewichte ergeben sich aus der Lage (Bedrohung, Kartenprofil, Forschung,
+   Bestände). Utility-Ansatz: Jede mögliche Maßnahme bekommt einen Nutzwert, die besten werden ausgeführt.
+4. **Planung (wie erreiche ich sie):** Rückwärtsrechnung durch den Graphen: Zielrate → nötige Gebäude → deren Eingänge
+   → Rohstoffe. Mehrere Wege zu einer Ware (über Tags): der günstigste nach Kosten, Verfügbarkeit und Entfernung; ein
+   Weg ohne Quelle ist unendlich teuer (keine Steine → Lehmweg). Ergebnis: Bauwünsche und Gebietswünsche.
+5. **Ausführung:** Bauplatzsuche, Straßenbau, Material-Reservierung (aus AIJH übernehmbar). Expansion gezielt: Regionen
+   mit Wert = Knappheit × Menge der Ressourcen − Entfernung − Gefahr; Militärgebäude als Korridor zur Zielregion statt
+   zufälligem Wachstum am Rand.
+
+**Rückkopplung:** geplante gegen gemessene Raten (Statistik, Lagerbestand). Bleibt eine Kette zurück, wird der
+Engpass gesucht (Rohstoff, Werkzeug, Arbeiter, Transport) und gezielt behoben, nicht pauschal mehr gebaut.
+
+**Forschung:** Wert einer Technologie = Nutzen der Ketten, die sie freischaltet, unter den aktuellen Zielen und den
+Ressourcen der Karte, plus der Wert der Technologien, zu denen sie führt. Kupferwerkzeuge ohne erreichbares Kupfer sind
+fast wertlos, Lehmziegel ohne Steine sehr wertvoll.
+
+**Nicht vorgesehen:** GOAP/volle Planungssuche über die Wirtschaft (Kombinationen explodieren), maschinelles Lernen
+(keine Trainingsdaten, bei jeder Inhaltsänderung neu, nicht erklärbar), großer Behavior Tree (wird wieder hartcodiert).
+
+**Erklärbarkeit:** Die KI protokolliert ihre Gründe („Ziel Baumaterial 4/min, Weg Lehmziegel, Engpass Ton, Expansion
+nach Region 12 wegen Lehm“), später als Fenster im Cheat-Modus. Wichtig fürs Balancing. Messstand bleibt ai-battle.
+
+### Rechenleistung
+
+Die KI läuft nur beim Host (`GameClient`: `AddAIPlayer` nur bei `IsHost()`), ihre Rechnung muss also nicht synchron
+sein; nur ihre Befehle (Game Commands) gehen ins Spiel. Ziel: im Mittel deutlich unter 1 ms je KI und GF auf einer
+512×512-Karte mit 8 KIs, keine Spitzen, die das Spiel ruckeln lassen. Maßnahmen:
+
+- **Takt je Schicht:** Wirtschaftsmodell einmal beim Spielstart (die Lua-Daten ändern sich im Spiel nicht), Forschung
+  nur bei Änderungen. Wahrnehmung ereignisgesteuert, Planung alle paar Sekunden Spielzeit, Ausführung je NWF in kleinen
+  Portionen.
+- **Wahrnehmung inkrementell:** Regionsprofile einmal beim Start aus der Karte, danach nur geänderte Regionen neu (Baum
+  gefällt/gepflanzt, Stein abgebaut, Erz abgebaut, Gebiet gewonnen/verloren) statt die Karte neu zu scannen. Der Graph
+  der Regionen (Nachbarschaft, grobe Entfernungen) ersetzt teure Wegsuchen auf Knotenebene für die Bewertung.
+- **Planung billig:** Der Produktionsgraph hat Dutzende bis wenige Hundert Knoten. Eine Rückwärtsrechnung mit
+  Wegewahl ist linear bis n·log n darin (Mikrosekunden). Zyklen (Werkzeuge für die Werkzeugherstellung) mit begrenzter
+  Iteration.
+- **Regionsbewertung:** Bei ~2600 Regionen (512×512) ein Skalarprodukt Ressourcenprofil × Knappheitsgewichte je
+  Region; neu nur, wenn sich die Gewichte deutlich ändern. Entfernungen per Breitensuche auf dem Regionsgraphen.
+- **Teure Schritte mit Budget:** Bauplatzsuche, Wegsuche und Straßenbau als Aufgaben in einer Warteschlange mit festem
+  Budget je GF (Anzahl Suchen bzw. Knoten). Große Aufgaben werden über mehrere GFs verteilt.
+- **KIs versetzt:** Schwere Schritte (Planung, Regionsbewertung) laufen bei mehreren KIs in verschiedenen GFs.
+- **Messen statt mitzählen:** Raten aus den vorhandenen Statistiken und Beständen (gleitende Mittel), keine neuen
+  Ereignisse je Ware.
+- **Datenstrukturen:** flache Felder je Ware/Gebäude/Region (`EnumArray`, Vektoren), keine Maps und keine
+  Speicheranforderungen in häufig laufenden Schleifen.
+- **Kein Nebel-Wissen:** Da die KI die Karte kennt, entfällt die Verwaltung des Erkundeten.
+- Später möglich: Planung in einem eigenen Thread auf einer Momentaufnahme der Daten (die KI ist nicht synchron), nur
+  wenn das Budget sonst nicht reicht.
+- Jede Schicht bekommt eine Zeitmessung im ai-battle (Summe und Spitze je KI), damit Regressionen auffallen.
+
+### Schritte
+
+1. Wahrnehmung und Wirtschaftsmodell, nur lesend: Graph und Regionsprofile berechnen und protokollieren, nichts im
+   Spiel ändern. Prüfen, ob die KI die Karte versteht; Zeitmessung.
+2. Planung ersetzt den Bauplaner (`BuildingPlanner`): Bauwünsche aus der Rückwärtsrechnung.
+3. Gezielte Expansion über den Regionswert.
+4. Forschung über den Graphen.
+5. Ziele aus der Lage (Gewichte), danach Militär.
+
+Jeder Schritt ist für sich testbar und mit der alten KI vergleichbar (ai-battle).
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 
