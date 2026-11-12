@@ -13,7 +13,7 @@
 #include <vector>
 
 class GameWorldBase;
-class Inventory;
+struct Inventory;
 
 namespace civai {
 

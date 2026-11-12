@@ -29,6 +29,8 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <list>
+#include <optional>
 #include <sstream>
 
 namespace civai {
