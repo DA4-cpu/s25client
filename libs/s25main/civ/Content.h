@@ -78,6 +78,34 @@ struct CustomOre
     unsigned tint = 0xFFFFFF;
 };
 
+/// How a workshop chooses its product if it has several (outputChoice)
+enum class ProductChoice : uint8_t
+{
+    /// Exactly one product (or one per input with inheritProperties)
+    None,
+    /// By knowledge type (regulator "Wissen")
+    Knowledge,
+    /// By tool type like the metalworks (tool regulator and tool orders of the player)
+    Tools,
+    /// By an own regulator (rttr:AddRegulator)
+    Regulator
+};
+
+/// Own regulator of the distribution window (rttr:AddRegulator)
+struct Regulator
+{
+    struct Entry
+    {
+        /// Wares belonging to this entry
+        TagQuery tags;
+        std::string title;
+        /// Default value 0..10
+        uint8_t defaultValue = 5;
+    };
+    std::string name, title;
+    std::vector<Entry> entries;
+};
+
 /// Workshop defined in lua (rttr:AddWorkshop)
 struct CustomBuilding
 {
@@ -98,11 +126,18 @@ struct CustomBuilding
     std::vector<std::pair<GoodType, GoodType>> productByInput;
     /// Product if properties are not passed on
     GoodType product = GoodType::Nothing;
-    /// Possible products if the product is chosen by knowledge type (outputChoice = "knowledge"). Otherwise empty.
-    /// The worker picks one of them for each product, weighted by the regulator "Wissen" of the player
+    /// How the product is chosen from productChoices
+    ProductChoice productChoice = ProductChoice::None;
+    /// Possible products if the product is chosen (productChoice != None). Otherwise empty.
+    /// The worker picks one of them for each product according to productChoice
     std::vector<GoodType> productChoices;
-    /// Knowledge type of each entry of productChoices
+    /// ProductChoice::Knowledge: Knowledge type of each entry of productChoices
     std::vector<KnowledgeType> productChoiceTypes;
+    /// ProductChoice::Tools: Tool type of each entry of productChoices
+    std::vector<Tool> productChoiceTools;
+    /// ProductChoice::Regulator: Index of the regulator (Content::GetRegulators) and the entry of each product
+    unsigned regulator = 0;
+    std::vector<unsigned> productChoiceEntries;
     /// Library: stores up to this many knowledge media and produces nothing. 0: normal workshop
     unsigned libraryCapacity = 0;
     /// Collector: Index of the map object (Content::GetMapObject) the worker collects like the stonemason. -1: none
@@ -130,7 +165,7 @@ struct CustomBuilding
 struct ToolMaterial
 {
     std::string name, title;
-    /// Default priority 0..10 of the regulator "Werkzeuge"
+    /// Default priority 0..10 of the regulator "Werkzeuge" (rttr:SetToolMaterialPriorities)
     uint8_t defaultPriority = 5;
 };
 
@@ -214,6 +249,12 @@ public:
     }
     /// All usable wares which match the query
     std::vector<GoodType> FindWares(const TagQuery& query) const;
+    /// Tool type of the ware: The built-in tools themselves and all wares which have the identifier of exactly one
+    /// built-in tool as tag (e.g. a "CopperAxe" with kind = "Axe")
+    std::optional<Tool> GetToolTypeOf(GoodType good) const;
+
+    /// Own regulators of the distribution window (rttr:AddRegulator) in order of definition
+    const std::vector<Regulator>& GetRegulators() const { return regulators_; }
 
     /// Tool reform: True if tools are used in the buildings (tool materials are defined). Then workers of buildings
     /// are recruited without tools, the buildings order their tools, the tools wear out and set the work speed
@@ -253,6 +294,7 @@ private:
     helpers::EnumArray<std::vector<std::string>, GoodType> tags_, properties_;
     std::vector<GoodType> knowledgeMedia_;
     helpers::EnumArray<uint8_t, KnowledgeType> defaultKnowledgeDistribution_;
+    std::vector<Regulator> regulators_;
     std::vector<ToolMaterial> toolMaterials_;
     helpers::EnumArray<std::optional<ToolInfo>, GoodType> tools_;
     helpers::EnumArray<BuildingTools, BuildingType> buildingTools_;

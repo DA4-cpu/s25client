@@ -8,6 +8,7 @@
 #include "civ/TechTree.h"
 #include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 class SerializedGameData;
@@ -59,6 +60,12 @@ public:
     ToolMaterialPriorities GetToolMaterialPriorities(const Content& content) const;
     void SetToolMaterialPriorities(const ToolMaterialPriorities& priorities);
 
+    /// Values 0..10 of an own regulator (rttr:AddRegulator), one per entry: Which product workshops with
+    /// outputChoice = <name of the regulator> make. Default (from lua) until the player changes it
+    using RegulatorValues = std::vector<uint8_t>;
+    RegulatorValues GetRegulatorValues(const Content& content, unsigned regulator) const;
+    void SetRegulatorValues(const Content& content, unsigned regulator, const RegulatorValues& values);
+
     void Serialize(SerializedGameData& sgd, const TechTree& techTree) const;
     void Deserialize(SerializedGameData& sgd, const TechTree& techTree);
 
@@ -70,6 +77,8 @@ private:
     /// Set by the player, otherwise the default of the tech tree is used
     std::optional<KnowledgeDistribution> knowledgeDistribution_;
     std::optional<ToolMaterialPriorities> toolMaterialPriorities_;
+    /// Values of the regulators set by the player: Name of the regulator -> values
+    std::map<std::string, RegulatorValues> regulatorValues_;
 };
 
 } // namespace civ

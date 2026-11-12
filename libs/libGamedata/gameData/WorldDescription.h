@@ -56,6 +56,10 @@ struct WorldDescription
     unsigned toolReorderPercent = 10;
     /// Default setting of the regulator "Wissen" (weights 0..10 for LWP, IWP, MWP). Not set: all equal
     std::optional<KnowledgeValues> knowledgeDistribution;
+    /// Default setting of the regulator "Werkzeuge": Tool material identifier -> priority 0..10. Not set: 5
+    std::map<std::string, unsigned> toolMaterialPriorities;
+    /// Own regulators of the distribution window (rttr:AddRegulator) in order of definition
+    std::vector<RegulatorDesc> regulators;
     /// Random map generator: climate, zones and resource rules (gamedata/world/mapgen.lua)
     MapGenDesc mapGen;
     // Convenience accessors

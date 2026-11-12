@@ -2921,8 +2921,36 @@ unsigned AIPlayerJH::GetNumAIRelevantSeaIds() const
 void AIPlayerJH::AdjustSettings()
 {
     const Inventory& inventory = aii.GetInventory();
+    const bool civMode = civ::isEnabled(gwb);
+    const civ::Content& content = civ::getActiveContent();
+    // Civilization mode: Workshops making tools (outputChoice = "tools") also use the tool regulator
+    bool hasToolWorkshop = false;
+    if(civMode)
+    {
+        for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
+        {
+            const BuildingType bld = getCustomBuilding(i);
+            if(content.GetBuilding(bld)->productChoice == civ::ProductChoice::Tools
+               && bldPlanner->GetNumBuildings(bld) > 0u)
+                hasToolWorkshop = true;
+        }
+    }
+    // Tools in stock of the type of the given built-in tool. Civilization mode: all wares of that type (e.g. copper
+    // axes, too)
+    const auto toolStock = [&](const GoodType good) {
+        if(!civMode)
+            return inventory[good];
+        const auto tool = content.GetToolTypeOf(good);
+        unsigned result = 0;
+        for(const auto other : helpers::enumRange<GoodType>())
+        {
+            if(other == good || (tool && content.IsUsed(other) && content.GetToolTypeOf(other) == tool))
+                result += inventory[other];
+        }
+        return result;
+    };
     // update tool creation settings
-    if(bldPlanner->GetNumBuildings(BuildingType::Metalworks) > 0u)
+    if(bldPlanner->GetNumBuildings(BuildingType::Metalworks) > 0u || hasToolWorkshop)
     {
         ToolSettings toolsettings{};
         const auto calcToolPriority = [&](const Tool tool) {
@@ -2955,29 +2983,29 @@ void AIPlayerJH::AdjustSettings()
         for(const Tool tool : {Tool::Axe, Tool::Saw, Tool::PickAxe, Tool::Crucible})
             toolsettings[tool] = calcToolPriority(tool);
         // Set some minima
-        if(inventory[GoodType::Saw] < 2)
+        if(toolStock(GoodType::Saw) < 2)
             toolsettings[Tool::Saw] = 2;
-        if(inventory[GoodType::Axe] < 2)
+        if(toolStock(GoodType::Axe) < 2)
             toolsettings[Tool::Axe] = 2;
-        if(inventory[GoodType::PickAxe] < 2)
+        if(toolStock(GoodType::PickAxe) < 2)
             toolsettings[Tool::PickAxe] = 2;
-        if(inventory[GoodType::Shovel] < 2)
+        if(toolStock(GoodType::Shovel) < 2)
             toolsettings[Tool::Shovel] = 2;
-        if(inventory[GoodType::Scythe] < 2)
+        if(toolStock(GoodType::Scythe) < 2)
             toolsettings[Tool::Scythe] = 2;
-        if(inventory[GoodType::Crucible] < 1)
+        if(toolStock(GoodType::Crucible) < 1)
             toolsettings[Tool::Crucible] = 1;
-        if(inventory[GoodType::Tongs] < 1)
+        if(toolStock(GoodType::Tongs) < 1)
             toolsettings[Tool::Tongs] = 1;
-        if(inventory[GoodType::Hammer] < 1)
+        if(toolStock(GoodType::Hammer) < 1)
             toolsettings[Tool::Hammer] = 1;
-        if(inventory[GoodType::Rollingpin] < 1)
+        if(toolStock(GoodType::Rollingpin) < 1)
             toolsettings[Tool::Rollingpin] = 1;
-        if(inventory[GoodType::Cleaver] < 1)
+        if(toolStock(GoodType::Cleaver) < 1)
             toolsettings[Tool::Cleaver] = 1;
-        if(inventory[GoodType::RodAndLine] < 1)
+        if(toolStock(GoodType::RodAndLine) < 1)
             toolsettings[Tool::RodAndLine] = 1;
-        if(inventory[GoodType::Bow] < 1)
+        if(toolStock(GoodType::Bow) < 1)
             toolsettings[Tool::Bow] = 1;
         /* Only if we haven't ordered any basic tool, we may order other tools
         if(toolsettings[Tool::Axe] == 0 && toolsettings[Tool::PickAxe] == 0 && toolsettings[Tool::Saw] == 0 && toolsettings[Tool::Crucible] == 
@@ -3006,7 +3034,7 @@ void AIPlayerJH::AdjustSettings()
         // Civilization mode, tool reform: The tools are used in the buildings and wear out. Make the tools the
         // buildings are missing first, and the more of a tool is missing the more of it
         bool toolShortage = false;
-        if(civ::isEnabled(gwb) && gwb.GetTechTree().GetContent().HasToolReform())
+        if(civMode && content.HasToolReform())
         {
             for(const auto tool : helpers::enumRange<Tool>())
             {
@@ -3019,10 +3047,11 @@ void AIPlayerJH::AdjustSettings()
                     for(const nobUsual* bld : aii.GetBuildings(bldType))
                         numMissing += bld->GetNumMissingTools(good);
                 }
-                if(numMissing > inventory[good])
+                const unsigned numInStock = toolStock(good);
+                if(numMissing > numInStock)
                 {
                     toolShortage = true;
-                    const unsigned priority = std::min(10u, 3u + numMissing - inventory[good]);
+                    const unsigned priority = std::min(10u, 3u + numMissing - numInStock);
                     toolsettings[tool] = std::max<unsigned>(toolsettings[tool], priority);
                 }
             }

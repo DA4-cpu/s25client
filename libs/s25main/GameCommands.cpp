@@ -12,6 +12,7 @@
 #include "buildings/nobMilitary.h"
 #include "buildings/nobShipYard.h"
 #include "buildings/nobTemple.h"
+#include "civ/Content.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "enum_cast.hpp"
@@ -290,6 +291,17 @@ void SetToolMaterialPriorities::Execute(GameWorld& world, uint8_t playerId)
     if(values.size() != numMaterials)
         return;
     world.GetPlayer(playerId).GetResearch().SetToolMaterialPriorities(values);
+}
+
+void SetRegulatorValues::Execute(GameWorld& world, uint8_t playerId)
+{
+    if(!civ::isEnabled(world))
+        return;
+    const civ::Content& content = world.GetTechTree().GetContent();
+    const auto& regulators = content.GetRegulators();
+    if(regulator >= regulators.size() || values.size() != regulators[regulator].entries.size())
+        return;
+    world.GetPlayer(playerId).GetResearch().SetRegulatorValues(content, regulator, values);
 }
 
 void SetArmorAllowed::Execute(GameWorld& world, uint8_t playerId)

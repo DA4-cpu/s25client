@@ -55,7 +55,7 @@ ToolDesc makeTool(const std::string& ware, const std::string& material, unsigned
     return desc;
 }
 
-/// Materials iron (priority 5) and copper (priority 3).
+/// Materials iron (priority 5) and copper (priority 3, see rttr:SetToolMaterialPriorities).
 /// The woodcutter uses an axe: the built-in one (iron) or the new copper axe (ware 0).
 /// The sawmill works slowly without tools and uses the new test saw (ware 1, copper, 10 work steps).
 /// Replacements are ordered at once (the carriers are busy with the wood, so they take some time)
@@ -67,11 +67,10 @@ WorldDescription makeDesc()
     ToolMaterialDesc iron, copper;
     iron.name = "Iron";
     iron.title = "Eisen";
-    iron.priority = 5;
     copper.name = "Copper";
     copper.title = "Kupfer";
-    copper.priority = 3;
     desc.toolMaterials = {iron, copper};
+    desc.toolMaterialPriorities = {{"Iron", 5}, {"Copper", 3}};
     desc.tools = {makeTool("Axe", "Iron", 4, 100), makeTool("CopperAxe", "Copper", 2, 50),
                   makeTool("TestSaw", "Copper", 10, 100)};
     BuildingToolsDesc woodcutter, sawmill;
@@ -134,8 +133,9 @@ BOOST_AUTO_TEST_CASE(ToolsFromLua)
     const std::string base = R"(
 rttr:AddWare{ name = "CopperScythe", kind = "Scythe", look = "Scythe", transport = "Scythe" }
 rttr:AddWare{ name = "Plough", look = "Hammer", transport = "Hammer" }
-rttr:AddToolMaterial{ name = "Iron", title = "Eisen", priority = 7 }
+rttr:AddToolMaterial{ name = "Iron", title = "Eisen" }
 rttr:AddToolMaterial{ name = "Copper" }
+rttr:SetToolMaterialPriorities{ Iron = 7 }
 rttr:AddTool{ ware = "Scythe", material = "Iron", durability = 100, speed = 100 }
 rttr:AddTool{ ware = "CopperScythe", material = "Copper", durability = 40, speed = 60 }
 rttr:AddTool{ ware = "Plough", material = "Iron", durability = 300, speed = 50 }
@@ -221,7 +221,9 @@ rttr:AddWorkshop{ name = "Thresher", size = "small", cost = { Boards = 2 }, look
         return result.replace(pos, from.size(), to);
     };
     for(const std::string& invalid :
-        {replaced("priority = 7", "priority = 11"), replaced("durability = 100", "durability = 0"),
+        {replaced("Iron = 7", "Iron = 11"), replaced("Iron = 7", "Iron = \"high\""),
+         replaced("title = \"Eisen\" }", "title = \"Eisen\", priority = 7 }"),
+         base + "\nrttr:SetToolMaterialPriorities{ Copper = 2 }", replaced("durability = 100", "durability = 0"),
          replaced("speed = 60", "speed = 2000"), replaced("rttr:SetToolReorder(20)", "rttr:SetToolReorder(101)"),
          replaced("Mill = { baseSpeed = 70 }", "Mill = { baseSpeed = 0 }"),
          replaced("Mill = { baseSpeed = 70 }", "Mill = { speed = 70 }"),
@@ -241,9 +243,10 @@ rttr:AddWorkshop{ name = "Thresher", size = "small", cost = { Boards = 2 }, look
          replaced("tools = { \"Scythe\", \"Plough\" }", "tools = { \"Sickle\" }"),
          replaced("tools = { \"Scythe\", \"Plough\" }", "tools = { \"Scythe\", \"CopperScythe\" }"),
          replaced("Mill = { baseSpeed = 70 }", "Barracks = { baseSpeed = 70 }"),
-         replaced("Mill = { baseSpeed = 70 }", "Joinery = { baseSpeed = 70 }"),
-         replaced("rttr:AddToolMaterial{ name = \"Iron\", title = \"Eisen\", priority = 7 }\n"
-                  "rttr:AddToolMaterial{ name = \"Copper\" }",
+         replaced("Mill = { baseSpeed = 70 }", "Joinery = { baseSpeed = 70 }"), replaced("Iron = 7", "Bronze = 7"),
+         replaced("rttr:AddToolMaterial{ name = \"Iron\", title = \"Eisen\" }\n"
+                  "rttr:AddToolMaterial{ name = \"Copper\" }\n"
+                  "rttr:SetToolMaterialPriorities{ Iron = 7 }",
                   "")})
     {
         WorldDescription invalidDesc;

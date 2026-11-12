@@ -47,17 +47,13 @@ struct WareTagsDesc
     std::vector<std::string> properties;
 };
 
-/// Worker of a workshop
 /// Material of tools (rttr:AddToolMaterial), e.g. iron
 struct ToolMaterialDesc
 {
-    /// Unique identifier, also a property tag of the tools made of it
+    /// Unique identifier
     std::string name;
     /// Displayed name
     std::string title;
-    /// Default priority 0..10 of the regulator "Werkzeuge": Buildings order the tool with the highest priority that is
-    /// in stock, 0 = never
-    unsigned priority = 5;
 
     ToolMaterialDesc() = default;
     explicit ToolMaterialDesc(const kaguya::LuaTable& luaData);
@@ -88,6 +84,7 @@ struct BuildingToolsDesc
     std::vector<TagQuery> tools;
 };
 
+/// Worker of a workshop
 struct WorkerDesc
 {
     std::string title;
@@ -157,10 +154,14 @@ struct WorkshopDesc
     bool consumeEach = true;
     /// Tag query of the product
     TagQuery output;
+    /// Alternative to output: List of products, each a tag query that must match exactly one ware
+    std::vector<TagQuery> outputs;
     /// True: the product gets the properties of the consumed input ware
     bool inheritProperties = false;
-    /// How the product is chosen if the output matches several wares. Empty: the output must match exactly one
-    /// ware. "knowledge": by knowledge type of the products (regulator "Wissen" in the distribution window)
+    /// How the product is chosen if there are several (output matches several wares or outputs has several entries).
+    /// Empty: there must be exactly one product. "knowledge": by knowledge type of the products (regulator "Wissen"),
+    /// "tools": by tool type like the metalworks (tool regulator and tool orders), otherwise the name of a regulator
+    /// (rttr:AddRegulator)
     std::string outputChoice;
     /// Library: Orders and stores up to this many knowledge media (all wares with knowledge points) and produces
     /// nothing. 0: normal workshop
@@ -192,6 +193,29 @@ struct WorkshopDesc
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);
 };
 
+/// Regulator in the distribution window (rttr:AddRegulator): Workshops with outputChoice = <name> choose their product
+/// weighted by the values of the entries
+struct RegulatorDesc
+{
+    struct Entry
+    {
+        /// Wares (products) belonging to this entry
+        TagQuery tags;
+        /// Displayed name
+        std::string title;
+        /// Default value 0..10
+        unsigned value = 5;
+    };
+    /// Unique identifier, used in workshops (outputChoice) and savegames
+    std::string name;
+    /// Displayed name (tooltip of the tab)
+    std::string title;
+    std::vector<Entry> entries;
+
+    RegulatorDesc() = default;
+    explicit RegulatorDesc(const kaguya::LuaTable& luaData);
+};
+
 /// Byproduct of a building as read from lua (rttr:AddByproduct):
 /// Whenever the worker of the building carries out a product, he also brings the byproduct to the flag
 struct ByproductDesc
@@ -219,3 +243,8 @@ BuildingToolsDesc parseBuildingTools(const kaguya::LuaTable& luaData, const std:
 constexpr unsigned MAX_BUILDING_TOOLS = 4;
 /// Maximum number of tool materials
 constexpr unsigned MAX_TOOL_MATERIALS = 8;
+/// Maximum number of entries in outputs of a workshop
+constexpr unsigned MAX_WORKSHOP_OUTPUTS = 16;
+/// Maximum number of regulators (rttr:AddRegulator) and of entries per regulator
+constexpr unsigned MAX_REGULATORS = 8;
+constexpr unsigned MAX_REGULATOR_ENTRIES = 8;

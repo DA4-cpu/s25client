@@ -292,7 +292,7 @@ rttr:AddMapResource{
 rttr:AddMapResource{
 	name = "Kupfer",
 	object = "Copper", -- Erz aus civ/mapobjects.lua (rttr:AddOre), wird mit Kohle, Eisen, Gold und Granit verteilt
-	amount = 1.5, -- PLATZHALTER
+	amount = 20, -- PLATZHALTER
 	terrain = { "mountain" },
 	cluster = 6, 
 	density = 60, 

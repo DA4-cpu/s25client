@@ -12,6 +12,7 @@
 
 class GameCommandFactory;
 class GameWorldViewer;
+class ctrlTab;
 
 class iwDistribution final : public TransmitSettingsIgwAdapter
 {
@@ -55,4 +56,12 @@ private:
     bool toolsChanged = false;
     unsigned GetToolTabId() const { return static_cast<unsigned>(groups.size()) + (hasKnowledgeTab ? 1u : 0u); }
     void SetToolValues(const std::vector<uint8_t>& values);
+
+    /// Civilization mode: One tab per own regulator (rttr:AddRegulator) after the tab "Werkzeuge"
+    std::vector<bool> regulatorsChanged;
+    unsigned GetRegulatorTabId(unsigned regulator) const { return GetToolTabId() + (hasToolTab ? 1u : 0u) + regulator; }
+    void SetRegulatorValues(unsigned regulator, const std::vector<uint8_t>& values);
+    /// Fill a tab with one regulator (progress bar) per name and a text below
+    void AddRegulatorTab(ctrlTab& tab, unsigned tabId, glArchivItem_Bitmap* img, const std::string& tooltip,
+                         const std::vector<std::string>& names, const std::string& text);
 };

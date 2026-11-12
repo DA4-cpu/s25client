@@ -60,6 +60,10 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-11-11 | Welches Material ein Gebäude bestellt, **stellt der Spieler ein** (Regler „Werkzeuge“ im Verteilungsfenster, Wert 0–10 je Material). |
 | 2026-11-11 | Ersatz wird **kurz vor dem Bruch** bestellt und wartet als zweites Werkzeug im Gebäude (Abweichung von „nur ein Werkzeug je Typ“). |
 | 2026-11-11 | Erster Schritt: nur die 12 vorhandenen Werkzeuge (Material Eisen) plus das System; weitere Materialien trägt der Nutzer in Lua ein. |
+| 2026-11-12 | Werkstätten mit mehreren Produkten: neues Feld **`outputs`** (Liste, jeder Eintrag eine Tag-Abfrage für genau eine Ware; ein Text = ein Tag, eine Liste = alle Tags). `output` bleibt wie bisher. |
+| 2026-11-12 | **`outputChoice = "tools"`**: Die Werkstatt (z. B. Kupferwerkstatt) teilt sich **Werkzeug-Regler und Bestellungen** mit der Schlosserei, Zuordnung über den Werkzeugtyp (`kind = "Axe"`). Eine Bestellung erfüllt, wer das Werkzeug zuerst anfängt. |
+| 2026-11-12 | Neue Datei **`distribution.lua`**: eigene Regler für `outputChoice` (`rttr:AddRegulator`, je ein Reiter im Verteilungsfenster) und die Startwerte der Regler „Wissen“ und „Werkzeuge“ (vorher `knowledge.lua` bzw. `priority` in `tools.lua`). |
+| 2026-11-12 | KI baut Werkstätten mit `outputChoice = "tools"` wie die Schlosserei, sobald die Eingänge im Lager sind; ihre Werkzeug-Regler gelten dort mit. |
 
 ## Zuordnung Humankind → Siedler
 
@@ -160,8 +164,9 @@ null. `ai-battle` zeigt die WP jedes Spielers als „verfügbar/gesamt“ an.
 | Waren, Werkstätten, Tags aus Lua | `libs/libGamedata/gameData/CivContentDesc.*`, `libs/s25main/civ/Content.*`, `civ/Looks.h`, `figures/nofCustomWorker.*` |
 | Nebenprodukte | `ByproductDesc` (`CivContentDesc.*`), `civ::Byproduct` (`TechTree.*`), `civ::getByproducts` (`Research.*`), `nofBuildingWorker::WorkingReady` |
 | Regler „Wissen“ | `PlayerResearch::Get/SetKnowledgeDistribution`, `gc::SetKnowledgeDistribution`, `iwDistribution` (Reiter), `nofCustomWorker::ProduceWare` |
+| Eigene Regler, `outputChoice = "tools"` | `civ::Regulator`, `PlayerResearch::Get/SetRegulatorValues`, `gc::SetRegulatorValues`, `iwDistribution::AddRegulatorTab`, `nofCustomWorker::ChooseTool` / `ChooseWeightedProduct` |
 | Medien-WP, Bibliothek | `civ::calcTotalKnowledge` (`Knowledge.cpp`), `nobUsual` (Bibliotheks-Modus), `iwBuilding`, KI: `BuildingPlanner::UpdateCustomBuildingsWanted` |
-| Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua`, `knowledge.lua`, `techtree.lua`, `byproducts.lua`) |
+| Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua`, `knowledge.lua`, `distribution.lua`, `tools.lua`, `techtree.lua`, `byproducts.lua`) |
 
 ## Wissenspunkte
 
@@ -240,18 +245,33 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   beim Ablegen geprüft. Ist an der Flagge nicht für alles Platz, wartet der Arbeiter mit dem Produkt wie bei voller
   Flagge, bis genug Plätze frei sind. Es wird also nichts zurückgelassen, und der Spielstand braucht keine neuen Daten.
 
-### Mehrere mögliche Produkte
+### Mehrere mögliche Produkte (Stand 2026-11-12)
 
-- `outputChoice = "knowledge"` erlaubt, dass `output` mehrere Waren trifft (geritzte Knochen LWP/IWP/MWP). Jede davon
-  braucht `knowledge` in `wares.lua`. Welche hergestellt wird, entscheidet später der Regler „Wissen“ (Schritt 4b);
-  bis dahin wählt der Arbeiter mit dem synchronen Spiel-Zufall gleich verteilt.
+- Produkte: `output` (eine Tag-Abfrage, darf mit `outputChoice` mehrere Waren treffen) oder `outputs` (Liste, jeder
+  Eintrag trifft genau eine Ware, höchstens 16; nicht für Sammler, Plantagen, Minen und nicht mit `inheritProperties`).
+  Mehr als ein Produkt braucht `outputChoice`. Aufgelöst in `civ::Content` (`CustomBuilding::productChoice`,
+  `productChoices`).
+- `outputChoice = "knowledge"`: nach dem Regler „Wissen“; jedes Produkt braucht `knowledge` in `wares.lua` (genau eine
+  Art).
+- `outputChoice = "tools"`: wie die Schlosserei (`nofCustomWorker::ChooseTool`). Jedes Produkt ist ein Werkzeugtyp
+  (`Content::GetToolTypeOf`: der Bezeichner genau eines eingebauten Werkzeugs als Tag), jeder Typ höchstens einmal.
+  Beim Arbeitsbeginn zuerst Bestellungen (`GamePlayer::ToolOrderProcessed`, Meldung „Completed the ordered amount of
+  tools.“ wenn keine mehr offen sind), dann gewichtet mit den Werkzeug-Prioritäten. Alle 0: Addon
+  „Schlosserei bei 0“ entscheidet (nichts oder irgendeins). Wartet sie, weckt sie ein neuer Auftrag oder eine neue
+  Einstellung (`ToolNote`).
+- `outputChoice = <Name>`: eigener Regler aus `distribution.lua` (`rttr:AddRegulator`, höchstens 8 Regler mit je
+  höchstens 8 Einträgen). Jedes Produkt trifft genau einen Eintrag (Tag-Abfrage `tags`). Gewichtete Zufallswahl wie
+  beim Regler „Wissen“, alle 0 = gleich verteilt. Werte je Spieler nach Reglername (`PlayerResearch::
+  Get/SetRegulatorValues`, Befehl `gc::SetRegulatorValues`), Reiter im Verteilungsfenster mit „Standard“-Knopf.
+- Spielstand Version 23: Reglerwerte (nach Name; unbekannte Regler fallen weg, neue Einträge bekommen den Startwert)
+  und das gewählte Werkzeug des Arbeiters.
 
 ### Regler „Wissen“ und Bibliothek (Schritte 4b, 4c)
 
 - Reiter „Wissen“ im Verteilungsfenster (nur im Zivilisationsmodus und wenn es Wissensmedien gibt): drei Regler
   LWP/IWP/MWP. Eigener Spielbefehl `gc::SetKnowledgeDistribution`, gespeichert in `civ::PlayerResearch`
   (Spielstand-Version 19). Das normale Verteilungssystem bleibt unverändert.
-- Startwerte: `rttr:SetKnowledgeDistribution{ LWP = 5, IWP = 5, MWP = 5 }` in `knowledge.lua` (ohne Angabe 5/5/5).
+- Startwerte: `rttr:SetKnowledgeDistribution{ LWP = 5, IWP = 5, MWP = 5 }` in `distribution.lua` (ohne Angabe 5/5/5).
 - Bibliothek: Werkstatt mit `library = { capacity = 20 }` (ohne inputs/output/workTime). Sie ist Abnehmer aller
   Wissensmedien, bestellt sie alle 10 Sekunden aus den Lagern (eins pro Durchlauf), solange Platz ist. „Produktion
   stoppen“ stoppt die Annahme. Das Gebäudefenster zeigt den Bestand. Wird sie zerstört, sind die Medien verloren.
@@ -260,7 +280,7 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   (höchstens 5). Werkzeuge bestellt sie über die vorhandene Werkzeug-Logik.
 - KI und Regler (Wunsch des Nutzers 2026-10-23): Alle 200 GF (10 Sekunden) stellt die KI den Regler nach den WP ein,
   die ihrer aktuellen Forschung noch fehlen: die am meisten fehlende Art 10, andere fehlende anteilig (mindestens 1),
-  nicht benötigte 0. Forscht sie nichts oder fehlen keine WP: Startwerte aus `knowledge.lua`. Einstellbar oben in
+  nicht benötigte 0. Forscht sie nichts oder fehlen keine WP: Startwerte aus `distribution.lua`. Einstellbar oben in
   `libs/s25main/ai/aijh/AIPlayerJH.cpp` (`KNOWLEDGE_DISTRIBUTION_INTERVAL_GF`, `KNOWLEDGE_WEIGHT_NOT_NEEDED`,
   `KNOWLEDGE_WEIGHT_MOST_NEEDED`), Logik in `AIPlayerJH::AdjustKnowledgeDistribution`.
 
@@ -406,7 +426,7 @@ sonst gilt das alte System.
   Werkzeuge haben eine niedrige Transportpriorität; bei vollen Straßen dauert die Lieferung.
 - **Material:** Regler „Werkzeuge“ je Spieler (`PlayerResearch::GetToolMaterialPriorities`, Befehl
   `gc::SetToolMaterialPriorities`). Bestellt wird das vorrätige Werkzeug mit dem höchsten Wert, bei Gleichstand das
-  schnellere; 0 = nie.
+  schnellere; 0 = nie. Startwerte seit 2026-11-12 in `distribution.lua` (`rttr:SetToolMaterialPriorities`).
 - **Inventar:** Werkzeuge im Gebäude zählen nicht mehr zum Inventar des Spielers (wie verbrauchte Waren). So stimmen
   die Formeln der KI „Werkzeuge + Arbeiter“ weiter.
 - **Abriss:** Der Arbeiter nimmt Werkzeuge mit mindestens halber Haltbarkeit und den Ersatz mit ins Lager
@@ -415,13 +435,16 @@ sonst gilt das alte System.
   rechts das Tempo. Verteilungsfenster hat den Reiter „Werkzeuge“.
 - **KI:** Stellt zuerst die Werkzeuge her, die ihren Gebäuden fehlen (`AdjustSettings`), und gibt der Schlosserei so
   lange Eisen und Bretter vor der Waffenschmiede. Der Bauplaner zählt Spitzhacken im Lager als mögliche Bergleute und
-  Steinmetze.
+  Steinmetze. Seit 2026-11-12 zählt sie alle Werkzeuge eines Typs (auch Kupferäxte) und stellt die Werkzeug-Regler
+  auch ein, wenn sie nur eine Werkstatt mit `outputChoice = "tools"` hat. Diese baut sie, sobald alle Eingänge im
+  Lager sind: 1, dazu 1 je 20 Waren des knappsten Eingangs, höchstens 3. Mögliche Arbeiter einer Lua-Werkstatt unter
+  der Reform: Helfer, wenn sie ohne Werkzeug arbeitet, sonst die vorrätigen Werkzeuge ihres ersten Platzes.
 - **Spielstand:** Version 22. Ältere Spielstände im Zivilisationsmodus laden; die Gebäude haben dann keine Werkzeuge und
   bestellen sie.
 
 ### Startwerte in `tools.lua` (von Claude gesetzt, der Nutzer balanciert)
 
-- Material Eisen (Vorrang 5), alle 12 Werkzeuge: Haltbarkeit 150 Schritte, Tempo +100.
+- Material Eisen, alle 12 Werkzeuge: Haltbarkeit 150 Schritte, Tempo +100. Vorrang in `distribution.lua`.
 - `baseSpeed` 0 für alle Gebäude mit Werkzeug, außer der Kette, die neue Werkzeuge ermöglicht: Holzfäller, Sägewerk,
   Steinbruch, alle Minen und Eisenschmelze 25, Schlosserei 50. Sonst gäbe es nach dem Bruch des letzten Werkzeugs nie
   wieder welche.
@@ -839,7 +862,8 @@ Sichtweiten) als auch mit den alten Werten (HQ 9, Militär 8–11). Ohne Soundka
   Baustelle eröffnet. `MilitarySitesNeedSoldiers` schaltet die HQ-Reserve ab (sonst hält das HQ 1 Soldaten je Rang
   zurück).
 - `AIBuildsWorkshopsAndLibraries` nennt die Werkstatt `BoneCarver`: Von den Lua-Werkstätten mit Eingängen baut die KI
-  nur diese (`BuildingPlanner::UpdateCustomBuildingsWanted`).
+  nur diese und Werkstätten mit `outputChoice = "tools"` (`BuildingPlanner::UpdateCustomBuildingsWanted`, Test
+  `AIBuildsToolWorkshop`).
 - Seefahrt: Die Erkundungsfahrt erkundet zuerst Hafen 6, weil Hafen 8 über den Kartenrand nur etwa 16 Knoten vom
   Heimathafen entfernt ist und das Erkundungsschiff (`VISUALRANGE_EXPLORATION_SHIP`) ihn schon von dort sieht.
 - **Cheat-Modus (Entscheidung 2026-11-10):** Im Einzelspielerspiel von Anfang an an, im Mehrspielerspiel aus und nicht

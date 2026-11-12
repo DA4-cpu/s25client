@@ -169,6 +169,11 @@ bool GameCommandFactory::SetToolMaterialPriorities(const std::vector<uint8_t>& v
     return AddGC(new gc::SetToolMaterialPriorities(values));
 }
 
+bool GameCommandFactory::SetRegulatorValues(const unsigned regulator, const std::vector<uint8_t>& values)
+{
+    return AddGC(new gc::SetRegulatorValues(static_cast<uint8_t>(regulator), values));
+}
+
 bool GameCommandFactory::SetResearch(std::optional<unsigned> techIdx)
 {
     RTTR_Assert(!techIdx || *techIdx < gc::SetResearch::STOP_RESEARCH);

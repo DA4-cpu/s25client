@@ -123,7 +123,8 @@
 /// 20: Civilization mode: Map objects defined in lua (deposits) and their collectors, map objects in the signature
 /// 21: Civilization mode: Ores defined in lua (resources with 16 bit), growing deposits and plantations, climate
 /// 22: Civilization mode: Tool reform (tools in buildings, work speed, regulator "Werkzeuge" of players)
-static const unsigned currentGameDataVersion = 22;
+/// 23: Civilization mode: Own regulators of the players, product of workshops with outputChoice = "tools"
+static const unsigned currentGameDataVersion = 23;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

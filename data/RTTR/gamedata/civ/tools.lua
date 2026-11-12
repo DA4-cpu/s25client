@@ -19,9 +19,8 @@ Ohne Material in dieser Datei bleibt alles beim alten Werkzeugsystem.
 rttr:AddToolMaterial{...}: Material der Werkzeuge
   name      Bezeichner. Nur A-Z, a-z, 0-9 und _.
   title     Anzeigename
-  priority  Startwert 0..10 im Regler "Werkzeuge" (Fenster "Verteilung"). Ein Gebäude bestellt das vorrätige Werkzeug
-            mit dem höchsten Wert, bei Gleichstand das schnellere. 0 = dieses Material nie bestellen.
-            Höchstens 8 Materialien. Neue Materialien immer hinten anfügen (Spielstände).
+  Höchstens 8 Materialien. Neue Materialien immer hinten anfügen (Spielstände). Den Startwert im Regler "Werkzeuge"
+  (Vorrang beim Bestellen) setzt distribution.lua mit rttr:SetToolMaterialPriorities.
 
 rttr:AddTool{...}: macht eine Ware (eingebaut oder aus wares.lua) zum Werkzeug
   ware        Bezeichner der Ware
@@ -44,7 +43,7 @@ rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nu
   hat. Es wartet im Gebäude, bis das alte kaputt ist.
 ]]
 
-rttr:AddToolMaterial{ name = "Iron", title = "Eisen", priority = 8 }
+rttr:AddToolMaterial{ name = "Iron", title = "Eisen" }
 
 rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 150, speed = 100 } -- Zange
 rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 150, speed = 100 } -- Hammer
@@ -59,7 +58,7 @@ rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 150, speed = 
 rttr:AddTool{ ware = "Rollingpin", material = "Iron", durability = 150, speed = 100 } -- Nudelholz
 rttr:AddTool{ ware = "Bow",        material = "Iron", durability = 150, speed = 100 } -- Bogen
 
-rttr:AddToolMaterial{ name = "Copper", title = "Copper", priority = 5 }
+rttr:AddToolMaterial{ name = "Copper", title = "Copper" }
 
 rttr:AddTool{ ware = "CopperTongs",      material = "Copper", durability = 100, speed = 50 } -- Zange
 rttr:AddTool{ ware = "CopperHammer",     material = "Copper", durability = 100, speed = 50 } -- Hammer

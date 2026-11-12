@@ -4,7 +4,9 @@
 
 #include "civ/PlayerResearch.h"
 #include "SerializedGameData.h"
+#include "civ/Content.h"
 #include "helpers/EnumRange.h"
+#include "helpers/containerUtils.h"
 #include "helpers/serializeEnums.h"
 #include "s25util/Log.h"
 #include <algorithm>
@@ -93,6 +95,38 @@ void PlayerResearch::SetToolMaterialPriorities(const ToolMaterialPriorities& pri
     toolMaterialPriorities_ = clamped;
 }
 
+PlayerResearch::RegulatorValues PlayerResearch::GetRegulatorValues(const Content& content,
+                                                                   const unsigned regulator) const
+{
+    const auto& regulators = content.GetRegulators();
+    if(regulator >= regulators.size())
+        return {};
+    const Regulator& desc = regulators[regulator];
+    const auto it = regulatorValues_.find(desc.name);
+    RegulatorValues result(desc.entries.size());
+    for(unsigned i = 0; i < result.size(); ++i)
+    {
+        // Entries added to the lua files after the player changed the setting get their default
+        if(it != regulatorValues_.end() && i < it->second.size())
+            result[i] = it->second[i];
+        else
+            result[i] = desc.entries[i].defaultValue;
+    }
+    return result;
+}
+
+void PlayerResearch::SetRegulatorValues(const Content& content, const unsigned regulator, const RegulatorValues& values)
+{
+    const auto& regulators = content.GetRegulators();
+    if(regulator >= regulators.size())
+        return;
+    RegulatorValues clamped = values;
+    clamped.resize(regulators[regulator].entries.size(), 0u);
+    for(uint8_t& value : clamped)
+        value = std::min(value, static_cast<uint8_t>(10));
+    regulatorValues_[regulators[regulator].name] = clamped;
+}
+
 void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree) const
 {
     std::vector<TechIdx> researchedTechs;
@@ -138,6 +172,15 @@ void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree
         for(const uint8_t value : *toolMaterialPriorities_)
             sgd.PushUnsignedChar(value);
     }
+
+    sgd.PushUnsignedInt(static_cast<unsigned>(regulatorValues_.size()));
+    for(const auto& entry : regulatorValues_)
+    {
+        sgd.PushString(entry.first);
+        sgd.PushUnsignedInt(static_cast<unsigned>(entry.second.size()));
+        for(const uint8_t value : entry.second)
+            sgd.PushUnsignedChar(value);
+    }
 }
 
 void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTree)
@@ -147,6 +190,8 @@ void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTr
     progress_.clear();
     spentKnowledge_ = KnowledgePoints{};
     knowledgeDistribution_.reset();
+    toolMaterialPriorities_.reset();
+    regulatorValues_.clear();
 
     const unsigned numResearched = sgd.PopUnsignedInt();
     for(unsigned i = 0; i < numResearched; ++i)
@@ -219,6 +264,24 @@ void PlayerResearch::Deserialize(SerializedGameData& sgd, const TechTree& techTr
         for(uint8_t& value : priorities)
             value = sgd.PopUnsignedChar();
         SetToolMaterialPriorities(priorities);
+    }
+
+    // Own regulators (older savegames: default). Regulators removed from the lua files are dropped
+    if(sgd.GetGameDataVersion() >= 23)
+    {
+        const auto& regulators = techTree.GetContent().GetRegulators();
+        const unsigned numRegulators = sgd.PopUnsignedInt();
+        for(unsigned i = 0; i < numRegulators; ++i)
+        {
+            const std::string name = sgd.PopString();
+            RegulatorValues values(sgd.PopUnsignedInt());
+            for(uint8_t& value : values)
+                value = std::min(sgd.PopUnsignedChar(), static_cast<unsigned char>(10));
+            if(helpers::contains_if(regulators, [&](const Regulator& regulator) { return regulator.name == name; }))
+                regulatorValues_[name] = values;
+            else
+                LOG.write("Savegame: Ignoring unknown regulator '%1%'\n") % name;
+        }
     }
 }
 

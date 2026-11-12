@@ -770,10 +770,13 @@ rttr:AddByproduct{ building = "Slaughterhouse", ware = "Bones" }
         BOOST_TEST(!load(wares + invalid, desc));
     }
     {
-        // outputChoice only "knowledge"
+        // outputChoice: "knowledge", "tools" or a regulator
         WorldDescription desc;
         std::string script = wares;
         script.replace(script.find("outputChoice = \"knowledge\""), 26, "outputChoice = \"random\"");
+        BOOST_TEST_REQUIRE(load(script, desc));
+        BOOST_CHECK_THROW(civ::TechTree{desc}, GameDataError);
+        script.replace(script.find("outputChoice = \"random\""), 23, "outputChoice = \"no regulator\"");
         BOOST_TEST(!load(script, desc));
     }
 }

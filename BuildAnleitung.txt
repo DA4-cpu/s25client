@@ -49,7 +49,6 @@ b2 --with-filesystem --with-iostreams --with-locale --with-program_options --wit
 Dann in der PowerShell:
 
 cd E:\Github\Settlers-2-Return-To-The-Roots\s25client
-rmdir /s /q build
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DBOOST_ROOT="E:\Programming\boost_1_91_0" -DRTTR_INCLUDE_DEVTOOLS=ON
 
 

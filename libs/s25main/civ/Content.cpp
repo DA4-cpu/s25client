@@ -11,6 +11,7 @@
 #include "gameData/GameConsts.h"
 #include "gameData/JobConsts.h"
 #include "gameData/ShieldConsts.h"
+#include "gameData/ToolConsts.h"
 #include "gameData/WorldDescription.h"
 #include <algorithm>
 #include <array>
@@ -197,6 +198,26 @@ Content::Content(const WorldDescription& desc) : Content()
         ores_.push_back(ore);
     }
 
+    // Own regulators of the distribution window (used by workshops with outputChoice = <name>)
+    for(const RegulatorDesc& regulatorDesc : desc.regulators)
+    {
+        const std::string context = "Regulator '" + regulatorDesc.name + "'";
+        Regulator regulator;
+        regulator.name = regulatorDesc.name;
+        regulator.title = regulatorDesc.title;
+        for(const RegulatorDesc::Entry& entryDesc : regulatorDesc.entries)
+        {
+            if(FindWares(entryDesc.tags).empty())
+                throw GameDataError(context + ": entry " + joinTags(entryDesc.tags) + " matches no ware");
+            Regulator::Entry entry;
+            entry.tags = entryDesc.tags;
+            entry.title = entryDesc.title;
+            entry.defaultValue = static_cast<uint8_t>(entryDesc.value);
+            regulator.entries.push_back(std::move(entry));
+        }
+        regulators_.push_back(std::move(regulator));
+    }
+
     // Workshops
     if(desc.workshops.size() > NUM_CUSTOM_BUILDINGS)
         throw GameDataError("At most " + std::to_string(NUM_CUSTOM_BUILDINGS) + " workshops can be defined");
@@ -333,16 +354,42 @@ Content::Content(const WorldDescription& desc) : Content()
         if(inputWares.size() > 3u)
             throw GameDataError(context + ": the inputs match more than 3 different wares");
 
-        // Output
-        const std::vector<GoodType> outputMatches =
-          wsDesc.output.empty() ? std::vector<GoodType>() : FindWares(wsDesc.output);
-        if(wsDesc.output.empty())
+        // Output: Either all wares matching output or one ware per entry of outputs
+        const bool hasOutput = !wsDesc.output.empty() || !wsDesc.outputs.empty();
+        std::vector<GoodType> outputMatches;
+        std::string outputText;
+        if(!wsDesc.outputs.empty())
+        {
+            outputText = "outputs";
+            for(const TagQuery& query : wsDesc.outputs)
+            {
+                const std::vector<GoodType> matches = FindWares(query);
+                if(matches.size() != 1u)
+                {
+                    throw GameDataError(context + ": entry " + joinTags(query) + " of outputs matches "
+                                        + std::to_string(matches.size()) + " wares (expected exactly 1)");
+                }
+                if(helpers::contains(outputMatches, matches.front()))
+                {
+                    throw GameDataError(context + ": the ware '" + getIdentifierOf(matches.front())
+                                        + "' is in outputs twice");
+                }
+                outputMatches.push_back(matches.front());
+            }
+        } else if(!wsDesc.output.empty())
+        {
+            outputText = "output " + joinTags(wsDesc.output);
+            outputMatches = FindWares(wsDesc.output);
+        }
+        if(!hasOutput)
         {
             // Plantation that only plants (like the forester)
             if(wsDesc.inheritProperties || !wsDesc.outputChoice.empty())
                 throw GameDataError(context + ": inheritProperties and outputChoice need an output");
         } else if(outputMatches.empty())
-            throw GameDataError(context + ": output " + joinTags(wsDesc.output) + " matches no ware");
+            throw GameDataError(context + ": " + outputText + " matches no ware");
+        if(!wsDesc.outputChoice.empty() && (bld.IsCollector() || bld.IsPlanter() || bld.IsMine()))
+            throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
         if(wsDesc.inheritProperties)
         {
             if(inputWares.empty())
@@ -377,28 +424,83 @@ Content::Content(const WorldDescription& desc) : Content()
                 }
                 if(types.size() != 1u)
                 {
-                    throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of the output "
-                                        + joinTags(wsDesc.output)
+                    throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of the " + outputText
                                         + " needs knowledge points of exactly one type (LWP, IWP or MWP), but '"
                                         + getIdentifierOf(candidate) + "' has " + std::to_string(types.size()));
                 }
                 bld.productChoiceTypes.push_back(types.front());
             }
+            bld.productChoice = ProductChoice::Knowledge;
             bld.productChoices = outputMatches;
             bld.product = outputMatches.front();
-        } else if(!wsDesc.output.empty())
+        } else if(wsDesc.outputChoice == "tools")
+        {
+            // One product per tool type, chosen like the metalworks does (tool regulator and tool orders)
+            for(const GoodType candidate : outputMatches)
+            {
+                const auto tool = GetToolTypeOf(candidate);
+                if(!tool)
+                {
+                    throw GameDataError(context + ": with outputChoice = \"tools\" every ware of the " + outputText
+                                        + " must be a tool type: '" + getIdentifierOf(candidate)
+                                        + "' needs the identifier of exactly one built-in tool as tag (e.g. kind = "
+                                          "\"Axe\")");
+                }
+                if(helpers::contains(bld.productChoiceTools, *tool))
+                {
+                    throw GameDataError(context
+                                        + ": with outputChoice = \"tools\" every tool type may only be made "
+                                          "once, but there are several of type '"
+                                        + getIdentifierOf(TOOL_TO_GOOD[*tool]) + "'");
+                }
+                bld.productChoiceTools.push_back(*tool);
+            }
+            bld.productChoice = ProductChoice::Tools;
+            bld.productChoices = outputMatches;
+            bld.product = outputMatches.front();
+        } else if(!wsDesc.outputChoice.empty())
+        {
+            // Own regulator: every product belongs to exactly one of its entries
+            const auto itRegulator = helpers::find_if(
+              regulators_, [&](const Regulator& regulator) { return regulator.name == wsDesc.outputChoice; });
+            if(itRegulator == regulators_.end())
+            {
+                throw GameDataError(context + ": outputChoice '" + wsDesc.outputChoice
+                                    + "' is neither \"knowledge\" nor \"tools\" nor a regulator (define it with "
+                                      "rttr:AddRegulator in distribution.lua)");
+            }
+            for(const GoodType candidate : outputMatches)
+            {
+                std::vector<unsigned> entries;
+                for(unsigned e = 0; e < itRegulator->entries.size(); ++e)
+                {
+                    if(Matches(candidate, itRegulator->entries[e].tags))
+                        entries.push_back(e);
+                }
+                if(entries.size() != 1u)
+                {
+                    throw GameDataError(context + ": the product '" + getIdentifierOf(candidate) + "' matches "
+                                        + std::to_string(entries.size()) + " entries of the regulator '"
+                                        + itRegulator->name + "' (expected exactly 1)");
+                }
+                bld.productChoiceEntries.push_back(entries.front());
+            }
+            bld.productChoice = ProductChoice::Regulator;
+            bld.regulator = static_cast<unsigned>(itRegulator - regulators_.begin());
+            bld.productChoices = outputMatches;
+            bld.product = outputMatches.front();
+        } else if(hasOutput)
         {
             if(outputMatches.size() != 1u)
             {
-                throw GameDataError(context + ": output " + joinTags(wsDesc.output) + " matches "
-                                    + std::to_string(outputMatches.size())
-                                    + " wares (expected exactly 1, or use outputChoice = \"knowledge\")");
+                throw GameDataError(context + ": " + outputText + " matches " + std::to_string(outputMatches.size())
+                                    + " wares (expected exactly 1, or use outputChoice)");
             }
             bld.product = outputMatches.front();
         }
 
         bld.workDesc.job = getCustomJob(i);
-        if(wsDesc.output.empty())
+        if(!hasOutput)
             bld.workDesc.producedWare = std::nullopt;
         else
             bld.workDesc.producedWare = bld.GetProduct(std::nullopt);
@@ -415,7 +517,7 @@ Content::Content(const WorldDescription& desc) : Content()
     // Tool reform: materials, tools and the tools of the buildings
     if(desc.toolMaterials.empty())
     {
-        if(!desc.tools.empty() || !desc.buildingTools.empty())
+        if(!desc.tools.empty() || !desc.buildingTools.empty() || !desc.toolMaterialPriorities.empty())
             throw GameDataError("Tools need tool materials (rttr:AddToolMaterial)");
         for(const WorkshopDesc& wsDesc : desc.workshops)
         {
@@ -430,8 +532,19 @@ Content::Content(const WorldDescription& desc) : Content()
         ToolMaterial material;
         material.name = materialDesc.name;
         material.title = materialDesc.title;
-        material.defaultPriority = static_cast<uint8_t>(materialDesc.priority);
+        const auto itPriority = desc.toolMaterialPriorities.find(material.name);
+        if(itPriority != desc.toolMaterialPriorities.end())
+            material.defaultPriority = static_cast<uint8_t>(itPriority->second);
         toolMaterials_.push_back(std::move(material));
+    }
+    for(const auto& entry : desc.toolMaterialPriorities)
+    {
+        if(!helpers::contains_if(toolMaterials_,
+                                 [&](const ToolMaterial& material) { return material.name == entry.first; }))
+        {
+            throw GameDataError("rttr:SetToolMaterialPriorities: unknown tool material '" + entry.first
+                                + "' (define it with rttr:AddToolMaterial)");
+        }
     }
     for(const ToolDesc& toolDesc : desc.tools)
     {
@@ -622,6 +735,21 @@ std::vector<GoodType> Content::FindWares(const TagQuery& query) const
     {
         if(Matches(good, query))
             result.push_back(good);
+    }
+    return result;
+}
+
+std::optional<Tool> Content::GetToolTypeOf(const GoodType good) const
+{
+    std::optional<Tool> result;
+    for(const auto tool : helpers::enumRange<Tool>())
+    {
+        if(helpers::contains(tags_[good], getIdentifier(TOOL_TO_GOOD[tool])))
+        {
+            if(result)
+                return std::nullopt;
+            result = tool;
+        }
     }
     return result;
 }

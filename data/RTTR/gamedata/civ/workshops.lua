@@ -22,10 +22,24 @@ rttr:AddWorkshop{...}:
   inputs      optional: bis zu 3 Eingänge, jeder eine Tag-Abfrage, z.B. { "Bones" } oder { { "Bretter", "Nadelholz" } }
   consume     optional: "each" (Standard): von jedem Eingang 1 Ware pro Produkt, jeder Eingang muss genau eine Ware
               treffen. "any": 1 Ware des Eingangs mit dem größten Vorrat (wie bei den Minen), höchstens 3 Waren insgesamt.
-  output      Tag-Abfrage der hergestellten Ware
-  outputChoice optional: "knowledge" erlaubt, dass output mehrere Waren trifft (z.B. geritzte Knochen für LWP, IWP
-              und MWP). Welche davon hergestellt wird, legt später der Regler "Wissen" im Verteilungsfenster fest;
-              bis es ihn gibt, wird zufällig gleich verteilt. Jede dieser Waren braucht knowledge in wares.lua.
+  output      Tag-Abfrage der hergestellten Ware. Mit outputChoice darf sie mehrere Waren treffen, z.B.
+              output = "GeritzterKnochen" für alle geritzten Knochen.
+  outputs     optional statt output: Liste der Produkte, jeder Eintrag eine Tag-Abfrage, die genau eine Ware trifft:
+              outputs = { "CopperAxe", { "Hammer", "Copper" } } (ein Text = ein Tag, eine Liste = alle diese Tags).
+              Bei mehr als einem Eintrag ist outputChoice nötig. Nicht für Sammler, Plantagen und Minen und nicht
+              zusammen mit inheritProperties.
+  outputRatio (Noch nicht im Code vorhanden!): Man kann bestimmten, wie viele Waren man pro Arbeitsdurchlauf erhält bpw. bei outputRatio 0.5 erhält man erst alle 2 Arbeitsdurchläufe eine Ware, 
+                bei outputRatio 2 (maximal 8) erhält man 2 Waren pro Durchlauf. Dieser Wert soll auch durch Tools angesteuert werden. Also muss man bei tools.lua noch ein outputRatio für jedes Tool ergänzen. 
+                Der Toolbonus wirkt summativ zB. 0.5 als Grundwert des Gebäudes und 1 als Toolbonus gibt 1.5 gesamt. 1.5 heißt jeder 1. Arbeitsschritt gibt 1 Ware als Output und jeder 2. gibt 2 Waren als Output
+  outputChoice optional: wie die Werkstatt ihr Produkt wählt, wenn es mehrere gibt:
+              "knowledge": nach dem Regler "Wissen" im Fenster "Verteilung" (z.B. geritzte Knochen für LWP, IWP und
+                MWP). Jedes Produkt braucht knowledge in wares.lua (genau eine Art).
+              "tools": wie die Schlosserei, nach dem Werkzeug-Regler und den Werkzeugbestellungen des Spielers. Jedes
+                Produkt muss ein Werkzeugtyp sein: der Bezeichner genau eines eingebauten Werkzeugs als Tag, z.B.
+                kind = "Axe" in wares.lua. Jeder Typ höchstens einmal. Bestellungen teilt sie sich mit der Schlosserei:
+                Wer ein bestelltes Werkzeug zuerst anfängt, erfüllt die Bestellung. Stehen alle ihre Werkzeuge auf 0,
+                gilt die Einstellung "Schlosserei bei 0" wie bei der Schlosserei.
+              sonst der Bezeichner eines eigenen Reglers aus distribution.lua (rttr:AddRegulator): nach dessen Werten.
   inheritProperties  optional (Standard false): Das Produkt hat dieselben Eigenschaften wie die verbrauchte Ware
               (z.B. Nadelholz -> Nadelholzbretter). Zu jeder möglichen Eingangsware muss es genau ein passendes Produkt
               geben.
@@ -123,20 +137,6 @@ rttr:AddWorkshop{
     outputChoice = "knowledge",
     workTime = 120,         
 }
-[[
-rttr:AddWorkshop{
-    name = "Copperworks",
-    title = "Copperworks",
-    size = "medium",
-    cost = { Boards = 2 }, 
-    look = "Metalworks",      
-    worker = { title = "Copperworker", tool = "Tongs", look = "Metalworker" },
-    inputs = { "CopperOre", "Coal" },
-    output = , -- mehrere Waren soll es hier als Output geben. Am besten als Liste  wie zB. {"CopperAxe", "CopperHammer" ...} wo halt alle möglichen Outputwaren drinnen stehen. Diese werden dann über die Verteilung OutputCoice gesteuert. Vorsicht: Es sollten aber trotzdem Warren mit mehreren Tags möglich sein.
-    outputChoice = "tools", --kann man hier irgendwie die Werkzeugverteilung verknüpfen, die Metalworks benutzt? Ein Verteilung.lua (Name gerne in Englisch) wäre auch sinnvoll. 
-    workTime = 120,         
-}
-]]
 -------------------------------------------------------------------------------
 -- Bibliothek (Schritt 4c). Entschieden: mittelgroß, fasst 20 Medien, Arbeiter "Bibliothekar" ohne Werkzeug, erst ab
 -- Ära 2 (Technologie "libraries" in techtree.lua).
@@ -212,4 +212,22 @@ rttr:AddWorkshop{
     workTime = 6,
     waitTime = 6,
     knowledge = { LWP = 2 },
+}
+
+-------------------------------------------------------------------------------
+-- Kupferwerkstatt: stellt Kupferwerkzeuge her wie die Schlosserei die Eisenwerkzeuge. Welches, legen der
+-- Werkzeug-Regler und die Werkzeugbestellungen fest (outputChoice = "tools").
+-------------------------------------------------------------------------------
+
+rttr:AddWorkshop{
+    name = "Copperworks",
+    title = "Copperworks",
+    size = "medium",
+    cost = { Boards = 2 },
+    look = "Metalworks",
+    worker = { title = "Copperworker", tool = "Tongs", look = "Metalworker" },
+    inputs = { "CopperOre", "Coal" },
+    outputs = { "CopperTongs", "CopperHammer", "CopperAxe", "CopperSaw", "CopperPickAxe" },
+    outputChoice = "tools",
+    workTime = 120,
 }

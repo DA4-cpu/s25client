@@ -640,6 +640,42 @@ private:
     }
 };
 
+/// Civilization mode: Set an own regulator (rttr:AddRegulator), value 0..10 per entry
+class SetRegulatorValues : public GameCommand
+{
+    GC_FRIEND_DECL;
+    const uint8_t regulator;
+    const std::vector<uint8_t> values;
+
+protected:
+    SetRegulatorValues(uint8_t regulator, std::vector<uint8_t> values)
+        : GameCommand(GCType::SetRegulatorValues), regulator(regulator), values(std::move(values))
+    {}
+    SetRegulatorValues(Serializer& ser)
+        : GameCommand(GCType::SetRegulatorValues), regulator(ser.PopUnsignedChar()), values(popValues(ser))
+    {}
+
+public:
+    void Execute(GameWorld& world, uint8_t playerId) override;
+    void Serialize(Serializer& ser) const override
+    {
+        GameCommand::Serialize(ser);
+        ser.PushUnsignedChar(regulator);
+        ser.PushUnsignedChar(static_cast<uint8_t>(values.size()));
+        for(const uint8_t value : values)
+            ser.PushUnsignedChar(value);
+    }
+
+private:
+    static std::vector<uint8_t> popValues(Serializer& ser)
+    {
+        std::vector<uint8_t> result(ser.PopUnsignedChar());
+        for(uint8_t& value : result)
+            value = ser.PopUnsignedChar();
+        return result;
+    }
+};
+
 /// Civilization mode: Set the regulator "Wissen" (weight 0..10 for LWP, IWP, MWP)
 class SetKnowledgeDistribution : public GameCommand
 {

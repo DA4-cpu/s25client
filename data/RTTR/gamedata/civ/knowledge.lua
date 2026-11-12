@@ -10,7 +10,8 @@ Arten:  LWP = Landwirtschaft,  IWP = Industrie,  MWP = Militär.
 Nicht genannte Gebäude und Arten zählen 0. Negative Werte sind erlaubt (Katapult).
 Gebäudenamen wie im Enum BuildingType (siehe techtree.lua), zusätzlich "Headquarters" für das Hauptquartier.
 
-Die WP-Kosten der Technologien stehen in techtree.lua unter "knowledge".
+Die WP-Kosten der Technologien stehen in techtree.lua unter "knowledge". Die Startwerte des Reglers "Wissen" stehen
+in distribution.lua.
 Änderungen gelten ab dem nächsten Spielstart, Neukompilieren ist nicht nötig.
 ]]
 
@@ -63,11 +64,3 @@ rttr:SetBuildingKnowledge{
     LookoutTower   = { MWP = 1 },                   -- Spähturm
     Catapult       = { MWP = -5 },                  -- Katapult (absichtlich negativ)
 }
-
---[[
-Startwerte des Reglers "Wissen" im Verteilungsfenster (je 0 bis 10): Welches Wissensmedium Werkstätten mit
-outputChoice = "knowledge" herstellen (z.B. der Knochenschnitzer). Jeder Spieler kann sie im Spiel ändern.
-Beispiel: LWP = 10, IWP = 5, MWP = 0 -> doppelt so viele LWP- wie IWP-Medien, keine MWP-Medien.
-Stehen alle möglichen Medien einer Werkstatt auf 0, wird gleich verteilt.
-]]
-rttr:SetKnowledgeDistribution{ LWP = 5, IWP = 5, MWP = 5 } -- PLATZHALTER: Startwerte noch offen

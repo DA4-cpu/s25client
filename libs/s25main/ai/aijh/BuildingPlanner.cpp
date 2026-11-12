@@ -17,6 +17,7 @@
 #include "gameData/BuildingProperties.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace AIJH {
 BuildingPlanner::BuildingPlanner(const AIPlayerJH& aijh) : buildingsWanted(), expansionRequired(false)
@@ -510,6 +511,9 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
     // - Workshop with inputs: 1 as soon as an input ware is in stock, 1 more per 8 input wares in stock
     // - Workshop without inputs: 1
     // - Library: 1 more if more knowledge media wait in warehouses than the existing libraries can still take
+    // - Workshop making tools (outputChoice = "tools", like the metalworks): 1 as soon as all inputs are in stock,
+    //   1 more per 20 wares of the scarcest input, at most 3. Its tools are set with the tool regulator
+    //   (AdjustSettings)
     // All of them limited by the workers that are available for the building (see potentialWorkers below).
     // Whether it can be built at all (technology) is checked by AIConstruction::Wanted
     const civ::Content& content = civ::getActiveContent();
@@ -527,7 +531,18 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
         const Job job = getCustomJob(i); // Job i belongs to workshop i
         const civ::CustomWorker* worker = content.GetWorker(job);
         unsigned potentialWorkers = inventory.people[job];
-        if(worker && worker->tool != GoodType::Nothing)
+        const civ::BuildingTools& buildingTools = content.GetBuildingTools(bld);
+        if(content.HasToolReform())
+        {
+            // Tool reform: Any helper can work there, but without its first tool the building does not work
+            if(buildingTools.slots.empty() || buildingTools.baseSpeed > 0)
+                potentialWorkers += inventory.people[Job::Helper];
+            else
+            {
+                for(const GoodType tool : buildingTools.slots.front().wares)
+                    potentialWorkers += inventory.goods[tool];
+            }
+        } else if(worker && worker->tool != GoodType::Nothing)
             potentialWorkers += inventory.goods[worker->tool];
         else
             potentialWorkers += inventory.people[Job::Helper];
@@ -554,7 +569,20 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
             buildingsWanted[bld] = std::min(1u, potentialWorkers);
         }
 
-        else if(building.name == "BoneCarver")
+        else if(building.productChoice == civ::ProductChoice::Tools)
+        {
+            // consume = "any": any input will do
+            unsigned numScarcest = building.workDesc.useOneWareEach ? std::numeric_limits<unsigned>::max() : 0u;
+            for(const GoodType input : building.workDesc.waresNeeded)
+            {
+                if(building.workDesc.useOneWareEach)
+                    numScarcest = std::min(numScarcest, aijh.AmountInStorage(input));
+                else
+                    numScarcest += aijh.AmountInStorage(input);
+            }
+            const unsigned wanted = 1; // numScarcest == 0 ? 0u : std::min(3u, 1u + numScarcest / 20u);  //Die Input Ressourcen landen selten im Lager, weil sie Verbrauchsgüter sind.
+            buildingsWanted[bld] = std::min({std::max(wanted, numExisting), potentialWorkers, 3u});
+        } else if(building.name == "BoneCarver")
         {
             unsigned numInputs = 0;
             for(const GoodType input : building.workDesc.waresNeeded)
