@@ -27,6 +27,10 @@ namespace civ {
 struct CustomBuilding;
 }
 
+namespace civai {
+class CivAI;
+}
+
 namespace AIJH {
 class BuildingPlanner;
 class AIConstruction;
@@ -290,7 +294,13 @@ private:
     AIEventManager eventManager;
     std::unique_ptr<BuildingPlanner> bldPlanner;
     std::unique_ptr<AIConstruction> construction;
+    /// Civilization mode: new AI (step 1: perception and economic model, only reads and logs)
+    std::unique_ptr<civai::CivAI> civAI_;
 
+public:
+    const civai::CivAI* GetCivAI() const { return civAI_.get(); }
+
+private:
     Subscription subBuilding, subExpedition, subResource, subRoad, subShip, subBQ;
     std::vector<MapPoint> nodesWithOutdatedBQ;
 };

@@ -11,6 +11,7 @@
 #include "RttrForeachPt.h"
 #include "addons/const_addons.h"
 #include "ai/AIEvents.h"
+#include "ai/civ/CivAI.h"
 #include "ai/random.h"
 #include "boost/filesystem/fstream.hpp"
 #include "buildings/noBuildingSite.h"
@@ -260,6 +261,13 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
     {
         isInitGfCompleted++;
         return; //  1 init -> 2 test defeat -> 3 do other ai stuff -> goto 2
+    }
+    // Civilization mode: new AI, so far only perception and economic model
+    if(civ::isEnabled(gwb))
+    {
+        if(!civAI_)
+            civAI_ = std::make_unique<civai::CivAI>(gwb, playerId);
+        civAI_->RunGF(gf, gfisnwf);
     }
     if(gf == 100)
     {

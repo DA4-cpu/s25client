@@ -954,13 +954,38 @@ sein; nur ihre Befehle (Game Commands) gehen ins Spiel. Ziel: im Mittel deutlich
 ### Schritte
 
 1. Wahrnehmung und Wirtschaftsmodell, nur lesend: Graph und Regionsprofile berechnen und protokollieren, nichts im
-   Spiel ändern. Prüfen, ob die KI die Karte versteht; Zeitmessung.
+   Spiel ändern. Prüfen, ob die KI die Karte versteht; Zeitmessung. *(umgesetzt 2026-11-12, siehe unten)*
 2. Planung ersetzt den Bauplaner (`BuildingPlanner`): Bauwünsche aus der Rückwärtsrechnung.
 3. Gezielte Expansion über den Regionswert.
 4. Forschung über den Graphen.
 5. Ziele aus der Lage (Gewichte), danach Militär.
 
 Jeder Schritt ist für sich testbar und mit der alten KI vergleichbar (ai-battle).
+
+### Stand Schritt 1 (2026-11-12)
+
+Code in `libs/s25main/ai/civ/`, Namensraum `civai`. Läuft im Zivilisationsmodus in jeder AIJH-KI mit
+(`AIPlayerJH::RunGF`), gibt keine Befehle.
+
+- `EconomyGraph`: Rezepte (Gebäude → Eingänge, Produkte, Nebenprodukte, Quelle auf der Karte, nötige Werkzeuge,
+  gesperrt durch Forschung, Waren pro Minute). Eingebaute Gebäude aus `BLD_WORK_DESC`/`JOB_CONSTS`; nur ihre Quellen
+  (Holzfäller → Bäume, Steinbruch → Steinhaufen, Minen → Erz, Fischer, Brunnen, Jäger, Bauer/Weinberg/Köhler → Land)
+  und die Mehrfachprodukte (Schlosserei, Waffenschmiede, Tempel) stehen als Tabelle im Code, weil diese Gebäude eigene
+  Figuren haben. Werkstätten aus Lua vollständig aus `civ::Content` (Sammler → Kartenobjekt, Plantage → Anbaufläche,
+  Mine → Erz). Gebäude ausgeschalteter Addons fehlen. Rate = Arbeitszyklus (+ geschätzte Wege) × `outputRatio`.
+- `MapProfile`: Regionen 8×8 Knoten; je Region Bäume, Steine in Steinhaufen, Tiere, freies Bauland, Bodenschätze je
+  Art (Erze, Wasser, Fisch), Stücke je Kartenobjekt, Anbauflächen je pflanzbarem Kartenobjekt; dasselbe nur für das
+  eigene Gebiet. Was sich im Spiel nicht ändert (bebaubares Terrain, wo ein Kartenobjekt natürlich wächst), wird einmal
+  je Knoten vorberechnet. Danach werden je NWF 16 Regionen neu gelesen (`REGIONS_PER_NWF`), reihum.
+- `analyzeEconomy`: Fixpunkt über den Graphen für drei Lagen (eigenes Gebiet + jetzige Gebäude, ganze Karte, ganze
+  Karte + alle Forschung) → je Ware herstellbar / nach Expansion / nach Forschung / nicht erreichbar mit Grund („fehlt
+  Steinhaufen“, „braucht Lehm“). Baumaterial und Werkzeuge dürfen auch aus dem Lager kommen (einmaliger Bedarf),
+  Eingänge nicht. Alle 3000 GF neu (`ANALYSIS_INTERVAL`).
+- Log: Bericht beim Start und wenn sich ein Warenzustand ändert (Rohstoffe Gebiet/Karte, Waren je Zustand), alle 36000 GF
+  die Zeiten. Im ai-battle braucht es dafür den Ordner `logs` im Arbeitsverzeichnis.
+- Zeiten (Debug-Build, DerGrosseSee, 2 KI): Graph ~0,2 ms und Kartenprofil ~13 ms einmal beim Start, Analyse ~0,4 ms
+  alle 3000 GF, Aktualisierung ~0,1 ms je NWF. Erste Fassung ohne Vorberechnung lag bei ~0,33 ms je NWF.
+- Tests: `CivAISuite` (Graph, fehlende Rohstoffe, Expansion, Forschung, schrittweise Aktualisierung).
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 
