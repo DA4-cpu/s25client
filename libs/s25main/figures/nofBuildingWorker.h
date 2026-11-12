@@ -56,6 +56,18 @@ protected:
     bool was_sounding;
     /// Tool reform (civilization mode): Tools of the demolished workplace the worker brings back to a warehouse
     std::vector<GoodType> carriedTools_;
+    /// Civilization mode: All wares still to put at the flag (front = `ware`): the products of the work step (output
+    /// ratio) and their byproducts. Empty while `ware` is set: only `ware` and its byproducts (older savegames)
+    std::vector<GoodType> carryList_;
+
+    /// To be called by derived classes right after a work step produced `ware` (or not). Civilization mode: Applies
+    /// the output ratio of the step. Clears `ware` if the step yields no ware yet, adds the further products of the
+    /// step (ProduceExtraWare) and the byproducts of all of them
+    void ProducedWare();
+    /// A further product of the current work step (output ratio above 1). Default: the same ware again. Workers
+    /// choosing their product choose again, miners and collectors take one more unit of their resource. Nothing: no
+    /// further ware (e.g. the resource is used up)
+    virtual helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) { return firstWare; }
 
     /// wird von abgeleiteten Klassen aufgerufen, wenn sie die Ware an der Fahne vorm Gebäude ablegen wollen (oder auch
     /// nicht) also fertig mit Arbeiten sind
@@ -75,8 +87,10 @@ protected:
 private:
     /// Wares to put at the flag when carrying out `ware`: the ware itself and its byproducts (civilization mode)
     std::vector<GoodType> GetWaresToCarryOut() const;
-    /// True if the flag has space for all wares to carry out (ware + byproducts)
+    /// True if the flag has space for all wares to carry out (ware + byproducts), at most a full flag
     bool HasSpaceForWaresAtFlag() const;
+    /// Number of wares put at the flag together: all of them, but at most a full flag
+    static unsigned GetNumWaresToPutNow(std::size_t numWares);
     /// Create the ware at the flag in front of the workplace and send it on its way
     void PutWareAtFlag(GoodType good);
 

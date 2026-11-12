@@ -210,3 +210,11 @@ helpers::OptionalEnum<GoodType> nofMetalworker::ProduceWare()
 {
     return nextProducedTool;
 }
+
+helpers::OptionalEnum<GoodType> nofMetalworker::ProduceExtraWare(GoodType /*firstWare*/)
+{
+    helpers::OptionalEnum<GoodType> tool = GetOrderedTool();
+    if(!tool)
+        tool = GetRandomTool();
+    return tool;
+}

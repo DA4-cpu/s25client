@@ -46,8 +46,25 @@ void nofStonemason::WorkStarted() {}
 /// Abgeleitete Klasse informieren, wenn fertig ist mit Arbeiten
 void nofStonemason::WorkFinished()
 {
+    HewStone();
+    // Stein in die Hand nehmen
+    ware = GoodType::Stones;
+}
+
+helpers::OptionalEnum<GoodType> nofStonemason::ProduceExtraWare(const GoodType firstWare)
+{
+    if(!HewStone())
+        return std::nullopt;
+    return firstWare;
+}
+
+bool nofStonemason::HewStone()
+{
+    auto* granite = world->GetSpecObj<noGranite>(pos);
+    if(!granite)
+        return false;
     // Stein abhauen (wenn er nur noch ganz klein ist, dann wird er von der Landkarte getilgt)
-    if(world->GetSpecObj<noGranite>(pos)->IsSmall())
+    if(granite->IsSmall())
     {
         // Granitklötzchen löschen
         world->DestroyNO(pos);
@@ -60,10 +77,8 @@ void nofStonemason::WorkFinished()
         world->RecalcBQAroundPoint(pos);
     } else
         // ansonsten wird er um 1 kleiner
-        world->GetSpecObj<noGranite>(pos)->Hew();
-
-    // Stein in die Hand nehmen
-    ware = GoodType::Stones;
+        granite->Hew();
+    return true;
 }
 
 /// Returns the quality of this working point or determines if the worker can work here at all

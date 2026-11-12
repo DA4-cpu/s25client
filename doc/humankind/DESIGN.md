@@ -64,6 +64,8 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-11-12 | **`outputChoice = "tools"`**: Die Werkstatt (z. B. Kupferwerkstatt) teilt sich **Werkzeug-Regler und Bestellungen** mit der Schlosserei, Zuordnung über den Werkzeugtyp (`kind = "Axe"`). Eine Bestellung erfüllt, wer das Werkzeug zuerst anfängt. |
 | 2026-11-12 | Neue Datei **`distribution.lua`**: eigene Regler für `outputChoice` (`rttr:AddRegulator`, je ein Reiter im Verteilungsfenster) und die Startwerte der Regler „Wissen“ und „Werkzeuge“ (vorher `knowledge.lua` bzw. `priority` in `tools.lua`). |
 | 2026-11-12 | KI baut Werkstätten mit `outputChoice = "tools"` wie die Schlosserei, sobald die Eingänge im Lager sind; ihre Werkzeug-Regler gelten dort mit. |
+| 2026-11-12 | **`outputRatio`** (Waren pro Arbeitsschritt, 0–8, Kommazahlen) für **alle Gebäude**: Werkstätten in `rttr:AddWorkshop`, eingebaute Gebäude mit `rttr:SetBuildingOutputRatio`, Werkzeuge geben einen Bonus (`outputRatio` in `rttr:AddTool`), der zum Grundwert addiert wird (0,5 + 1 = 1,5 = abwechselnd 1 und 2 Waren). |
+| 2026-11-12 | Mehrere Waren in einem Schritt: Mit `outputChoice` wird **jede Ware einzeln gewählt**; **Nebenprodukte je Ware**. |
 
 ## Zuordnung Humankind → Siedler
 
@@ -265,6 +267,29 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   Get/SetRegulatorValues`, Befehl `gc::SetRegulatorValues`), Reiter im Verteilungsfenster mit „Standard“-Knopf.
 - Spielstand Version 23: Reglerwerte (nach Name; unbekannte Regler fallen weg, neue Einträge bekommen den Startwert)
   und das gewählte Werkzeug des Arbeiters.
+
+### Ertrag pro Arbeitsschritt: `outputRatio` (Stand 2026-11-12)
+
+- Wert in Hundertsteln (`parseOutputRatio`, 0–800): Werkstatt `WorkshopDesc::outputRatio`, eingebautes Gebäude
+  `WorldDescription::buildingOutputRatios` (`rttr:SetBuildingOutputRatio`, nur eingebaute Gebäude mit Arbeiter),
+  Bonus des Werkzeugs `ToolDesc::outputRatio`. `Content::GetOutputRatio(BuildingType)` ist der Grundwert (Standard 100).
+- `nobUsual::GetOutputRatio` = Grundwert + Bonus aller Werkzeuge in Gebrauch, höchstens 800; außerhalb des
+  Zivilisationsmodus immer 100. `BeginWorkStep` merkt sich den Wert des Schritts (vor der Abnutzung, wie das Tempo);
+  ist er 0, arbeitet das Gebäude nicht (die Eingänge bleiben liegen).
+- Ergibt ein Schritt eine Ware, ruft der Arbeiter `nofBuildingWorker::ProducedWare` (in `nofWorkman`, `nofFarmhand`,
+  `nofHunter`, `nofSkinner`). `nobUsual::TakeNumProducts` zählt den Wert zum Rest der früheren Schritte
+  (`outputCredit_`) und gibt die ganzen Waren zurück. Fest, ohne Zufall: 1,5 = 1, 2, 1, 2 …; Schritte ohne Ware (Fischer
+  ohne Fang, Bauer beim Säen) zählen nicht.
+- 0 Waren: Der Arbeiter trägt nichts hinaus (draußen: er kommt mit leeren Händen zurück). Mehr als 1: weitere Waren
+  über `ProduceExtraWare` (Standard dieselbe Ware). Schlosserei, Kupferwerkstatt (`outputChoice`), Waffenschmiede
+  (Schwert/Schild abwechselnd) und Tempel wählen jede Ware neu. Abbau je Ware: Minen (auch Lua-Minen) und Brunnen eine
+  Einheit, Steinmetz ein Stück des Steinhaufens, Sammler und Plantagen ein Stück des Objekts, Fischer ein Fisch; ist
+  nichts mehr da, gibt es weniger Waren. Holzfäller, Bauer, Jäger usw.: alle Waren aus demselben Baum, Feld, Tier.
+- Alle Waren eines Schritts samt Nebenprodukten liegen in `carryList_` (Spielstand) und werden zusammen an die Fahne
+  gelegt, mehr als 8 nacheinander (`GetNumWaresToPutNow`); bis 8 wartet der Arbeiter wie bisher, bis für alle Platz ist.
+- Gebäudefenster: „Ertrag xN“ unter dem Tempo (wenn nicht 1 oder das Gebäude Werkzeugplätze hat).
+- Spielstand Version 24: `stepOutputRatio_`, `outputCredit_`, `carryList_`.
+- Ausgelieferte Daten setzen keine Werte (alle 1, Werkzeuge ohne Bonus); das Balancing macht der Nutzer.
 
 ### Regler „Wissen“ und Bibliothek (Schritte 4b, 4c)
 

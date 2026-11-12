@@ -43,6 +43,9 @@ void nofBuildingWorker::Serialize(SerializedGameData& sgd) const
     sgd.PushUnsignedInt(static_cast<unsigned>(carriedTools_.size()));
     for(const GoodType tool : carriedTools_)
         helpers::pushEnum<uint8_t>(sgd, tool);
+    sgd.PushUnsignedInt(static_cast<unsigned>(carryList_.size()));
+    for(const GoodType good : carryList_)
+        helpers::pushEnum<uint8_t>(sgd, good);
 }
 
 void nofBuildingWorker::TakeTools(std::vector<GoodType> tools)
@@ -86,6 +89,44 @@ nofBuildingWorker::nofBuildingWorker(SerializedGameData& sgd, const unsigned obj
         carriedTools_.resize(sgd.PopUnsignedInt());
         for(GoodType& tool : carriedTools_)
             tool = helpers::popEnum<GoodType>(sgd);
+    }
+    if(sgd.GetGameDataVersion() >= 24)
+    {
+        carryList_.resize(sgd.PopUnsignedInt());
+        for(GoodType& good : carryList_)
+            good = helpers::popEnum<GoodType>(sgd);
+    }
+}
+
+void nofBuildingWorker::ProducedWare()
+{
+    carryList_.clear();
+    if(!ware || !workplace)
+        return;
+    const unsigned numProducts = workplace->TakeNumProducts();
+    if(numProducts == 0)
+    {
+        // Only a fraction of a ware so far (output ratio below 1)
+        ware = std::nullopt;
+        return;
+    }
+    if(numProducts == 1 && civ::getByproducts(*world, player, workplace->GetBuildingType(), *ware).empty())
+        return;
+    std::vector<GoodType> products{*ware};
+    for(unsigned i = 1; i < numProducts; ++i)
+    {
+        const auto extra = ProduceExtraWare(*ware);
+        if(!extra)
+            break;
+        products.push_back(*extra);
+    }
+    // Every product with its byproducts
+    for(const GoodType product : products)
+    {
+        carryList_.push_back(product);
+        const std::vector<GoodType> byproducts =
+          civ::getByproducts(*world, player, workplace->GetBuildingType(), product);
+        carryList_.insert(carryList_.end(), byproducts.begin(), byproducts.end());
     }
 }
 
@@ -167,15 +208,26 @@ void nofBuildingWorker::WorkingReady()
     // Trage ich eine Ware?
     if(ware)
     {
-        // Ist noch Platz an der Fahne (auch für evtl. Nebenprodukte)?
-        // Sonst wird die Ware wieder mit hinein genommen und auf Platz gewartet
-        const std::vector<GoodType> waresToPut = GetWaresToCarryOut();
-        if(workplace->GetFlag()->GetNumFreeSpaces() >= waresToPut.size())
+        // Ist noch Platz an der Fahne (auch für evtl. Nebenprodukte und weitere Produkte)?
+        // Sonst wird die Ware wieder mit hinein genommen und auf Platz gewartet.
+        // Mehr als eine volle Fahne wird nacheinander abgelegt
+        std::vector<GoodType> waresToPut = GetWaresToCarryOut();
+        const unsigned numNow = GetNumWaresToPutNow(waresToPut.size());
+        if(workplace->GetFlag()->GetNumFreeSpaces() >= numNow)
         {
-            for(const GoodType good : waresToPut)
-                PutWareAtFlag(good);
-            // Tragen nun keine Ware mehr
-            ware = std::nullopt;
+            for(unsigned i = 0; i < numNow; ++i)
+                PutWareAtFlag(waresToPut[i]);
+            waresToPut.erase(waresToPut.begin(), waresToPut.begin() + numNow);
+            if(waresToPut.empty())
+            {
+                // Tragen nun keine Ware mehr
+                ware = std::nullopt;
+                carryList_.clear();
+            } else
+            {
+                carryList_ = std::move(waresToPut);
+                ware = carryList_.front();
+            }
         }
     }
 
@@ -184,11 +236,19 @@ void nofBuildingWorker::WorkingReady()
     state = State::EnterBuilding;
 }
 
+unsigned nofBuildingWorker::GetNumWaresToPutNow(const std::size_t numWares)
+{
+    constexpr std::size_t flagCapacity = 8;
+    return static_cast<unsigned>(std::max<std::size_t>(std::min(numWares, flagCapacity), 1u));
+}
+
 std::vector<GoodType> nofBuildingWorker::GetWaresToCarryOut() const
 {
     std::vector<GoodType> result;
     if(!ware)
         return result;
+    if(!carryList_.empty())
+        return carryList_;
     result.push_back(*ware);
     // Nebenprodukte (Zivilisationsmodus, rttr:AddByproduct), z.B. Knochen beim Jäger
     const std::vector<GoodType> byproducts = civ::getByproducts(*world, player, workplace->GetBuildingType(), *ware);
@@ -198,8 +258,7 @@ std::vector<GoodType> nofBuildingWorker::GetWaresToCarryOut() const
 
 bool nofBuildingWorker::HasSpaceForWaresAtFlag() const
 {
-    const auto numWares = std::max<std::size_t>(GetWaresToCarryOut().size(), 1u);
-    return workplace->GetFlag()->GetNumFreeSpaces() >= numWares;
+    return workplace->GetFlag()->GetNumFreeSpaces() >= GetNumWaresToPutNow(GetWaresToCarryOut().size());
 }
 
 void nofBuildingWorker::PutWareAtFlag(const GoodType good)

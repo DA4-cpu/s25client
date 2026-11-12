@@ -172,23 +172,36 @@ unsigned short nofCustomPlanter::GetCarryID() const
     return CARRY_ID_CARRIER_OFFSET + static_cast<unsigned short>(ware ? *ware : GetBuildingDesc().product);
 }
 
+helpers::OptionalEnum<GoodType> nofCustomPlanter::ProduceExtraWare(const GoodType firstWare)
+{
+    if(!harvest_ || !HarvestPiece())
+        return std::nullopt;
+    return firstWare;
+}
+
+bool nofCustomPlanter::HarvestPiece()
+{
+    auto* deposit = world->GetSpecObj<noDeposit>(pos);
+    if(!deposit || deposit->IsGrowing() || static_cast<int>(deposit->GetObjectIdx()) != GetBuildingDesc().plantObject)
+        return false;
+    if(deposit->IsSmall())
+    {
+        // Last ware: The object disappears
+        world->DestroyNO(pos);
+        world->RecalcBQAroundPoint(pos);
+    } else
+        deposit->Collect();
+    return true;
+}
+
 void nofCustomPlanter::WorkFinished()
 {
     const civ::CustomBuilding& building = GetBuildingDesc();
     ware = std::nullopt;
     if(harvest_)
     {
-        auto* deposit = world->GetSpecObj<noDeposit>(pos);
-        if(!deposit || deposit->IsGrowing() || static_cast<int>(deposit->GetObjectIdx()) != building.plantObject)
-            return;
-        if(deposit->IsSmall())
-        {
-            // Last ware: The object disappears
-            world->DestroyNO(pos);
-            world->RecalcBQAroundPoint(pos);
-        } else
-            deposit->Collect();
-        ware = building.product;
+        if(HarvestPiece())
+            ware = building.product;
     } else
     {
         // The point may have become unusable meanwhile (e.g. a flag next to it): Then the wares are lost

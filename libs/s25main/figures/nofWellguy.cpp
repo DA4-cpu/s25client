@@ -121,6 +121,16 @@ bool nofWellguy::AreWaresAvailable() const
     return FindPointWithResource(ResourceType::Water).isValid();
 }
 
+helpers::OptionalEnum<GoodType> nofWellguy::ProduceExtraWare(const GoodType firstWare)
+{
+    const MapPoint resPt = FindPointWithResource(ResourceType::Water);
+    if(!resPt.isValid())
+        return std::nullopt;
+    if(world->GetGGS().getSelection(AddonId::EXHAUSTIBLE_WATER) == 2)
+        world->ReduceResource(resPt);
+    return firstWare;
+}
+
 bool nofWellguy::StartWorking()
 {
     MapPoint resPt = FindPointWithResource(ResourceType::Water);

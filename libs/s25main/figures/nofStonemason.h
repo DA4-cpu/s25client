@@ -20,6 +20,10 @@ private:
     void WorkStarted() override;
     /// Abgeleitete Klasse informieren, wenn fertig ist mit Arbeiten
     void WorkFinished() override;
+    /// Civilization mode, output ratio above 1: one more piece of the stone pile per stone
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
+    /// Hew a piece off the stone pile at the current position. False if there is none (anymore)
+    bool HewStone();
 
     /// Returns the quality of this working point or determines if the worker can work here at all
     PointQuality GetPointQuality(MapPoint pt, bool isBeforeWork) const override;

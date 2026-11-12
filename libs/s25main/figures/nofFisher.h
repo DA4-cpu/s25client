@@ -25,6 +25,8 @@ private:
     void WorkStarted() override;
     /// Abgeleitete Klasse informieren, wenn fertig ist mit Arbeiten
     void WorkFinished() override;
+    /// Civilization mode, output ratio above 1: one more fish of the same fishing ground per fish
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
 
 public:
     nofFisher(MapPoint pos, unsigned char player, nobUsual* workplace);

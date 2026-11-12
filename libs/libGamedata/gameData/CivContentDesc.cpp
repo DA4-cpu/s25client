@@ -5,6 +5,7 @@
 #include "CivContentDesc.h"
 #include "WorldDescription.h"
 #include "lua/CheckedLuaTable.h"
+#include <cmath>
 
 namespace {
 bool isValidIdentifier(const std::string& name)
@@ -69,6 +70,13 @@ TagQuery parseTagQuery(const kaguya::LuaRef& value, const std::string& context)
     return result;
 }
 
+unsigned parseOutputRatio(const double value, const std::string& context)
+{
+    if(!(value >= 0 && value <= MAX_OUTPUT_RATIO / 100.))
+        throw GameDataError(context + ": outputRatio must be in [0, " + std::to_string(MAX_OUTPUT_RATIO / 100) + "]");
+    return static_cast<unsigned>(std::lround(value * 100));
+}
+
 BuildingToolsDesc parseBuildingTools(const kaguya::LuaTable& luaTable, const std::string& context)
 {
     CheckedLuaTable luaData(luaTable);
@@ -114,6 +122,8 @@ ToolDesc::ToolDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context + ": durability must be in [1, 60000] (work steps)");
     if(speed > 1000)
         throw GameDataError(context + ": speed must be in [0, 1000] (percent)");
+    if(const auto ratio = luaData.getOptional<double>("outputRatio"))
+        outputRatio = parseOutputRatio(*ratio, context);
     luaData.checkUnused();
 }
 
@@ -276,6 +286,12 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     aiNearBorder = luaData.getOrDefault("aiNearBorder", false);
     if(const auto toolsTable = luaData.getOptional<kaguya::LuaTable>("tools"))
         tools = parseBuildingTools(*toolsTable, context);
+    if(const auto ratio = luaData.getOptional<double>("outputRatio"))
+    {
+        if(isLibrary || (output.empty() && outputs.empty()))
+            throw GameDataError(context + ": outputRatio needs a product (output or outputs)");
+        outputRatio = parseOutputRatio(*ratio, context);
+    }
     luaData.checkUnused();
 }
 

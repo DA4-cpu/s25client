@@ -104,3 +104,8 @@ helpers::OptionalEnum<GoodType> nofTempleServant::ProduceWare()
     }
     return currentProduction;
 }
+
+helpers::OptionalEnum<GoodType> nofTempleServant::ProduceExtraWare(GoodType /*firstWare*/)
+{
+    return ProduceWare();
+}

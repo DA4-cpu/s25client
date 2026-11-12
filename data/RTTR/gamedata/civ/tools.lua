@@ -27,6 +27,8 @@ rttr:AddTool{...}: macht eine Ware (eingebaut oder aus wares.lua) zum Werkzeug
   material    Bezeichner des Materials
   durability  Haltbarkeit in Arbeitsschritten
   speed       Bonus auf das Arbeitstempo in Prozent
+  outputRatio optional (Standard 0): Bonus auf die Waren pro Arbeitsschritt des Gebäudes, z.B. 0.5 (siehe outputRatio
+              in workshops.lua). Zählt, solange das Werkzeug in Gebrauch ist.
   Der Werkzeugtyp ergibt sich aus den Tags der Ware: Eine neue Ware "CopperAxe" mit kind = "Axe" zählt überall als
   Axt, wo unten "Axe" steht.
 
@@ -38,6 +40,11 @@ rttr:SetBuildingTools{...}: Werkzeuge der eingebauten Gebäude
   kein Werkzeug hatte, arbeiten wie bisher (Tempo 100).
   Werkstätten aus workshops.lua bekommen ihre Werkzeuge dort: tools = { baseSpeed = 0, tools = { "Saw" } }.
   Ohne diese Angabe gilt worker.tool mit baseSpeed = 0.
+
+rttr:SetBuildingOutputRatio{...}: Waren pro Arbeitsschritt der eingebauten Gebäude ohne Werkzeug (Standard 1), 0 bis 8,
+  z.B. rttr:SetBuildingOutputRatio{ Woodcutter = 1, Quarry = 1.5 }. Bedeutung wie outputRatio in workshops.lua
+  (dort für die Werkstätten). Gilt auch ohne Werkzeugreform. Ein Holzfäller mit 2 bringt 2 Holz je Baum, ein Steinmetz
+  oder eine Mine nimmt je Ware ein Stück Stein bzw. eine Einheit Erz, ein Fischer je Fisch einen Fisch aus dem Wasser.
 
 rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nur noch n Prozent seiner Haltbarkeit
   hat. Es wartet im Gebäude, bis das alte kaputt ist.

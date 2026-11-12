@@ -85,6 +85,8 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
         {
             // Done working -> Handle results of the work (step)
             WorkFinished();
+            // Civilization mode: yield of the work step (output ratio)
+            ProducedWare();
             world->SetReserved(pos, false);
             StartWalkingHome();
 

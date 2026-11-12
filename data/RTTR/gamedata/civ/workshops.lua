@@ -28,9 +28,15 @@ rttr:AddWorkshop{...}:
               outputs = { "CopperAxe", { "Hammer", "Copper" } } (ein Text = ein Tag, eine Liste = alle diese Tags).
               Bei mehr als einem Eintrag ist outputChoice nötig. Nicht für Sammler, Plantagen und Minen und nicht
               zusammen mit inheritProperties.
-  outputRatio (Noch nicht im Code vorhanden!): Man kann bestimmten, wie viele Waren man pro Arbeitsdurchlauf erhält bpw. bei outputRatio 0.5 erhält man erst alle 2 Arbeitsdurchläufe eine Ware, 
-                bei outputRatio 2 (maximal 8) erhält man 2 Waren pro Durchlauf. Dieser Wert soll auch durch Tools angesteuert werden. Also muss man bei tools.lua noch ein outputRatio für jedes Tool ergänzen. 
-                Der Toolbonus wirkt summativ zB. 0.5 als Grundwert des Gebäudes und 1 als Toolbonus gibt 1.5 gesamt. 1.5 heißt jeder 1. Arbeitsschritt gibt 1 Ware als Output und jeder 2. gibt 2 Waren als Output
+  outputRatio optional (Standard 1): Waren pro Arbeitsschritt, 0 bis 8, auch Kommazahlen. 0.5 = eine Ware jeden 2.
+              Schritt, 2 = zwei Waren je Schritt, 1.5 = abwechselnd 1 und 2. Der Rest einer Ware wird mitgezählt, bis
+              eine ganze erreicht ist. Die Eingänge werden in jedem Schritt verbraucht.
+              Die Werkzeuge in Gebrauch zählen ihr outputRatio aus tools.lua dazu (0.5 + Werkzeug 1 = 1.5), höchstens
+              8 insgesamt. Ist die Summe 0, arbeitet die Werkstatt nicht.
+              Mehrere Waren je Schritt: Mit outputChoice wird jede einzeln gewählt, Minen und Sammler nehmen je Ware
+              eine Einheit ihres Erzes bzw. Objekts (ist nichts mehr da, gibt es weniger Waren), Nebenprodukte
+              (byproducts.lua) gibt es je Ware. Der Arbeiter legt alle zusammen an die Fahne, mehr als 8 nacheinander.
+              Eingebaute Gebäude: rttr:SetBuildingOutputRatio in tools.lua.
   outputChoice optional: wie die Werkstatt ihr Produkt wählt, wenn es mehrere gibt:
               "knowledge": nach dem Regler "Wissen" im Fenster "Verteilung" (z.B. geritzte Knochen für LWP, IWP und
                 MWP). Jedes Produkt braucht knowledge in wares.lua (genau eine Art).

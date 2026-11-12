@@ -21,6 +21,8 @@ protected:
     unsigned short GetCarryID() const override { return CARRY_ID_CARRIER_OFFSET + rttr::enum_cast(GoodType::Water); }
     /// Der Arbeiter erzeugt eine Ware
     helpers::OptionalEnum<GoodType> ProduceWare() override;
+    /// Civilization mode, output ratio above 1: one more unit of water per ware (if water is exhaustible)
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
 
     bool AreWaresAvailable() const override;
     bool StartWorking() override;

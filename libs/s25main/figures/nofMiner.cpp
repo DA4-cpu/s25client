@@ -74,7 +74,7 @@ bool nofMiner::AreWaresAvailable() const
     return nofWorkman::AreWaresAvailable() && FindPointWithResource(GetRequiredResType()).isValid();
 }
 
-bool nofMiner::StartWorking()
+bool nofMiner::DigResource()
 {
     MapPoint resPt = FindPointWithResource(GetRequiredResType());
     if(!resPt.isValid())
@@ -85,7 +85,19 @@ bool nofMiner::StartWorking()
                                 && settings.isEnabled(AddonId::INEXHAUSTIBLE_GRANITEMINES));
     if(!inexhaustibleRes)
         world->ReduceResource(resPt);
-    return nofWorkman::StartWorking();
+    return true;
+}
+
+bool nofMiner::StartWorking()
+{
+    return DigResource() && nofWorkman::StartWorking();
+}
+
+helpers::OptionalEnum<GoodType> nofMiner::ProduceExtraWare(const GoodType firstWare)
+{
+    if(!DigResource())
+        return std::nullopt;
+    return firstWare;
 }
 
 ResourceType nofMiner::GetRequiredResType() const

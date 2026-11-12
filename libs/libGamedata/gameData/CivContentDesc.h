@@ -70,6 +70,8 @@ struct ToolDesc
     unsigned durability = 0;
     /// Bonus to the work speed of the building in percent of the normal speed
     unsigned speed = 0;
+    /// Bonus to the output ratio of the building in hundredths (wares per work step), e.g. 50 = +0.5
+    unsigned outputRatio = 0;
 
     ToolDesc() = default;
     explicit ToolDesc(const kaguya::LuaTable& luaData);
@@ -188,6 +190,8 @@ struct WorkshopDesc
     bool aiNearBorder = false;
     /// Tools used in the workshop. Not set: the tool of the worker (if any) with base speed 0
     std::optional<BuildingToolsDesc> tools;
+    /// Wares per work step in hundredths (100 = 1 ware, 50 = 1 ware every 2nd step). Tools can add to it
+    unsigned outputRatio = 100;
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);
@@ -235,6 +239,10 @@ struct ByproductDesc
     explicit ByproductDesc(const kaguya::LuaTable& luaData);
 };
 
+/// Read an output ratio (wares per work step, e.g. 1.5) from lua and return it in hundredths. Throws if it is not in
+/// [0, MAX_OUTPUT_RATIO]
+unsigned parseOutputRatio(double value, const std::string& context);
+
 /// Read a tag query from lua: Either a single string or a list of strings
 TagQuery parseTagQuery(const kaguya::LuaRef& value, const std::string& context);
 /// Parse { baseSpeed = 0, tools = { "Axe", ... } } (both optional)
@@ -243,6 +251,8 @@ BuildingToolsDesc parseBuildingTools(const kaguya::LuaTable& luaData, const std:
 constexpr unsigned MAX_BUILDING_TOOLS = 4;
 /// Maximum number of tool materials
 constexpr unsigned MAX_TOOL_MATERIALS = 8;
+/// Maximum output ratio (wares per work step) in hundredths, also for the sum with the tool bonus
+constexpr unsigned MAX_OUTPUT_RATIO = 800;
 /// Maximum number of entries in outputs of a workshop
 constexpr unsigned MAX_WORKSHOP_OUTPUTS = 16;
 /// Maximum number of regulators (rttr:AddRegulator) and of entries per regulator

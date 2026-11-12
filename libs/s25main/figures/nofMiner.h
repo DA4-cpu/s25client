@@ -19,6 +19,10 @@ protected:
     unsigned short GetCarryID() const override;
     /// Der Arbeiter erzeugt eine Ware
     helpers::OptionalEnum<GoodType> ProduceWare() override;
+    /// Take one unit of the resource. False if there is none in range
+    bool DigResource();
+    /// Civilization mode, output ratio above 1: one more unit of the resource per ware
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
 
     bool AreWaresAvailable() const override;
     bool StartWorking() override;

@@ -122,3 +122,8 @@ helpers::OptionalEnum<GoodType> nofArmorer::ProduceWare()
     else
         return SHIELD_TYPES[world->GetPlayer(player).nation];
 }
+
+helpers::OptionalEnum<GoodType> nofArmorer::ProduceExtraWare(GoodType /*firstWare*/)
+{
+    return ProduceWare();
+}

@@ -180,8 +180,21 @@ void iwBuilding::Msg_PaintAfter()
 void iwBuilding::DrawTools()
 {
     // Civilization mode, tool reform: Tools of the building (left of the inputs) with their durability and the
-    // work speed (below the product)
+    // work speed (below the product), also the output ratio (wares per work step) unless it is 1 without tools
     const auto& slots = building->GetToolSlots();
+    const DrawPoint speedPos = GetDrawPos() + DrawPoint(196, 66);
+    const unsigned ratio = building->GetOutputRatio();
+    if(ratio != 100 || !slots.empty())
+    {
+        const DrawPoint ratioPos = speedPos + DrawPoint(0, slots.empty() ? 0 : 24);
+        std::string ratioText = "x" + std::to_string(ratio / 100u);
+        if(ratio % 100u != 0)
+            ratioText +=
+              "." + std::to_string((ratio % 100u) / 10u) + ((ratio % 10u) ? std::to_string(ratio % 10u) : "");
+        SmallFont->Draw(ratioPos, _("Ertrag"), FontStyle::CENTER, COLOR_YELLOW);
+        SmallFont->Draw(ratioPos + DrawPoint(0, 10), ratioText, FontStyle::CENTER,
+                        ratio == 0 ? COLOR_RED : COLOR_YELLOW);
+    }
     if(slots.empty())
         return;
     const civ::Content& content = civ::getActiveContent();
@@ -218,7 +231,6 @@ void iwBuilding::DrawTools()
             SmallFont->Draw(boxPos + DrawPoint(boxSize.x + 2, 2), "...", FontStyle::LEFT, COLOR_YELLOW);
     }
     const unsigned speed = building->GetWorkSpeed();
-    const DrawPoint speedPos = GetDrawPos() + DrawPoint(196, 66);
     SmallFont->Draw(speedPos, _("Tempo"), FontStyle::CENTER, COLOR_YELLOW);
     SmallFont->Draw(speedPos + DrawPoint(0, 10), std::to_string(speed) + "%", FontStyle::CENTER,
                     speed == 0 ? COLOR_RED : COLOR_YELLOW);

@@ -93,6 +93,7 @@ Content::Content()
 {
     // Regulator "Wissen": all knowledge types equal unless set in lua
     std::fill(defaultKnowledgeDistribution_.begin(), defaultKnowledgeDistribution_.end(), static_cast<uint8_t>(5));
+    std::fill(outputRatios_.begin(), outputRatios_.end(), static_cast<uint16_t>(100));
     for(const auto good : helpers::enumRange<GoodType>())
     {
         if(isUsableBuiltinGood(good))
@@ -507,11 +508,24 @@ Content::Content(const WorldDescription& desc) : Content()
         bld.workDesc.waresNeeded = makeWaresNeeded(inputWares);
         bld.workDesc.numSpacesPerWare = static_cast<uint8_t>(wsDesc.storage);
         bld.workDesc.useOneWareEach = wsDesc.consumeEach;
+        outputRatios_[getCustomBuilding(i)] = static_cast<uint16_t>(wsDesc.outputRatio);
         bld.workGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.workTime)));
         bld.waitGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.waitTime)));
 
         buildings_.push_back(std::move(bld));
         workers_.push_back(std::move(worker));
+    }
+
+    // Output ratio of built-in buildings (workshops have it in rttr:AddWorkshop)
+    for(const auto& entry : desc.buildingOutputRatios)
+    {
+        const auto bld = buildingFromIdentifier(entry.first);
+        if(!bld || !BuildingProperties::IsUsual(*bld) || !BUILTIN_BLD_WORK_DESC[static_cast<unsigned>(*bld)].job)
+        {
+            throw GameDataError("Output ratio of building '" + entry.first
+                                + "': not a built-in building with a worker (workshops get it in rttr:AddWorkshop)");
+        }
+        outputRatios_[*bld] = static_cast<uint16_t>(entry.second);
     }
 
     // Tool reform: materials, tools and the tools of the buildings
@@ -561,6 +575,7 @@ Content::Content(const WorldDescription& desc) : Content()
         tool.material = static_cast<unsigned>(itMaterial - toolMaterials_.begin());
         tool.durability = toolDesc.durability;
         tool.speed = toolDesc.speed;
+        tool.outputRatio = toolDesc.outputRatio;
         tools_[*good] = tool;
     }
     const auto resolveTools = [this](const BuildingToolsDesc& toolsDesc, const std::string& context) {

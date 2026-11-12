@@ -29,6 +29,8 @@ class nofCustomWorker : public nofWorkman
     void DrawWorking(DrawPoint drawPt) override;
     unsigned short GetCarryID() const override;
     helpers::OptionalEnum<GoodType> ProduceWare() override;
+    /// Civilization mode, output ratio above 1: each product is chosen on its own, a mine digs one more unit
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
     bool StartWorking() override;
     /// A librarian never "works": the library only stores media. A miner needs the ore in range, too
     bool AreWaresAvailable() const override;

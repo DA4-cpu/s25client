@@ -124,7 +124,8 @@
 /// 21: Civilization mode: Ores defined in lua (resources with 16 bit), growing deposits and plantations, climate
 /// 22: Civilization mode: Tool reform (tools in buildings, work speed, regulator "Werkzeuge" of players)
 /// 23: Civilization mode: Own regulators of the players, product of workshops with outputChoice = "tools"
-static const unsigned currentGameDataVersion = 23;
+/// 24: Civilization mode: Output ratio of buildings (credit of the step), wares a worker still has to put at the flag
+static const unsigned currentGameDataVersion = 24;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

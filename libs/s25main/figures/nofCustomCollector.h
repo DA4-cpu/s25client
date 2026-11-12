@@ -22,6 +22,10 @@ class nofCustomCollector : public nofFarmhand
     unsigned short GetCarryID() const override;
     void WorkStarted() override {}
     void WorkFinished() override;
+    /// Civilization mode, output ratio above 1: one more piece of the object per ware
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
+    /// Take a piece of the object at the current position (it disappears after the last one). False if there is none
+    bool CollectPiece();
     PointQuality GetPointQuality(MapPoint pt, bool isBeforeWork) const override;
 
 public:

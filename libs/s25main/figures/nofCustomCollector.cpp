@@ -72,9 +72,23 @@ unsigned short nofCustomCollector::GetCarryID() const
 
 void nofCustomCollector::WorkFinished()
 {
-    auto* deposit = world->GetSpecObj<noDeposit>(pos);
-    if(!deposit)
+    if(!CollectPiece())
         return; // Gone (should not happen as the point is reserved)
+    ware = GetBuildingDesc().product;
+}
+
+helpers::OptionalEnum<GoodType> nofCustomCollector::ProduceExtraWare(const GoodType firstWare)
+{
+    if(!CollectPiece())
+        return std::nullopt;
+    return firstWare;
+}
+
+bool nofCustomCollector::CollectPiece()
+{
+    auto* deposit = world->GetSpecObj<noDeposit>(pos);
+    if(!deposit || static_cast<int>(deposit->GetObjectIdx()) != GetBuildingDesc().collectObject)
+        return false;
     if(deposit->IsSmall())
     {
         // Last ware: The object disappears
@@ -84,8 +98,7 @@ void nofCustomCollector::WorkFinished()
         world->RecalcBQAroundPoint(pos);
     } else
         deposit->Collect();
-
-    ware = GetBuildingDesc().product;
+    return true;
 }
 
 nofFarmhand::PointQuality nofCustomCollector::GetPointQuality(const MapPoint pt, bool /* isBeforeWork */) const

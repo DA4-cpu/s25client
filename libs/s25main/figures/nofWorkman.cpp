@@ -51,7 +51,10 @@ void nofWorkman::HandleStateWaiting2()
 {
     current_ev = nullptr;
     // Ware erzeugen... (noch nicht "richtig"!, sondern nur viruell erstmal)
-    if(!(ware = ProduceWare()).has_value())
+    ware = ProduceWare();
+    // Zivilisationsmodus: Ertrag des Arbeitsschritts (outputRatio)
+    ProducedWare();
+    if(!ware.has_value())
     {
         // Soll keine erzeugt werden --> wieder anfangen zu arbeiten
         TryToWork();

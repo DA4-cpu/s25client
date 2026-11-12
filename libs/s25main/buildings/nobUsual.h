@@ -76,6 +76,10 @@ protected:
     const GameEvent* ordertool_ev;
     /// Tool reform: Work speed in percent of the current work step
     uint16_t stepSpeed_;
+    /// Civilization mode: Output ratio of the current work step in hundredths and the fraction of a ware left over
+    /// from the previous work steps (e.g. 50 after the first step with ratio 0.5)
+    uint16_t stepOutputRatio_ = 100;
+    uint16_t outputCredit_ = 0;
     /// Tool reform: Slot a tool is ordered for right now (not serialized), -1: none
     int orderingToolSlot_ = -1;
 
@@ -154,6 +158,12 @@ public:
     bool BeginWorkStep();
     /// Duration of a part of the current work step at its work speed
     unsigned ScaleWorkDuration(unsigned gfs) const;
+    /// Civilization mode: Wares per work step in hundredths: ratio of the building plus the bonus of its tools in use,
+    /// at most MAX_OUTPUT_RATIO (8 wares). Always 100 outside the civilization mode
+    unsigned GetOutputRatio() const;
+    /// Called by the worker when the current work step produced a ware: Number of wares it yields according to the
+    /// output ratio of the step (0 if only a fraction is reached yet, the fraction is kept for the next steps)
+    unsigned TakeNumProducts();
     /// Number of tools of this ware the building is missing (nothing in use or ordered)
     unsigned GetNumMissingTools(GoodType tool) const;
 

@@ -217,6 +217,31 @@ bool nofCustomWorker::StartWorking()
     return true;
 }
 
+helpers::OptionalEnum<GoodType> nofCustomWorker::ProduceExtraWare(const GoodType firstWare)
+{
+    const civ::CustomBuilding* building = GetBuildingDesc();
+    if(!building)
+        return std::nullopt;
+    switch(building->productChoice)
+    {
+        case civ::ProductChoice::Tools: return ChooseTool();
+        case civ::ProductChoice::Knowledge:
+        case civ::ProductChoice::Regulator: return ChooseWeightedProduct(*building);
+        case civ::ProductChoice::None: break;
+    }
+    const ResourceType ore = GetMineResource();
+    if(ore != ResourceType::Nothing)
+    {
+        // Mine: one more unit of the ore per ware
+        const MapPoint resPt = FindPointWithResource(ore);
+        if(!resPt.isValid())
+            return std::nullopt;
+        if(!world->GetGGS().isEnabled(AddonId::INEXHAUSTIBLE_MINES))
+            world->ReduceResource(resPt);
+    }
+    return firstWare;
+}
+
 helpers::OptionalEnum<GoodType> nofCustomWorker::ProduceWare()
 {
     const civ::CustomBuilding* building = GetBuildingDesc();

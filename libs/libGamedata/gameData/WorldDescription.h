@@ -52,6 +52,8 @@ struct WorldDescription
     std::vector<ToolDesc> tools;
     /// Tools of built-in buildings: Building identifier -> tools
     std::map<std::string, BuildingToolsDesc> buildingTools;
+    /// Output ratio of built-in buildings in hundredths (rttr:SetBuildingOutputRatio): Building identifier -> ratio
+    std::map<std::string, unsigned> buildingOutputRatios;
     /// A replacement is ordered when a tool has at most this many percent of its durability left
     unsigned toolReorderPercent = 10;
     /// Default setting of the regulator "Wissen" (weights 0..10 for LWP, IWP, MWP). Not set: all equal

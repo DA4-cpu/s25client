@@ -137,6 +137,8 @@ void nofSkinner::HandleStateSkinningCarcass()
     animal = nullptr;
 
     ware = ProduceWare();
+    // Civilization mode: yield of the work step (output ratio)
+    ProducedWare();
     StartWalkingHome();
 }
 

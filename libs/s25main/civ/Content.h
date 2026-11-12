@@ -178,6 +178,8 @@ struct ToolInfo
     unsigned durability = 0;
     /// Bonus to the work speed of the building in percent
     unsigned speed = 0;
+    /// Bonus to the output ratio of the building in hundredths (wares per work step)
+    unsigned outputRatio = 0;
 };
 
 /// Tools used in a building
@@ -266,6 +268,9 @@ public:
     const BuildingTools& GetBuildingTools(BuildingType bld) const { return buildingTools_[bld]; }
     /// A replacement is ordered when a tool has at most this many work steps left
     unsigned GetToolReorderSteps(GoodType tool) const;
+    /// Wares per work step of the building without tools in hundredths (100 = 1 ware, 50 = 1 ware every 2nd step).
+    /// The tools in use add their bonus (nobUsual::GetOutputRatio)
+    unsigned GetOutputRatio(BuildingType bld) const { return outputRatios_[bld]; }
     /// True if a helper can take this job without a tool (tool reform: all jobs of buildings).
     /// Builder, planer, geologist and scout still need their tool
     bool IsRecruitedWithoutTool(Job job) const;
@@ -298,6 +303,7 @@ private:
     std::vector<ToolMaterial> toolMaterials_;
     helpers::EnumArray<std::optional<ToolInfo>, GoodType> tools_;
     helpers::EnumArray<BuildingTools, BuildingType> buildingTools_;
+    helpers::EnumArray<uint16_t, BuildingType> outputRatios_;
     unsigned toolReorderPercent_ = 10;
 };
 

@@ -26,6 +26,7 @@
 #include "world/GameWorld.h"
 #include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
+#include "gameData/CivContentDesc.h"
 #include <algorithm>
 #include <numeric>
 
@@ -97,6 +98,12 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
         ordertool_ev = sgd.PopEvent();
         stepSpeed_ = sgd.PopUnsignedShort();
     }
+    // Civilization mode: output ratio
+    if(sgd.GetGameDataVersion() >= 24)
+    {
+        stepOutputRatio_ = sgd.PopUnsignedShort();
+        outputCredit_ = sgd.PopUnsignedShort();
+    }
     // The lua files may have changed (and older savegames have no tools): Buildings start without the new tools
     const std::size_t numSlots = GetToolsDesc().slots.size();
     for(std::size_t i = numSlots; i < toolSlots_.size(); ++i)
@@ -157,6 +164,8 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
     }
     sgd.PushEvent(ordertool_ev);
     sgd.PushUnsignedShort(stepSpeed_);
+    sgd.PushUnsignedShort(stepOutputRatio_);
+    sgd.PushUnsignedShort(outputCredit_);
 }
 
 nobUsual::~nobUsual() = default;
@@ -697,8 +706,33 @@ unsigned nobUsual::GetWorkSpeed() const
     return speed;
 }
 
+unsigned nobUsual::GetOutputRatio() const
+{
+    if(!civ::isEnabled(*world))
+        return 100;
+    const civ::Content& content = civ::getActiveContent();
+    unsigned ratio = content.GetOutputRatio(bldType_);
+    for(const ToolSlot& slot : toolSlots_)
+    {
+        if(const civ::ToolInfo* info = content.GetTool(slot.tool))
+            ratio += info->outputRatio;
+    }
+    return std::min(ratio, MAX_OUTPUT_RATIO);
+}
+
+unsigned nobUsual::TakeNumProducts()
+{
+    const unsigned total = outputCredit_ + stepOutputRatio_;
+    outputCredit_ = static_cast<uint16_t>(total % 100u);
+    return total / 100u;
+}
+
 bool nobUsual::BeginWorkStep()
 {
+    // Output ratio 0: The work would be in vain
+    stepOutputRatio_ = static_cast<uint16_t>(GetOutputRatio());
+    if(stepOutputRatio_ == 0)
+        return false;
     if(toolSlots_.empty())
     {
         stepSpeed_ = static_cast<uint16_t>(GetWorkSpeed());

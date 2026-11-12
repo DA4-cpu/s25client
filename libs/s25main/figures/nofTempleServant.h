@@ -17,6 +17,8 @@ class nofTempleServant : public nofWorkman
     [[noreturn]] unsigned short GetCarryID() const override;
     /// The worker produces a ware
     helpers::OptionalEnum<GoodType> ProduceWare() override;
+    /// Civilization mode, output ratio above 1: each ware is chosen on its own
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
 
     /// Draws the figure while returning home / entering the building (often carrying wares)
     void DrawWalkingWithWare(DrawPoint drawPt) override;

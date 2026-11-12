@@ -23,6 +23,8 @@ protected:
     unsigned short GetCarryID() const override;
     /// Der Arbeiter erzeugt eine Ware
     helpers::OptionalEnum<GoodType> ProduceWare() override;
+    /// Civilization mode, output ratio above 1: each tool is chosen on its own (orders, then priorities)
+    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
     /// Returns the next tool to be produced according to the orders
     helpers::OptionalEnum<GoodType> GetOrderedTool();
     /// Returns a random tool according to the priorities

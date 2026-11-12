@@ -112,6 +112,17 @@ void nofFisher::WorkStarted()
         world->ReduceResource(world->GetNeighbour(pos, fishing_dir));
 }
 
+helpers::OptionalEnum<GoodType> nofFisher::ProduceExtraWare(const GoodType firstWare)
+{
+    const MapPoint fishPt = world->GetNeighbour(pos, fishing_dir);
+    if(world->GetGGS().isEnabled(AddonId::INEXHAUSTIBLE_FISH))
+        return firstWare;
+    if(!world->GetNode(fishPt).resources.has(ResourceType::Fish))
+        return std::nullopt;
+    world->ReduceResource(fishPt);
+    return firstWare;
+}
+
 void nofFisher::WorkFinished()
 {
     if(successful)
