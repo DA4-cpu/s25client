@@ -5,9 +5,12 @@
 #pragma once
 
 #include "noBaseBuilding.h"
+#include "gameTypes/BuildingTypes.h"
 #include "gameTypes/GoodTypes.h"
 #include <cstdint>
 #include <list>
+#include <utility>
+#include <vector>
 
 class nofBuilder;
 class nofPlaner;
@@ -34,23 +37,40 @@ class noBuildingSite : public noBaseBuilding
     nofPlaner* planer;
     /// Bauarbeiter, der an dieser Baustelle arbeitet
     nofBuilder* builder;
-    /// Bretter und Steine, die hier liegen
-    unsigned char boards, stones;
-    /// Bretter und Steine, die schon verbaut wurden
-    unsigned char used_boards, used_stones;
-    /// Gibt den Baufortschritt an, wie hoch das Gebäude schon gebaut ist, gemessen in 8 Stufen für jede verbaute Ware
-    unsigned char build_progress;
-    /// Bestellte Bretter und Steine, d.h. Steine/Bretter, die noch "bestellt" wurden, aber noch nicht da sind
-    std::list<Ware*> ordered_boards, ordered_stones;
 
 public:
-    unsigned char getUsedBoards() const { return used_boards; }
-    unsigned char getUsedStones() const { return used_stones; }
-    unsigned char getBoards() const { return boards; }
-    unsigned char getStones() const { return stones; }
-    /// Bretter und Steine, die bestellt, aber noch nicht da sind
-    unsigned getNumOrderedBoards() const { return static_cast<unsigned>(ordered_boards.size()); }
-    unsigned getNumOrderedStones() const { return static_cast<unsigned>(ordered_stones.size()); }
+    /// Construction material of one entry of the costs (BUILDING_COSTS)
+    struct Material
+    {
+        /// Wares lying at the site (not used yet)
+        std::vector<GoodType> delivered;
+        /// Number of wares already used by the builder
+        unsigned char used = 0;
+        /// Wares ordered but not yet here
+        std::list<Ware*> ordered;
+    };
+
+private:
+    /// Material per entry of the costs of the building type
+    std::vector<Material> materials_;
+    /// Gibt den Baufortschritt an, wie hoch das Gebäude schon gebaut ist, gemessen in 8 Stufen für jede verbaute Ware
+    unsigned char build_progress;
+    /// Entry of the costs material is ordered for right now (see TakeWare), -1: none
+    int orderingEntry_ = -1;
+
+    /// Number of wares of the entry still to order (not used, lying here or ordered)
+    unsigned GetNumMissing(unsigned entry) const;
+    /// Entry the ware belongs to: the one it was ordered for, otherwise the first that needs it. -1: none
+    int FindEntryForWare(const Ware& ware) const;
+
+public:
+    /// Material per entry of the costs (same order as BUILDING_COSTS)
+    const std::vector<Material>& GetMaterials() const { return materials_; }
+    /// Number of wares used, lying at the site and ordered of all entries whose wares contain the ware type
+    /// (counts each entry only once)
+    unsigned GetNumUsed(GoodType good) const;
+    /// Progress (out of the maximum) at which the frame is complete and the walls begin, and the maximum progress
+    static std::pair<unsigned, unsigned> GetMaxProgress(BuildingType type);
     /// Ist bereits ein Bauarbeiter (oder Planierer) dieser Baustelle zugewiesen, oder wartet sie noch auf einen?
     bool HasBuilder() const { return builder != nullptr; }
 

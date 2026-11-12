@@ -12,6 +12,7 @@
 #include "figures/nofBuilder.h"
 #include "figures/nofPlaner.h"
 #include "helpers/containerUtils.h"
+#include "helpers/serializeEnums.h"
 #include "helpers/toString.h"
 #include "ogl/glArchivItem_Bitmap.h"
 #include "ogl/glSmartBitmap.h"
@@ -19,11 +20,13 @@
 #include "gameData/BuildingConsts.h"
 #include "gameData/MilitaryConsts.h"
 #include "s25util/colors.h"
+#include <algorithm>
+#include <array>
 #include <stdexcept>
 
 noBuildingSite::noBuildingSite(const BuildingType type, const MapPoint pos, const unsigned char player)
     : noBaseBuilding(NodalObjectType::Buildingsite, type, pos, player), state(BuildingSiteState::Building),
-      planer(nullptr), builder(nullptr), boards(0), stones(0), used_boards(0), used_stones(0), build_progress(0)
+      planer(nullptr), builder(nullptr), materials_(BUILDING_COSTS[type].size()), build_progress(0)
 {
     // Überprüfen, ob die Baustelle erst noch planiert werden muss (nur bei mittleren/großen Gebäuden)
     if(GetSize() == BuildingQuality::House || GetSize() == BuildingQuality::Castle
@@ -57,8 +60,8 @@ noBuildingSite::noBuildingSite(const BuildingType type, const MapPoint pos, cons
 /// Konstruktor für Hafenbaustellen vom Schiff aus
 noBuildingSite::noBuildingSite(const MapPoint pos, const unsigned char player)
     : noBaseBuilding(NodalObjectType::Buildingsite, BuildingType::HarborBuilding, pos, player),
-      state(BuildingSiteState::Building), planer(nullptr), boards(BUILDING_COSTS[BuildingType::HarborBuilding].boards),
-      stones(BUILDING_COSTS[BuildingType::HarborBuilding].stones), used_boards(0), used_stones(0), build_progress(0)
+      state(BuildingSiteState::Building), planer(nullptr),
+      materials_(BUILDING_COSTS[BuildingType::HarborBuilding].size()), build_progress(0)
 {
     GamePlayer& owner = world->GetPlayer(player);
     // Baustelle in den Index eintragen, damit die Wirtschaft auch Bescheid weiß
@@ -66,9 +69,13 @@ noBuildingSite::noBuildingSite(const MapPoint pos, const unsigned char player)
     // Bauarbeiter auch auf der Karte auftragen
     builder = &world->AddFigure(pos, std::make_unique<nofBuilder>(pos, player, this));
 
+    // The expedition brought all material (harbor costs: boards and stones)
+    const BuildingCosts& costs = BUILDING_COSTS[BuildingType::HarborBuilding];
+    for(unsigned i = 0; i < costs.size(); ++i)
+        materials_[i].delivered.assign(costs[i].amount, costs[i].wares.front());
     // Baumaterialien in der Inventur verbuchen
-    owner.DecreaseInventoryWare(GoodType::Boards, boards);
-    owner.DecreaseInventoryWare(GoodType::Stones, stones);
+    owner.DecreaseInventoryWare(GoodType::Boards, HARBOR_BUILDING_COST.boards);
+    owner.DecreaseInventoryWare(GoodType::Stones, HARBOR_BUILDING_COST.stones);
 }
 
 noBuildingSite::~noBuildingSite() = default;
@@ -91,12 +98,12 @@ void noBuildingSite::Destroy()
     RTTR_Assert(!planer);
 
     // Bestellte Waren Bescheid sagen
-    for(Ware* ordered_board : ordered_boards)
-        WareNotNeeded(ordered_board);
-    ordered_boards.clear();
-    for(Ware* ordered_stone : ordered_stones)
-        WareNotNeeded(ordered_stone);
-    ordered_stones.clear();
+    for(Material& material : materials_)
+    {
+        for(Ware* ware : material.ordered)
+            WareNotNeeded(ware);
+        material.ordered.clear();
+    }
 
     // und Feld wird leer
     world->SetNO(pos, nullptr);
@@ -124,23 +131,119 @@ void noBuildingSite::Serialize(SerializedGameData& sgd) const
     sgd.PushEnum<uint8_t>(state);
     sgd.PushObject(planer, true);
     sgd.PushObject(builder, true);
-    sgd.PushUnsignedChar(boards);
-    sgd.PushUnsignedChar(stones);
-    sgd.PushUnsignedChar(used_boards);
-    sgd.PushUnsignedChar(used_stones);
     sgd.PushUnsignedChar(build_progress);
-    sgd.PushObjectContainer(ordered_boards, true);
-    sgd.PushObjectContainer(ordered_stones, true);
+    sgd.PushUnsignedInt(static_cast<unsigned>(materials_.size()));
+    for(const Material& material : materials_)
+    {
+        sgd.PushUnsignedInt(static_cast<unsigned>(material.delivered.size()));
+        for(const GoodType good : material.delivered)
+            helpers::pushEnum<uint8_t>(sgd, good);
+        sgd.PushUnsignedChar(material.used);
+        sgd.PushObjectContainer(material.ordered, true);
+    }
 }
 
 noBuildingSite::noBuildingSite(SerializedGameData& sgd, const unsigned obj_id)
     : noBaseBuilding(sgd, obj_id), state(sgd.Pop<BuildingSiteState>()),
       planer(sgd.PopObject<nofPlaner>(GO_Type::NofPlaner)), builder(sgd.PopObject<nofBuilder>(GO_Type::NofBuilder)),
-      boards(sgd.PopUnsignedChar()), stones(sgd.PopUnsignedChar()), used_boards(sgd.PopUnsignedChar()),
-      used_stones(sgd.PopUnsignedChar()), build_progress(sgd.PopUnsignedChar())
+      build_progress(0)
 {
-    sgd.PopObjectContainer(ordered_boards, GO_Type::Ware);
-    sgd.PopObjectContainer(ordered_stones, GO_Type::Ware);
+    const BuildingCosts& costs = BUILDING_COSTS[bldType_];
+    if(sgd.GetGameDataVersion() >= 25)
+    {
+        build_progress = sgd.PopUnsignedChar();
+        materials_.resize(sgd.PopUnsignedInt());
+        for(Material& material : materials_)
+        {
+            material.delivered.resize(sgd.PopUnsignedInt());
+            for(GoodType& good : material.delivered)
+                good = helpers::popEnum<GoodType>(sgd);
+            material.used = sgd.PopUnsignedChar();
+            sgd.PopObjectContainer(material.ordered, GO_Type::Ware);
+        }
+        if(materials_.size() != costs.size())
+            throw SerializedGameData::Error("Construction costs of a building site do not fit the lua files");
+    } else
+    {
+        // Boards and stones: to the entries which take them
+        const unsigned char boards = sgd.PopUnsignedChar(), stones = sgd.PopUnsignedChar();
+        const unsigned char usedBoards = sgd.PopUnsignedChar(), usedStones = sgd.PopUnsignedChar();
+        build_progress = sgd.PopUnsignedChar();
+        std::list<Ware*> orderedBoards, orderedStones;
+        sgd.PopObjectContainer(orderedBoards, GO_Type::Ware);
+        sgd.PopObjectContainer(orderedStones, GO_Type::Ware);
+        materials_.resize(costs.size());
+        const auto entryOf = [&costs](const GoodType good) {
+            for(unsigned i = 0; i < costs.size(); ++i)
+            {
+                if(helpers::contains(costs[i].wares, good))
+                    return static_cast<int>(i);
+            }
+            return -1;
+        };
+        const int boardsEntry = entryOf(GoodType::Boards), stonesEntry = entryOf(GoodType::Stones);
+        if((boards + usedBoards + orderedBoards.size() > 0 && boardsEntry < 0)
+           || (stones + usedStones + orderedStones.size() > 0 && stonesEntry < 0))
+            throw SerializedGameData::Error("Construction costs of a building site do not fit the lua files");
+        if(boardsEntry >= 0)
+        {
+            Material& material = materials_[boardsEntry];
+            material.delivered.assign(boards, GoodType::Boards);
+            material.used = usedBoards;
+            material.ordered = orderedBoards;
+        }
+        if(stonesEntry >= 0)
+        {
+            Material& material = materials_[stonesEntry];
+            material.delivered.insert(material.delivered.end(), stones, GoodType::Stones);
+            material.used += usedStones;
+            material.ordered.insert(material.ordered.end(), orderedStones.begin(), orderedStones.end());
+        }
+    }
+}
+
+unsigned noBuildingSite::GetNumMissing(const unsigned entry) const
+{
+    const Material& material = materials_[entry];
+    const unsigned have = material.used + material.delivered.size() + material.ordered.size();
+    const unsigned amount = BUILDING_COSTS[bldType_][entry].amount;
+    return have < amount ? amount - have : 0u;
+}
+
+int noBuildingSite::FindEntryForWare(const Ware& ware) const
+{
+    for(unsigned i = 0; i < materials_.size(); ++i)
+    {
+        if(helpers::contains(materials_[i].ordered, &ware))
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+unsigned noBuildingSite::GetNumUsed(const GoodType good) const
+{
+    const BuildingCosts& costs = BUILDING_COSTS[bldType_];
+    unsigned result = 0;
+    for(unsigned i = 0; i < costs.size(); ++i)
+    {
+        if(helpers::contains(costs[i].wares, good))
+            result += materials_[i].used + materials_[i].delivered.size() + materials_[i].ordered.size();
+    }
+    return result;
+}
+
+std::pair<unsigned, unsigned> noBuildingSite::GetMaxProgress(const BuildingType type)
+{
+    const BuildingCosts& costs = BUILDING_COSTS[type];
+    unsigned total = 0;
+    for(const CostEntry& entry : costs)
+        total += entry.amount;
+    total *= 8;
+    // Original costs: The frame is made of the boards (first entry), the walls of the stones. Only boards: 50:50.
+    // Civilization mode: In the order of the costs, the first half is the frame
+    if(!civ::getActiveContent().IsFromLua() && costs.size() == 2u)
+        return {costs[0].amount * 8u, total};
+    return {total / 2u, total};
 }
 
 void noBuildingSite::OrderConstructionMaterial()
@@ -153,23 +256,21 @@ void noBuildingSite::OrderConstructionMaterial()
     if(!IsConnected())
         return;
 
-    // Bretter
+    // Every material in the order of the costs, each from the next warehouse having any matching ware
     GamePlayer& owner = world->GetPlayer(player);
-    for(int i = used_boards + boards + ordered_boards.size(); i < BUILDING_COSTS[bldType_].boards; ++i)
+    const BuildingCosts& costs = BUILDING_COSTS[bldType_];
+    for(unsigned entry = 0; entry < costs.size(); ++entry)
     {
-        Ware* w = owner.OrderWare(GoodType::Boards, *this);
-        if(!w)
-            break;
-        RTTR_Assert(helpers::contains(ordered_boards, w));
+        orderingEntry_ = static_cast<int>(entry);
+        for(unsigned i = GetNumMissing(entry); i > 0; --i)
+        {
+            Ware* w = owner.OrderWare(costs[entry].wares, *this);
+            if(!w)
+                break;
+            RTTR_Assert(helpers::contains(materials_[entry].ordered, w));
+        }
     }
-    // Steine
-    for(int i = used_stones + stones + ordered_stones.size(); i < BUILDING_COSTS[bldType_].stones; ++i)
-    {
-        Ware* w = owner.OrderWare(GoodType::Stones, *this);
-        if(!w)
-            break;
-        RTTR_Assert(helpers::contains(ordered_stones, w));
-    }
+    orderingEntry_ = -1;
 }
 
 unsigned noBuildingSite::GetMilitaryRadius() const
@@ -192,36 +293,28 @@ void noBuildingSite::Draw(DrawPoint drawPt)
         LOADER.GetNationImage(world->GetPlayer(player).nation, 455)->DrawFull(drawPt);
         LOADER.GetNationImage(world->GetPlayer(player).nation, 456)->DrawFull(drawPt, COLOR_SHADOW);
 
-        // Waren auf der Baustelle
-
-        // Bretter
-        DrawPoint doorPos = drawPt + DrawPoint(GetDoorPointX(), GetDoorPointY());
-        for(unsigned char i = 0; i < boards; ++i)
-            LOADER.GetWareStackTex(GoodType::Boards)->DrawFull(doorPos - DrawPoint(5, 10 + i * 4));
-        // Steine
-        for(unsigned char i = 0; i < stones; ++i)
-            LOADER.GetWareStackTex(GoodType::Stones)->DrawFull(doorPos + DrawPoint(8, -12 - i * 4));
-
-        // bis dahin gebautes Haus zeichnen
-
-        // Rohbau
-
-        // ausrechnen, wie weit er ist
-        unsigned progressRaw, progressBld;
-        unsigned maxProgressRaw, maxProgressBld;
-
-        if(BUILDING_COSTS[bldType_].stones)
+        // Waren auf der Baustelle: the first material left of the door (like the boards), the second right of it
+        // (like the stones), further ones stacked on top of them
+        const DrawPoint doorPos = drawPt + DrawPoint(GetDoorPointX(), GetDoorPointY());
+        std::array<unsigned, 2> stackHeight{};
+        for(unsigned entry = 0; entry < materials_.size(); ++entry)
         {
-            // Haus besteht aus Steinen und Brettern
-            maxProgressRaw = BUILDING_COSTS[bldType_].boards * 8;
-            maxProgressBld = BUILDING_COSTS[bldType_].stones * 8;
-        } else
-        {
-            // Haus besteht nur aus Brettern, dann 50:50
-            maxProgressBld = maxProgressRaw = BUILDING_COSTS[bldType_].boards * 4;
+            const unsigned side = entry % 2u;
+            for(const GoodType good : materials_[entry].delivered)
+            {
+                const DrawPoint offset = side == 0 ? DrawPoint(-5, -10) : DrawPoint(8, -12);
+                LOADER.GetWareStackTex(good)->DrawFull(doorPos + offset
+                                                       - DrawPoint(0, static_cast<int>(stackHeight[side]) * 4));
+                ++stackHeight[side];
+            }
         }
-        progressRaw = std::min<unsigned>(build_progress, maxProgressRaw);
-        progressBld = ((build_progress > maxProgressRaw) ? (build_progress - maxProgressRaw) : 0);
+
+        // bis dahin gebautes Haus zeichnen: erst der Rohbau, dann die Mauern
+        const auto maxProgress = GetMaxProgress(bldType_);
+        const unsigned maxProgressRaw = std::max(1u, maxProgress.first);
+        const unsigned maxProgressBld = std::max(1u, maxProgress.second - maxProgress.first);
+        const unsigned progressRaw = std::min<unsigned>(build_progress, maxProgressRaw);
+        const unsigned progressBld = ((build_progress > maxProgressRaw) ? (build_progress - maxProgressRaw) : 0);
 
         LOADER.getBuildingSprites(nation, bldType_).skeleton.drawPercent(drawPt, progressRaw * 100 / maxProgressRaw);
         LOADER.getBuildingSprites(nation, bldType_).building.drawPercent(drawPt, progressBld * 100 / maxProgressBld);
@@ -262,18 +355,18 @@ unsigned noBuildingSite::CalcDistributionPoints(const GoodType goodtype)
     if(state == BuildingSiteState::Planing)
         return 0;
 
-    // We only need boards and stones.
-    if(goodtype != GoodType::Boards && goodtype != GoodType::Stones)
-        return 0;
-
-    const unsigned curBoards = ordered_boards.size() + boards + used_boards;
-    const unsigned curStones = ordered_stones.size() + stones + used_stones;
-    RTTR_Assert(curBoards <= BUILDING_COSTS[this->bldType_].boards);
-    RTTR_Assert(curStones <= BUILDING_COSTS[this->bldType_].stones);
-
-    // Wenn wir schon genug Baumaterial haben, brauchen wir nichts mehr
-    if((goodtype == GoodType::Boards && curBoards == BUILDING_COSTS[this->bldType_].boards)
-       || (goodtype == GoodType::Stones && curStones == BUILDING_COSTS[this->bldType_].stones))
+    // Only the construction materials which are still missing
+    const BuildingCosts& costs = BUILDING_COSTS[bldType_];
+    bool needed = false;
+    unsigned numMissing = 0;
+    for(unsigned entry = 0; entry < costs.size(); ++entry)
+    {
+        const unsigned missing = GetNumMissing(entry);
+        numMissing += missing;
+        if(missing > 0 && helpers::contains(costs[entry].wares, goodtype))
+            needed = true;
+    }
+    if(!needed)
         return 0;
 
     // 10000 als Basis wählen, damit man auch noch was abziehen kann
@@ -282,8 +375,7 @@ unsigned noBuildingSite::CalcDistributionPoints(const GoodType goodtype)
 
     // Baumaterial mit einberechnen (wer noch am wenigsten braucht, soll mehr Punkte kriegen, da ja möglichst
     // zuerst Gebäude fertiggestellt werden sollten)
-    points -= (BUILDING_COSTS[bldType_].boards - curBoards) * 20;
-    points -= (BUILDING_COSTS[bldType_].stones - curStones) * 20;
+    points -= numMissing * 20;
 
     // Baupriorität mit einberechnen (niedriger = höhere Priorität, daher - !)
     const unsigned buildingSitePrio = world->GetPlayer(player).GetBuidingSitePriority(this) * 30;
@@ -302,18 +394,11 @@ void noBuildingSite::AddWare(std::unique_ptr<Ware> ware)
 {
     RTTR_Assert(state == BuildingSiteState::Building);
 
-    if(ware->type == GoodType::Boards)
-    {
-        RTTR_Assert(helpers::contains(ordered_boards, ware.get()));
-        ordered_boards.remove(ware.get());
-        ++boards;
-    } else if(ware->type == GoodType::Stones)
-    {
-        RTTR_Assert(helpers::contains(ordered_stones, ware.get()));
-        ordered_stones.remove(ware.get());
-        ++stones;
-    } else
+    const int entry = FindEntryForWare(*ware);
+    if(entry < 0)
         throw std::logic_error("Wrong ware type " + helpers::toString(ware->type));
+    materials_[entry].ordered.remove(ware.get());
+    materials_[entry].delivered.push_back(ware->type);
 
     // Inventur entsprechend verringern
     world->GetPlayer(player).DecreaseInventoryWare(ware->type, 1);
@@ -324,16 +409,10 @@ void noBuildingSite::WareLost(Ware& ware)
 {
     RTTR_Assert(state == BuildingSiteState::Building);
 
-    if(ware.type == GoodType::Boards)
-    {
-        RTTR_Assert(helpers::contains(ordered_boards, &ware));
-        ordered_boards.remove(&ware);
-    } else if(ware.type == GoodType::Stones)
-    {
-        RTTR_Assert(helpers::contains(ordered_stones, &ware));
-        ordered_stones.remove(&ware);
-    } else
+    const int entry = FindEntryForWare(ware);
+    if(entry < 0)
         throw std::logic_error("Wrong ware type lost " + helpers::toString(ware.type));
+    materials_[entry].ordered.remove(&ware);
 
     OrderConstructionMaterial();
 }
@@ -342,22 +421,25 @@ void noBuildingSite::TakeWare(Ware* ware)
 {
     RTTR_Assert(state == BuildingSiteState::Building);
 
-    // Ware in die Bestellliste aufnehmen
-    if(ware->type == GoodType::Boards)
+    // Ware in die Bestellliste aufnehmen: for the material it is ordered for, otherwise the first needing it
+    RTTR_Assert(FindEntryForWare(*ware) < 0);
+    const BuildingCosts& costs = BUILDING_COSTS[bldType_];
+    int entry = -1;
+    if(orderingEntry_ >= 0 && helpers::contains(costs[orderingEntry_].wares, ware->type))
+        entry = orderingEntry_;
+    for(unsigned i = 0; entry < 0 && i < costs.size(); ++i)
     {
-        RTTR_Assert(!helpers::contains(ordered_boards, ware));
-        ordered_boards.push_back(ware);
-    } else if(ware->type == GoodType::Stones)
-    {
-        RTTR_Assert(!helpers::contains(ordered_stones, ware));
-        ordered_stones.push_back(ware);
-    } else
+        if(GetNumMissing(i) > 0 && helpers::contains(costs[i].wares, ware->type))
+            entry = static_cast<int>(i);
+    }
+    if(entry < 0)
         throw std::logic_error("Wrong ware type " + helpers::toString(ware->type));
+    materials_[entry].ordered.push_back(ware);
 }
 
 bool noBuildingSite::IsBuildingComplete()
 {
-    return (build_progress == BUILDING_COSTS[bldType_].boards * 8 + BUILDING_COSTS[bldType_].stones * 8);
+    return build_progress == GetMaxProgress(bldType_).second;
 }
 
 unsigned char noBuildingSite::GetBuildProgress(bool percent) const
@@ -365,7 +447,7 @@ unsigned char noBuildingSite::GetBuildProgress(bool percent) const
     if(!percent)
         return build_progress;
 
-    unsigned costs = BUILDING_COSTS[bldType_].boards * 8 + BUILDING_COSTS[bldType_].stones * 8;
+    const unsigned costs = std::max(1u, GetMaxProgress(bldType_).second);
     unsigned progress = (((unsigned)build_progress) * 100) / costs;
 
     return (unsigned char)progress;

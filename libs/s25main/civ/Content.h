@@ -20,6 +20,7 @@
 #include <vector>
 
 struct WorldDescription;
+struct CostDesc;
 
 namespace civ {
 
@@ -111,7 +112,6 @@ struct CustomBuilding
 {
     std::string name, title, description;
     BuildingQuality size;
-    BuildingCost cost;
     /// Built-in building whose graphics are used
     BuildingType look;
     /// What the building needs and produces (job is the custom worker slot)
@@ -255,6 +255,12 @@ public:
     /// built-in tool as tag (e.g. a "CopperAxe" with kind = "Axe")
     std::optional<Tool> GetToolTypeOf(GoodType good) const;
 
+    /// True if the content was read from lua (civilization mode), false for the empty content
+    bool IsFromLua() const { return fromLua_; }
+
+    /// Construction costs of the building (in the order the builder uses them). Original costs unless set in lua
+    const BuildingCosts& GetBuildingCost(BuildingType bld) const { return costs_[bld]; }
+
     /// Own regulators of the distribution window (rttr:AddRegulator) in order of definition
     const std::vector<Regulator>& GetRegulators() const { return regulators_; }
 
@@ -290,6 +296,9 @@ private:
     void SetTags(GoodType good, const std::string& kind, const std::vector<std::string>& properties);
     /// Identifier of the ware according to this content
     std::string getIdentifierOf(GoodType good) const;
+    /// Original costs of a built-in building (boards and stones)
+    BuildingCosts makeBuiltinCost(BuildingType bld) const;
+    BuildingCosts resolveCost(const std::vector<CostDesc>& desc, const std::string& context) const;
 
     std::vector<CustomWare> wares_;
     std::vector<CustomMapObject> mapObjects_;
@@ -304,6 +313,8 @@ private:
     helpers::EnumArray<std::optional<ToolInfo>, GoodType> tools_;
     helpers::EnumArray<BuildingTools, BuildingType> buildingTools_;
     helpers::EnumArray<uint16_t, BuildingType> outputRatios_;
+    helpers::EnumArray<BuildingCosts, BuildingType> costs_;
+    bool fromLua_ = false;
     unsigned toolReorderPercent_ = 10;
 };
 

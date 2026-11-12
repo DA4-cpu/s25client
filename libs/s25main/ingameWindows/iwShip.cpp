@@ -224,8 +224,8 @@ void iwShip::DrawCargo()
     if(ship->IsOnExpedition())
     {
         orderedFigures[Job::Builder] = 1;
-        orderedWares[GoodType::Boards] = BUILDING_COSTS[BuildingType::HarborBuilding].boards;
-        orderedWares[GoodType::Stones] = BUILDING_COSTS[BuildingType::HarborBuilding].stones;
+        orderedWares[GoodType::Boards] = HARBOR_BUILDING_COST.boards;
+        orderedWares[GoodType::Stones] = HARBOR_BUILDING_COST.stones;
     } else if(ship->IsOnExplorationExpedition())
     {
         orderedFigures[Job::Scout] = gwv.GetWorld().GetGGS().GetNumScoutsExpedition();

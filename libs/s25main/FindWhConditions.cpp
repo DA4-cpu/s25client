@@ -13,6 +13,16 @@ bool HasMinWares::operator()(const nobBaseWarehouse& wh) const
     return wh.GetNumRealWares(type) >= count;
 }
 
+bool HasAnyWare::operator()(const nobBaseWarehouse& wh) const
+{
+    for(const GoodType type : types)
+    {
+        if(wh.GetNumRealWares(type) > 0)
+            return true;
+    }
+    return false;
+}
+
 bool HasFigure::operator()(const nobBaseWarehouse& wh) const
 {
     if(wh.GetNumRealFigures(type) > 0)

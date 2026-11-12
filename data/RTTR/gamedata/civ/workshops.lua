@@ -11,7 +11,9 @@ rttr:AddWorkshop{...}:
   title       Anzeigename
   description optional: Hilfetext
   size        "small", "medium", "large" oder "mine" (Minenplatz im Gebirge, nur zusammen mit mine)
-  cost        Baukosten, vorerst nur Bretter und Steine: { Boards = 2, Stones = 1 }
+  cost        Baukosten wie in buildingcosts.lua: { Boards = 2, Stones = 1 } (je ein Tag, alphabetisch verbaut) oder
+              { { tags = { "Bretter", "Nadelholz" }, amount = 2 }, { tags = "Stones", amount = 1 } } (in dieser
+              Reihenfolge verbaut). Jede Ware mit allen Tags eines Eintrags kann geliefert werden.
   look        Platzhaltergrafik: Das Gebäude sieht aus wie dieses eingebaute Gebäude (z.B. "Sawmill")
   worker      Arbeiter: { title = "...", tool = "Hammer" (oder "none"), look = "Carpenter" }
               tool: Werkzeug, das ein Helfer braucht, um Arbeiter zu werden. Mit der Werkzeugreform (tools.lua)

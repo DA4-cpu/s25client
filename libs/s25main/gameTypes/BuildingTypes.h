@@ -11,12 +11,28 @@
 #include "helpers/OptionalEnum.h"
 #include "variant.h"
 #include <cassert>
+#include <string>
+#include <vector>
 
+/// Original construction costs (boards and stones)
 struct BuildingCost
 {
     uint8_t boards;
     uint8_t stones;
 };
+
+/// One kind of construction material of a building: `amount` wares, each of them any of `wares` (civilization mode:
+/// all wares matching the tags). The builder uses the materials in the order of the list
+struct CostEntry
+{
+    /// Tag query (civilization mode) or the identifier of the ware
+    std::vector<std::string> tags;
+    /// Wares that can be used, never empty
+    std::vector<GoodType> wares;
+    uint8_t amount = 0;
+};
+/// Construction costs of a building
+using BuildingCosts = std::vector<CostEntry>;
 
 class WaresNeeded
 {

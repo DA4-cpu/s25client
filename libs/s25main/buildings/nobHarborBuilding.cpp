@@ -294,10 +294,8 @@ void nobHarborBuilding::StartExpedition()
 
     // In unseren Warenbestand gucken und die erforderlichen Bretter und Steine sowie den
     // Bauarbeiter holen, falls vorhanden
-    expedition.boards =
-      std::min(unsigned(BUILDING_COSTS[BuildingType::HarborBuilding].boards), inventory[GoodType::Boards]);
-    expedition.stones =
-      std::min(unsigned(BUILDING_COSTS[BuildingType::HarborBuilding].stones), inventory[GoodType::Stones]);
+    expedition.boards = std::min(unsigned(HARBOR_BUILDING_COST.boards), inventory[GoodType::Boards]);
+    expedition.stones = std::min(unsigned(HARBOR_BUILDING_COST.stones), inventory[GoodType::Stones]);
     inventory.Remove(GoodType::Boards, expedition.boards);
     inventory.Remove(GoodType::Stones, expedition.stones);
 
@@ -454,9 +452,9 @@ void nobHarborBuilding::OrderExpeditionWares()
 
     // Prüfen, ob jeweils noch weitere Waren bestellt werden müssen
     unsigned todo_boards = 0;
-    if(boards + expedition.boards < BUILDING_COSTS[BuildingType::HarborBuilding].boards)
+    if(boards + expedition.boards < HARBOR_BUILDING_COST.boards)
     {
-        todo_boards = BUILDING_COSTS[BuildingType::HarborBuilding].boards - (boards + expedition.boards);
+        todo_boards = HARBOR_BUILDING_COST.boards - (boards + expedition.boards);
         Ware* ware;
         do
         {
@@ -470,9 +468,9 @@ void nobHarborBuilding::OrderExpeditionWares()
     }
 
     unsigned todo_stones = 0;
-    if(stones + expedition.stones < BUILDING_COSTS[BuildingType::HarborBuilding].stones)
+    if(stones + expedition.stones < HARBOR_BUILDING_COST.stones)
     {
-        todo_stones = BUILDING_COSTS[BuildingType::HarborBuilding].stones - (stones + expedition.stones);
+        todo_stones = HARBOR_BUILDING_COST.stones - (stones + expedition.stones);
         Ware* ware;
         do
         {
@@ -526,9 +524,8 @@ void nobHarborBuilding::ShipArrived(noShip& ship)
         return;
     }
     // Expedition ready?
-    if(expedition.active && expedition.builder
-       && expedition.boards == BUILDING_COSTS[BuildingType::HarborBuilding].boards
-       && expedition.stones == BUILDING_COSTS[BuildingType::HarborBuilding].stones)
+    if(expedition.active && expedition.builder && expedition.boards == HARBOR_BUILDING_COST.boards
+       && expedition.stones == HARBOR_BUILDING_COST.stones)
     {
         // Aufräumen am Hafen
         expedition.active = false;
@@ -666,9 +663,8 @@ void nobHarborBuilding::AddWare(std::unique_ptr<Ware> ware)
     // Do we need the ware for an expedition?
     if(expedition.active)
     {
-        if((ware->type == GoodType::Boards && expedition.boards < BUILDING_COSTS[BuildingType::HarborBuilding].boards)
-           || (ware->type == GoodType::Stones
-               && expedition.stones < BUILDING_COSTS[BuildingType::HarborBuilding].stones))
+        if((ware->type == GoodType::Boards && expedition.boards < HARBOR_BUILDING_COST.boards)
+           || (ware->type == GoodType::Stones && expedition.stones < HARBOR_BUILDING_COST.stones))
         {
             // Don't wait for it any longer if it had a goal, i.e. us.
             // Without a goal it was a "lost" ware.
@@ -728,9 +724,9 @@ bool nobHarborBuilding::IsExpeditionReady() const
     if(!expedition.active)
         return false;
     // Alles da?
-    if(expedition.boards < BUILDING_COSTS[BuildingType::HarborBuilding].boards)
+    if(expedition.boards < HARBOR_BUILDING_COST.boards)
         return false;
-    if(expedition.stones < BUILDING_COSTS[BuildingType::HarborBuilding].stones)
+    if(expedition.stones < HARBOR_BUILDING_COST.stones)
         return false;
     if(!expedition.builder)
         return false;
@@ -1270,11 +1266,9 @@ unsigned nobHarborBuilding::CalcDistributionPoints(const GoodType type) const
     unsigned short points = 10000;
 
     // Ermitteln, ob wir noch Bretter oder Steine brauchen
-    if(expedition.boards + ordered_boards >= BUILDING_COSTS[BuildingType::HarborBuilding].boards
-       && type == GoodType::Boards)
+    if(expedition.boards + ordered_boards >= HARBOR_BUILDING_COST.boards && type == GoodType::Boards)
         return 0;
-    if(expedition.stones + ordered_stones >= BUILDING_COSTS[BuildingType::HarborBuilding].stones
-       && type == GoodType::Stones)
+    if(expedition.stones + ordered_stones >= HARBOR_BUILDING_COST.stones && type == GoodType::Stones)
         return 0;
 
     // Schon bestellte Sachen wirken sich positiv aus, da wir ja so eher eine Expedition bereit haben

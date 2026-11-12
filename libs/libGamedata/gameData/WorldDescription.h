@@ -52,6 +52,8 @@ struct WorldDescription
     std::vector<ToolDesc> tools;
     /// Tools of built-in buildings: Building identifier -> tools
     std::map<std::string, BuildingToolsDesc> buildingTools;
+    /// Construction costs of built-in buildings (rttr:SetBuildingCost): Building identifier -> costs
+    std::map<std::string, std::vector<CostDesc>> buildingCosts;
     /// Output ratio of built-in buildings in hundredths (rttr:SetBuildingOutputRatio): Building identifier -> ratio
     std::map<std::string, unsigned> buildingOutputRatios;
     /// A replacement is ordered when a tool has at most this many percent of its durability left

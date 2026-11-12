@@ -1002,6 +1002,27 @@ Ware* GamePlayer::OrderWare(const GoodType ware, noBaseBuilding& goal)
     return nullptr;
 }
 
+Ware* GamePlayer::OrderWare(const std::vector<GoodType>& wares, noBaseBuilding& goal)
+{
+    if(wares.size() == 1u)
+        return OrderWare(wares.front(), goal);
+    if(nobBaseWarehouse* wh = FindWarehouse(goal, FW::HasAnyWare(wares), false, true))
+    {
+        for(const GoodType ware : wares)
+        {
+            if(wh->GetNumRealWares(ware) > 0)
+                return OrderWare(ware, goal);
+        }
+    }
+    // No warehouse: lost wares
+    for(const GoodType ware : wares)
+    {
+        if(Ware* result = OrderWare(ware, goal))
+            return result;
+    }
+    return nullptr;
+}
+
 nofCarrier* GamePlayer::OrderDonkey(RoadSegment& road) const
 {
     std::array<unsigned, 2> length;
@@ -1182,6 +1203,23 @@ noBaseBuilding* GamePlayer::FindClientForWare(const Ware& ware)
                 unsigned distance = world.CalcDistance(start->GetPos(), bld->GetPos()) / 2;
                 possibleClients.push_back(ClientForWare(bld, points > distance ? points - distance : 0, points));
             }
+        }
+    }
+
+    // Civilization mode: Building sites take every ware matching their construction costs, also wares without
+    // construction in the distribution (e.g. new kinds of boards)
+    if(civ::getActiveContent().IsFromLua()
+       && !helpers::contains(wareDistribution.client_buildings, BuildingType::Headquarters))
+    {
+        for(noBuildingSite* bldSite : buildings.GetBuildingSites())
+        {
+            if(!bldSite->IsConnected())
+                continue;
+            const unsigned points = bldSite->CalcDistributionPoints(gt);
+            if(!points)
+                continue;
+            unsigned distance = world.CalcDistance(start->GetPos(), bldSite->GetPos()) / 2;
+            possibleClients.push_back(ClientForWare(bldSite, points > distance ? points - distance : 0, points));
         }
     }
 

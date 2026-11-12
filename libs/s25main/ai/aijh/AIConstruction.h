@@ -8,6 +8,7 @@
 #include "helpers/OptionalEnum.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/Direction.h"
+#include "gameTypes/GoodTypes.h"
 #include "gameTypes/MapCoordinates.h"
 #include <deque>
 #include <memory>
@@ -28,11 +29,8 @@ class BuildingPlanner;
 class BuildJob;
 class ConnectJob;
 
-/// Boards and stones (may be negative if more is needed than available)
-struct ConstructionMaterial
-{
-    int boards = 0, stones = 0;
-};
+/// Free construction material per ware (may be negative if more is needed than available)
+using ConstructionMaterial = helpers::EnumArray<int, GoodType>;
 
 class AIConstruction
 {
@@ -145,8 +143,8 @@ private:
         BuildingType type;
         unsigned age; // NWFs since the order
     };
-    /// Material kept free for important buildings in the current ExecuteJobs call
-    ConstructionMaterial reservedMaterial;
+    /// Important buildings in the current ExecuteJobs call which wait for material: it is kept free for them
+    std::vector<BuildingType> reservedFor;
     std::vector<PendingSite> pendingSites;
     /// True if there is a building site (or already a building) at the point
     bool HasSiteAt(MapPoint pt) const;

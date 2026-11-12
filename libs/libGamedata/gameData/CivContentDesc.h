@@ -86,6 +86,13 @@ struct BuildingToolsDesc
     std::vector<TagQuery> tools;
 };
 
+/// Construction material of a building: `amount` wares matching the tags
+struct CostDesc
+{
+    TagQuery tags;
+    unsigned amount = 0;
+};
+
 /// Worker of a workshop
 struct WorkerDesc
 {
@@ -145,8 +152,8 @@ struct WorkshopDesc
     std::string description;
     /// "small", "medium", "large" or "mine"
     std::string size;
-    /// Construction costs: ware identifier -> amount (currently only Boards and Stones)
-    std::map<std::string, unsigned> cost;
+    /// Construction costs in the order the builder uses them
+    std::vector<CostDesc> cost;
     /// Identifier of an existing building whose graphics are used (placeholder)
     std::string look;
     WorkerDesc worker;
@@ -243,6 +250,10 @@ struct ByproductDesc
 /// [0, MAX_OUTPUT_RATIO]
 unsigned parseOutputRatio(double value, const std::string& context);
 
+/// Read construction costs from lua: { Boards = 2, Stones = 1 } (one tag each, used in alphabetical order) or
+/// { { tags = { "Bretter", "Nadelholz" }, amount = 2 }, ... } (used in this order)
+std::vector<CostDesc> parseBuildingCost(const kaguya::LuaRef& value, const std::string& context);
+
 /// Read a tag query from lua: Either a single string or a list of strings
 TagQuery parseTagQuery(const kaguya::LuaRef& value, const std::string& context);
 /// Parse { baseSpeed = 0, tools = { "Axe", ... } } (both optional)
@@ -253,6 +264,9 @@ constexpr unsigned MAX_BUILDING_TOOLS = 4;
 constexpr unsigned MAX_TOOL_MATERIALS = 8;
 /// Maximum output ratio (wares per work step) in hundredths, also for the sum with the tool bonus
 constexpr unsigned MAX_OUTPUT_RATIO = 800;
+/// Maximum number of construction materials of a building and maximum sum of their amounts
+constexpr unsigned MAX_COST_ENTRIES = 4;
+constexpr unsigned MAX_TOTAL_COST = 31;
 /// Maximum number of entries in outputs of a workshop
 constexpr unsigned MAX_WORKSHOP_OUTPUTS = 16;
 /// Maximum number of regulators (rttr:AddRegulator) and of entries per regulator

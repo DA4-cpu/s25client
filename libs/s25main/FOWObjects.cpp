@@ -6,11 +6,13 @@
 #include "Loader.h"
 #include "SerializedGameData.h"
 #include "buildings/noBaseBuilding.h"
+#include "buildings/noBuildingSite.h"
 #include "civ/Content.h"
 #include "civ/Graphics.h"
 #include "ogl/glArchivItem_Bitmap.h"
 #include "gameData/BuildingConsts.h"
 #include "s25util/colors.h"
+#include <algorithm>
 
 /// Berechnet die dunklere Spielerfarbe zum Zeichnen
 unsigned CalcPlayerFOWDrawColor(const unsigned color)
@@ -82,21 +84,11 @@ void fowBuildingSite::Draw(DrawPoint drawPt) const
         // bis dahin gebautes Haus zeichnen
 
         // ausrechnen, wie weit er ist
-        unsigned progressRaw, progressBld;
-        unsigned maxProgressRaw, maxProgressBld;
-
-        if(BUILDING_COSTS[type].stones)
-        {
-            // Haus besteht aus Steinen und Brettern
-            maxProgressRaw = BUILDING_COSTS[type].boards * 8;
-            maxProgressBld = BUILDING_COSTS[type].stones * 8;
-        } else
-        {
-            // Haus besteht nur aus Brettern, dann 50:50
-            maxProgressBld = maxProgressRaw = BUILDING_COSTS[type].boards * 4;
-        }
-        progressRaw = std::min<unsigned>(build_progress, maxProgressRaw);
-        progressBld = ((build_progress > maxProgressRaw) ? (build_progress - maxProgressRaw) : 0);
+        const auto maxProgress = noBuildingSite::GetMaxProgress(type);
+        const unsigned maxProgressRaw = std::max(1u, maxProgress.first);
+        const unsigned maxProgressBld = std::max(1u, maxProgress.second - maxProgress.first);
+        const unsigned progressRaw = std::min<unsigned>(build_progress, maxProgressRaw);
+        const unsigned progressBld = ((build_progress > maxProgressRaw) ? (build_progress - maxProgressRaw) : 0);
 
         LOADER.getBuildingSprites(nation, type)
           .skeleton.drawPercent(drawPt, progressRaw * 100 / maxProgressRaw, FOW_DRAW_COLOR);

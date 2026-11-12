@@ -558,7 +558,7 @@ BOOST_FIXTURE_TEST_CASE(NoBuildingSitesWithoutMaterial, BiggerWorldWithGCExecuti
 BOOST_FIXTURE_TEST_CASE(MaterialIsReservedForImportantBuildings, BiggerWorldWithGCExecution)
 {
     auto* hq = world.GetSpecObj<nobBaseWarehouse>(hqPos);
-    const BuildingCost smelterCost = BUILDING_COSTS[BuildingType::Ironsmelter];
+    const BuildingCost smelterCost = BUILTIN_BUILDING_COSTS[static_cast<unsigned>(BuildingType::Ironsmelter)];
     {
         GoodsAndPeopleCounts inv;
         inv[GoodType::Boards] = smelterCost.boards;
@@ -572,7 +572,7 @@ BOOST_FIXTURE_TEST_CASE(MaterialIsReservedForImportantBuildings, BiggerWorldWith
     BOOST_TEST(!AIJH::AIConstruction::IsImportantBuilding(BuildingType::GraniteMine));
     BOOST_TEST(!AIJH::AIConstruction::IsImportantBuilding(BuildingType::Woodcutter));
     // Exactly enough for the smelter
-    BOOST_TEST(construction.GetFreeConstructionMaterial().boards == static_cast<int>(smelterCost.boards));
+    BOOST_TEST(construction.GetFreeConstructionMaterial()[GoodType::Boards] == static_cast<int>(smelterCost.boards));
     BOOST_TEST(construction.HasMaterialFor(BuildingType::Ironsmelter));
     BOOST_TEST(construction.HasMaterialFor(BuildingType::Woodcutter));
     // The smelter waits for material -> it is kept free: other buildings can't have it, important ones can
@@ -584,8 +584,8 @@ BOOST_FIXTURE_TEST_CASE(MaterialIsReservedForImportantBuildings, BiggerWorldWith
     const MapPoint sitePos = world.MakeMapPoint(hqPos + Position(4, 0));
     world.SetBuildingSite(BuildingType::Woodcutter, sitePos, curPlayer);
     BOOST_TEST_REQUIRE(world.GetSpecObj<noBuildingSite>(sitePos));
-    const BuildingCost woodcutterCost = BUILDING_COSTS[BuildingType::Woodcutter];
-    BOOST_TEST(construction.GetFreeConstructionMaterial().boards
+    const BuildingCost woodcutterCost = BUILTIN_BUILDING_COSTS[static_cast<unsigned>(BuildingType::Woodcutter)];
+    BOOST_TEST(construction.GetFreeConstructionMaterial()[GoodType::Boards]
                == static_cast<int>(smelterCost.boards) - static_cast<int>(woodcutterCost.boards));
     BOOST_TEST(!construction.HasMaterialFor(BuildingType::Ironsmelter));
 }

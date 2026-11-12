@@ -63,6 +63,7 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("SetBuildingTools", &GameDataLoader::SetBuildingTools)
         .addFunction("SetToolReorder", &GameDataLoader::SetToolReorder)
         .addFunction("SetBuildingOutputRatio", &GameDataLoader::SetBuildingOutputRatio)
+        .addFunction("SetBuildingCost", &GameDataLoader::SetBuildingCost)
         .addFunction("SetToolMaterialPriorities", &GameDataLoader::SetToolMaterialPriorities)
         .addFunction("AddRegulator", &GameDataLoader::AddRegulator)
         .addFunction("SetMapClimate", &GameDataLoader::SetMapClimate)
@@ -240,6 +241,16 @@ void GameDataLoader::SetToolReorder(unsigned percent)
     if(percent > 100)
         throw GameDataError("rttr:SetToolReorder: the value must be in [0, 100] (percent of the durability)");
     worldDesc_.toolReorderPercent = percent;
+}
+
+void GameDataLoader::SetBuildingCost(const kaguya::LuaTable& data)
+{
+    for(const std::string& building : data.keys<std::string>())
+    {
+        const std::string context = "Construction costs of building '" + building + "'";
+        if(!worldDesc_.buildingCosts.emplace(building, parseBuildingCost(data[building], context)).second)
+            throw GameDataError(context + " are defined twice");
+    }
 }
 
 void GameDataLoader::SetBuildingOutputRatio(const kaguya::LuaTable& data)

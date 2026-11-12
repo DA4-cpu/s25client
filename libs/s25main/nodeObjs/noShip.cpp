@@ -253,8 +253,8 @@ void noShip::HandleEvent(const unsigned id)
                 if(hb && hb->GetGOT() == GO_Type::NobHarborbuilding)
                 {
                     GoodsAndPeopleCounts goods;
-                    goods.goods[GoodType::Boards] = BUILDING_COSTS[BuildingType::HarborBuilding].boards;
-                    goods.goods[GoodType::Stones] = BUILDING_COSTS[BuildingType::HarborBuilding].stones;
+                    goods.goods[GoodType::Boards] = HARBOR_BUILDING_COST.boards;
+                    goods.goods[GoodType::Stones] = HARBOR_BUILDING_COST.stones;
                     goods.people[Job::Builder] = 1;
                     static_cast<nobBaseWarehouse*>(hb)->AddToInventory(goods, false);
                     // Wieder idlen und ggf. neuen Job suchen

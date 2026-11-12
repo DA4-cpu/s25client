@@ -18,6 +18,7 @@
 #include "buildings/nobMilitary.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
+#include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
 #include "nodeObjs/noFlag.h"
 #include "nodeObjs/noRoadNode.h"
@@ -118,7 +119,7 @@ void AIConstruction::AddBuildJob(std::unique_ptr<BuildJob> job, bool front)
 void AIConstruction::ExecuteJobs(unsigned limit)
 {
     // Important buildings first (stable: otherwise keep the order). Material they wait for is kept free for them
-    reservedMaterial = ConstructionMaterial{};
+    reservedFor.clear();
     std::stable_partition(buildJobs.begin(), buildJobs.end(), [](const std::unique_ptr<BuildJob>& job) {
         return AIConstruction::IsImportantBuilding(job->GetType());
     });
@@ -242,31 +243,63 @@ unsigned AIConstruction::GetMinSoldiersPerMilitarySite()
     return MIN_SOLDIERS_PER_MILITARY_SITE;
 }
 
+namespace {
+    /// Take `amount` wares of the construction material from the free material, the first matching wares first. If
+    /// there are not enough, the rest is taken from the first ware (negative) and false is returned
+    bool takeMaterial(ConstructionMaterial& free, const CostEntry& entry, int amount)
+    {
+        for(const GoodType good : entry.wares)
+        {
+            if(amount <= 0)
+                break;
+            const int taken = std::min(std::max(free[good], 0), amount);
+            free[good] -= taken;
+            amount -= taken;
+        }
+        if(amount <= 0)
+            return true;
+        free[entry.wares.front()] -= amount;
+        return false;
+    }
+
+    /// Take all construction material of the building type. False if there is not enough
+    bool takeMaterial(ConstructionMaterial& free, const BuildingType type)
+    {
+        bool enough = true;
+        for(const CostEntry& entry : BUILDING_COSTS[type])
+            enough &= takeMaterial(free, entry, entry.amount);
+        return enough;
+    }
+} // namespace
+
 ConstructionMaterial AIConstruction::GetFreeConstructionMaterial() const
 {
-    ConstructionMaterial result;
+    ConstructionMaterial result{};
     // Real stock (not the displayed one): Wares ordered by building sites already left it
     for(const nobBaseWarehouse* wh : aii.GetStorehouses())
     {
-        result.boards += static_cast<int>(wh->GetNumRealWares(GoodType::Boards));
-        result.stones += static_cast<int>(wh->GetNumRealWares(GoodType::Stones));
+        for(const auto good : helpers::enumRange<GoodType>())
+            result[good] += static_cast<int>(wh->GetNumRealWares(good));
     }
     // What existing building sites still need: costs minus used, lying at the site and on the way
     for(const noBuildingSite* site : aii.GetBuildingSites())
     {
-        const BuildingCost& cost = BUILDING_COSTS[site->GetBuildingType()];
-        result.boards -= std::max(0, static_cast<int>(cost.boards) - site->getUsedBoards() - site->getBoards()
-                                       - static_cast<int>(site->getNumOrderedBoards()));
-        result.stones -= std::max(0, static_cast<int>(cost.stones) - site->getUsedStones() - site->getStones()
-                                       - static_cast<int>(site->getNumOrderedStones()));
+        const BuildingCosts& costs = BUILDING_COSTS[site->GetBuildingType()];
+        const auto& materials = site->GetMaterials();
+        for(unsigned i = 0; i < costs.size() && i < materials.size(); ++i)
+        {
+            const int have =
+              materials[i].used + static_cast<int>(materials[i].delivered.size() + materials[i].ordered.size());
+            if(costs[i].amount > have)
+                takeMaterial(result, costs[i], costs[i].amount - have);
+        }
     }
     // Just ordered sites (not yet existing) need everything
     for(const PendingSite& site : pendingSites)
     {
         if(HasSiteAt(site.pos))
             continue;
-        result.boards -= BUILDING_COSTS[site.type].boards;
-        result.stones -= BUILDING_COSTS[site.type].stones;
+        takeMaterial(result, site.type);
     }
     return result;
 }
@@ -276,17 +309,15 @@ bool AIConstruction::HasMaterialFor(const BuildingType type) const
     ConstructionMaterial free = GetFreeConstructionMaterial();
     if(!IsImportantBuilding(type))
     {
-        free.boards -= reservedMaterial.boards;
-        free.stones -= reservedMaterial.stones;
+        for(const BuildingType reserved : reservedFor)
+            takeMaterial(free, reserved);
     }
-    const BuildingCost& cost = BUILDING_COSTS[type];
-    return free.boards >= cost.boards && free.stones >= cost.stones;
+    return takeMaterial(free, type);
 }
 
 void AIConstruction::ReserveMaterialFor(const BuildingType type)
 {
-    reservedMaterial.boards += BUILDING_COSTS[type].boards;
-    reservedMaterial.stones += BUILDING_COSTS[type].stones;
+    reservedFor.push_back(type);
 }
 
 unsigned AIConstruction::GetNumMilitarySitesInProgress() const

@@ -261,7 +261,12 @@ rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = 
     BOOST_TEST(shop.title == "Werkstatt");
     BOOST_TEST(shop.description == "Desc");
     BOOST_TEST(shop.size == "medium");
-    BOOST_TEST(shop.cost.at("Boards") == 2u);
+    // Short form: alphabetical
+    BOOST_TEST_REQUIRE(shop.cost.size() == 2u);
+    BOOST_TEST((shop.cost[0].tags == TagQuery{"Boards"}));
+    BOOST_TEST(shop.cost[0].amount == 2u);
+    BOOST_TEST((shop.cost[1].tags == TagQuery{"Stones"}));
+    BOOST_TEST(shop.cost[1].amount == 1u);
     BOOST_TEST(shop.look == "Sawmill");
     BOOST_TEST(shop.worker.title == "Arbeiter");
     BOOST_TEST(shop.worker.tool == "none");

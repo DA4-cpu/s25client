@@ -339,35 +339,22 @@ void nofBuilder::Draw(DrawPoint drawPt)
 
 bool nofBuilder::ChooseWare()
 {
-    // Brauch ich ein Brett(Rohbau und wenn kein Stein benötigt wird) oder Stein?
-    const BuildingCost costs = BUILDING_COSTS[building_site->GetBuildingType()];
-    if(building_site->GetBuildProgress(false) < costs.boards * 8 || !costs.stones)
+    // The materials in the order of the costs (originally first the boards for the frame, then the stones): The next
+    // one not used up yet must be here
+    const BuildingCosts& costs = BUILDING_COSTS[building_site->GetBuildingType()];
+    for(unsigned entry = 0; entry < costs.size() && entry < building_site->materials_.size(); ++entry)
     {
-        // Brett
-        if(building_site->boards)
-        {
-            // ein Brett weniger liegt da
-            --building_site->boards;
-            ++building_site->used_boards;
-            // wir können 8 Bauschritt ausführen
-            building_steps_available = 8;
-
-            return true;
-        }
-    } else
-    {
-        // Stein
-        if(building_site->stones)
-        {
-            // ein Stein weniger liegt da
-            --building_site->stones;
-            ++building_site->used_stones;
-            // wir können 8 Bauschritt ausführen
-            building_steps_available = 8;
-
-            return true;
-        }
+        noBuildingSite::Material& material = building_site->materials_[entry];
+        if(material.used >= costs[entry].amount)
+            continue;
+        if(material.delivered.empty())
+            return false;
+        // eine Ware weniger liegt da
+        material.delivered.erase(material.delivered.begin());
+        ++material.used;
+        // wir können 8 Bauschritt ausführen
+        building_steps_available = 8;
+        return true;
     }
-
     return false;
 }

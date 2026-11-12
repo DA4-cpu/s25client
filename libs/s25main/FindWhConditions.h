@@ -6,6 +6,7 @@
 
 #include "gameTypes/GoodTypes.h"
 #include "gameTypes/JobTypes.h"
+#include <vector>
 
 class nobBaseWarehouse;
 
@@ -16,6 +17,14 @@ struct HasMinWares
     const GoodType type;
     const unsigned count;
     HasMinWares(const GoodType type, unsigned count = 1) : type(type), count(count) {}
+    bool operator()(const nobBaseWarehouse& wh) const;
+};
+
+/// At least one of any of the wares
+struct HasAnyWare
+{
+    const std::vector<GoodType>& types;
+    explicit HasAnyWare(const std::vector<GoodType>& types) : types(types) {}
     bool operator()(const nobBaseWarehouse& wh) const;
 };
 

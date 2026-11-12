@@ -80,7 +80,7 @@ WorkshopDesc makeWorkshop(const std::string& name, std::vector<TagQuery> inputs,
     desc.name = name;
     desc.title = name + "Title";
     desc.size = "small";
-    desc.cost = {{"Boards", 2}, {"Stones", 1}};
+    desc.cost = {{{"Boards"}, 2}, {{"Stones"}, 1}};
     desc.look = "Sawmill";
     desc.worker.title = name + "Worker";
     desc.worker.tool = "Saw";
@@ -172,7 +172,7 @@ WorldDescription makeLibraryDesc(unsigned capacity = 20)
     library.name = "Library";
     library.title = "LibraryTitle";
     library.size = "medium";
-    library.cost = {{"Boards", 2}};
+    library.cost = {{{"Boards"}, 2}};
     library.look = "Bakery";
     library.worker.title = "Librarian";
     library.worker.tool = "none";
@@ -269,8 +269,12 @@ BOOST_AUTO_TEST_CASE(WaresGetSlotsAndTags)
     BOOST_TEST_REQUIRE(shop);
     BOOST_TEST(shop->name == "Shop");
     BOOST_TEST((shop->size == BuildingQuality::Hut));
-    BOOST_TEST(shop->cost.boards == 2u);
-    BOOST_TEST(shop->cost.stones == 1u);
+    const BuildingCosts& shopCost = content.GetBuildingCost(BuildingType::Custom0);
+    BOOST_TEST_REQUIRE(shopCost.size() == 2u);
+    BOOST_TEST((shopCost[0].wares == std::vector<GoodType>{GoodType::Boards}));
+    BOOST_TEST(shopCost[0].amount == 2u);
+    BOOST_TEST((shopCost[1].wares == std::vector<GoodType>{GoodType::Stones}));
+    BOOST_TEST(shopCost[1].amount == 1u);
     BOOST_TEST((shop->look == BuildingType::Sawmill));
     BOOST_TEST((shop->workDesc.job == Job::Custom0));
     BOOST_TEST_REQUIRE(shop->workDesc.waresNeeded.size() == 1u);
@@ -375,7 +379,7 @@ BOOST_AUTO_TEST_CASE(InvalidDefinitions)
     }
     {
         WorldDescription desc = makeSimpleDesc();
-        desc.workshops.front().cost = {{"Wood", 2}};
+        desc.workshops.front().cost = {{{"Unknown"}, 2}};
         expectError(desc);
     }
     {
@@ -577,7 +581,7 @@ BOOST_AUTO_TEST_CASE(GlobalTablesUseActiveContent)
     BOOST_TEST(WARE_NAMES[GoodType::Custom0] == "RawTitle");
     BOOST_TEST(WARE_NAMES[getCustomGood(2)].empty());
     BOOST_TEST(std::string(BUILDING_NAMES[BuildingType::Custom0]) == "ShopTitle");
-    BOOST_TEST(BUILDING_COSTS[BuildingType::Custom0].boards == 2u);
+    BOOST_TEST(BUILDING_COSTS[BuildingType::Custom0].front().amount == 2u);
     BOOST_TEST((BUILDING_SIZE[BuildingType::Custom0] == BuildingQuality::Hut));
     BOOST_TEST((BLD_WORK_DESC[BuildingType::Custom0].job == Job::Custom0));
     BOOST_TEST(JOB_NAMES[Job::Custom0] == "ShopWorker");
@@ -606,7 +610,7 @@ BOOST_AUTO_TEST_CASE(TechTreeUsesCustomNames)
     TechnologyDesc tech;
     tech.name = "crafting";
     tech.title = "Crafting";
-    tech.cost = {{"Raw", 2}};
+    tech.cost = {{{"Raw"}, 2}};
     tech.unlockedBuildings = {"Shop"};
     desc.technologies.add(tech);
     desc.buildingKnowledge["Shop"] = KnowledgeValues{0, 2, 0};

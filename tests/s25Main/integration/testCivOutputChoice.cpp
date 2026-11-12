@@ -74,7 +74,7 @@ WorkshopDesc makeWorkshop(const std::string& name, const std::string& input, std
     desc.name = name;
     desc.title = name + "Title";
     desc.size = "small";
-    desc.cost = {{"Boards", 2}};
+    desc.cost = {{{"Boards"}, 2}};
     desc.look = "Metalworks";
     desc.worker.title = name + "Worker";
     desc.worker.tool = "none";

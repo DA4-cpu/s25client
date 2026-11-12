@@ -66,6 +66,7 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-11-12 | KI baut Werkstätten mit `outputChoice = "tools"` wie die Schlosserei, sobald die Eingänge im Lager sind; ihre Werkzeug-Regler gelten dort mit. |
 | 2026-11-12 | **`outputRatio`** (Waren pro Arbeitsschritt, 0–8, Kommazahlen) für **alle Gebäude**: Werkstätten in `rttr:AddWorkshop`, eingebaute Gebäude mit `rttr:SetBuildingOutputRatio`, Werkzeuge geben einen Bonus (`outputRatio` in `rttr:AddTool`), der zum Grundwert addiert wird (0,5 + 1 = 1,5 = abwechselnd 1 und 2 Waren). |
 | 2026-11-12 | Mehrere Waren in einem Schritt: Mit `outputChoice` wird **jede Ware einzeln gewählt**; **Nebenprodukte je Ware**. |
+| 2026-11-12 | **Baukosten nach Tags**: jede Ware kann Baumaterial sein. Auch die eingebauten Gebäude bekommen ihre Kosten aus Lua (`rttr:SetBuildingCost`). Kurzform `{ Boards = 2 }` und Langform `{ { tags = ..., amount = ... } }`. Verbaut wird **nur nach Reihenfolge** (erste Hälfte des Fortschritts = Gerüst). Die Baustelle bestellt aus dem **nächsten Lager mit irgendeiner passenden Ware**. |
 
 ## Zuordnung Humankind → Siedler
 
@@ -290,6 +291,32 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
 - Gebäudefenster: „Ertrag xN“ unter dem Tempo (wenn nicht 1 oder das Gebäude Werkzeugplätze hat).
 - Spielstand Version 24: `stepOutputRatio_`, `outputCredit_`, `carryList_`.
 - Ausgelieferte Daten setzen keine Werte (alle 1, Werkzeuge ohne Bonus); das Balancing macht der Nutzer.
+
+### Baukosten nach Tags (Stand 2026-11-12)
+
+- Lua: `rttr:SetBuildingCost{ Gebäude = Kosten }` in `buildingcosts.lua` (dort stehen die bisherigen Kosten aller
+  eingebauten Gebäude), `cost` in `rttr:AddWorkshop` im selben Format. Kurzform `{ Boards = 2, Stones = 1 }` (ein Tag je
+  Eintrag, alphabetisch, da Lua-Tabellen keine Reihenfolge haben), Langform
+  `{ { tags = { "Bretter", "Nadelholz" }, amount = 2 }, ... }` (in dieser Reihenfolge). Höchstens 4 Einträge und 31 Waren
+  (`MAX_COST_ENTRIES`, `MAX_TOTAL_COST`; der Baufortschritt bleibt 1 Byte). Nicht genannte eingebaute Gebäude:
+  `Boards`/`Stones` als Tags (passen auch auf neue Waren mit diesem Tag).
+- Der Hafen ist ausgenommen: Expeditionen tragen Bretter und Steine (`HARBOR_BUILDING_COST`).
+- Code: `CostEntry { tags, wares, amount }`, `BuildingCosts` (`gameTypes/BuildingTypes.h`); `BUILDING_COSTS[bld]` liefert
+  `civ::Content::GetBuildingCost` (auch ohne Zivilisationsmodus, dann die Originalkosten).
+- Baustelle (`noBuildingSite::Material` je Eintrag: geliefert mit Warentyp, verbaut, bestellt): `OrderConstructionMaterial`
+  bestellt je Eintrag mit `GamePlayer::OrderWare(wares, goal)` (nächstes Lager mit irgendeiner passenden Ware
+  `FW::HasAnyWare`, dort die erste vorrätige der Liste; sonst herrenlose Waren). `TakeWare` ordnet eine Ware dem Eintrag
+  zu, für den gerade bestellt wird, sonst dem ersten, der sie braucht. Waren ohne Baustellen in der Verteilung (z. B.
+  neue Bretter) finden Baustellen trotzdem (`FindClientForWare`).
+- Bauarbeiter (`nofBuilder::ChooseWare`): streng in Listenreihenfolge, wartet auf den nächsten Eintrag, auch wenn
+  spätere Waren schon da sind. Anzeige: im Zivilisationsmodus Gerüst = erste Hälfte, außerhalb wie im Original
+  (`noBuildingSite::GetMaxProgress`, auch im Nebel).
+- Baustellenfenster: eine Reihe je Eintrag (mehr als 8 Waren umbrechen, Fenster wächst); Bau-Tooltip zeigt „N boards“,
+  den Warennamen oder die Tags. Waren an der Baustelle: Einträge abwechselnd links/rechts der Tür.
+- Abriss mit Rückerstattung: je Eintrag die erste passende Ware.
+- KI (`AIConstruction`): freier Bestand je Ware (`ConstructionMaterial = EnumArray<int, GoodType>`), Bedarf der Baustellen
+  und Reserven werden greedy auf die passenden Waren verteilt.
+- Spielstand Version 25 (ältere: Bretter/Steine kommen in die Einträge, die sie enthalten).
 
 ### Regler „Wissen“ und Bibliothek (Schritte 4b, 4c)
 

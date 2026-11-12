@@ -99,10 +99,17 @@ Content::Content()
         if(isUsableBuiltinGood(good))
             tags_[good] = {getIdentifier(good)};
     }
+    // Original construction costs: boards and stones
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        if(!isCustomBuilding(bld))
+            costs_[bld] = makeBuiltinCost(bld);
+    }
 }
 
 Content::Content(const WorldDescription& desc) : Content()
 {
+    fromLua_ = true;
     // Wares
     if(desc.wares.size() > NUM_CUSTOM_GOODS)
         throw GameDataError("At most " + std::to_string(NUM_CUSTOM_GOODS) + " new wares can be defined");
@@ -243,21 +250,7 @@ Content::Content(const WorldDescription& desc) : Content()
         else
             bld.size = BuildingQuality::Castle;
 
-        bld.cost = BuildingCost{0, 0};
-        for(const auto& costEntry : wsDesc.cost)
-        {
-            if(costEntry.second > 255)
-                throw GameDataError(context + ": costs must be <= 255");
-            if(costEntry.first == "Boards")
-                bld.cost.boards = static_cast<uint8_t>(costEntry.second);
-            else if(costEntry.first == "Stones")
-                bld.cost.stones = static_cast<uint8_t>(costEntry.second);
-            else
-                throw GameDataError(context + ": construction costs can only be Boards and Stones (for now), not '"
-                                    + costEntry.first + "'");
-        }
-        if(bld.cost.boards + bld.cost.stones == 0)
-            throw GameDataError(context + ": construction costs are missing");
+        costs_[getCustomBuilding(i)] = resolveCost(wsDesc.cost, context);
 
         const auto look = buildingFromIdentifier(wsDesc.look);
         if(!look)
@@ -516,6 +509,24 @@ Content::Content(const WorldDescription& desc) : Content()
         workers_.push_back(std::move(worker));
     }
 
+    // Construction costs of built-in buildings: boards and stones unless set in lua. The tags "Boards" and "Stones"
+    // also match new wares with them as tag
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        if(!isCustomBuilding(bld))
+            costs_[bld] = makeBuiltinCost(bld);
+    }
+    for(const auto& entry : desc.buildingCosts)
+    {
+        const std::string context = "Construction costs of building '" + entry.first + "'";
+        const auto bld = buildingFromIdentifier(entry.first);
+        if(!bld || !BuildingProperties::IsValid(*bld) || *bld == BuildingType::Headquarters)
+            throw GameDataError(context + ": not a built-in building (workshops get them in rttr:AddWorkshop)");
+        if(*bld == BuildingType::HarborBuilding)
+            throw GameDataError(context + ": the harbor always costs boards and stones (expeditions carry them)");
+        costs_[*bld] = resolveCost(entry.second, context);
+    }
+
     // Output ratio of built-in buildings (workshops have it in rttr:AddWorkshop)
     for(const auto& entry : desc.buildingOutputRatios)
     {
@@ -751,6 +762,44 @@ std::vector<GoodType> Content::FindWares(const TagQuery& query) const
         if(Matches(good, query))
             result.push_back(good);
     }
+    return result;
+}
+
+BuildingCosts Content::makeBuiltinCost(const BuildingType bld) const
+{
+    BuildingCosts result;
+    const BuildingCost cost = BUILTIN_BUILDING_COSTS[static_cast<unsigned>(bld)];
+    const auto add = [&](const GoodType good, const uint8_t amount) {
+        if(amount == 0)
+            return;
+        CostEntry entry;
+        entry.tags = {getIdentifier(good)};
+        entry.wares = FindWares(entry.tags);
+        if(entry.wares.empty())
+            entry.wares = {good};
+        entry.amount = amount;
+        result.push_back(std::move(entry));
+    };
+    add(GoodType::Boards, cost.boards);
+    add(GoodType::Stones, cost.stones);
+    return result;
+}
+
+BuildingCosts Content::resolveCost(const std::vector<CostDesc>& desc, const std::string& context) const
+{
+    BuildingCosts result;
+    for(const CostDesc& entryDesc : desc)
+    {
+        CostEntry entry;
+        entry.tags = entryDesc.tags;
+        entry.wares = FindWares(entryDesc.tags);
+        if(entry.wares.empty())
+            throw GameDataError(context + ": " + joinTags(entryDesc.tags) + " matches no ware");
+        entry.amount = static_cast<uint8_t>(entryDesc.amount);
+        result.push_back(std::move(entry));
+    }
+    if(result.empty())
+        throw GameDataError(context + ": construction costs are missing");
     return result;
 }
 

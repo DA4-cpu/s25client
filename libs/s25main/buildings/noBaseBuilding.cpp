@@ -115,35 +115,34 @@ void noBaseBuilding::Destroy()
             const std::array<unsigned, 5> percents = {0, 25, 50, 75, 100};
             const unsigned percent = 10 * percents[percent_index];
 
-            // zurückgaben berechnen (abgerundet)
-            unsigned boards = (percent * BUILDING_COSTS[bldType_].boards) / 1000;
-            unsigned stones = (percent * BUILDING_COSTS[bldType_].stones) / 1000;
+            // zurückgaben berechnen (abgerundet): of every material, as the first ware matching it (boards, stones)
+            std::vector<std::pair<GoodType, unsigned>> refunds;
+            for(const CostEntry& entry : BUILDING_COSTS[bldType_])
+                refunds.emplace_back(entry.wares.front(), (percent * entry.amount) / 1000);
 
-            std::array<GoodType, 2> goods = {GoodType::Boards, GoodType::Stones};
-            bool which = false;
-            while(flag->HasSpaceForWare() && (boards > 0 || stones > 0))
+            // Abwechselnd von jedem Material eine Ware, solange Platz an der Fahne ist
+            bool anyLeft = true;
+            while(flag->HasSpaceForWare() && anyLeft)
             {
-                if((!which && boards > 0) || (which && stones > 0))
+                anyLeft = false;
+                for(auto& refund : refunds)
                 {
+                    if(refund.second == 0 || !flag->HasSpaceForWare())
+                        continue;
                     // Ware erzeugen
-                    auto ware = std::make_unique<Ware>(goods[which], nullptr, flag);
+                    auto ware = std::make_unique<Ware>(refund.first, nullptr, flag);
                     ware->WaitAtFlag(flag);
                     // Inventur anpassen
-                    world->GetPlayer(player).IncreaseInventoryWare(goods[which], 1);
+                    world->GetPlayer(player).IncreaseInventoryWare(refund.first, 1);
                     // Abnehmer für Ware finden
                     ware->SetGoal(world->GetPlayer(player).FindClientForWare(*ware));
                     // Ware soll ihren weiteren Weg berechnen
                     ware->RecalcRoute();
                     // Ware ablegen
                     flag->AddWare(std::move(ware));
-
-                    if(!which)
-                        --boards;
-                    else
-                        --stones;
+                    --refund.second;
+                    anyLeft |= refund.second > 0;
                 }
-
-                which = !which;
             }
         }
     }

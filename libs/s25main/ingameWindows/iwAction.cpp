@@ -28,6 +28,7 @@
 #include "world/GameWorldViewer.h"
 #include "nodeObjs/noFlag.h"
 #include "gameData/BuildingConsts.h"
+#include "gameData/GoodConsts.h"
 #include "gameData/const_gui_ids.h"
 #include <sstream>
 
@@ -190,13 +191,26 @@ iwAction::iwAction(GameInterface& gi, GameWorldView& gwv, const Tabs& tabs, MapP
                 tooltip << _(BUILDING_NAMES[bld]);
 
                 tooltip << _("\nCosts: ");
-                if(BUILDING_COSTS[bld].boards > 0)
-                    tooltip << (int)BUILDING_COSTS[bld].boards << _(" boards");
-                if(BUILDING_COSTS[bld].stones > 0)
+                bool first = true;
+                for(const CostEntry& entry : BUILDING_COSTS[bld])
                 {
-                    if(BUILDING_COSTS[bld].boards > 0)
+                    if(!first)
                         tooltip << ", ";
-                    tooltip << (int)BUILDING_COSTS[bld].stones << _(" stones");
+                    first = false;
+                    tooltip << static_cast<int>(entry.amount);
+                    if(entry.wares == std::vector<GoodType>{GoodType::Boards})
+                        tooltip << _(" boards");
+                    else if(entry.wares == std::vector<GoodType>{GoodType::Stones})
+                        tooltip << _(" stones");
+                    else if(entry.wares.size() == 1u)
+                        tooltip << " " << _(WARE_NAMES[entry.wares.front()]);
+                    else
+                    {
+                        // Several wares: the tags
+                        tooltip << " ";
+                        for(unsigned t = 0; t < entry.tags.size(); ++t)
+                            tooltip << (t ? "/" : "") << entry.tags[t];
+                    }
                 }
 
                 DrawPoint iconPos((k % 5) * 36, (k / 5) * 36 + 45);

@@ -25,7 +25,7 @@
 
 RTTR_BUILDING_TABLE(BuildingNamesTable, const char*);
 RTTR_BUILDING_TABLE(BuildingHelpTable, const char*);
-RTTR_BUILDING_TABLE(BuildingCostTable, BuildingCost);
+RTTR_BUILDING_TABLE(BuildingCostTable, const BuildingCosts&);
 RTTR_BUILDING_TABLE(BuildingSizeTable, BuildingQuality);
 RTTR_BUILDING_TABLE(BuildingWorkDescTable, const BldWorkDescription&);
 #undef RTTR_BUILDING_TABLE
@@ -33,6 +33,7 @@ RTTR_BUILDING_TABLE(BuildingWorkDescTable, const BldWorkDescription&);
 extern const BuildingNamesTable BUILDING_NAMES;
 /// Hilfetexte für Gebäude
 extern const BuildingHelpTable BUILDING_HELP_STRINGS;
+/// Construction costs (civilization mode: from lua, rttr:SetBuildingCost and rttr:AddWorkshop)
 extern const BuildingCostTable BUILDING_COSTS;
 extern const BuildingSizeTable BUILDING_SIZE;
 /// Describes the work the building does
@@ -42,6 +43,10 @@ constexpr std::array<BuildingCost, NUM_BUILTIN_BUILDINGS> SUPPRESS_UNUSED BUILTI
   {{0, 0}, {2, 0}, {2, 3}, {2, 0}, {3, 5}, {4, 4}, {2, 3}, {4, 7}, {2, 2}, {4, 7}, {4, 0}, {4, 0}, {4, 0}, {4, 0},
    {4, 0}, {2, 2}, {4, 2}, {2, 0}, {2, 0}, {2, 0}, {2, 0}, {2, 2}, {2, 0}, {2, 2}, {2, 2}, {2, 2}, {2, 2}, {4, 3},
    {3, 3}, {4, 3}, {0, 0}, {2, 2}, {2, 2}, {2, 2}, {2, 2}, {2, 0}, {2, 3}, {3, 3}, {3, 3}, {4, 6}}};
+
+/// Costs of the harbor: always boards and stones, as expeditions carry them (not changed by lua)
+constexpr BuildingCost HARBOR_BUILDING_COST =
+  BUILTIN_BUILDING_COSTS[static_cast<unsigned>(BuildingType::HarborBuilding)];
 
 // Bauqualitäten der Gebäude
 constexpr std::array<BuildingQuality, NUM_BUILTIN_BUILDINGS> SUPPRESS_UNUSED BUILTIN_BUILDING_SIZE = {

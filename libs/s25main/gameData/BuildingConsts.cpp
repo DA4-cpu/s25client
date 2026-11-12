@@ -347,12 +347,9 @@ const char* BuildingHelpTable::operator[](BuildingType bld) const
     return custom ? custom->description.c_str() : "";
 }
 
-BuildingCost BuildingCostTable::operator[](BuildingType bld) const
+const BuildingCosts& BuildingCostTable::operator[](BuildingType bld) const
 {
-    if(!isCustomBuilding(bld))
-        return BUILTIN_BUILDING_COSTS[static_cast<unsigned>(bld)];
-    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
-    return custom ? custom->cost : BuildingCost{0, 0};
+    return civ::getActiveContent().GetBuildingCost(bld);
 }
 
 BuildingQuality BuildingSizeTable::operator[](BuildingType bld) const

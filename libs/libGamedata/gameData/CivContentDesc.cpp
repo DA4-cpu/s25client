@@ -5,6 +5,7 @@
 #include "CivContentDesc.h"
 #include "WorldDescription.h"
 #include "lua/CheckedLuaTable.h"
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -67,6 +68,73 @@ TagQuery parseTagQuery(const kaguya::LuaRef& value, const std::string& context)
         if(tag.empty())
             throw GameDataError(context + ": empty tag");
     }
+    return result;
+}
+
+std::vector<CostDesc> parseBuildingCost(const kaguya::LuaRef& value, const std::string& context)
+{
+    if(value.type() != kaguya::LuaRef::TYPE_TABLE)
+        throw GameDataError(context
+                            + ": expected a table like { Boards = 2 } or { { tags = \"Bretter\", amount = 2 } }");
+    const auto table = value.get<kaguya::LuaTable>();
+    std::vector<CostDesc> result;
+    const auto readAmount = [&context](const kaguya::LuaRef& amountValue) {
+        if(amountValue.type() != kaguya::LuaRef::TYPE_NUMBER)
+            throw GameDataError(context + ": the amount must be a number");
+        const int amount = amountValue.get<int>();
+        if(amount <= 0 || amount > static_cast<int>(MAX_TOTAL_COST))
+            throw GameDataError(context + ": the amount must be in [1, " + std::to_string(MAX_TOTAL_COST) + "]");
+        return static_cast<unsigned>(amount);
+    };
+    std::vector<std::string> keys;
+    unsigned numIndexed = 0;
+    for(const kaguya::LuaRef& key : table.keys<kaguya::LuaRef>())
+    {
+        if(key.type() == kaguya::LuaRef::TYPE_STRING)
+            keys.push_back(key.get<std::string>());
+        else if(key.type() == kaguya::LuaRef::TYPE_NUMBER)
+            ++numIndexed;
+        else
+            throw GameDataError(context + ": unexpected key");
+    }
+    if(!keys.empty() && numIndexed > 0)
+        throw GameDataError(context + ": use either { Boards = 2 } or { { tags = ..., amount = ... } }, not both");
+    // Short form: tag -> amount (a lua table has no order, so alphabetical)
+    std::sort(keys.begin(), keys.end());
+    for(const std::string& key : keys)
+    {
+        if(key.empty())
+            throw GameDataError(context + ": empty tag");
+        result.push_back(CostDesc{{key}, readAmount(table[key])});
+    }
+    // Long form: list of { tags = ..., amount = ... } in this order
+    for(unsigned i = 1; i <= numIndexed; ++i)
+    {
+        const kaguya::LuaRef entry = table[i];
+        if(entry.type() != kaguya::LuaRef::TYPE_TABLE)
+            throw GameDataError(context + ": every entry must be a table like { tags = \"Bretter\", amount = 2 }");
+        CheckedLuaTable entryData(entry.get<kaguya::LuaTable>());
+        const auto tagsValue = entryData.getOptional<kaguya::LuaRef>("tags");
+        if(!tagsValue)
+            throw GameDataError(context + ": tags of an entry are missing");
+        CostDesc desc;
+        desc.tags = parseTagQuery(*tagsValue, context);
+        const auto amountValue = entryData.getOptional<kaguya::LuaRef>("amount");
+        if(!amountValue)
+            throw GameDataError(context + ": amount of an entry is missing");
+        desc.amount = readAmount(*amountValue);
+        entryData.checkUnused();
+        result.push_back(std::move(desc));
+    }
+    if(result.empty())
+        throw GameDataError(context + ": no construction material given");
+    if(result.size() > MAX_COST_ENTRIES)
+        throw GameDataError(context + ": at most " + std::to_string(MAX_COST_ENTRIES) + " materials are possible");
+    unsigned total = 0;
+    for(const CostDesc& entry : result)
+        total += entry.amount;
+    if(total > MAX_TOTAL_COST)
+        throw GameDataError(context + ": at most " + std::to_string(MAX_TOTAL_COST) + " wares in total are possible");
     return result;
 }
 
@@ -152,7 +220,8 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     luaData.getOrThrow(size, "size");
     if(size != "small" && size != "medium" && size != "large" && size != "mine")
         throw GameDataError(context + ": size must be \"small\", \"medium\", \"large\" or \"mine\"");
-    cost = luaData.getOrDefault("cost", std::map<std::string, unsigned>());
+    if(const auto costValue = luaData.getOptional<kaguya::LuaRef>("cost"))
+        cost = parseBuildingCost(*costValue, context + ", cost");
     luaData.getOrThrow(look, "look");
 
     {

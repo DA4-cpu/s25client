@@ -148,6 +148,9 @@ public:
     void FindClientForLostWares();
     /// Bestellt eine Ware und gibt sie zurück, falls es eine gibt, ansonsten 0
     Ware* OrderWare(GoodType ware, noBaseBuilding& goal);
+    /// Order any of the wares (e.g. construction material matching tags): From the next warehouse having one of them
+    /// the first of the list it has, otherwise a lost ware
+    Ware* OrderWare(const std::vector<GoodType>& wares, noBaseBuilding& goal);
     /// Versucht einen Esel zu bestellen, gibt 0 zurück, falls keinen gefunden
     nofCarrier* OrderDonkey(RoadSegment& road) const;
     /// Versucht für einen Esel eine Straße zu finden, in goal wird die Zielflagge zurückgegeben,
