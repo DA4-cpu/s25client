@@ -192,9 +192,9 @@ public:
     /// with where the wares came from or what they were used for
     void IncreaseInventoryWare(GoodType ware, unsigned count, WareSource source);
     void DecreaseInventoryWare(GoodType ware, unsigned count, WareUse use);
-    /// Helpers created by a warehouse / who became a worker or soldier (economy statistic)
+    /// Helpers created by a warehouse / who became a worker, soldier or carrier (economy statistic)
     void CountHelpersCreated(unsigned count);
-    void CountHelpersRecruited(unsigned count);
+    void CountHelpersUsed(unsigned count);
     /// Exact statistic of the economy (see EconomyStatistics)
     const EconomyStatistics& GetEconomyStatistics() const { return economyStatistics_; }
     void IncreaseInventoryJob(const Job job, unsigned count) { global_inventory.Add(job, count); }

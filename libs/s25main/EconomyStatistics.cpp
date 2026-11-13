@@ -70,9 +70,9 @@ void EconomyStatistics::AddHelpersCreated(const unsigned count, const unsigned g
     addSaturated(Current(gf).helpersCreated, count);
 }
 
-void EconomyStatistics::AddHelpersRecruited(const unsigned count, const unsigned gf)
+void EconomyStatistics::AddHelpersUsed(const unsigned count, const unsigned gf)
 {
-    addSaturated(Current(gf).helpersRecruited, count);
+    addSaturated(Current(gf).helpersUsed, count);
 }
 
 const EconomyMinute* EconomyStatistics::GetMinute(const unsigned minutesAgo, const unsigned gf) const
@@ -150,9 +150,9 @@ unsigned EconomyStatistics::GetHelpersCreated(const unsigned minutes, const unsi
     return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.helpersCreated; });
 }
 
-unsigned EconomyStatistics::GetHelpersRecruited(const unsigned minutes, const unsigned gf) const
+unsigned EconomyStatistics::GetHelpersUsed(const unsigned minutes, const unsigned gf) const
 {
-    return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.helpersRecruited; });
+    return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.helpersUsed; });
 }
 
 void EconomyStatistics::Serialize(SerializedGameData& sgd) const
@@ -198,7 +198,7 @@ void EconomyStatistics::Serialize(SerializedGameData& sgd) const
         const EconomyMinute& minute = history_[(newestMinute_ + 1 - i) % HISTORY_MINUTES];
         pushEntries(minute.gained, minute.used, [&sgd](const uint16_t value) { sgd.PushUnsignedShort(value); });
         sgd.PushUnsignedShort(minute.helpersCreated);
-        sgd.PushUnsignedShort(minute.helpersRecruited);
+        sgd.PushUnsignedShort(minute.helpersUsed);
     }
     pushEntries(totalGained_, totalUsed_, [&sgd](const uint32_t value) { sgd.PushUnsignedInt(value); });
 }
@@ -233,7 +233,7 @@ void EconomyStatistics::Deserialize(SerializedGameData& sgd)
         EconomyMinute& minute = history_[(newestMinute_ + 1 - i) % HISTORY_MINUTES];
         popEntries(minute.gained, minute.used, [&sgd]() { return sgd.PopUnsignedShort(); });
         minute.helpersCreated = sgd.PopUnsignedShort();
-        minute.helpersRecruited = sgd.PopUnsignedShort();
+        minute.helpersUsed = sgd.PopUnsignedShort();
     }
     popEntries(totalGained_, totalUsed_, [&sgd]() { return sgd.PopUnsignedInt(); });
 }

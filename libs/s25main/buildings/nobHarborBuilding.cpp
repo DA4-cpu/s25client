@@ -324,7 +324,7 @@ void nobHarborBuilding::StartExpedition()
             owner.DecreaseInventoryWare(GoodType::Hammer, 1, WareUse::Tool);
             inventory.Remove(Job::Helper);
             owner.DecreaseInventoryJob(Job::Helper, 1);
-            owner.CountHelpersRecruited(1);
+            owner.CountHelpersUsed(1);
 
             owner.IncreaseInventoryJob(Job::Builder, 1);
             expedition.builder = true;

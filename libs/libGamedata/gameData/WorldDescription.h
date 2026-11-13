@@ -35,6 +35,9 @@ struct WorldDescription
     DescriptionContainer<TechnologyDesc> technologies;
     /// Knowledge points of a finished building in the civilization mode: Building identifier -> points
     std::map<std::string, KnowledgeValues> buildingKnowledge;
+    /// AI of the civilization mode: buildings it may build to make the economy bigger (rttr:SetAIExpandingBuildings).
+    /// All others it only builds when the economy needs them
+    std::vector<std::string> aiExpandingBuildings;
     /// New wares of the civilization mode in order of definition
     std::vector<WareDesc> wares;
     /// Additional tags of built-in wares: Ware identifier -> tags

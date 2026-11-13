@@ -1192,8 +1192,11 @@ Statistik läuft in allen Spielen mit, nicht nur im Zivilisationsmodus.
   - `GetBalance` = Produktion − Verbrauch (alle Verwendungen); andere Zugänge zählen nicht.
   - `GetConsumptionPerMinute` teilt durch die tatsächlich vergangene Zeit, am Spielstart also weniger als n Minuten.
   - Im Spielstand stehen nur Werte ungleich 0.
-- **Gehilfen:** von Lagern erzeugt, zu Arbeitern oder Soldaten geworden (je Minute). Freie Gehilfen und Arbeiter
-  liefert die Momentaufnahme. Gehilfen, die als Träger auf Straßen gehen, sind nicht als Verbrauch gezählt.
+- **Gehilfen:** von Lagern erzeugt, und verbraucht (zu Arbeitern oder Soldaten geworden oder als Träger auf eine
+  Straße gegangen; Nutzer 2026-11-13: Träger zählen mit), je Minute. Freie Gehilfen und Arbeiter liefert die
+  Momentaufnahme.
+- **Expansionsliste:** `data/RTTR/gamedata/civ/ai.lua` mit `rttr:SetAIExpandingBuildings{ ... }` (Liste von
+  Gebäudenamen, auch Werkstätten aus Lua), abfragbar mit `civ::TechTree::IsAIExpanding`.
 - **Momentaufnahme** (`takeEconomySnapshot`): offene Nachfrage (angefragt, aber noch nicht geschickt). Sie umfasst:
   - Baustellen,
   - Eingänge der Gebäude, bei „eins von“ als ein Eintrag,

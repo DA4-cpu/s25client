@@ -2015,9 +2015,9 @@ void GamePlayer::CountHelpersCreated(const unsigned count)
     economyStatistics_.AddHelpersCreated(count, world.GetEvMgr().GetCurrentGF());
 }
 
-void GamePlayer::CountHelpersRecruited(const unsigned count)
+void GamePlayer::CountHelpersUsed(const unsigned count)
 {
-    economyStatistics_.AddHelpersRecruited(count, world.GetEvMgr().GetCurrentGF());
+    economyStatistics_.AddHelpersUsed(count, world.GetEvMgr().GetCurrentGF());
 }
 
 void GamePlayer::RegisterShip(noShip& ship)

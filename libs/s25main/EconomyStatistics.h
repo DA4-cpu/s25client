@@ -64,8 +64,8 @@ struct EconomyMinute
     helpers::EnumArray<helpers::EnumArray<uint16_t, WareUse>, GoodType> used{};
     /// Helpers created by the warehouses
     uint16_t helpersCreated = 0;
-    /// Helpers who became a worker or a soldier
-    uint16_t helpersRecruited = 0;
+    /// Helpers who left a warehouse for good: became a worker or a soldier, or went to a road as carrier
+    uint16_t helpersUsed = 0;
 };
 
 /// Exact economy statistic of a player: every ware that enters or leaves his stock, counted at the moment it happens,
@@ -82,7 +82,7 @@ public:
     void AddGained(GoodType good, unsigned count, WareSource source, unsigned gf);
     void AddUsed(GoodType good, unsigned count, WareUse use, unsigned gf);
     void AddHelpersCreated(unsigned count, unsigned gf);
-    void AddHelpersRecruited(unsigned count, unsigned gf);
+    void AddHelpersUsed(unsigned count, unsigned gf);
 
     /// Made in the last n minutes (n = 1..HISTORY_MINUTES)
     unsigned GetProduced(GoodType good, unsigned minutes, unsigned gf) const;
@@ -97,7 +97,7 @@ public:
     /// Consumed per minute in the last n minutes (divided by the time actually covered, shorter at the start)
     double GetConsumptionPerMinute(GoodType good, unsigned minutes, unsigned gf) const;
     unsigned GetHelpersCreated(unsigned minutes, unsigned gf) const;
-    unsigned GetHelpersRecruited(unsigned minutes, unsigned gf) const;
+    unsigned GetHelpersUsed(unsigned minutes, unsigned gf) const;
 
     /// Game minutes covered by the last n minutes at the given GF (the current minute counts as the part passed)
     double GetCoveredMinutes(unsigned minutes, unsigned gf) const;

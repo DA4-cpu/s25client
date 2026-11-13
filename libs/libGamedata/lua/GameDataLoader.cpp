@@ -16,6 +16,7 @@
 #include "s25util/Log.h"
 #include <kaguya/kaguya.hpp>
 #include <boost/filesystem.hpp>
+#include <algorithm>
 #include <stdexcept>
 
 namespace bfs = boost::filesystem;
@@ -51,6 +52,7 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("AddTerrain", &GameDataLoader::AddTerrain)
         .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
         .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
+        .addFunction("SetAIExpandingBuildings", &GameDataLoader::SetAIExpandingBuildings)
         .addFunction("AddWare", &GameDataLoader::AddWare)
         .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
@@ -356,6 +358,29 @@ void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)
         if(!worldDesc_.buildingKnowledge.emplace(building, knowledge).second)
             throw GameDataError("Knowledge of building '" + building + "' is defined twice");
     }
+}
+
+void GameDataLoader::SetAIExpandingBuildings(const kaguya::LuaTable& data)
+{
+    const std::string context = "Expanding buildings of the AI (rttr:SetAIExpandingBuildings)";
+    if(!worldDesc_.aiExpandingBuildings.empty())
+        throw GameDataError(context + " are defined twice");
+    const size_t numEntries = data.size();
+    if(data.keys<kaguya::LuaRef>().size() != numEntries)
+        throw GameDataError(context + ": expected a list of building names like { \"Woodcutter\", \"Quarry\" }");
+    for(size_t i = 1; i <= numEntries; ++i)
+    {
+        const kaguya::LuaRef value = data[i];
+        if(value.type() != kaguya::LuaRef::TYPE_STRING)
+            throw GameDataError(context + ": entry " + std::to_string(i) + " is no building name");
+        const std::string name = value.get<std::string>();
+        if(std::find(worldDesc_.aiExpandingBuildings.begin(), worldDesc_.aiExpandingBuildings.end(), name)
+           != worldDesc_.aiExpandingBuildings.end())
+            throw GameDataError(context + ": '" + name + "' is listed twice");
+        worldDesc_.aiExpandingBuildings.push_back(name);
+    }
+    if(worldDesc_.aiExpandingBuildings.empty())
+        throw GameDataError(context + ": the list is empty");
 }
 
 void loadGameData(WorldDescription& worldDesc)

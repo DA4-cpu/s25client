@@ -94,9 +94,9 @@ BOOST_AUTO_TEST_CASE(CountsPerMinute)
     BOOST_TEST(stats.GetTotalUsed(GoodType::Wood, WareUse::Lost) == 4u);
 
     stats.AddHelpersCreated(2, 3 * GFS_PER_MINUTE);
-    stats.AddHelpersRecruited(1, 3 * GFS_PER_MINUTE);
+    stats.AddHelpersUsed(1, 3 * GFS_PER_MINUTE);
     BOOST_TEST(stats.GetHelpersCreated(5, 3 * GFS_PER_MINUTE) == 2u);
-    BOOST_TEST(stats.GetHelpersRecruited(5, 3 * GFS_PER_MINUTE) == 1u);
+    BOOST_TEST(stats.GetHelpersUsed(5, 3 * GFS_PER_MINUTE) == 1u);
 }
 
 BOOST_AUTO_TEST_CASE(ConsumptionPerMinuteOverTheCoveredTime)
@@ -191,7 +191,7 @@ BOOST_FIXTURE_TEST_CASE(EveryChangeOfTheStockIsCounted, EconomyFixture)
     hq().AddToInventory(GoodCounts::make(GoodType::Beer, 2), true);
     RTTR_EXEC_TILL(2000, stats().GetTotalUsed(GoodType::Beer, WareUse::Soldiers) == 2u);
     BOOST_TEST(stats().GetTotalUsed(GoodType::Sword, WareUse::Soldiers) == 2u);
-    BOOST_TEST(stats().GetHelpersRecruited(EconomyStatistics::HISTORY_MINUTES, gf()) >= 2u);
+    BOOST_TEST(stats().GetHelpersUsed(EconomyStatistics::HISTORY_MINUTES, gf()) >= 2u);
     checkStockMatchesCounts(player());
 
     // The warehouse creates helpers

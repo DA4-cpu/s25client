@@ -14,6 +14,7 @@
 #include "civ/Research.h"
 #include "civ/TechTree.h"
 #include "helpers/containerUtils.h"
+#include "lua/GameDataLoader.h"
 #include "worldFixtures/WorldWithGCExecution.h"
 #include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noGranite.h"
@@ -21,6 +22,9 @@
 #include "gameTypes/GameTypesOutput.h"
 #include "gameTypes/Inventory.h"
 #include "gameData/WorldDescription.h"
+#include "rttr/test/LogAccessor.hpp"
+#include "rttr/test/TmpFolder.hpp"
+#include <boost/nowide/fstream.hpp>
 #include <boost/test/unit_test.hpp>
 #include <algorithm>
 #include <memory>
@@ -497,6 +501,68 @@ BOOST_FIXTURE_TEST_CASE(PlansInRunGF, CivAIFixture)
         ai->RunGF(gf, false);
     BOOST_TEST_REQUIRE(ai->GetPlan());
     BOOST_TEST(ai->GetTimes().planUs > 0.);
+}
+
+namespace {
+bool loadLua(const std::string& content, WorldDescription& desc)
+{
+    rttr::test::TmpFolder tmp;
+    {
+        boost::nowide::ofstream file(tmp / "default.lua");
+        file << content;
+    }
+    GameDataLoader loader(desc, tmp);
+    rttr::test::LogAccessor logAcc;
+    return loader.Load();
+}
+} // namespace
+
+BOOST_AUTO_TEST_CASE(ExpandingBuildingsFromLua)
+{
+    const std::string workshop = R"(
+rttr:AddWare{ name = "Loam", look = "Stones", transport = "Stones" }
+rttr:AddWorkshop{ name = "Pit", size = "small", cost = { Boards = 2 }, look = "Quarry",
+    worker = { tool = "none", look = "Stonemason" }, output = "Loam", workTime = 5 }
+)";
+    WorldDescription desc;
+    BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIExpandingBuildings{ "Woodcutter", "Pit", "Barracks" })", desc));
+    BOOST_TEST((desc.aiExpandingBuildings == std::vector<std::string>{"Woodcutter", "Pit", "Barracks"}));
+    const civ::TechTree techTree(desc);
+    BOOST_TEST(techTree.IsAIExpanding(BuildingType::Woodcutter));
+    BOOST_TEST(techTree.IsAIExpanding(BuildingType::Custom0));
+    BOOST_TEST(techTree.IsAIExpanding(BuildingType::Barracks));
+    BOOST_TEST(!techTree.IsAIExpanding(BuildingType::Forester));
+    BOOST_TEST(!techTree.IsAIExpanding(BuildingType::Well));
+
+    for(const std::string& invalid :
+        {std::string(R"(rttr:SetAIExpandingBuildings{ "Woodcutter", "Woodcutter" })"),
+         std::string(R"(rttr:SetAIExpandingBuildings{ "Woodcutter", 3 })"),
+         std::string(R"(rttr:SetAIExpandingBuildings{ Woodcutter = true })"),
+         std::string(R"(rttr:SetAIExpandingBuildings{ })"), std::string(R"(rttr:SetAIExpandingBuildings{ "Woodcutter" }
+rttr:SetAIExpandingBuildings{ "Quarry" })")})
+    {
+        WorldDescription invalidDesc;
+        BOOST_TEST_INFO(invalid);
+        BOOST_TEST(!loadLua(workshop + invalid, invalidDesc));
+    }
+    WorldDescription unknownDesc;
+    BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIExpandingBuildings{ "Woodcuter" })", unknownDesc));
+    BOOST_CHECK_THROW(civ::TechTree{unknownDesc}, GameDataError);
+}
+
+BOOST_AUTO_TEST_CASE(ExpandingBuildingsOfTheGameData)
+{
+    const civ::TechTree techTree = civ::loadDefaultTechTree();
+    for(const BuildingType bld :
+        {BuildingType::Woodcutter, BuildingType::Quarry, BuildingType::Sawmill, BuildingType::Armory,
+         BuildingType::Mint, BuildingType::Barracks, BuildingType::Storehouse, BuildingType::HarborBuilding})
+        BOOST_TEST(techTree.IsAIExpanding(bld));
+    for(const BuildingType bld : {BuildingType::Forester, BuildingType::Well, BuildingType::Shipyard,
+                                  BuildingType::Catapult, BuildingType::Farm, BuildingType::Mill})
+        BOOST_TEST(!techTree.IsAIExpanding(bld));
+    const auto copperworks = techTree.GetContent().FindBuilding("Copperworks");
+    BOOST_TEST_REQUIRE(copperworks.has_value());
+    BOOST_TEST(techTree.IsAIExpanding(*copperworks));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

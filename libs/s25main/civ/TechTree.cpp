@@ -64,6 +64,14 @@ TechTree::TechTree(const WorldDescription& desc)
         for(const auto type : helpers::enumRange<KnowledgeType>())
             buildingKnowledge_[*bld][type] = entry.second[static_cast<unsigned>(type)];
     }
+    std::fill(aiExpanding_.begin(), aiExpanding_.end(), false);
+    for(const std::string& name : desc.aiExpandingBuildings)
+    {
+        const auto bld = content_->FindBuilding(name, true);
+        if(!bld)
+            throw GameDataError("Expanding building of the AI is an invalid building '" + name + "'");
+        aiExpanding_[*bld] = true;
+    }
     techs_.reserve(desc.technologies.size());
     for(const TechnologyDesc& techDesc : desc.technologies)
     {

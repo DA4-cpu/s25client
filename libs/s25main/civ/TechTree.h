@@ -90,6 +90,8 @@ public:
     std::vector<TechIdx> GetTechsUnlocking(BuildingType bld) const;
     /// Knowledge points (whole points) of a finished building of this type
     const KnowledgePoints& GetBuildingKnowledge(BuildingType bld) const { return buildingKnowledge_[bld]; }
+    /// AI: The building may be built to make the economy bigger (ai.lua). Others only when the economy needs them
+    bool IsAIExpanding(BuildingType bld) const { return aiExpanding_[bld]; }
     /// Byproducts of the building (in order of definition)
     const std::vector<Byproduct>& GetByproducts(BuildingType bld) const { return byproducts_[bld]; }
     /// Wares, workshops and tags defined in lua
@@ -101,6 +103,7 @@ private:
     std::vector<Technology> techs_;
     helpers::EnumArray<bool, BuildingType> lockedAtStart_;
     helpers::EnumArray<KnowledgePoints, BuildingType> buildingKnowledge_;
+    helpers::EnumArray<bool, BuildingType> aiExpanding_;
     helpers::EnumArray<std::vector<Byproduct>, BuildingType> byproducts_;
 };
 

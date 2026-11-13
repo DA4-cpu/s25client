@@ -272,6 +272,7 @@ void nobBaseWarehouse::OrderCarrier(noRoadNode& goal, RoadSegment& workplace)
     inventory.real.Remove(Job::Helper);
     if(isBoatRequired)
         inventory.real.Remove(GoodType::Boat);
+    world->GetPlayer(player).CountHelpersUsed(1);
 
     // Evtl. kein Gehilfe mehr, sodass das Rekrutieren gestoppt werden muss
     TryStopRecruiting();
@@ -535,7 +536,7 @@ void nobBaseWarehouse::HandleRecrutingEvent()
 
     inventory.Remove(Job::Helper, real_recruits);
     owner.DecreaseInventoryJob(Job::Helper, real_recruits);
-    owner.CountHelpersRecruited(real_recruits);
+    owner.CountHelpersUsed(real_recruits);
 
     inventory.Remove(GoodType::Sword, real_recruits);
     owner.DecreaseInventoryWare(GoodType::Sword, real_recruits, WareUse::Soldiers);
@@ -1265,7 +1266,7 @@ bool nobBaseWarehouse::TryRecruitJob(const Job job)
 
     inventory.Remove(Job::Helper);
     owner.DecreaseInventoryJob(Job::Helper, 1);
-    owner.CountHelpersRecruited(1);
+    owner.CountHelpersUsed(1);
 
     inventory.Add(job);
     owner.IncreaseInventoryJob(job, 1);
