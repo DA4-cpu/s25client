@@ -113,6 +113,9 @@ public:
     /// Keep material free for an important building which could not be built for lack of material (until the next
     /// call of ExecuteJobs)
     void ReserveMaterialFor(BuildingType type);
+    /// Civilization mode: material the economy planner keeps for its needed orders waiting for material. No other
+    /// building may take it (until the planner sets it again)
+    void SetPlannerReservation(const ConstructionMaterial& material) { plannerReservation_ = material; }
     /// Number of military building sites, including the just ordered ones
     unsigned GetNumMilitarySitesInProgress() const;
     /// True if another military building site may be started: less than MAX_MILITARY_SITES in progress and enough
@@ -120,6 +123,14 @@ public:
     bool CanStartMilitarySite() const;
     /// To be called when the current pending construction orders were processed (usually on NWF)
     void ConstructionsExecuted();
+    /// True if there is a building site or a building (of any type) at the point
+    bool HasSiteAt(MapPoint pt) const;
+    /// True if a building site was ordered at the point and the command was not executed yet
+    bool IsSitePending(MapPoint pt) const;
+    /// Points of the building sites ordered whose commands were not executed yet
+    std::vector<MapPoint> GetPendingSitePositions() const;
+    /// Building sites of the type ordered whose commands were not executed yet
+    unsigned GetNumPendingSites(BuildingType type) const;
 
 private:
     AIPlayerJH& aijh;
@@ -145,9 +156,8 @@ private:
     };
     /// Important buildings in the current ExecuteJobs call which wait for material: it is kept free for them
     std::vector<BuildingType> reservedFor;
+    ConstructionMaterial plannerReservation_{};
     std::vector<PendingSite> pendingSites;
-    /// True if there is a building site (or already a building) at the point
-    bool HasSiteAt(MapPoint pt) const;
 };
 
 } // namespace AIJH

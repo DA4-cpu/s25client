@@ -20,9 +20,6 @@
 namespace civai {
 
 namespace {
-    /// Estimated walking time of a worker who works outside (to the work point and back) in GFs
-    constexpr unsigned OUTSIDE_WALK_GFS = 160;
-
     /// What the built-in buildings take from the map. These buildings have their own figures in the code, so this is
     /// the only place where the AI knows them by name
     Source getBuiltinSource(const BuildingType bld)
@@ -90,11 +87,7 @@ void EconomyGraph::AddBuiltinRecipes(const GameWorldBase& world)
         recipe.outputs = getBuiltinOutputs(bld);
         recipe.source = getBuiltinSource(bld);
         const JobConst jobConst = JOB_CONSTS[*workDesc.job];
-        unsigned cycle = jobConst.wait1_length + jobConst.work_length + jobConst.wait2_length;
-        if(recipe.source.kind != SourceKind::None && recipe.source.kind != SourceKind::Ore
-           && recipe.source.kind != SourceKind::Water)
-            cycle += OUTSIDE_WALK_GFS;
-        AddRecipe(world, std::move(recipe), cycle);
+        AddRecipe(world, std::move(recipe), jobConst.wait1_length + jobConst.work_length + jobConst.wait2_length);
     }
 }
 
@@ -122,19 +115,13 @@ void EconomyGraph::AddCustomRecipes(const GameWorldBase& world)
             }
         } else if(building.product != GoodType::Nothing)
             recipe.outputs.push_back(building.product);
-        unsigned cycle = building.workGFs + building.waitGFs;
         if(building.IsCollector())
-        {
             recipe.source = {SourceKind::MapObject, static_cast<unsigned>(building.collectObject)};
-            cycle += OUTSIDE_WALK_GFS;
-        } else if(building.IsPlanter())
-        {
-            // Planting and harvesting: about every second trip yields a ware
+        else if(building.IsPlanter())
             recipe.source = {SourceKind::Plantable, static_cast<unsigned>(building.plantObject)};
-            cycle = 2 * (cycle + OUTSIDE_WALK_GFS);
-        } else if(building.IsMine())
+        else if(building.IsMine())
             recipe.source = {SourceKind::Ore, static_cast<unsigned>(building.mineResource)};
-        AddRecipe(world, std::move(recipe), cycle);
+        AddRecipe(world, std::move(recipe), building.workGFs + building.waitGFs);
     }
 }
 
@@ -166,8 +153,7 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
     }
     recipe.lockedAtStart = world.GetTechTree().IsLockedAtStart(recipe.building);
     const double gfsPerMinute = static_cast<double>(duration_to_gfs(std::chrono::minutes(1)));
-    recipe.stepsPerMinute = gfsPerMinute / std::max(1u, cycleGFs);
-    recipe.waresPerMinute = recipe.stepsPerMinute * content.GetOutputRatio(recipe.building) / 100.;
+    recipe.nominalStepsPerMinute = gfsPerMinute / std::max(1u, cycleGFs);
 
     const auto idx = static_cast<unsigned>(recipes_.size());
     for(const GoodType good : recipe.outputs)
@@ -186,10 +172,7 @@ void EconomyGraph::AddRenewers(const GameWorldBase& world)
     // themselves and are recipes)
     if(makeIsUnusedBuilding(world.GetGGS())(BuildingType::Forester))
         return;
-    const JobConst jobConst = JOB_CONSTS[Job::Forester];
-    const unsigned cycle = jobConst.wait1_length + jobConst.work_length + jobConst.wait2_length + OUTSIDE_WALK_GFS;
-    const double gfsPerMinute = static_cast<double>(duration_to_gfs(std::chrono::minutes(1)));
-    renewers_.push_back({BuildingType::Forester, {SourceKind::Trees, 0}, gfsPerMinute / cycle});
+    renewers_.push_back({BuildingType::Forester, {SourceKind::Trees, 0}});
 }
 
 std::string EconomyGraph::GetSourceName(const Source& source) const

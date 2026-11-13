@@ -68,11 +68,10 @@ struct Recipe
     std::vector<std::vector<GoodType>> requiredTools;
     /// Not buildable at the start: one of these technologies unlocks it
     bool lockedAtStart = false;
-    /// Work steps per minute of one building at normal speed (estimate from the work cycle). Each step consumes the
-    /// inputs once
-    double stepsPerMinute = 0;
-    /// Wares per minute of one building at normal speed (work steps and output ratio)
-    double waresPerMinute = 0;
+    /// Work steps per minute of one building by the work times in the game data (waiting and working, without the walks
+    /// of workers working outside). Each step takes the inputs once. Only used for the consumption of a building that
+    /// does not exist yet; everything else is measured (EconomyStatistics)
+    double nominalStepsPerMinute = 0;
 };
 
 /// Building which makes a source on the map grow again (e.g. the forester plants trees) and makes no wares
@@ -80,8 +79,6 @@ struct Renewer
 {
     BuildingType building;
     Source source;
-    /// Pieces of the source per minute of one building (e.g. trees planted)
-    double perMinute = 0;
 };
 
 /// Production graph of the game: which buildings make which wares from what. Built once at the start of the game from

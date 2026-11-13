@@ -307,6 +307,8 @@ ConstructionMaterial AIConstruction::GetFreeConstructionMaterial() const
 bool AIConstruction::HasMaterialFor(const BuildingType type) const
 {
     ConstructionMaterial free = GetFreeConstructionMaterial();
+    for(const auto good : helpers::enumRange<GoodType>())
+        free[good] -= plannerReservation_[good];
     if(!IsImportantBuilding(type))
     {
         for(const BuildingType reserved : reservedFor)
@@ -351,6 +353,27 @@ bool AIConstruction::HasSiteAt(const MapPoint pt) const
 {
     const auto got = aii.gwb.GetNO(pt)->GetGOT();
     return got == GO_Type::Buildingsite || aii.gwb.GetNO(pt)->GetType() == NodalObjectType::Building;
+}
+
+bool AIConstruction::IsSitePending(const MapPoint pt) const
+{
+    return helpers::contains_if(pendingSites, [pt](const PendingSite& site) { return site.pos == pt; });
+}
+
+std::vector<MapPoint> AIConstruction::GetPendingSitePositions() const
+{
+    std::vector<MapPoint> result;
+    result.reserve(pendingSites.size());
+    for(const PendingSite& site : pendingSites)
+        result.push_back(site.pos);
+    return result;
+}
+
+unsigned AIConstruction::GetNumPendingSites(const BuildingType type) const
+{
+    return static_cast<unsigned>(
+      std::count_if(pendingSites.begin(), pendingSites.end(),
+                    [this, type](const PendingSite& site) { return site.type == type && !HasSiteAt(site.pos); }));
 }
 
 void AIConstruction::ConstructionsExecuted()

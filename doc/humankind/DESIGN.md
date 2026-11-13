@@ -955,8 +955,8 @@ sein; nur ihre Befehle (Game Commands) gehen ins Spiel. Ziel: im Mittel deutlich
 
 1. Wahrnehmung und Wirtschaftsmodell, nur lesend: Graph und Regionsprofile berechnen und protokollieren, nichts im
    Spiel ändern. Prüfen, ob die KI die Karte versteht; Zeitmessung. *(umgesetzt 2026-11-12, siehe unten)*
-2. Planung ersetzt den Bauplaner (`BuildingPlanner`): Bauwünsche aus der Rückwärtsrechnung. *(umgesetzt 2026-11-12,
-   siehe unten)*
+2. Planung ersetzt den Bauplaner (`BuildingPlanner`): Prioritätenliste aus gemessenen Zahlen. *(erste Fassung
+   2026-11-12 verworfen; Neufassung umgesetzt 2026-11-13, siehe „Stand Schritt 2: Prioritätenliste“)*
 3. Gezielte Expansion über den Regionswert.
 4. Forschung über den Graphen.
 5. Ziele aus der Lage (Gewichte), danach Militär.
@@ -993,7 +993,7 @@ Code in `libs/s25main/ai/civ/`, Namensraum `civai`. Läuft im Zivilisationsmodus
 **Vom Nutzer verworfen (2026-11-12):** Die Planung aus geschätztem Bedarf hat schlecht gespielt (z. B. 7 Brunnen ohne
 Wasserverbrauch, Brauereien ohne Farm, kein Roden). Sie schätzte Raten (Wirkungsgrad 0,6) und enthielt künstliche
 Regeln (Expansionsfluss, Wissensgebäude, Baustellen- und Gehilfengrenzen). Der Code in `ai/civ/ProductionPlanner.*`
-wird durch die Neufassung unten ersetzt und dient nur noch als Beispiel, wie es nicht geht.
+ist gelöscht und durch `ai/civ/EconomyPlanner.*` ersetzt. Die Beschreibung bleibt als Beispiel, wie es nicht geht.
 
 
 Entscheidungen des Nutzers: Der Planer übernimmt nur Gebäude, die Waren herstellen (eingebaute und aus Lua) und den
@@ -1211,6 +1211,109 @@ Statistik läuft in allen Spielen mit, nicht nur im Zivilisationsmodus.
   Dazu Gebäudezustände je Typ: Anzahl, Baustellen, ohne Arbeiter, gestoppt, ohne Werkzeug, wartet auf Ware X,
   Produktivität. Außerdem Waren und Personen in den Lagern.
 - Tests: `EconomyStatisticsSuite`.
+
+### Stand Schritt 2: Prioritätenliste (2026-11-13)
+
+Code: `ai/civ/EconomyPlanner.*`, Tests `EconomyPlannerSuite`. Der Planer läuft im Zivilisationsmodus in jeder
+AIJH-KI.
+
+**Zuständigkeit:**
+- Der Planer entscheidet über alle Gebäude, die Waren herstellen (eingebaute und aus Lua), außer der Werft, dazu über
+  den Förster. Für diese Gebäude setzt `BuildingPlanner` `buildingsWanted = 0`, AIJH baut sie nicht mehr selbst.
+- AIJH bleibt zuständig für Militär, Hafen, Werft, Eselzucht, Bibliothek, Straßen und die Bauplatzsuche.
+- Lagerhäuser bestellt der Planer nur als Lösung für fehlende Gehilfen; den Ort bestimmt die alte Regel.
+
+**Takt:** Schwer alle 20 GF, Mittel alle 100 GF, Leicht alle 400 GF (1 s, 5 s, 20 s). Der Bericht steht jede Spielminute
+im Log („ECONOMY player …“): Mangel, Überschuss und die Liste mit Zustand und Grund.
+
+**Ein Planungsschritt:**
+1. Momentaufnahme und Warenzustand aus der Statistik der letzten 5 Minuten.
+2. Platzierte Aufträge prüfen: Ein Auftrag verlässt die Liste, wenn sein Gebäude eine Bilanzlänge mit Arbeiter
+   gearbeitet hat (Anlaufzeit). Ist die Baustelle verschwunden oder kam der Befehl nicht an, ist der Auftrag erledigt;
+   bei Bedarf entsteht ein neuer.
+3. Aufträge anlegen:
+   - Mangel → benötigter Erzeuger.
+   - „Eins von“-Nachfrage (z. B. Nahrung einer Mine), die das Lager nicht deckt → die Ware, die jetzt am leichtesten
+     herzustellen ist.
+   - Überschuss → benötigter Verbraucher.
+   - Normal → expandierender Erzeuger aus `ai.lua`. Ein Holzfäller ist dabei immer ein rodender.
+   - Förster für dauerhafte Holzfäller mit weniger als 5 Bäumen.
+   - Aufträge, deren Grund weg ist, werden gelöscht (nur nicht platzierte).
+4. Liste abarbeiten, von oben nach unten.
+5. Das Baumaterial, auf das benötigte Aufträge warten, wird für sie reserviert. Auch das alte Militär nimmt es nicht.
+6. Werkzeugbestellungen.
+
+**Abarbeitung eines Auftrags:**
+- Er wartet, solange Aufträge für ihn (Kinder) noch nicht platziert sind.
+- **Eingänge:** Reicht ein Eingang nicht, wartet ein benötigter Auftrag und bekommt den Erzeuger des Eingangs als
+  Kind. Ausnahmen:
+  - Ein Erzeuger dieser Ware ist schon bestellt oder läuft an.
+  - Die Ware kommt in der Elternkette schon vor (Schleife).
+
+  Ein expandierender Auftrag wandert stattdessen nach unten.
+- **Regeln** (einzelne Funktionen, in dieser Reihenfolge):
+  1. erforscht,
+  2. Baumaterial,
+  3. Bauarbeiter,
+  4. Arbeiter oder Gehilfe samt Werkzeug zum Rekrutieren,
+  5. Pflichtwerkzeug der Werkzeugreform,
+  6. Bauplatz mit Arbeit in Reichweite.
+- **Lösen** (nur benötigte Aufträge):
+  - Fehlt Baumaterial, wird das vorhandene reserviert und der Erzeuger des fehlenden Materials Kind.
+  - Fehlen Gehilfen, kommt ein Lagerhaus-Auftrag (nicht, wenn das eine Schleife wäre).
+  - Werkzeuge kommen über die Werkzeugbestellung.
+- **Blockiert:** Ein Auftrag merkt sich eine Bedingung (Material da, Bauarbeiter frei, Gehilfe frei, Werkzeug da) und
+  die Lage (Zahl der Militärgebäude und Lager, Forschung). Er wird erst wieder versucht, wenn die Bedingung erfüllt ist
+  oder sich die Lage ändert.
+- **Kein Weg** zu einer Ware: Der Auftrag für den besten Erzeuger steht blockiert in der Liste, mit Grund. Beispiel:
+  „kein Weg zu Beer (kein Weg zu Water (nicht im Gebiet: Wasser))“.
+- **Kein Bauplatz** für einen benötigten Erzeuger: Dieser Weg gilt bis zur nächsten Lageänderung als gescheitert, und
+  die nächste Alternative wird versucht.
+- **Bauplatzsuche:** reihum um Lager und Militärgebäude, höchstens 8 Suchen je Schritt (Rechenzeit). Bauplätze, deren
+  Befehl noch unterwegs ist, belegen ihre Umgebung (Radius 2), damit zwei Aufträge nicht denselben Platz nehmen.
+
+**Holzfäller und Förster:**
+- Ein rodender Holzfäller kommt nur dorthin, wo mindestens 8 Bäume in Reichweite sind, und hält Abstand zu Förstern.
+  Er bekommt keinen Förster und wird abgerissen, wenn keine Bäume mehr da sind.
+- Ein dauerhafter Holzfäller bleibt stehen und bekommt einen Förster in seiner Reichweite.
+- Die alten Regeln (2 Holzfäller je Förster, Förster nach Dichte, Abriss von Sägewerken und dichten Holzfällern,
+  Granitminen-Abriss, automatischer Brunnen) sind mit dem Planer aus.
+
+**Werkzeuge:** Der Planer gibt nur Bestellungen auf (Addon „Werkzeugbestellung“). Je Werkzeugart wird bestellt, was
+angefragt ist, plus 1 auf Vorrat; alle Materialien (Eisen, Kupfer) zählen. Der Verteilungsregler steht auf 0.
+
+**Von Claude ergänzt, bitte bestätigen:**
+1. **Anzahl je Mangel:** Defizit je Minute ÷ Ausstoß eines Erzeugers je Minute, mindestens 1. Der Ausstoß ist
+   gemessen, ohne arbeitende Erzeuger laut Arbeitszeit.
+2. **„Eingang reicht“ zählt Verbraucher mit, die die Bilanz noch nicht zeigt:** Baustellen, Gebäude ohne Arbeiter oder
+   in der Anlaufzeit, mit ihrem Verbrauch laut Arbeitszeit. Eine positive Bilanz reicht nur, wenn sie auch diese deckt.
+   Ohne das baute die KI bis zu 17 Brauereien und 26 Schlossereien, weil die Bilanz positiv blieb, bis die neuen
+   Gebäude liefen.
+3. **Verbraucher eines Überschusses:** Für ihn gilt die überschüssige Ware als vorhanden. Sein Produkt muss eine
+   Verwendung haben (Eingang, Baukosten, Werkzeug, Soldaten, Münzen, Rüstung, Forschung, Wissensträger).
+4. **Kein zweiter Erzeuger für einen Eingang,** solange einer bestellt ist oder anläuft.
+5. **Rollen der Holzfäller (rodend oder dauerhaft) stehen nicht im Spielstand.** Nach dem Laden gelten alle als
+   dauerhaft.
+
+**Vergleich** (7 Karten, 2 KI, 2 h; je Karte ein Lauf, große Streuung):
+
+| | alte Planung | Prioritätenliste |
+|---|---|---|
+| Land | 82 334 | 79 787 |
+| Gebäude | 2724 | 1804 |
+| Militärgebäude | 1546 | 1214 |
+| Forschung (Ø Technologien) | 15,5 | 15,0 |
+
+**Beobachtungen:**
+- Am Start sind die meisten Waren im Überschuss (Bestand > 8 bei Verbrauch 0). Deshalb expandiert die KI am Anfang
+  kaum. Holzfäller kommen erst, wenn Holz knapp wird.
+- In 3 von 14 Spielen brach die Holz-/Bretterkette früh zusammen: 0 Holz und 0 Bretter, und ein Holzfäller kostet
+  Bretter. Die Bretter gehen vor allem an die Militärbaustellen von AIJH. Danach hat die Seite verloren.
+- Ohne Lagerkapazität begrenzt nichts die rodenden Holzfäller. In einem Spiel standen 52 und 14 Baustellen.
+- Rechenzeit im Debug-Build: meist unter 1–2 ms je Schritt, einzelne Spitzen bis 50 ms (Bauplatzsuche).
+
+**Offen:** Lagerkapazität (Regel „nur benötigte Aufträge, wenn das Lager voll ist“) und die Holz-/Bretterkette am
+Start (Frage an den Nutzer).
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 

@@ -29,6 +29,7 @@ struct CustomBuilding;
 
 namespace civai {
 class CivAI;
+class EconomyPlanner;
 }
 
 namespace AIJH {
@@ -295,11 +296,23 @@ private:
     /// Civilization mode: new AI (perception, economic model, plan of the production buildings). Declared before the
     /// building planner, which asks it for the plan (also in its constructor)
     std::unique_ptr<civai::CivAI> civAI_;
+    std::unique_ptr<civai::EconomyPlanner> economyPlanner_;
     std::unique_ptr<BuildingPlanner> bldPlanner;
     std::unique_ptr<AIConstruction> construction;
 
 public:
     const civai::CivAI* GetCivAI() const { return civAI_.get(); }
+    /// Civilization mode: planner of the production buildings (priority list), nullptr before it is created
+    const civai::EconomyPlanner* GetEconomyPlanner() const { return economyPlanner_.get(); }
+    civai::EconomyPlanner* GetEconomyPlanner() { return economyPlanner_.get(); }
+    /// Places a building site at the point and connects it to the roads (the caller checked everything else)
+    bool PlaceBuilding(BuildingType type, MapPoint pos);
+    /// Civilization mode: place for a woodcutter around the point, at the best wood. clearing: at least
+    /// EconomyPlanner::CLEARING_MIN_TREES trees in its reach and away from every forester (both radii)
+    MapPoint FindWoodcutterPosition(const MapPoint& around, bool clearing);
+    /// Civilization mode: place for a forester in reach of the woodcutter at the point, not where clearing woodcutters
+    /// work (both radii)
+    MapPoint FindForesterPosition(const MapPoint& woodcutterPos, const std::vector<MapPoint>& clearingWoodcutters);
 
 private:
     Subscription subBuilding, subExpedition, subResource, subRoad, subShip, subBQ;

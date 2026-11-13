@@ -12,6 +12,7 @@
 #include "addons/const_addons.h"
 #include "ai/AIEvents.h"
 #include "ai/civ/CivAI.h"
+#include "ai/civ/EconomyPlanner.h"
 #include "ai/random.h"
 #include "boost/filesystem/fstream.hpp"
 #include "buildings/noBuildingSite.h"
@@ -25,6 +26,7 @@
 #include "civ/Research.h"
 #include "civ/TechTree.h"
 #include "figures/nofCustomPlanter.h"
+#include "figures/nofFarmhand.h"
 #include "figures/nofPassiveSoldier.h"
 #include "helpers/EnumRange.h"
 #include "helpers/IdRange.h"
@@ -73,6 +75,9 @@ constexpr unsigned WOODCUTTERS_PER_FORESTER = 2;
 /// the forester's own effective planting radius (RES_RADIUS[Wood]) so wild woodcutters
 /// don't crowd a forester's planting area right at its border.
 constexpr unsigned WILD_WOODCUTTER_MIN_FORESTER_DIST = RES_RADIUS[AIResource::Wood] + 3;
+/// A building site whose command was not executed yet takes the nodes in this radius (building, flag and the nodes
+/// whose building quality it lowers) until it is on the map
+constexpr unsigned PENDING_SITE_RADIUS = 2;
 
 void HandleBuildingNote(AIEventManager& eventMgr, const BuildingNote& note)
 {
@@ -262,12 +267,16 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
         isInitGfCompleted++;
         return; //  1 init -> 2 test defeat -> 3 do other ai stuff -> goto 2
     }
-    // Civilization mode: new AI, so far only perception and economic model
+    // Civilization mode: new AI. Perception and economic model, the planner of the production buildings (priority
+    // list, see DESIGN.md "Neufassung der Planung")
     if(civ::isEnabled(gwb))
     {
         if(!civAI_)
             civAI_ = std::make_unique<civai::CivAI>(gwb, playerId);
         civAI_->RunGF(gf, gfisnwf);
+        if(!economyPlanner_)
+            economyPlanner_ = std::make_unique<civai::EconomyPlanner>(*this, *civAI_);
+        economyPlanner_->RunGF(gf);
     }
     if(gf == 100)
     {
@@ -318,17 +327,21 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
     if((gf + playerId * 13) % 1500 == 0)
     {
         CheckExpeditions();
-        CheckForester();
-        PruneExcessForesterWoodcutters();
-        CheckGranitMine();
+        // Rules of the old AI the economy planner replaces (foresters, woodcutters, granite mines)
+        if(!economyPlanner_)
+        {
+            CheckForester();
+            PruneExcessForesterWoodcutters();
+            CheckGranitMine();
+        }
     }
 
     if((gf + playerId * 11) % 150 == 0)
     {
         AdjustSettings();
-        // check for useless sawmills
+        // check for useless sawmills (not with the economy planner: it measures why they do not work)
         const std::list<nobUsual*>& sawMills = aii.GetBuildings(BuildingType::Sawmill);
-        if(sawMills.size() > 3)
+        if(sawMills.size() > 3 && !economyPlanner_)
         {
             int burns = 0;
             for(const nobUsual* sawmill : sawMills)
@@ -362,7 +375,7 @@ void AIPlayerJH::RunGF(const unsigned gf, bool gfisnwf)
         */
         //check for useless Woodcutters
         const std::list<nobUsual*>& woodCutters = aii.GetBuildings(BuildingType::Woodcutter);
-        if(woodCutters.size() > 4)
+        if(woodCutters.size() > 4 && !economyPlanner_)
         {
             int burns = 0;
             for(const nobUsual* woodcutter : woodCutters)
@@ -444,16 +457,6 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
                 if(construction->Wanted(bld))
                     AddBuildJobAroundEveryWarehouse(bld);
             }
-            // Built-in buildings of the plan the list above lacks (well, temple ...)
-            if(const civai::ProductionPlan* plan = civAI_ ? civAI_->GetPlan() : nullptr)
-            {
-                for(const auto bld : helpers::enumRange<BuildingType>())
-                {
-                    if(plan->managed[bld] && !isCustomBuilding(bld) && !helpers::contains(bldToTest, bld)
-                       && construction->Wanted(bld))
-                        AddBuildJobAroundEveryWarehouse(bld);
-                }
-            }
         }
         if(gf > 1500 || aii.GetInventory().goods[GoodType::Boards] > 11)
             AddMilitaryBuildJob(whPos);
@@ -473,18 +476,6 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
         if(construction->Wanted(bldToTest[i]))
         {
             AddBuildJobAroundEveryMilBld(bldToTest[i]);
-        }
-    }
-    // Civilization mode: all buildings of the plan taking something from the map also around military buildings
-    if(const civai::ProductionPlan* plan = civAI_ ? civAI_->GetPlan() : nullptr)
-    {
-        for(const civai::Recipe& recipe : civAI_->GetGraph().GetRecipes())
-        {
-            const auto resGatherEnd = bldToTest.begin() + numResGatherBlds;
-            if(plan->managed[recipe.building] && recipe.source.kind != civai::SourceKind::None
-               && std::find(bldToTest.begin(), resGatherEnd, recipe.building) == resGatherEnd
-               && construction->Wanted(recipe.building))
-                AddBuildJobAroundEveryMilBld(recipe.building);
         }
     }
     AddMilitaryBuildJob(bldPos);
@@ -738,6 +729,7 @@ void AIPlayerJH::InitNodes()
         node.owned = aii.IsOwnTerritory(pt);
         node.border = aii.IsBorder(pt);
         node.farmed = false;
+        node.siteOrdered = false;
     }
 }
 
@@ -752,6 +744,16 @@ void AIPlayerJH::UpdateNodesAround(const MapPoint pt, unsigned radius)
         node.bq = aii.GetBuildingQuality(pt);
         node.owned = aii.IsOwnTerritory(pt);
         node.border = aii.IsBorder(pt);
+        node.siteOrdered = false;
+    }
+    // Building sites ordered whose commands were not executed yet are not on the map: their place and the nodes next
+    // to it are taken
+    for(const MapPoint sitePos : construction->GetPendingSitePositions())
+    {
+        if(gwb.CalcDistance(sitePos, pt) > radius + PENDING_SITE_RADIUS)
+            continue;
+        for(const MapPoint& curPt : gwb.GetPointsInRadiusWithCenter(sitePos, PENDING_SITE_RADIUS))
+            aiMap[curPt].siteOrdered = true;
     }
 }
 
@@ -1017,7 +1019,7 @@ MapPoint AIPlayerJH::SimpleFindPosition(const MapPoint& pt, BuildingQuality size
     std::vector<MapPoint> pts = gwb.GetPointsInRadius(pt, radius);
     for(const MapPoint& curPt : pts)
     {
-        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || !aii.IsOwnTerritory(curPt))
+        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || aiMap[curPt].siteOrdered || !aii.IsOwnTerritory(curPt))
             continue;
         if(aii.isHarborPosClose(curPt, 2, true))
         {
@@ -1678,6 +1680,21 @@ void AIPlayerJH::HandleNoMoreResourcesReachable(const MapPoint pt, BuildingType 
 
     if(!aii.IsObjectTypeOnNode(pt, NodalObjectType::Building))
         return;
+    if(economyPlanner_)
+    {
+        // A woodcutter for good stays: the planner orders a forester when the trees get few. A clearing woodcutter
+        // and every other building without resources is torn down. New buildings come from the planner
+        if(bld == BuildingType::Woodcutter && !economyPlanner_->IsClearingWoodcutter(pt))
+            return;
+        aii.DestroyBuilding(pt);
+        if(bld == BuildingType::Fishery)
+            resourceMaps[AIResource::Fish].avoidPosition(pt);
+        UpdateNodesAround(pt, 11);
+        RemoveUnusedRoad(*gwb.GetSpecObj<noFlag>(gwb.GetNeighbour(pt, Direction::SouthEast)), Direction::NorthWest,
+                         true);
+        AddMilitaryBuildJob(pt);
+        return;
+    }
     // keep 2 woodcutters for each forester even if they sometimes run out of trees
     if(bld == BuildingType::Woodcutter)
     {
@@ -2980,7 +2997,8 @@ void AIPlayerJH::AdjustSettings()
         return result;
     };
     // update tool creation settings
-    if(bldPlanner->GetNumBuildings(BuildingType::Metalworks) > 0u || hasToolWorkshop)
+    // With the economy planner tools are only ordered (EconomyPlanner::OrderTools)
+    if((bldPlanner->GetNumBuildings(BuildingType::Metalworks) > 0u || hasToolWorkshop) && !economyPlanner_)
     {
         ToolSettings toolsettings{};
         const auto calcToolPriority = [&](const Tool tool) {
@@ -3199,9 +3217,61 @@ BuildingType AIPlayerJH::ChooseRandomGrainUser()
     return userTypes[AI::randomValue(0u, static_cast<unsigned>(userTypes.size() - 1))];
 }
 
+bool AIPlayerJH::PlaceBuilding(const BuildingType type, const MapPoint pos)
+{
+    if(!aii.SetBuildingSite(pos, type))
+        return false;
+    construction->BuildingSiteOrdered(pos, type);
+    auto job = std::make_unique<BuildJob>(*this, type, pos);
+    job->SetState(JobState::ExecutingRoad1); // Skips TryToBuild(): the economy planner decided already
+    job->SetTarget(pos);
+    construction->AddBuildJob(std::move(job), true);
+    return true;
+}
+
+MapPoint AIPlayerJH::FindWoodcutterPosition(const MapPoint& around, const bool clearing)
+{
+    constexpr unsigned searchRadius = 15;
+    const MapPoint pos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[BuildingType::Woodcutter],
+                                          searchRadius, 1, AIConstruction::GetBorderReserve(BuildingType::Woodcutter));
+    if(!pos.isValid() || !clearing)
+        return pos;
+    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
+    if(civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius) < civai::EconomyPlanner::CLEARING_MIN_TREES)
+        return MapPoint::Invalid();
+    if(construction->OtherUsualBuildingInRadius(pos, woodcutterRadius + foresterRadius, BuildingType::Forester))
+        return MapPoint::Invalid();
+    return pos;
+}
+
+MapPoint AIPlayerJH::FindForesterPosition(const MapPoint& woodcutterPos,
+                                          const std::vector<MapPoint>& clearingWoodcutters)
+{
+    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
+    // In reach of the woodcutter: the best place to plant there
+    const MapPoint pos =
+      FindBestPosition(woodcutterPos, AIResource::Plantspace, BUILDING_SIZE[BuildingType::Forester], woodcutterRadius,
+                       1, AIConstruction::GetBorderReserve(BuildingType::Forester));
+    if(!pos.isValid())
+        return pos;
+    // Rules of the old AI: enough space to plant, not at the border
+    if(GetDensity(pos, AIResource::Plantspace, 7u) < 10u || GetDensity(pos, AIResource::Borderland, 1u) > 1u)
+        return MapPoint::Invalid();
+    for(const MapPoint clearingPos : clearingWoodcutters)
+    {
+        if(gwb.CalcDistance(pos, clearingPos) < woodcutterRadius + foresterRadius)
+            return MapPoint::Invalid();
+    }
+    return pos;
+}
+
 void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingType bldToPlace,
                                           const BuildingType bldToAvoid)
 {
+    if(economyPlanner_ && economyPlanner_->IsManaged(bldToPlace))
+        return;                               // The economy planner decides about it
     if(!aii.CanBuildBuildingtype(bldToPlace)) // z.B. per Addon deaktiviert -> gar nicht erst versuchen
         return;
     if(aii.isBuildingNearby(bldToAvoid, whPos, 9)) // schon vorhanden? -> fertig

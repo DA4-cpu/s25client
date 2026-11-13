@@ -186,17 +186,10 @@ void CivAI::RunGF(const unsigned gf, const bool isNWF)
         if(changed)
             LOG.write("CIVAI player %u, GF %u: %s") % playerId_ % gf % GetReport();
     }
-    if((gf + playerId_ * 37) % PLAN_INTERVAL == 0)
-    {
-        Plan();
-        if((gf + playerId_ * 37) % PLAN_LOG_INTERVAL == 0)
-            LOG.write("CIVAI player %u, GF %u, Plan:\n%s") % playerId_ % gf % plan_.GetReport();
-    }
     if(gf > 0 && gf % TIMES_INTERVAL == 0)
     {
-        LOG.write("CIVAI player %u, GF %u: Analyse %u us, Plan %u us (max %u), Aktualisierung je NWF %u us (max %u)\n")
-          % playerId_ % gf % static_cast<unsigned>(times_.analysisUs) % static_cast<unsigned>(times_.planUs)
-          % static_cast<unsigned>(times_.planMaxUs)
+        LOG.write("CIVAI player %u, GF %u: Analyse %u us, Aktualisierung je NWF %u us (max %u)\n") % playerId_ % gf
+          % static_cast<unsigned>(times_.analysisUs)
           % static_cast<unsigned>(times_.numUpdates ? times_.updateTotalUs / times_.numUpdates : 0.)
           % static_cast<unsigned>(times_.updateMaxUs);
     }
@@ -206,16 +199,6 @@ void CivAI::Refresh()
 {
     map_.Update(map_.GetNumRegions());
     Analyze();
-    Plan();
-}
-
-void CivAI::Plan()
-{
-    const auto start = Clock::now();
-    plan_ = planProduction(world_, playerId_, graph_, map_, collectDemand(world_, playerId_));
-    hasPlan_ = true;
-    times_.planUs = elapsedUs(start);
-    times_.planMaxUs = std::max(times_.planMaxUs, times_.planUs);
 }
 
 void CivAI::Analyze()
@@ -266,7 +249,7 @@ std::string CivAI::GetReport() const
     }
     out << "  Zeiten: Graph " << static_cast<unsigned>(times_.graphUs) << " us, Karte "
         << static_cast<unsigned>(times_.initialScanUs) << " us, Analyse " << static_cast<unsigned>(times_.analysisUs)
-        << " us, Plan " << static_cast<unsigned>(times_.planUs) << " us, Aktualisierung je NWF "
+        << " us, Aktualisierung je NWF "
         << static_cast<unsigned>(times_.numUpdates ? times_.updateTotalUs / times_.numUpdates : 0.) << " us (max "
         << static_cast<unsigned>(times_.updateMaxUs) << ")\n";
     return out.str();

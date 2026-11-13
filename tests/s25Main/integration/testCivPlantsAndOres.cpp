@@ -738,7 +738,9 @@ BOOST_FIXTURE_TEST_CASE(AIBuildsPlantation, BiggerPlantWorldFixture)
     addStartResources();
     auto& hqBld = *world.GetPlayer(curPlayer).GetHQ();
     hqBld.AddToInventory(GoodCounts::make(GoodType::Scythe, 2), true);
-    hqBld.AddToInventory(GoodCounts::make(GoodType::Water, 5), true);
+    // No ground water on this map (no well): the water in stock must suffice for the plantation (the planner orders
+    // a building only if its input suffices, see EconomyPlanner::InputSuffices)
+    hqBld.AddToInventory(GoodCounts::make(GoodType::Water, 40), true);
     world.InitAfterLoad();
     const BuildingRegister& buildings = world.GetPlayer(curPlayer).GetBuildingRegister();
     const auto findPlantation = [&buildings]() {

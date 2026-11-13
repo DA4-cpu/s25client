@@ -18,6 +18,8 @@ struct Node
     char failed_penalty; // when a node was marked reachable, but building failed, this field is >0
     bool border;
     bool farmed;
+    /// A building site was ordered here or next to it and the command was not executed yet: not free
+    bool siteOrdered;
 };
 
 /// Map of AINodes

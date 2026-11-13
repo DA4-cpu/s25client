@@ -86,7 +86,7 @@ MapPoint AIResourceMap::findBestPosition(const MapPoint& pt, BuildingQuality siz
         const unsigned idx = map.GetIdx(curPt);
         if(map[idx] > best_value)
         {
-            if(!aiMap[idx].reachable || !aiMap[idx].owned || aiMap[idx].farmed)
+            if(!aiMap[idx].reachable || !aiMap[idx].owned || aiMap[idx].farmed || aiMap[idx].siteOrdered)
                 continue;
             RTTR_Assert(aii.GetBuildingQuality(curPt)
                         == aiMap[curPt].bq); // Temporary, to check if aiMap is correctly update, see below
