@@ -137,6 +137,8 @@ public:
 
     /// Bestellte Waren
     bool AreThereAnyOrderedWares() const;
+    /// Number of wares of the input on the way to the building
+    unsigned GetNumOrderedWares(unsigned id) const { return static_cast<unsigned>(orderedWares[id].size()); }
 
     /// Civilization mode: True if this is a library (workshop from lua storing knowledge media)
     bool IsLibrary() const;
@@ -166,6 +168,8 @@ public:
     unsigned TakeNumProducts();
     /// Number of tools of this ware the building is missing (nothing in use or ordered)
     unsigned GetNumMissingTools(GoodType tool) const;
+    /// Tool reform: True if a tool should be ordered for the slot (empty, or a replacement is due)
+    bool NeedsToolOrder(const ToolSlot& slot) const;
 
     /// Gibt Pointer auf Produktivität zurück
     const unsigned short* GetProductivityPointer() const { return &productivity; }
@@ -196,8 +200,6 @@ private:
     static bool IsKnowledgeMedium(GoodType good);
     /// Tool reform: Tools of this building type (none without the tool reform)
     const civ::BuildingTools& GetToolsDesc() const;
-    /// Tool reform: True if a tool should be ordered for the slot
-    bool NeedsToolOrder(const ToolSlot& slot) const;
     /// Tool reform: Order missing tools and replacements for tools which are nearly broken
     void OrderTools();
     /// Tool reform: Start the event which orders tools if there are tools and it is not running

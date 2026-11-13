@@ -85,8 +85,8 @@ void nobHarborBuilding::DestroyBuilding()
     // Baumaterialien in der Inventur verbuchen
     if(expedition.active)
     {
-        owner.DecreaseInventoryWare(GoodType::Boards, expedition.boards);
-        owner.DecreaseInventoryWare(GoodType::Stones, expedition.stones);
+        owner.DecreaseInventoryWare(GoodType::Boards, expedition.boards, WareUse::Lost);
+        owner.DecreaseInventoryWare(GoodType::Stones, expedition.stones, WareUse::Lost);
 
         // Und Bauarbeiter (später) rausschicken
         if(expedition.builder)
@@ -321,9 +321,10 @@ void nobHarborBuilding::StartExpedition()
            && inventory[Job::Helper] > 1) // maybe have a hammer & helper to create our own builder?
         {
             inventory.Remove(GoodType::Hammer);
-            owner.DecreaseInventoryWare(GoodType::Hammer, 1);
+            owner.DecreaseInventoryWare(GoodType::Hammer, 1, WareUse::Tool);
             inventory.Remove(Job::Helper);
             owner.DecreaseInventoryJob(Job::Helper, 1);
+            owner.CountHelpersRecruited(1);
 
             owner.IncreaseInventoryJob(Job::Builder, 1);
             expedition.builder = true;
@@ -719,6 +720,20 @@ void nobHarborBuilding::AddFigure(std::unique_ptr<noFigure> figure, const bool i
 }
 
 /// Gibt zurück, ob Expedition vollständig ist
+unsigned nobHarborBuilding::GetExpeditionBoardsMissing() const
+{
+    return expedition.active && HARBOR_BUILDING_COST.boards > expedition.boards ?
+             HARBOR_BUILDING_COST.boards - expedition.boards :
+             0u;
+}
+
+unsigned nobHarborBuilding::GetExpeditionStonesMissing() const
+{
+    return expedition.active && HARBOR_BUILDING_COST.stones > expedition.stones ?
+             HARBOR_BUILDING_COST.stones - expedition.stones :
+             0u;
+}
+
 bool nobHarborBuilding::IsExpeditionReady() const
 {
     if(!expedition.active)

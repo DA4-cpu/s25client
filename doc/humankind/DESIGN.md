@@ -988,7 +988,13 @@ Code in `libs/s25main/ai/civ/`, Namensraum `civai`. Läuft im Zivilisationsmodus
   alle 3000 GF, Aktualisierung ~0,1 ms je NWF. Erste Fassung ohne Vorberechnung lag bei ~0,33 ms je NWF.
 - Tests: `CivAISuite` (Graph, fehlende Rohstoffe, Expansion, Forschung, schrittweise Aktualisierung).
 
-### Stand Schritt 2 (2026-11-12)
+### Stand Schritt 2 (2026-11-12) – verworfen
+
+**Vom Nutzer verworfen (2026-11-12):** Die Planung aus geschätztem Bedarf hat schlecht gespielt (z. B. 7 Brunnen ohne
+Wasserverbrauch, Brauereien ohne Farm, kein Roden). Sie schätzte Raten (Wirkungsgrad 0,6) und enthielt künstliche
+Regeln (Expansionsfluss, Wissensgebäude, Baustellen- und Gehilfengrenzen). Der Code in `ai/civ/ProductionPlanner.*`
+wird durch die Neufassung unten ersetzt und dient nur noch als Beispiel, wie es nicht geht.
+
 
 Entscheidungen des Nutzers: Der Planer übernimmt nur Gebäude, die Waren herstellen (eingebaute und aus Lua) und den
 Förster; Militär, Lager, Hafen, Werft, Katapult, Eselzucht und Bibliothek plant weiter AIJH. Die Ziele kommen bis
@@ -1054,6 +1060,154 @@ Schritt 5 aus dem aktuellen Bedarf plus kleinen Vorräten, die Gewichte stehen i
 - Tests: `CivAISuite` (Kette rückwärts, keine Quelle, Weg nach Quelle und Kapazität, Nebenprodukt, Baustelle, Lager nach
   Priorität, Förster, Wissen über Gebäude, Plan im Takt). Die KI-Tests in `CivContentSuite`, `CivOutputChoiceSuite`
   und `CivPlantsAndOresSuite` geben der KI jetzt einen Bedarf (Forschung), statt dass sie Werkstätten pauschal baut.
+
+### Neufassung der Planung (Entscheidungen des Nutzers 2026-11-13)
+
+Grundsätze:
+- **Maximale Ausbeutung und Expansion.** Es gewinnt, wer die Rohstoffe am besten ausnutzt.
+- **Nur natürliche Grenzen**, keine künstlichen Regeln oder Timer. Bei fehlenden Spielregeln den Nutzer fragen.
+- **Exakte gemessene Zahlen statt Schätzungen.**
+
+**Baustein A – Statistik** (umgesetzt, siehe unten): Bestand, Produktion, Verbrauch je Verwendung, Bilanz, Gehilfen,
+offene Nachfrage, Gebäudezustände.
+
+**Baustein B – Wahrnehmung:**
+- Kartenprofil und Wirtschaftsgraph ohne geschätzte Raten.
+- Keine Regel „freie Vorkommen“: Mehrere Gebäude dürfen eng an einem Vorkommen stehen.
+- Natürliche Bedingung: Am Bauplatz muss etwas in Reichweite sein (Bauplatzsuche).
+- Lagerkapazität (geplant): Jedes Lager fasst eine Gesamtzahl Waren. Ist kein Platz mehr, gibt es nur noch benötigte
+  Aufträge.
+
+**Warenzustand.** Bilanz und Verbrauch beziehen sich auf die letzten 5 Minuten; die Länge ist eine Variable zum
+Ausprobieren. Schwelle `S = max(8, 10 × Verbrauch/min)` (8 ist der Mindestbestand):
+- **Mangel:** Bilanz < 0, oder offene Nachfrage größer als der Bestand. Folge: benötigter Auftrag für Erzeuger.
+- **Überschuss:** Bilanz ≥ 0 und Bestand > S. Folge: benötigter Auftrag für Verbraucher. Liegengebliebene Waren
+  belegen Lager und haben Arbeit gekostet; die Verarbeitung ist dann der Engpass.
+- **Normal:** Bilanz ≥ 0 und Bestand ≤ S. Folge: expandierender Auftrag, nur für Gebäude der Expansionsliste.
+
+**Reicht ein Eingang für einen weiteren Verbraucher?**
+- Bilanz > 0: ja, der Bestand ist egal.
+- Bilanz = 0: ja, wenn Bestand ≥ `max(8, 10 × (gemessener Verbrauch + Verbrauch des neuen Gebäudes laut Arbeitszeit))`.
+- Bilanz < 0: nein.
+
+**Benötigt / expandierend:**
+- **Benötigt:** gleicht einen Mangel aus oder stabilisiert die Wirtschaft.
+- **Expandierend:** macht die Wirtschaft größer.
+- Nur Gebäude der Liste in `ai.lua` dürfen expandierend gebaut werden: Waffenschmiede, Münzprägerei, Schlosserei,
+  Kupferwerk, Brauerei, Holzfäller, Steinbruch, Lehmgrube, Fischer, Knochenschnitzer, Gold-, Kohle-, Eisen- und
+  Kupfermine, Lederei, Lagerhaus, Hafen, Papyrusplantage, Köhler, Baracke, Wachstube, Wachturm, Festung, Sägewerk,
+  Jäger. Begründung: Expansion über Endproduzenten stützt die Wirtschaft gezielter.
+- Förster, Brunnen, Werft und Katapult sind nie expandierend.
+
+**Prioritätenliste:**
+- **Einträge:** einzelne Gebäudeaufträge mit der Ware, für die sie gedacht sind, und dem Auftrag darüber (`parent`),
+  nicht der ganzen Kette.
+- **Kind-Aufträge** kommen direkt über ihren Eltern-Auftrag. Beispiel: Die Brauerei braucht Getreide, also kommt die
+  Farm darüber; fehlen Sensen, kommt deren Auftrag über die Farm.
+- **Reihenfolge:**
+  1. Mangel, nach „Minuten bis leer“ (offene Nachfrage zählt als 0 Minuten),
+  2. Überschuss,
+  3. ganz unten die expandierenden Aufträge.
+- **Abarbeitung:** Der oberste Eintrag muss platziert oder als nicht baubar erkannt sein, bevor der nächste drankommt.
+  - Benötigte Aufträge: Bei jeder unerfüllten Regel wird zuerst versucht, sie zu lösen.
+  - Expandierende Aufträge: Ist eine Regel unerfüllt, wandert der Auftrag nach unten.
+- **Regeln** sind einzelne, leicht ergänzbare Funktionen: erforscht, Baumaterial, Werkzeug, Arbeiter/Gehilfen
+  (Helfer-Bilanz), Eingänge reichen, Bauplatz mit Vorkommen in Reichweite, Lagerplatz (nur expandierend),
+  Expansionsliste.
+- **Anlaufzeit:** Nach dem Platzieren eines Erzeugers bzw. Verbrauchers einer Ware gibt es keinen weiteren, bis er eine
+  Bilanzlänge gearbeitet hat.
+
+**Vorgehen für eine gefragte Ware:**
+1. Erzeuger ansehen.
+2. Produktivität unter 80 %: Grund suchen (Eingang, Werkzeug, Arbeiter, Platzierung, Wachstum) und diesen angehen.
+3. Produktivität ab 80 % oder noch kein Erzeuger: dessen Eingänge prüfen.
+   - Reichen alle, wird der Erzeuger ein Auftrag.
+   - Sonst dasselbe Vorgehen mit jedem fehlenden Eingang. Der Erzeuger wartet so lange.
+4. Schleifen: Waren, die in der Elternkette schon vorkommen, werden übersprungen.
+
+Verbraucher ohne Gebäude (Rekrutierung, Bau, Forschung, Militär, Expeditionen) werden wie Gebäude behandelt: Ihre
+übrigen Eingänge werden geprüft. Liegen z. B. Schwerter im Überschuss, weil Bier fehlt, stößt das Bier an. Münzen fragt
+nur das Militärgebäude an, das Münzen erlaubt.
+
+**Gescheiterte Aufträge:**
+- Schleife erkennen: Kommt die Ware oder das Gebäude in der Elternkette schon vor, ist dieser Lösungsweg unmöglich.
+- Sonst die nächste Alternative für die Ware versuchen; gescheiterte Wege merkt sich der Auftrag.
+- Keine Alternative mehr: Der Auftrag wird blockiert und speichert eine prüfbare Bedingung (z. B. „freie Gehilfen ≥ 1“,
+  „Steine ≥ 2“, „Vorkommen im Gebiet“, „Technologie erforscht“). Nur diese Bedingungen werden geprüft; ist eine
+  erfüllt, wird der Auftrag neu versucht.
+- Beispiel: Ein Steinbruch braucht Gehilfen. Die Lösung „Lagerhaus“ bräuchte Steine, das ist eine Schleife. Also
+  wartet der Steinbruch auf Gehilfen.
+
+**Wahl zwischen Alternativen** (z. B. Kohlemine oder Köhler, Nahrungsketten): ein Probelauf je Weg ohne zu platzieren.
+Gewählt wird nach dieser Reihenfolge:
+1. nicht blockiert,
+2. die wenigsten neuen Gebäude,
+3. die höchste gemessene Produktivität der vorhandenen Erzeuger,
+4. die geringeren Baukosten.
+
+Der Aufwand wächst nur mit der Zahl der Waren, weil die KI Ergebnisse je Ware merkt.
+
+**Holzfäller und Förster** (Radien aus dem Spiel, Standard je 6):
+- **Rodender Holzfäller:**
+  - Der Auftrag entsteht, wenn die Walddichte im Radius des Holzfällers mindestens 8 Bäume erreicht.
+  - Abstand zu jedem Förster mindestens Försterradius + Holzfällerradius.
+  - Kein Förster; Abriss, wenn keine Bäume mehr in Reichweite sind.
+- **Dauerhafter Holzfäller:**
+  - Der Auftrag entsteht aus Holzbedarf.
+  - Fällt die Dichte in seinem Bereich unter 5 Bäume, wird ein Förster benötigt.
+- **Förster:**
+  - Nicht im Radius eines rodenden Holzfällers + Försterradius.
+  - Sonst gelten die alten Platzierungsregeln.
+  - „2 Holzfäller je Förster“ entfällt.
+- Steinbruch: die alten Platzierungsregeln.
+- Entfällt: der automatische Brunnen und die Folgeaufträge der alten KI (Farm → Mühle, Eisenmine → Schmelze …).
+- Abrissregeln werden an die neuen Regeln angepasst.
+
+**Baustein D – Ausführung:**
+- Bauplatzsuche, Straßen und Militär bleiben aus AIJH.
+- Der Takt wird zur Reaktionszeit je Schwierigkeitsgrad (Vorschlag: Schwer 1 s, Mittel 5 s, Leicht 20 s). Gesucht wird
+  nur für die obersten Aufträge.
+- Wo die KI Lagerhäuser hinsetzt, bleibt unverändert.
+
+**Spielstart:** keine vorgefertigte Liste; sie ergibt sich aus den Regeln. Jeder Verbrauch zählt, nicht nur der von
+Militärbaustellen.
+
+### Stand Baustein A: Wirtschaftsstatistik (2026-11-13)
+
+Code: `EconomyStatistics.*` (Zähler, im Spielstand, Version 26) und `EconomySnapshot.*` (Momentaufnahme). Die
+Statistik läuft in allen Spielen mit, nicht nur im Zivilisationsmodus.
+
+- **Jede Änderung des Warenbestands nennt ihren Grund.**
+  - `GamePlayer::IncreaseInventoryWare(Ware, Anzahl, WareSource)`. Quellen: Produktion (auch Nebenprodukte), Rückgabe
+    (Abriss, abgebrochene Forschung), Werkzeug zurück, erobert, Handel, hinzugefügt (Startwaren, Lua, Cheats).
+  - `DecreaseInventoryWare(Ware, Anzahl, WareUse)`. Verwendungen: Produktion (Eingang je Arbeitsschritt), Bau (an der
+    Baustelle abgeliefert, auch Expeditions-Hafen), Werkzeug (Arbeiter rekrutiert oder in einen Werkzeugplatz
+    gesteckt), Soldaten (Rekrutierung), Militär (Münze für Beförderung, Rüstung angelegt), Forschung, Handel, Verlust
+    (verloren, verbrannt, erobert).
+  - Da beide Parameter Pflicht sind, ist die Zählung vollständig. Es gilt immer: Bestand = Summe der Zugänge −
+    Summe der Verwendungen (Test und 2-h-ai-battle: 0 Abweichungen).
+- **Verlauf:** Je Spielminute die Zähler der letzten 240 Minuten (4 h), danach abgeschnitten; dazu Summen seit
+  Spielstart.
+  - „Die letzten n Minuten“ sind die laufende Minute und die n−1 davor.
+  - `GetBalance` = Produktion − Verbrauch (alle Verwendungen); andere Zugänge zählen nicht.
+  - `GetConsumptionPerMinute` teilt durch die tatsächlich vergangene Zeit, am Spielstart also weniger als n Minuten.
+  - Im Spielstand stehen nur Werte ungleich 0.
+- **Gehilfen:** von Lagern erzeugt, zu Arbeitern oder Soldaten geworden (je Minute). Freie Gehilfen und Arbeiter
+  liefert die Momentaufnahme. Gehilfen, die als Träger auf Straßen gehen, sind nicht als Verbrauch gezählt.
+- **Momentaufnahme** (`takeEconomySnapshot`): offene Nachfrage (angefragt, aber noch nicht geschickt). Sie umfasst:
+  - Baustellen,
+  - Eingänge der Gebäude, bei „eins von“ als ein Eintrag,
+  - Werkzeugplätze,
+  - Werkzeuge zum Rekrutieren fehlender Arbeiter,
+  - Münzen nur bei Gebäuden mit erlaubten Münzen,
+  - Rüstungen,
+  - Expeditionen,
+  - laufende Forschung,
+  - fehlende Soldaten.
+
+  Dazu Gebäudezustände je Typ: Anzahl, Baustellen, ohne Arbeiter, gestoppt, ohne Werkzeug, wartet auf Ware X,
+  Produktivität. Außerdem Waren und Personen in den Lagern.
+- Tests: `EconomyStatisticsSuite`.
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 

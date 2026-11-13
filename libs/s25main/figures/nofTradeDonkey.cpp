@@ -53,7 +53,7 @@ void nofTradeDonkey::GoalReached()
     GamePlayer& whOwner = world->GetPlayer(wh->GetPlayer());
 
     if(gt)
-        wh->AddToInventory(GoodCounts::make(*gt, 1), true);
+        wh->AddToInventory(GoodCounts::make(*gt, 1), true, WareSource::Trade);
 
     whOwner.IncreaseInventoryJob(this->GetJobType(), 1);
     if(hasArmor_)

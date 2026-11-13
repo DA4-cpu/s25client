@@ -126,7 +126,8 @@
 /// 23: Civilization mode: Own regulators of the players, product of workshops with outputChoice = "tools"
 /// 24: Civilization mode: Output ratio of buildings (credit of the step), wares a worker still has to put at the flag
 /// 25: Civilization mode: Construction costs from lua (materials of building sites per cost entry)
-static const unsigned currentGameDataVersion = 25;
+/// 26: Economy statistic of the players (wares gained and used per minute)
+static const unsigned currentGameDataVersion = 26;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

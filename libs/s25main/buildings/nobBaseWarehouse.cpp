@@ -104,7 +104,7 @@ void nobBaseWarehouse::DestroyBuilding()
 
     // restliche Warenbestände von der Inventur wieder abziehen
     for(const auto good : helpers::enumRange<GoodType>())
-        world->GetPlayer(player).DecreaseInventoryWare(good, inventory[good]);
+        world->GetPlayer(player).DecreaseInventoryWare(good, inventory[good], WareUse::Lost);
 
     // move soldiers from reserve to inventory.
     for(unsigned rank = 0; rank < world->GetGGS().GetMaxMilitaryRank(); ++rank)
@@ -234,7 +234,7 @@ void nobBaseWarehouse::Clear()
 
     GamePlayer& owner = world->GetPlayer(player);
     for(const auto i : helpers::enumRange<GoodType>())
-        owner.DecreaseInventoryWare(i, inventory[i]);
+        owner.DecreaseInventoryWare(i, inventory[i], WareUse::Lost);
 
     for(const auto i : helpers::enumRange<Job>())
         owner.DecreaseInventoryJob(i, inventory[i]);
@@ -535,15 +535,16 @@ void nobBaseWarehouse::HandleRecrutingEvent()
 
     inventory.Remove(Job::Helper, real_recruits);
     owner.DecreaseInventoryJob(Job::Helper, real_recruits);
+    owner.CountHelpersRecruited(real_recruits);
 
     inventory.Remove(GoodType::Sword, real_recruits);
-    owner.DecreaseInventoryWare(GoodType::Sword, real_recruits);
+    owner.DecreaseInventoryWare(GoodType::Sword, real_recruits, WareUse::Soldiers);
 
     inventory.Remove(GoodType::ShieldRomans, real_recruits);
-    owner.DecreaseInventoryWare(GoodType::ShieldRomans, real_recruits);
+    owner.DecreaseInventoryWare(GoodType::ShieldRomans, real_recruits, WareUse::Soldiers);
 
     inventory.Remove(GoodType::Beer, real_recruits);
-    owner.DecreaseInventoryWare(GoodType::Beer, real_recruits);
+    owner.DecreaseInventoryWare(GoodType::Beer, real_recruits, WareUse::Soldiers);
 
     // Evtl. versuchen nächsten zu rekrutieren
     TryRecruiting();
@@ -568,6 +569,7 @@ void nobBaseWarehouse::HandleProduceHelperEvent()
 
         GamePlayer& owner = world->GetPlayer(player);
         owner.IncreaseInventoryJob(Job::Helper, 1);
+        owner.CountHelpersCreated(1);
 
         if(inventory[Job::Helper] == 1)
         {
@@ -865,7 +867,7 @@ void nobBaseWarehouse::AddFigure(std::unique_ptr<noFigure> figure, const bool in
         for(const GoodType tool : buildingWorker->ReleaseTools())
         {
             inventory.Add(tool);
-            world->GetPlayer(player).IncreaseInventoryWare(tool, 1);
+            world->GetPlayer(player).IncreaseInventoryWare(tool, 1, WareSource::Returned);
             CheckUsesForNewWare(tool);
         }
     }
@@ -1161,13 +1163,13 @@ const Inventory& nobBaseWarehouse::GetInventory() const
     return inventory.visual;
 }
 
-void nobBaseWarehouse::AddToInventory(const GoodsAndPeopleCounts& what, bool addToPlayer)
+void nobBaseWarehouse::AddToInventory(const GoodsAndPeopleCounts& what, bool addToPlayer, const WareSource source)
 {
-    AddToInventory(static_cast<const GoodCounts&>(what), addToPlayer);
+    AddToInventory(static_cast<const GoodCounts&>(what), addToPlayer, source);
     AddToInventory(static_cast<const PeopleCounts&>(what), addToPlayer);
 }
 
-void nobBaseWarehouse::AddToInventory(const GoodCounts& goods, bool addToPlayer)
+void nobBaseWarehouse::AddToInventory(const GoodCounts& goods, bool addToPlayer, const WareSource source)
 {
     GamePlayer& owner = world->GetPlayer(player);
     for(const auto i : helpers::enumRange<GoodType>())
@@ -1179,19 +1181,19 @@ void nobBaseWarehouse::AddToInventory(const GoodCounts& goods, bool addToPlayer)
 
         inventory.Add(i, goods[i]);
         if(addToPlayer)
-            owner.IncreaseInventoryWare(i, goods[i]);
+            owner.IncreaseInventoryWare(i, goods[i], source);
         CheckUsesForNewWare(i);
     }
 }
 
-unsigned nobBaseWarehouse::TakeWares(const GoodType good, const unsigned maxCount)
+unsigned nobBaseWarehouse::TakeWares(const GoodType good, const unsigned maxCount, const WareUse use)
 {
     RTTR_Assert(ConvertShields(good) == good);
     const unsigned count = std::min(maxCount, inventory[good]);
     if(count == 0)
         return 0;
     inventory.Remove(good, count);
-    world->GetPlayer(player).DecreaseInventoryWare(good, count);
+    world->GetPlayer(player).DecreaseInventoryWare(good, count, use);
     // Weapons or beer might be gone now
     TryStopRecruiting();
     return count;
@@ -1258,11 +1260,12 @@ bool nobBaseWarehouse::TryRecruitJob(const Job job)
     if(requiredTool != GoodType::Nothing && !IsRecruitedWithoutTool(job))
     {
         inventory.Remove(requiredTool);
-        owner.DecreaseInventoryWare(requiredTool, 1);
+        owner.DecreaseInventoryWare(requiredTool, 1, WareUse::Tool);
     }
 
     inventory.Remove(Job::Helper);
     owner.DecreaseInventoryJob(Job::Helper, 1);
+    owner.CountHelpersRecruited(1);
 
     inventory.Add(job);
     owner.IncreaseInventoryJob(job, 1);
@@ -1299,7 +1302,7 @@ void nobBaseWarehouse::ConvertWorkersForToolReform()
         if(tool != GoodType::Nothing)
         {
             inventory.Add(tool, count);
-            owner.IncreaseInventoryWare(tool, count);
+            owner.IncreaseInventoryWare(tool, count, WareSource::Returned);
         }
     }
 }
@@ -1591,7 +1594,7 @@ void nobBaseWarehouse::StartTradeCaravane(const boost_variant2<GoodType, Job>& w
             [&](const GoodType gt) {
                 // Diminish the goods in the warehouse
                 inventory.real.Remove(gt, count);
-                owner.DecreaseInventoryWare(gt, count);
+                owner.DecreaseInventoryWare(gt, count, WareUse::Trade);
                 // now that we have removed the goods lets remove the donkeys
                 inventory.real.Remove(Job::PackDonkey, count);
                 owner.DecreaseInventoryJob(Job::PackDonkey, count);

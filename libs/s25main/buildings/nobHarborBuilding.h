@@ -135,6 +135,9 @@ public:
 
     /// Ist Expedition in Vorbereitung?
     bool IsExpeditionActive() const { return expedition.active; }
+    /// Boards and stones the expedition still needs (0 if no expedition is prepared)
+    unsigned GetExpeditionBoardsMissing() const;
+    unsigned GetExpeditionStonesMissing() const;
     /// Hat eine aktive Expedition bereits ihren Bauarbeiter (für die Kolonie-Gründung) bekommen?
     bool HasExpeditionBuilder() const { return expedition.builder; }
     /// Ist Erkundungs-Expedition in Vorbereitung?

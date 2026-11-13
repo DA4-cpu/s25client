@@ -74,8 +74,8 @@ noBuildingSite::noBuildingSite(const MapPoint pos, const unsigned char player)
     for(unsigned i = 0; i < costs.size(); ++i)
         materials_[i].delivered.assign(costs[i].amount, costs[i].wares.front());
     // Baumaterialien in der Inventur verbuchen
-    owner.DecreaseInventoryWare(GoodType::Boards, HARBOR_BUILDING_COST.boards);
-    owner.DecreaseInventoryWare(GoodType::Stones, HARBOR_BUILDING_COST.stones);
+    owner.DecreaseInventoryWare(GoodType::Boards, HARBOR_BUILDING_COST.boards, WareUse::Construction);
+    owner.DecreaseInventoryWare(GoodType::Stones, HARBOR_BUILDING_COST.stones, WareUse::Construction);
 }
 
 noBuildingSite::~noBuildingSite() = default;
@@ -401,7 +401,7 @@ void noBuildingSite::AddWare(std::unique_ptr<Ware> ware)
     materials_[entry].delivered.push_back(ware->type);
 
     // Inventur entsprechend verringern
-    world->GetPlayer(player).DecreaseInventoryWare(ware->type, 1);
+    world->GetPlayer(player).DecreaseInventoryWare(ware->type, 1, WareUse::Construction);
     world->GetPlayer(player).RemoveWare(*ware);
 }
 

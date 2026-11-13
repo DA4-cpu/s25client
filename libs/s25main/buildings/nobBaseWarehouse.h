@@ -5,6 +5,7 @@
 #pragma once
 
 #include "DataChangedObservable.h"
+#include "EconomyStatistics.h"
 #include "nobBaseMilitary.h"
 #include "variant.h"
 #include "gameTypes/GoodsAndPeopleArray.h"
@@ -149,13 +150,13 @@ public:
 
     /// Adds specified goods and people. If addToPlayer is true,
     /// then they are also added to the owners inventory (for newly created/arrived goods)
-    /// Use false for goods, that are only moved between players units
-    void AddToInventory(const GoodsAndPeopleCounts& what, bool addToPlayer);
+    /// Use false for goods, that are only moved between players units. source: where new goods came from (statistic)
+    void AddToInventory(const GoodsAndPeopleCounts& what, bool addToPlayer, WareSource source = WareSource::Added);
     void AddToInventory(const PeopleCounts& people, bool addToPlayer);
-    void AddToInventory(const GoodCounts& goods, bool addToPlayer);
+    void AddToInventory(const GoodCounts& goods, bool addToPlayer, WareSource source = WareSource::Added);
     /// Removes up to maxCount wares of the given (canonical) type which are not yet ordered from the warehouse
     /// and the owners inventory (consumed e.g. by research). Returns the number of wares removed
-    unsigned TakeWares(GoodType good, unsigned maxCount);
+    unsigned TakeWares(GoodType good, unsigned maxCount, WareUse use);
 
     /// Gibt Anzahl der Waren bzw. Figuren zurück
     unsigned GetNumRealWares(GoodType type) const { return inventory.real[type]; }

@@ -862,7 +862,7 @@ void noFigure::RemoveFromInventory()
     if(job_ == Job::BoatCarrier)
     {
         world->GetPlayer(player).DecreaseInventoryJob(Job::Helper, 1);
-        world->GetPlayer(player).DecreaseInventoryWare(GoodType::Boat, 1);
+        world->GetPlayer(player).DecreaseInventoryWare(GoodType::Boat, 1, WareUse::Lost);
     } else
     {
         world->GetPlayer(player).DecreaseInventoryJob(job_, 1);

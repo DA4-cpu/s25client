@@ -221,11 +221,11 @@ void nobUsual::DestroyBuilding()
     {
         const GoodType ware = BLD_WORK_DESC[bldType_].waresNeeded[i];
         RTTR_Assert(ware != GoodType::Nothing);
-        world->GetPlayer(player).DecreaseInventoryWare(ware, numWares[i]);
+        world->GetPlayer(player).DecreaseInventoryWare(ware, numWares[i], WareUse::Lost);
     }
     // Media in a library are lost with the building (and so are their knowledge points)
     for(const auto& entry : libraryMedia_)
-        world->GetPlayer(player).DecreaseInventoryWare(entry.first, entry.second);
+        world->GetPlayer(player).DecreaseInventoryWare(entry.first, entry.second, WareUse::Lost);
     libraryMedia_.clear();
 }
 
@@ -417,7 +417,7 @@ void nobUsual::AddWare(std::unique_ptr<Ware> ware)
         } else
             slot.spare = ware->type;
         GamePlayer& owner = world->GetPlayer(player);
-        owner.DecreaseInventoryWare(ware->type, 1);
+        owner.DecreaseInventoryWare(ware->type, 1, WareUse::Tool);
         owner.RemoveWare(*ware);
         if(worker)
             worker->GotWareOrProductionAllowed();
@@ -588,7 +588,7 @@ void nobUsual::ConsumeWares()
         if(!lastConsumedWare_)
             lastConsumedWare_ = workDesc.waresNeeded[wareIdxToUse];
         // Inventur entsprechend verringern
-        owner.DecreaseInventoryWare(workDesc.waresNeeded[wareIdxToUse], 1);
+        owner.DecreaseInventoryWare(workDesc.waresNeeded[wareIdxToUse], 1, WareUse::Production);
 
         // try to get ware from warehouses
         if(numWares[wareIdxToUse] < 2)

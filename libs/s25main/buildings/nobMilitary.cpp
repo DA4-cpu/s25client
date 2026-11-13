@@ -136,8 +136,8 @@ void nobMilitary::DestroyBuilding()
     GetEvMgr().RemoveEvent(armor_upgrade_event);
 
     // übriggebliebene Goldmünzen in der Inventur abmelden
-    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Coins, numCoins);
-    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Armor, numArmor);
+    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Coins, numCoins, WareUse::Lost);
+    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Armor, numArmor, WareUse::Lost);
 
     nobBaseMilitary::DestroyBuilding();
     // If this was occupied, recalc territory. AFTER calling base destroy as otherwise figures might get stuck here
@@ -351,7 +351,7 @@ void nobMilitary::HandleEvent(const unsigned id)
 
                 // Goldmünze verbrauchen
                 --numCoins;
-                world->GetPlayer(player).DecreaseInventoryWare(GoodType::Coins, 1);
+                world->GetPlayer(player).DecreaseInventoryWare(GoodType::Coins, 1, WareUse::Military);
 
                 RegulateTroops();
 
@@ -384,7 +384,7 @@ void nobMilitary::HandleEvent(const unsigned id)
                 soldier->SetArmor(true);
 
                 --numArmor;
-                world->GetPlayer(player).DecreaseInventoryWare(GoodType::Armor, 1);
+                world->GetPlayer(player).DecreaseInventoryWare(GoodType::Armor, 1, WareUse::Military);
                 world->GetPlayer(player).IncreaseInventoryJob(jobEnumToAmoredSoldierEnum(soldier->GetJobType()), 1);
 
                 PrepareArmorUpgrading();
@@ -1065,11 +1065,11 @@ void nobMilitary::Capture(const unsigned char new_owner)
     RTTR_Assert(IsBeingCaptured());
 
     // Goldmünzen in der Inventur vom alten Spieler abziehen und dem neuen hinzufügen
-    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Coins, numCoins);
-    world->GetPlayer(new_owner).IncreaseInventoryWare(GoodType::Coins, numCoins);
+    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Coins, numCoins, WareUse::Lost);
+    world->GetPlayer(new_owner).IncreaseInventoryWare(GoodType::Coins, numCoins, WareSource::Captured);
 
-    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Armor, numArmor);
-    world->GetPlayer(new_owner).IncreaseInventoryWare(GoodType::Armor, numArmor);
+    world->GetPlayer(player).DecreaseInventoryWare(GoodType::Armor, numArmor, WareUse::Lost);
+    world->GetPlayer(new_owner).IncreaseInventoryWare(GoodType::Armor, numArmor, WareSource::Captured);
 
     // Reset desired troop setting
     troop_limits.fill(GetMaxTroopsCt());

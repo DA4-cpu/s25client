@@ -234,6 +234,10 @@ public:
     bool IsArmorAllowedVirtual() const { return armorAllowedVirtual; }
     bool IsArmorAllowed() const { return armorAllowed; }
     unsigned char GetNumArmor() const { return numArmor; }
+    /// Coins, armor and soldiers on the way to the building
+    unsigned GetNumOrderedCoins() const { return static_cast<unsigned>(ordered_coins.size()); }
+    unsigned GetNumOrderedArmor() const { return static_cast<unsigned>(ordered_armor.size()); }
+    unsigned GetNumOrderedTroops() const { return static_cast<unsigned>(ordered_troops.size()); }
 
     /// is there a max rank soldier in the building?
     bool HasMaxRankSoldier() const;

@@ -5,11 +5,12 @@
 #pragma once
 
 #include "BuildingRegister.h"
+#include "EconomyStatistics.h"
 #include "GamePlayerInfo.h"
+#include "civ/PlayerResearch.h"
 #include "helpers/EnumArray.h"
 #include "helpers/MultiArray.h"
 #include "variant.h"
-#include "civ/PlayerResearch.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/Inventory.h"
 #include "gameTypes/MapCoordinates.h"
@@ -187,9 +188,15 @@ public:
     bool IsWareRegistred(const Ware& ware);
     bool IsWareDependent(const Ware& ware);
 
-    /// Fügt Waren zur Inventur hinzu
-    void IncreaseInventoryWare(GoodType ware, unsigned count);
-    void DecreaseInventoryWare(GoodType ware, unsigned count);
+    /// Wares entering or leaving the stock of the player (inventory). Each change is counted in the economy statistic
+    /// with where the wares came from or what they were used for
+    void IncreaseInventoryWare(GoodType ware, unsigned count, WareSource source);
+    void DecreaseInventoryWare(GoodType ware, unsigned count, WareUse use);
+    /// Helpers created by a warehouse / who became a worker or soldier (economy statistic)
+    void CountHelpersCreated(unsigned count);
+    void CountHelpersRecruited(unsigned count);
+    /// Exact statistic of the economy (see EconomyStatistics)
+    const EconomyStatistics& GetEconomyStatistics() const { return economyStatistics_; }
     void IncreaseInventoryJob(const Job job, unsigned count) { global_inventory.Add(job, count); }
     void DecreaseInventoryJob(const Job job, unsigned count) { global_inventory.Remove(job, count); }
     void IncreaseInventoryJob(const ArmoredSoldier job, unsigned count) { global_inventory.Add(job, count); }
@@ -197,6 +204,8 @@ public:
 
     /// Gibt Inventory-Settings zurück
     const Inventory& GetInventory() const { return global_inventory; }
+    /// Number of building sites and buildings waiting for a worker of each job
+    helpers::EnumArray<unsigned, Job> GetNumJobsWanted() const;
 
     /// Setzt neue Militäreinstellungen
     void ChangeMilitarySettings(const MilitarySettings& military_settings);
@@ -467,6 +476,7 @@ private:
     helpers::EnumArray<bool, BuildingType> building_enabled;
     /// Research state of the civilization mode
     civ::PlayerResearch research_;
+    EconomyStatistics economyStatistics_;
 
     // TODO: Move to viewer. Mutable as a work-around
     mutable helpers::EnumArray<int8_t, Tool> tools_ordered_delta;

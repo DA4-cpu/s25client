@@ -162,7 +162,7 @@ namespace {
         {
             if(taken >= amount)
                 break;
-            taken += wh->TakeWares(good, amount - taken);
+            taken += wh->TakeWares(good, amount - taken, WareUse::Research);
         }
         return taken;
     }
@@ -176,7 +176,7 @@ namespace {
         GoodCounts goods;
         for(unsigned i = 0; i < tech.cost.size(); ++i)
             goods[tech.cost[i].good] += progress.paid.at(i);
-        wh->AddToInventory(goods, true);
+        wh->AddToInventory(goods, true, WareSource::Refund);
     }
 
     void sendMessage(GameWorld& world, unsigned playerId, const std::string& text)

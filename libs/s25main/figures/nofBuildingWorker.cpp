@@ -269,7 +269,7 @@ void nofBuildingWorker::PutWareAtFlag(const GoodType good)
     real_ware->WaitAtFlag(flag);
     // Inventur entsprechend erhöhen, dabei Schilder unterscheiden!
     GoodType ware_type = ConvertShields(real_ware->type);
-    world->GetPlayer(player).IncreaseInventoryWare(ware_type, 1);
+    world->GetPlayer(player).IncreaseInventoryWare(ware_type, 1, WareSource::Production);
     // Abnehmer für Ware finden
     real_ware->SetGoal(world->GetPlayer(player).FindClientForWare(*real_ware));
     // Ware soll ihren weiteren Weg berechnen

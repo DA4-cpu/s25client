@@ -133,7 +133,7 @@ void noBaseBuilding::Destroy()
                     auto ware = std::make_unique<Ware>(refund.first, nullptr, flag);
                     ware->WaitAtFlag(flag);
                     // Inventur anpassen
-                    world->GetPlayer(player).IncreaseInventoryWare(refund.first, 1);
+                    world->GetPlayer(player).IncreaseInventoryWare(refund.first, 1, WareSource::Refund);
                     // Abnehmer für Ware finden
                     ware->SetGoal(world->GetPlayer(player).FindClientForWare(*ware));
                     // Ware soll ihren weiteren Weg berechnen

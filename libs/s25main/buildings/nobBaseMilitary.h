@@ -40,6 +40,8 @@ protected:
     nofDefender* defender_;
 
 public:
+    /// Soldiers of the building away on a mission (attack, defense ...) who may come back
+    unsigned GetNumTroopsOnMission() const { return static_cast<unsigned>(troops_on_mission.size()); }
     nobBaseMilitary(BuildingType type, MapPoint pos, unsigned char player, Nation nation);
     nobBaseMilitary(SerializedGameData& sgd, unsigned obj_id);
     ~nobBaseMilitary() override;

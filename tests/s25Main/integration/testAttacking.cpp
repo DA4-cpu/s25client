@@ -916,7 +916,7 @@ BOOST_FIXTURE_TEST_CASE(ConquerWithCarriersWalkingIn, AttackFixture<2>)
         coin->RecalcRoute();
         flag->AddWare(std::move(coin));
     }
-    world.GetPlayer(1).IncreaseInventoryWare(GoodType::Coins, 2);
+    world.GetPlayer(1).IncreaseInventoryWare(GoodType::Coins, 2, WareSource::Added);
     carrierIn.ActAtFirst();
     carrierOut.ActAtFirst();
     // Both picked up
@@ -952,7 +952,7 @@ BOOST_FIXTURE_TEST_CASE(ConquerWithCarriersWalkingIn, AttackFixture<2>)
     coin->WaitAtFlag(flagE);
     coin->RecalcRoute();
     flagE->AddWare(std::move(coin));
-    world.GetPlayer(1).IncreaseInventoryWare(GoodType::Coins, 1);
+    world.GetPlayer(1).IncreaseInventoryWare(GoodType::Coins, 1, WareSource::Added);
     carrierInE.ActAtFirst();
     // Picked up
     BOOST_TEST_REQUIRE(flagE->GetNumWares() == 0u);

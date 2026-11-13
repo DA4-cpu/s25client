@@ -233,6 +233,7 @@ void GamePlayer::Serialize(SerializedGameData& sgd) const
     }
 
     sgd.PushBool(emergency);
+    economyStatistics_.Serialize(sgd);
 
     // Civilization mode (only stored if active so normal games don't depend on the tech tree data)
     const bool hasResearch = civ::isEnabled(world);
@@ -440,6 +441,9 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
     }
 
     emergency = sgd.PopBool();
+    economyStatistics_ = EconomyStatistics();
+    if(sgd.GetGameDataVersion() >= 26)
+        economyStatistics_.Deserialize(sgd);
 
     research_ = civ::PlayerResearch();
     if(sgd.GetGameDataVersion() >= 16 && sgd.PopBool())
@@ -1986,14 +1990,34 @@ bool GamePlayer::IsWareDependent(const Ware& ware)
     return false;
 }
 
-void GamePlayer::IncreaseInventoryWare(const GoodType ware, const unsigned count)
+void GamePlayer::IncreaseInventoryWare(const GoodType ware, const unsigned count, const WareSource source)
 {
     global_inventory.Add(ConvertShields(ware), count);
+    economyStatistics_.AddGained(ConvertShields(ware), count, source, world.GetEvMgr().GetCurrentGF());
 }
 
-void GamePlayer::DecreaseInventoryWare(const GoodType ware, const unsigned count)
+void GamePlayer::DecreaseInventoryWare(const GoodType ware, const unsigned count, const WareUse use)
 {
     global_inventory.Remove(ConvertShields(ware), count);
+    economyStatistics_.AddUsed(ConvertShields(ware), count, use, world.GetEvMgr().GetCurrentGF());
+}
+
+helpers::EnumArray<unsigned, Job> GamePlayer::GetNumJobsWanted() const
+{
+    helpers::EnumArray<unsigned, Job> result{};
+    for(const JobNeeded& entry : jobs_wanted)
+        ++result[entry.job];
+    return result;
+}
+
+void GamePlayer::CountHelpersCreated(const unsigned count)
+{
+    economyStatistics_.AddHelpersCreated(count, world.GetEvMgr().GetCurrentGF());
+}
+
+void GamePlayer::CountHelpersRecruited(const unsigned count)
+{
+    economyStatistics_.AddHelpersRecruited(count, world.GetEvMgr().GetCurrentGF());
 }
 
 void GamePlayer::RegisterShip(noShip& ship)
