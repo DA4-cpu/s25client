@@ -53,6 +53,8 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("AddTechnology", &GameDataLoader::AddTechnology)
         .addFunction("SetBuildingKnowledge", &GameDataLoader::SetBuildingKnowledge)
         .addFunction("SetAIExpandingBuildings", &GameDataLoader::SetAIExpandingBuildings)
+        .addFunction("SetAIBasicEconomy", &GameDataLoader::SetAIBasicEconomy)
+        .addFunction("SetAIStartStockNoSurplus", &GameDataLoader::SetAIStartStockNoSurplus)
         .addFunction("AddWare", &GameDataLoader::AddWare)
         .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
@@ -360,27 +362,75 @@ void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)
     }
 }
 
+namespace {
+/// A lua list of names like { "Woodcutter", "Quarry" } (no other keys, no name twice, not empty). `what`: "building"
+/// or "ware" for the messages
+std::vector<std::string> readNameList(const kaguya::LuaTable& data, const std::string& context, const std::string& what,
+                                      const std::string& example)
+{
+    const size_t numEntries = data.size();
+    if(data.keys<kaguya::LuaRef>().size() != numEntries)
+        throw GameDataError(context + ": expected a list of " + what + " names like " + example);
+    std::vector<std::string> result;
+    for(size_t i = 1; i <= numEntries; ++i)
+    {
+        const kaguya::LuaRef value = data[i];
+        if(value.type() != kaguya::LuaRef::TYPE_STRING)
+            throw GameDataError(context + ": entry " + std::to_string(i) + " is no " + what + " name");
+        const std::string name = value.get<std::string>();
+        if(std::find(result.begin(), result.end(), name) != result.end())
+            throw GameDataError(context + ": '" + name + "' is listed twice");
+        result.push_back(name);
+    }
+    if(result.empty())
+        throw GameDataError(context + ": the list is empty");
+    return result;
+}
+} // namespace
+
 void GameDataLoader::SetAIExpandingBuildings(const kaguya::LuaTable& data)
 {
     const std::string context = "Expanding buildings of the AI (rttr:SetAIExpandingBuildings)";
     if(!worldDesc_.aiExpandingBuildings.empty())
         throw GameDataError(context + " are defined twice");
-    const size_t numEntries = data.size();
-    if(data.keys<kaguya::LuaRef>().size() != numEntries)
-        throw GameDataError(context + ": expected a list of building names like { \"Woodcutter\", \"Quarry\" }");
-    for(size_t i = 1; i <= numEntries; ++i)
+    worldDesc_.aiExpandingBuildings = readNameList(data, context, "building", "{ \"Woodcutter\", \"Quarry\" }");
+}
+
+void GameDataLoader::SetAIBasicEconomy(const kaguya::LuaTable& data)
+{
+    const std::string context = "Basic economy of the AI (rttr:SetAIBasicEconomy)";
+    if(!worldDesc_.aiBasicEconomy.empty())
+        throw GameDataError(context + " is defined twice");
+    const std::string example = "{ { \"Woodcutter\", \"Quarry\" }, { \"IronMine\" } }";
+    const size_t numLevels = data.size();
+    if(numLevels == 0 || data.keys<kaguya::LuaRef>().size() != numLevels)
+        throw GameDataError(context + ": expected a list of levels like " + example);
+    std::vector<std::string> all;
+    for(size_t i = 1; i <= numLevels; ++i)
     {
         const kaguya::LuaRef value = data[i];
-        if(value.type() != kaguya::LuaRef::TYPE_STRING)
-            throw GameDataError(context + ": entry " + std::to_string(i) + " is no building name");
-        const std::string name = value.get<std::string>();
-        if(std::find(worldDesc_.aiExpandingBuildings.begin(), worldDesc_.aiExpandingBuildings.end(), name)
-           != worldDesc_.aiExpandingBuildings.end())
-            throw GameDataError(context + ": '" + name + "' is listed twice");
-        worldDesc_.aiExpandingBuildings.push_back(name);
+        if(value.type() != kaguya::LuaRef::TYPE_TABLE)
+            throw GameDataError(context + ": level " + std::to_string(i) + " is no list of building names (" + example
+                                + ")");
+        const std::string levelContext = context + ", level " + std::to_string(i);
+        std::vector<std::string> level =
+          readNameList(value.get<kaguya::LuaTable>(), levelContext, "building", "{ \"Woodcutter\", \"Quarry\" }");
+        for(const std::string& name : level)
+        {
+            if(std::find(all.begin(), all.end(), name) != all.end())
+                throw GameDataError(context + ": '" + name + "' is in two levels");
+            all.push_back(name);
+        }
+        worldDesc_.aiBasicEconomy.push_back(std::move(level));
     }
-    if(worldDesc_.aiExpandingBuildings.empty())
-        throw GameDataError(context + ": the list is empty");
+}
+
+void GameDataLoader::SetAIStartStockNoSurplus(const kaguya::LuaTable& data)
+{
+    const std::string context = "Start stock of the AI that is no surplus (rttr:SetAIStartStockNoSurplus)";
+    if(!worldDesc_.aiStartStockNoSurplus.empty())
+        throw GameDataError(context + " is defined twice");
+    worldDesc_.aiStartStockNoSurplus = readNameList(data, context, "ware", "{ \"Wood\", \"Boards\" }");
 }
 
 void loadGameData(WorldDescription& worldDesc)

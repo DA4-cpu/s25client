@@ -169,6 +169,11 @@ bool GameCommandFactory::SetToolMaterialPriorities(const std::vector<uint8_t>& v
     return AddGC(new gc::SetToolMaterialPriorities(values));
 }
 
+bool GameCommandFactory::SetClearingWoodcutter(const MapPoint pt, const bool clearing)
+{
+    return AddGC(new gc::SetClearingWoodcutter(pt, clearing));
+}
+
 bool GameCommandFactory::SetRegulatorValues(const unsigned regulator, const std::vector<uint8_t>& values)
 {
     return AddGC(new gc::SetRegulatorValues(static_cast<uint8_t>(regulator), values));

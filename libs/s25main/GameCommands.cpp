@@ -304,6 +304,20 @@ void SetRegulatorValues::Execute(GameWorld& world, uint8_t playerId)
     world.GetPlayer(playerId).GetResearch().SetRegulatorValues(content, regulator, values);
 }
 
+void SetClearingWoodcutter::Execute(GameWorld& world, uint8_t playerId)
+{
+    GamePlayer& player = world.GetPlayer(playerId);
+    if(!clearing)
+    {
+        player.SetClearingWoodcutter(pt_, false);
+        return;
+    }
+    // Only a woodcutter or its building site of the player
+    const auto* building = world.GetSpecObj<noBaseBuilding>(pt_);
+    if(building && building->GetPlayer() == playerId && building->GetBuildingType() == BuildingType::Woodcutter)
+        player.SetClearingWoodcutter(pt_, true);
+}
+
 void SetArmorAllowed::Execute(GameWorld& world, uint8_t playerId)
 {
     auto* const bld = world.GetSpecObj<nobMilitary>(pt_);

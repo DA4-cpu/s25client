@@ -64,9 +64,17 @@ struct EconomySnapshot
     helpers::EnumArray<unsigned, Job> inWarehousesPeople{};
     /// Building sites and buildings waiting for a worker of the job
     helpers::EnumArray<unsigned, Job> jobsWanted{};
+    /// Wares on their way to the building that asked for them (not to a warehouse). They left the stock already
+    helpers::EnumArray<unsigned, GoodType> inTransit{};
+    /// Input spaces of the building sites: the finished buildings will ask for these wares (any of `wares` for the
+    /// entries "any of", e.g. the food of a mine)
+    std::vector<OpenDemand> siteInputs;
 
     /// Sum of the open demand of all entries the ware can serve
     unsigned GetOpenDemand(GoodType good) const;
 };
 
 EconomySnapshot takeEconomySnapshot(const GamePlayer& player);
+/// Input spaces of a building of the type: the wares it will ask for when it works (one entry "any of" for buildings
+/// using any of their inputs, e.g. the food of a mine)
+void addInputSpaces(std::vector<OpenDemand>& demand, BuildingType bld);

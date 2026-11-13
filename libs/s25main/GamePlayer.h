@@ -186,6 +186,8 @@ public:
         ware_list.remove(&ware);
     }
     bool IsWareRegistred(const Ware& ware);
+    /// Wares outside the warehouses (on roads, at flags, waiting to leave a warehouse, on ships)
+    const std::list<Ware*>& GetWares() const { return ware_list; }
     bool IsWareDependent(const Ware& ware);
 
     /// Wares entering or leaving the stock of the player (inventory). Each change is counted in the economy statistic
@@ -197,6 +199,11 @@ public:
     void CountHelpersUsed(unsigned count);
     /// Exact statistic of the economy (see EconomyStatistics)
     const EconomyStatistics& GetEconomyStatistics() const { return economyStatistics_; }
+    /// AI: woodcutters (by position) that clear the land instead of supplying wood for good (game command
+    /// SetClearingWoodcutter)
+    bool IsClearingWoodcutter(MapPoint pt) const;
+    void SetClearingWoodcutter(MapPoint pt, bool clearing);
+    const std::vector<MapPoint>& GetClearingWoodcutters() const { return clearingWoodcutters_; }
     void IncreaseInventoryJob(const Job job, unsigned count) { global_inventory.Add(job, count); }
     void DecreaseInventoryJob(const Job job, unsigned count) { global_inventory.Remove(job, count); }
     void IncreaseInventoryJob(const ArmoredSoldier job, unsigned count) { global_inventory.Add(job, count); }
@@ -477,6 +484,7 @@ private:
     /// Research state of the civilization mode
     civ::PlayerResearch research_;
     EconomyStatistics economyStatistics_;
+    std::vector<MapPoint> clearingWoodcutters_;
 
     // TODO: Move to viewer. Mutable as a work-around
     mutable helpers::EnumArray<int8_t, Tool> tools_ordered_delta;

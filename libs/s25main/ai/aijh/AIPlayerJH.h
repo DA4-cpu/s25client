@@ -310,6 +310,14 @@ public:
     /// Civilization mode: place for a woodcutter around the point, at the best wood. clearing: at least
     /// EconomyPlanner::CLEARING_MIN_TREES trees in its reach and away from every forester (both radii)
     MapPoint FindWoodcutterPosition(const MapPoint& around, bool clearing);
+    /// Civilization mode: place for a quarry around the point with at least EconomyPlanner::QUARRY_MIN_STONE_PILES
+    /// stone piles in reach of the stonemason
+    MapPoint FindQuarryPosition(const MapPoint& around);
+    /// The best place for the resource around the point (like FindBestPosition) that also fulfills `condition`. The
+    /// places tried and not fitting are skipped (at most `maxTries`)
+    template<class T_Condition>
+    MapPoint FindBestPositionWhere(const MapPoint& pt, AIResource res, BuildingQuality size, unsigned radius,
+                                   unsigned borderReserve, const T_Condition& condition, unsigned maxTries = 8);
     /// Civilization mode: place for a forester in reach of the woodcutter at the point, not where clearing woodcutters
     /// work (both radii)
     MapPoint FindForesterPosition(const MapPoint& woodcutterPos, const std::vector<MapPoint>& clearingWoodcutters);

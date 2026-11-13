@@ -3229,20 +3229,49 @@ bool AIPlayerJH::PlaceBuilding(const BuildingType type, const MapPoint pos)
     return true;
 }
 
+template<class T_Condition>
+MapPoint AIPlayerJH::FindBestPositionWhere(const MapPoint& pt, const AIResource res, const BuildingQuality size,
+                                           const unsigned radius, const unsigned borderReserve,
+                                           const T_Condition& condition, const unsigned maxTries)
+{
+    resourceMaps[res].updateAround(pt, radius);
+    for(unsigned i = 0; i < maxTries; ++i)
+    {
+        const MapPoint pos = resourceMaps[res].findBestPosition(pt, size, radius, 1, borderReserve);
+        if(!pos.isValid() || condition(pos))
+            return pos;
+        // Not fitting: the next best one (the value is calculated again with the next update of the area)
+        resourceMaps[res].avoidPosition(pos);
+    }
+    return MapPoint::Invalid();
+}
+
 MapPoint AIPlayerJH::FindWoodcutterPosition(const MapPoint& around, const bool clearing)
 {
     constexpr unsigned searchRadius = 15;
-    const MapPoint pos = FindBestPosition(around, AIResource::Wood, BUILDING_SIZE[BuildingType::Woodcutter],
-                                          searchRadius, 1, AIConstruction::GetBorderReserve(BuildingType::Woodcutter));
-    if(!pos.isValid() || !clearing)
-        return pos;
     const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
     const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
-    if(civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius) < civai::EconomyPlanner::CLEARING_MIN_TREES)
-        return MapPoint::Invalid();
-    if(construction->OtherUsualBuildingInRadius(pos, woodcutterRadius + foresterRadius, BuildingType::Forester))
-        return MapPoint::Invalid();
-    return pos;
+    // Clearing: at least CLEARING_MIN_TREES trees in reach, far enough from foresters (their trees are for the
+    // woodcutters for good)
+    return FindBestPositionWhere(around, AIResource::Wood, BUILDING_SIZE[BuildingType::Woodcutter], searchRadius,
+                                 AIConstruction::GetBorderReserve(BuildingType::Woodcutter), [&](const MapPoint pos) {
+                                     return !clearing
+                                            || (civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius)
+                                                  >= civai::EconomyPlanner::CLEARING_MIN_TREES
+                                                && !construction->OtherUsualBuildingInRadius(
+                                                  pos, woodcutterRadius + foresterRadius, BuildingType::Forester));
+                                 });
+}
+
+MapPoint AIPlayerJH::FindQuarryPosition(const MapPoint& around)
+{
+    constexpr unsigned searchRadius = 15;
+    const unsigned radius = nofFarmhand::GetWorkRadius(Job::Stonemason);
+    return FindBestPositionWhere(around, AIResource::Stones, BUILDING_SIZE[BuildingType::Quarry], searchRadius,
+                                 AIConstruction::GetBorderReserve(BuildingType::Quarry), [&](const MapPoint pos) {
+                                     return civai::EconomyPlanner::CountStonePiles(player, pos, radius)
+                                            >= civai::EconomyPlanner::QUARRY_MIN_STONE_PILES;
+                                 });
 }
 
 MapPoint AIPlayerJH::FindForesterPosition(const MapPoint& woodcutterPos,
@@ -3250,21 +3279,17 @@ MapPoint AIPlayerJH::FindForesterPosition(const MapPoint& woodcutterPos,
 {
     const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
     const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
-    // In reach of the woodcutter: the best place to plant there
-    const MapPoint pos =
-      FindBestPosition(woodcutterPos, AIResource::Plantspace, BUILDING_SIZE[BuildingType::Forester], woodcutterRadius,
-                       1, AIConstruction::GetBorderReserve(BuildingType::Forester));
-    if(!pos.isValid())
-        return pos;
-    // Rules of the old AI: enough space to plant, not at the border
-    if(GetDensity(pos, AIResource::Plantspace, 7u) < 10u || GetDensity(pos, AIResource::Borderland, 1u) > 1u)
-        return MapPoint::Invalid();
-    for(const MapPoint clearingPos : clearingWoodcutters)
-    {
-        if(gwb.CalcDistance(pos, clearingPos) < woodcutterRadius + foresterRadius)
-            return MapPoint::Invalid();
-    }
-    return pos;
+    // In reach of the woodcutter, the best place to plant there. Rules of the old AI: enough space to plant, not at
+    // the border. Not near clearing woodcutters
+    return FindBestPositionWhere(
+      woodcutterPos, AIResource::Plantspace, BUILDING_SIZE[BuildingType::Forester], woodcutterRadius,
+      AIConstruction::GetBorderReserve(BuildingType::Forester), [&](const MapPoint pos) {
+          if(GetDensity(pos, AIResource::Plantspace, 7u) < 10u || GetDensity(pos, AIResource::Borderland, 1u) > 1u)
+              return false;
+          return !helpers::contains_if(clearingWoodcutters, [&](const MapPoint clearingPos) {
+              return gwb.CalcDistance(pos, clearingPos) < woodcutterRadius + foresterRadius;
+          });
+      });
 }
 
 void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingType bldToPlace,

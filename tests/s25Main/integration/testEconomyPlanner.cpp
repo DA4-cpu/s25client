@@ -4,6 +4,7 @@
 
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
+#include "SerializedGameData.h"
 #include "addons/const_addons.h"
 #include "ai/AIPlayer.h"
 #include "ai/aijh/AIConstruction.h"
@@ -17,10 +18,13 @@
 #include "factories/AIFactory.h"
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
+#include "worldFixtures/MockLocalGameState.h"
 #include "worldFixtures/WorldWithGCExecution.h"
 #include "nodeObjs/noDeposit.h"
+#include "nodeObjs/noGranite.h"
 #include "nodeObjs/noTree.h"
 #include "gameTypes/Inventory.h"
+#include "gameData/BuildingConsts.h"
 #include "gameData/ToolConsts.h"
 #include "gameData/WorldDescription.h"
 #include <boost/test/unit_test.hpp>
@@ -57,8 +61,9 @@ WorkshopDesc makeWorkshop(const std::string& name)
 }
 
 /// Loam (ware 0) collected from deposits (map object 0) by the pit (workshop 0), clay (ware 1) made of loam by the
-/// kiln (workshop 1). The technology "pottery" costs 5 clay. `expanding`: the list of ai.lua
-WorldDescription makeDesc(const std::vector<std::string>& expanding = {})
+/// kiln (workshop 1). The technology "pottery" costs 5 clay (or `techCost`). `expanding`: the list of ai.lua
+WorldDescription makeDesc(const std::vector<std::string>& expanding = {},
+                          const decltype(TechnologyDesc::cost)& techCost = {{"Clay", 5}})
 {
     WorldDescription desc;
     desc.wares.push_back(makeWare("Loam"));
@@ -81,7 +86,7 @@ WorldDescription makeDesc(const std::vector<std::string>& expanding = {})
     TechnologyDesc tech;
     tech.name = "pottery";
     tech.title = "Pottery";
-    tech.cost = {{"Clay", 5}};
+    tech.cost = techCost;
     desc.technologies.add(tech);
     desc.aiExpandingBuildings = expanding;
     return desc;
@@ -314,7 +319,8 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderKeepsItsMaterial, PlannerFixture)
     const civai::Order& pit = getOrder(PIT);
     BOOST_TEST((pit.state == civai::OrderState::Blocked));
     BOOST_TEST_INFO(pit.reason);
-    BOOST_TEST(pit.reason.find("Baumaterial fehlt") == 0u);
+    // Exactly what is missing and why
+    BOOST_TEST(pit.reason.find("Boards fehlt: 5 nötig, 3 frei (Lager 3") == 0u);
     // No trees: no way to more boards, both reasons are shown
     BOOST_TEST(pit.reason.find("kein Weg zu") != std::string::npos);
     // The 3 boards are kept for the pit: the old AI cannot use them for other buildings (e.g. military buildings)
@@ -329,18 +335,207 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderKeepsItsMaterial, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterNeedsEnoughTrees, PlannerFixture)
 {
-    // Woodcutters expand only where at least CLEARING_MIN_TREES trees are in reach
-    startGame(makeDesc({"Woodcutter"}));
+    // Clearing woodcutters come where at least CLEARING_MIN_TREES trees are
+    startGame(makeDesc());
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
     placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES - 1u);
     startAI();
     step();
+    BOOST_TEST(findOrder(BuildingType::Woodcutter) == -1);
     BOOST_TEST(!findSite(BuildingType::Woodcutter).isValid());
-    const civai::Order& order = getOrder(BuildingType::Woodcutter);
-    BOOST_TEST((order.kind == civai::OrderKind::Expanding));
-    BOOST_TEST(order.clearing);
+}
+
+BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterDespiteWoodInStock, PlannerFixture)
+{
+    // Lots of wood in stock does not matter: the trees on the map do (and the woodcutter is no part of ai.lua here)
+    startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(GoodType::Wood, 40), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    startAI();
+    step();
+    const MapPoint pos = findSite(BuildingType::Woodcutter);
+    BOOST_TEST_REQUIRE(pos.isValid());
+    BOOST_TEST(planner()->IsClearingWoodcutter(pos));
+    // The mark is a game command, kept in the savegame
+    BOOST_TEST(world.GetPlayer(curPlayer).IsClearingWoodcutter(pos));
+}
+
+BOOST_FIXTURE_TEST_CASE(QuarryAtOneStonePile, PlannerFixture)
+{
+    startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(GoodType::PickAxe, 2), true);
+    placeObject(Position(-4, 4), [](MapPoint) { return new noGranite(GraniteType::One, 5); });
+    startAI();
+    step();
+    // Stones in stock (40) do not matter
+    const MapPoint pos = findSite(BuildingType::Quarry);
+    BOOST_TEST_REQUIRE(pos.isValid());
+    BOOST_TEST(civai::EconomyPlanner::CountStonePiles(world.GetPlayer(curPlayer), pos, 8) >= 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(NoOrdersForInputsOfABuildingThatCannotWork, PlannerFixture)
+{
+    // The glassworks needs loam and sand. Loam can be made (pit at the deposits), sand not: no pit for it (like no
+    // well for a brewery without grain)
+    WorldDescription desc = makeDesc();
+    desc.wares.push_back(makeWare("Sand"));
+    desc.wares.push_back(makeWare("Glass"));
+    WorkshopDesc glassworks = makeWorkshop("Glassworks");
+    glassworks.inputs = {{"Loam"}, {"Sand"}};
+    glassworks.output = {"Glass"};
+    desc.workshops.push_back(glassworks);
+    TechnologyDesc tech;
+    tech.name = "windows";
+    tech.title = "Windows";
+    tech.cost = {{"Glass", 2}};
+    desc.technologies.add(tech);
+    startGame(desc);
+    placeDeposits();
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 1));
+    step();
+    step();
+    const civai::Order& order = getOrder(getCustomBuilding(2));
     BOOST_TEST((order.state == civai::OrderState::Blocked));
-    BOOST_TEST(order.reason == "kein Bauplatz");
+    BOOST_TEST_INFO(order.reason);
+    BOOST_TEST(order.reason.find("kein Weg zu SandTitle") != std::string::npos);
+    BOOST_TEST(findOrder(PIT) == -1);
+    BOOST_TEST(!findSite(PIT).isValid());
+}
+
+BOOST_FIXTURE_TEST_CASE(MissingInputIsKeptForTheOrderAbove, PlannerFixture)
+{
+    // Clay is short (research): the kiln is needed, but the 8 loam do not suffice for it (it works fast) and no loam
+    // can be made. The brickworks (expanding, slow) would get by with them, but it comes below the kiln: the loam is
+    // kept for the kiln
+    WorldDescription desc = makeDesc({"Brickworks"});
+    desc.wares.push_back(makeWare("Brick"));
+    WorkshopDesc brickworks = makeWorkshop("Brickworks");
+    brickworks.inputs = {{"Loam"}};
+    brickworks.output = {"Brick"};
+    brickworks.workTime = 200;
+    desc.workshops.push_back(brickworks);
+    TechnologyDesc tech;
+    tech.name = "walls";
+    tech.title = "Walls";
+    tech.cost = {{"Brick", 1}};
+    desc.technologies.add(tech);
+    startGame(desc);
+    hq().AddToInventory(GoodCounts::make(LOAM, 8), true);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    const int kiln = findOrder(KILN);
+    BOOST_TEST_REQUIRE(kiln >= 0);
+    BOOST_TEST(list()[kiln]->inputsMissing == std::vector<GoodType>{LOAM});
+    const civai::Order& order = getOrder(getCustomBuilding(2));
+    BOOST_TEST_INFO(order.reason);
+    BOOST_TEST(order.reason == "LoamTitle vorbehalten für Kiln");
+    BOOST_TEST(!findSite(getCustomBuilding(2)).isValid());
+}
+
+BOOST_FIXTURE_TEST_CASE(BasicEconomyComesFirst, PlannerFixture)
+{
+    // The research costs loam and clay. Loam is short first (pit), but the kiln is in the first level of the basic
+    // economy: it comes first among the needed orders
+    WorldDescription desc = makeDesc({}, {{"Loam", 5}, {"Clay", 5}});
+    desc.aiBasicEconomy = {{"Kiln"}};
+    startGame(desc);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    planner()->Step();
+    const int kiln = findOrder(KILN), pit = findOrder(PIT);
+    BOOST_TEST_REQUIRE(kiln >= 0);
+    BOOST_TEST_REQUIRE(pit >= 0);
+    BOOST_TEST(kiln < pit);
+}
+
+BOOST_FIXTURE_TEST_CASE(StartStockIsNoSurplus, PlannerFixture)
+{
+    WorldDescription desc = makeDesc();
+    desc.aiStartStockNoSurplus = {"Loam"};
+    startGame(desc);
+    hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
+    placeDeposits();
+    startAI();
+    step();
+    BOOST_TEST(ware(LOAM).startStockLeft == 20u);
+    BOOST_TEST((ware(LOAM).state == civai::SupplyState::Normal));
+    BOOST_TEST(findOrder(KILN) == -1);
+}
+
+BOOST_FIXTURE_TEST_CASE(PlannedWaresOfSites, PlannerFixture)
+{
+    startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
+    startAI();
+    step();
+    BOOST_TEST_REQUIRE(findSite(KILN).isValid());
+    step();
+    // The kiln site will ask for its input spaces of loam: planned, not free anymore
+    const unsigned spaces = BLD_WORK_DESC[KILN].numSpacesPerWare;
+    BOOST_TEST(ware(LOAM).planned == spaces);
+    BOOST_TEST(ware(LOAM).free == 20 - static_cast<int>(spaces));
+    BOOST_TEST(ware(LOAM).inTransit == 0u);
+}
+
+BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
+{
+    // 1 board, promised to a barracks site, and no boards made. The clearing woodcutter needs 2 and is part of the
+    // board chain (sawmill without wood): it is not blocked, the barracks site (nothing built in yet) is cancelled for
+    // it
+    startGame(makeDesc(), 1);
+    hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    MapPoint sitePos = MapPoint::Invalid();
+    for(const Position offset : {Position(5, -3), Position(6, 2), Position(3, 5), Position(-3, -4)})
+    {
+        const MapPoint pt = world.MakeMapPoint(hqPos + offset);
+        if(world.GetBQ(pt, curPlayer) >= BuildingQuality::Hut)
+        {
+            world.SetBuildingSite(BuildingType::Barracks, pt, curPlayer);
+            sitePos = pt;
+            break;
+        }
+    }
+    BOOST_TEST_REQUIRE(sitePos.isValid());
+    BOOST_TEST_REQUIRE(findSite(BuildingType::Barracks).isValid());
+    startAI();
+    step();
+    const civai::Order& order = getOrder(BuildingType::Woodcutter);
+    BOOST_TEST(order.selfSolving);
+    BOOST_TEST_INFO(order.reason);
+    BOOST_TEST(order.reason.find("Vorrang") == 0u);
+    BOOST_TEST(order.reason.find("abgebrochen: Barracks") != std::string::npos);
+    BOOST_TEST(!findSite(BuildingType::Barracks).isValid());
+    // The board is free again, one more comes: the woodcutter gets them before anybody else
+    hq().AddToInventory(GoodCounts::make(GoodType::Boards, 1), true);
+    step();
+    BOOST_TEST(findSite(BuildingType::Woodcutter).isValid());
+}
+
+BOOST_FIXTURE_TEST_CASE(ClearingMarkIsSaved, PlannerFixture)
+{
+    startGame(makeDesc());
+    const MapPoint pt = world.MakeMapPoint(hqPos + Position(4, 2));
+    world.SetBuildingSite(BuildingType::Woodcutter, pt, curPlayer);
+    const MapPoint other = world.MakeMapPoint(hqPos + Position(-4, 2));
+    // Only woodcutters are marked
+    this->SetClearingWoodcutter(other, true);
+    this->SetClearingWoodcutter(pt, true);
+    BOOST_TEST(world.GetPlayer(curPlayer).GetClearingWoodcutters() == std::vector<MapPoint>{pt});
+
+    SerializedGameData sgd;
+    sgd.MakeSnapshot(*game);
+    MockLocalGameState lgs;
+    em.Clear();
+    world.Unload();
+    sgd.ReadSnapshot(*game, lgs);
+    BOOST_TEST(world.GetPlayer(curPlayer).IsClearingWoodcutter(pt));
+
+    this->SetClearingWoodcutter(pt, false);
+    BOOST_TEST(world.GetPlayer(curPlayer).GetClearingWoodcutters().empty());
 }
 
 BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterIsPlacedAtTheForest, PlannerFixture)

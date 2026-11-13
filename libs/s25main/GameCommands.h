@@ -640,6 +640,28 @@ private:
     }
 };
 
+/// AI of the civilization mode: mark the woodcutter (or its building site) at the point as clearing the land (no
+/// forester, demolished when no trees are left) or as a woodcutter for good. Kept in the savegame
+class SetClearingWoodcutter : public Coords
+{
+    GC_FRIEND_DECL;
+    const bool clearing;
+
+protected:
+    SetClearingWoodcutter(const MapPoint pt, bool clearing)
+        : Coords(GCType::SetClearingWoodcutter, pt), clearing(clearing)
+    {}
+    SetClearingWoodcutter(Serializer& ser) : Coords(GCType::SetClearingWoodcutter, ser), clearing(ser.PopBool()) {}
+
+public:
+    void Execute(GameWorld& world, uint8_t playerId) override;
+    void Serialize(Serializer& ser) const override
+    {
+        Coords::Serialize(ser);
+        ser.PushBool(clearing);
+    }
+};
+
 /// Civilization mode: Set an own regulator (rttr:AddRegulator), value 0..10 per entry
 class SetRegulatorValues : public GameCommand
 {

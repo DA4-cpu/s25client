@@ -67,10 +67,11 @@ enum class GCType : uint8_t
     SetKnowledgeDistribution,
     SetToolMaterialPriorities,
     SetRegulatorValues,
+    SetClearingWoodcutter,
 };
 constexpr auto maxEnumValue(GCType)
 {
-    return GCType::SetRegulatorValues;
+    return GCType::SetClearingWoodcutter;
 }
 
 class GameCommand

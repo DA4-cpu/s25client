@@ -81,6 +81,8 @@ public:
     /// Civilization mode, tool reform: Set the regulator "Werkzeuge" (priority 0..10 per tool material)
     bool SetToolMaterialPriorities(const std::vector<uint8_t>& values);
     bool SetRegulatorValues(unsigned regulator, const std::vector<uint8_t>& values);
+    /// AI: mark the woodcutter at the point as clearing the land (or as a woodcutter for good)
+    bool SetClearingWoodcutter(MapPoint pt, bool clearing);
     /// Starts Preparation of an sea expedition in a habor
     bool StartStopExpedition(MapPoint pt, bool start);
     /// Lets a ship found a colony

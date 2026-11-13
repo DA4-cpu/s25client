@@ -351,6 +351,54 @@ BOOST_AUTO_TEST_CASE(ExpandingBuildingsOfTheGameData)
     const auto copperworks = techTree.GetContent().FindBuilding("Copperworks");
     BOOST_TEST_REQUIRE(copperworks.has_value());
     BOOST_TEST(techTree.IsAIExpanding(*copperworks));
+    // Basic economy of the user: woodcutter, quarry, sawmill, forester first; mines, smelters and smiths second
+    for(const BuildingType bld :
+        {BuildingType::Woodcutter, BuildingType::Quarry, BuildingType::Sawmill, BuildingType::Forester})
+        BOOST_TEST(techTree.GetAIBasicEconomyLevel(bld) == 1u);
+    for(const BuildingType bld : {BuildingType::IronMine, BuildingType::CoalMine, BuildingType::Charburner,
+                                  BuildingType::Metalworks, BuildingType::Ironsmelter, BuildingType::Armory})
+        BOOST_TEST(techTree.GetAIBasicEconomyLevel(bld) == 2u);
+    BOOST_TEST(techTree.GetAIBasicEconomyLevel(*copperworks) == 2u);
+    BOOST_TEST(techTree.GetAIBasicEconomyLevel(BuildingType::Brewery) == 0u);
+    for(const GoodType good : {GoodType::Stones, GoodType::Wood, GoodType::Boards})
+        BOOST_TEST(techTree.IsAIStartStockNoSurplus(good));
+    BOOST_TEST(!techTree.IsAIStartStockNoSurplus(GoodType::IronOre));
+}
+
+BOOST_AUTO_TEST_CASE(BasicEconomyAndStartStockFromLua)
+{
+    const std::string workshop = R"(
+rttr:AddWare{ name = "Loam", look = "Stones", transport = "Stones" }
+rttr:AddWorkshop{ name = "Pit", size = "small", cost = { Boards = 2 }, look = "Quarry",
+    worker = { tool = "none", look = "Stonemason" }, output = "Loam", workTime = 5 }
+)";
+    WorldDescription desc;
+    BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIBasicEconomy{ { "Woodcutter", "Pit" }, { "IronMine" } }
+rttr:SetAIStartStockNoSurplus{ "Wood", "Loam" })",
+                               desc));
+    BOOST_TEST(desc.aiBasicEconomy.size() == 2u);
+    const civ::TechTree techTree(desc);
+    BOOST_TEST(techTree.GetAIBasicEconomyLevel(BuildingType::Woodcutter) == 1u);
+    BOOST_TEST(techTree.GetAIBasicEconomyLevel(BuildingType::Custom0) == 1u);
+    BOOST_TEST(techTree.GetAIBasicEconomyLevel(BuildingType::IronMine) == 2u);
+    BOOST_TEST(techTree.GetAIBasicEconomyLevel(BuildingType::Sawmill) == 0u);
+    BOOST_TEST(techTree.IsAIStartStockNoSurplus(GoodType::Wood));
+    BOOST_TEST(techTree.IsAIStartStockNoSurplus(GoodType::Custom0));
+    BOOST_TEST(!techTree.IsAIStartStockNoSurplus(GoodType::Boards));
+
+    for(const std::string& invalid :
+        {std::string(R"(rttr:SetAIBasicEconomy{ { "Woodcutter" }, { "Woodcutter" } })"),
+         std::string(R"(rttr:SetAIBasicEconomy{ "Woodcutter" })"), std::string(R"(rttr:SetAIBasicEconomy{ })"),
+         std::string(R"(rttr:SetAIBasicEconomy{ { } })"), std::string(R"(rttr:SetAIStartStockNoSurplus{ "Wood", 2 })"),
+         std::string(R"(rttr:SetAIStartStockNoSurplus{ "Wood", "Wood" })")})
+    {
+        WorldDescription invalidDesc;
+        BOOST_TEST_INFO(invalid);
+        BOOST_TEST(!loadLua(workshop + invalid, invalidDesc));
+    }
+    WorldDescription unknownDesc;
+    BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIStartStockNoSurplus{ "Wod" })", unknownDesc));
+    BOOST_CHECK_THROW(civ::TechTree{unknownDesc}, GameDataError);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

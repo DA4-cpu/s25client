@@ -27,6 +27,7 @@
 #include "figures/nofFlagWorker.h"
 #include "helpers/containerUtils.h"
 #include "helpers/mathFuncs.h"
+#include "helpers/serializePoint.h"
 #include "lua/LuaInterfaceGame.h"
 #include "notifications/ToolNote.h"
 #include "pathfinding/RoadPathFinder.h"
@@ -234,6 +235,9 @@ void GamePlayer::Serialize(SerializedGameData& sgd) const
 
     sgd.PushBool(emergency);
     economyStatistics_.Serialize(sgd);
+    sgd.PushUnsignedInt(static_cast<unsigned>(clearingWoodcutters_.size()));
+    for(const MapPoint pt : clearingWoodcutters_)
+        helpers::pushPoint(sgd, pt);
 
     // Civilization mode (only stored if active so normal games don't depend on the tech tree data)
     const bool hasResearch = civ::isEnabled(world);
@@ -444,6 +448,13 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
     economyStatistics_ = EconomyStatistics();
     if(sgd.GetGameDataVersion() >= 26)
         economyStatistics_.Deserialize(sgd);
+    clearingWoodcutters_.clear();
+    if(sgd.GetGameDataVersion() >= 27)
+    {
+        clearingWoodcutters_.resize(sgd.PopUnsignedInt());
+        for(MapPoint& pt : clearingWoodcutters_)
+            pt = sgd.PopMapPoint();
+    }
 
     research_ = civ::PlayerResearch();
     if(sgd.GetGameDataVersion() >= 16 && sgd.PopBool())
@@ -2008,6 +2019,19 @@ helpers::EnumArray<unsigned, Job> GamePlayer::GetNumJobsWanted() const
     for(const JobNeeded& entry : jobs_wanted)
         ++result[entry.job];
     return result;
+}
+
+bool GamePlayer::IsClearingWoodcutter(const MapPoint pt) const
+{
+    return helpers::contains(clearingWoodcutters_, pt);
+}
+
+void GamePlayer::SetClearingWoodcutter(const MapPoint pt, const bool clearing)
+{
+    if(!clearing)
+        helpers::erase(clearingWoodcutters_, pt);
+    else if(!IsClearingWoodcutter(pt))
+        clearingWoodcutters_.push_back(pt);
 }
 
 void GamePlayer::CountHelpersCreated(const unsigned count)

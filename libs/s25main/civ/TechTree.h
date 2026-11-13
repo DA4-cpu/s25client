@@ -92,6 +92,10 @@ public:
     const KnowledgePoints& GetBuildingKnowledge(BuildingType bld) const { return buildingKnowledge_[bld]; }
     /// AI: The building may be built to make the economy bigger (ai.lua). Others only when the economy needs them
     bool IsAIExpanding(BuildingType bld) const { return aiExpanding_[bld]; }
+    /// AI: level of the building in the basic economy (ai.lua), 1 most important. 0: not part of it
+    unsigned GetAIBasicEconomyLevel(BuildingType bld) const { return aiBasicLevel_[bld]; }
+    /// AI: the start stock of the ware is no surplus (ai.lua)
+    bool IsAIStartStockNoSurplus(GoodType good) const { return aiStartStockNoSurplus_[good]; }
     /// Byproducts of the building (in order of definition)
     const std::vector<Byproduct>& GetByproducts(BuildingType bld) const { return byproducts_[bld]; }
     /// Wares, workshops and tags defined in lua
@@ -104,6 +108,8 @@ private:
     helpers::EnumArray<bool, BuildingType> lockedAtStart_;
     helpers::EnumArray<KnowledgePoints, BuildingType> buildingKnowledge_;
     helpers::EnumArray<bool, BuildingType> aiExpanding_;
+    helpers::EnumArray<unsigned, BuildingType> aiBasicLevel_;
+    helpers::EnumArray<bool, GoodType> aiStartStockNoSurplus_;
     helpers::EnumArray<std::vector<Byproduct>, BuildingType> byproducts_;
 };
 

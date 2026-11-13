@@ -183,13 +183,18 @@ void EconomyPlanner::Step()
     currentGF_ = player_.GetGameWorld().GetEvMgr().GetCurrentGF();
     snapshot_ = takeEconomySnapshot(player_);
     wayCache_.clear();
+    chainCache_.clear();
+    cancelledThisStep_ = false;
     helpers::erase_if(failedWays_, [this](const FailedWay& way) { return way.situation != GetSituation(); });
-    UpdateWareStatus();
     UpdateWorkingBuildings();
     UpdatePlacedOrders();
+    UpdatePlanned();
+    UpdateWareStatus();
     CreateOrders();
     freeMaterial_ = aijh_.GetConstruction().GetFreeConstructionMaterial();
+    stepFreeMaterial_ = freeMaterial_;
     reservedMaterial_ = {};
+    MarkSelfSolving();
     ProcessList();
     // Material needed orders wait for: no other building takes it (also not the military buildings of the old AI)
     aijh_.GetConstruction().SetPlannerReservation(reservedMaterial_);
@@ -202,9 +207,87 @@ void EconomyPlanner::Step()
 // ---------------------------------------------------------------------------------------------------------------------
 // What the AI knows: state of the wares and of the buildings
 
+bool EconomyPlanner::IsPlanned(const Order& order) const
+{
+    // Expanding orders are wishes: planned only once they are placed (building site)
+    if(order.state == OrderState::Placed || order.kind != OrderKind::Needed)
+        return false;
+    return !(order.state == OrderState::Blocked && order.retry.kind == RetryCondition::Kind::Situation);
+}
+
+void EconomyPlanner::AddPlanned(const BuildingType bld, const bool updateStatus, const bool withCosts,
+                                const bool withInputs)
+{
+    std::vector<OpenDemand> demand;
+    if(withCosts)
+    {
+        for(const CostEntry& entry : BUILDING_COSTS[bld])
+            demand.push_back({entry.wares, entry.amount, WareUse::Construction});
+    }
+    if(withInputs && BuildingProperties::IsUsual(bld))
+        addInputSpaces(demand, bld);
+    for(OpenDemand& entry : demand)
+    {
+        if(entry.wares.size() != 1u)
+        {
+            plannedAnyOf_.push_back(entry);
+            anyOfDemand_.push_back(std::move(entry));
+            continue;
+        }
+        const GoodType good = entry.wares.front();
+        planned_[good] += entry.amount;
+        if(updateStatus)
+        {
+            wares_[good].planned += entry.amount;
+            wares_[good].free -= static_cast<int>(entry.amount);
+        }
+    }
+}
+
+void EconomyPlanner::UpdatePlanned()
+{
+    std::fill(planned_.begin(), planned_.end(), 0u);
+    plannedAnyOf_.clear();
+    plannedOrderIds_.clear();
+    anyOfDemand_.clear();
+    for(const OpenDemand& demand : snapshot_.openDemand)
+    {
+        if(demand.wares.size() > 1u)
+            anyOfDemand_.push_back(demand);
+    }
+    // Input spaces of the building sites: the buildings will ask for them
+    for(const OpenDemand& demand : snapshot_.siteInputs)
+    {
+        if(demand.wares.size() == 1u)
+            planned_[demand.wares.front()] += demand.amount;
+        else
+        {
+            plannedAnyOf_.push_back(demand);
+            anyOfDemand_.push_back(demand);
+        }
+    }
+    // Building sites ordered whose commands are on their way (also those of the old AI)
+    const AIJH::AIConstruction& construction = aijh_.GetConstruction();
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        for(unsigned i = construction.GetNumPendingSites(bld); i > 0; --i)
+            AddPlanned(bld, false, true, true);
+    }
+    // Needed orders of the list that will be built when the resources are there: their construction material (their
+    // inputs count once they are placed, otherwise several orders waiting for the same input block each other)
+    for(const Order& order : orders_)
+    {
+        if(!IsPlanned(order))
+            continue;
+        AddPlanned(order.building, false, true, false);
+        plannedOrderIds_.push_back(order.id);
+    }
+}
+
 void EconomyPlanner::UpdateWareStatus()
 {
     const EconomyStatistics& stats = player_.GetEconomyStatistics();
+    const civ::TechTree& techTree = player_.GetGameWorld().GetTechTree();
     const double coveredMinutes = stats.GetCoveredMinutes(BALANCE_MINUTES, currentGF_);
     for(const auto good : helpers::enumRange<GoodType>())
     {
@@ -219,17 +302,30 @@ void EconomyPlanner::UpdateWareStatus()
             if(demand.wares.size() == 1u && demand.wares.front() == good)
                 status.openDemand += demand.amount;
         }
+        status.inTransit = snapshot_.inTransit[good];
+        status.planned = planned_[good];
+        status.free = static_cast<int>(status.stock) - static_cast<int>(status.openDemand + status.planned);
+        // Start stock (wares added, not produced) not used up yet
+        status.startStockLeft = 0;
+        if(techTree.IsAIStartStockNoSurplus(good))
+        {
+            uint32_t used = 0;
+            for(const auto use : helpers::enumRange<WareUse>())
+                used += stats.GetTotalUsed(good, use);
+            const uint32_t added = stats.GetTotalGained(good, WareSource::Added);
+            status.startStockLeft = added > used ? added - used : 0u;
+        }
         const double threshold = std::max(static_cast<double>(MIN_STOCK), SURPLUS_FACTOR * status.consumptionPerMinute);
-        if(status.balance < 0 || status.openDemand > status.stock)
+        if(status.balance < 0 || status.free < 0)
             status.state = SupplyState::Shortage;
-        else if(status.stock > threshold)
+        else if(status.free - static_cast<int>(status.startStockLeft) > threshold)
             status.state = SupplyState::Surplus;
         else
             status.state = SupplyState::Normal;
-        if(status.openDemand > status.stock)
+        if(status.free < 0)
             status.minutesUntilEmpty = 0;
         else if(status.balance < 0)
-            status.minutesUntilEmpty = status.stock / (-status.balance / coveredMinutes);
+            status.minutesUntilEmpty = status.free / (-status.balance / coveredMinutes);
         else
             status.minutesUntilEmpty = std::numeric_limits<double>::infinity();
     }
@@ -251,9 +347,23 @@ void EconomyPlanner::UpdateWorkingBuildings()
         }
     }
     workingSince_ = std::move(working);
-    helpers::erase_if(clearingWoodcutters_, [this](const MapPoint pt) {
-        const auto* building = player_.GetGameWorld().GetSpecObj<noBaseBuilding>(pt);
-        return !building || building->GetBuildingType() != BuildingType::Woodcutter;
+
+    // Clearing woodcutters: marked in the game (savegame). Marks of woodcutters that are gone are removed
+    const GameWorldBase& world = player_.GetGameWorld();
+    const AIJH::AIConstruction& construction = aijh_.GetConstruction();
+    const auto isWoodcutter = [&](const MapPoint pt) {
+        const auto* building = world.GetSpecObj<noBaseBuilding>(pt);
+        return building && building->GetPlayer() == player_.GetPlayerId()
+               && building->GetBuildingType() == BuildingType::Woodcutter;
+    };
+    for(const MapPoint pt : player_.GetClearingWoodcutters())
+    {
+        if(!isWoodcutter(pt) && !construction.IsSitePending(pt))
+            aijh_.GetInterface().SetClearingWoodcutter(pt, false);
+    }
+    // Placed by this planner, mark not executed yet: until it is in the game or the site is gone
+    helpers::erase_if(clearingPending_, [&](const MapPoint pt) {
+        return player_.IsClearingWoodcutter(pt) || (!isWoodcutter(pt) && !construction.IsSitePending(pt));
     });
 }
 
@@ -277,44 +387,15 @@ bool EconomyPlanner::InputSuffices(const GoodType input, const Recipe& consumer)
     const WareStatus& status = wares_[input];
     if(status.balance < 0)
         return false;
-    // Consumers which are ordered or built but not measured yet will use the ware too: the balance does not show them
-    const double pending = GetUnmeasuredConsumption(input);
-    const double coveredMinutes = player_.GetEconomyStatistics().GetCoveredMinutes(BALANCE_MINUTES, currentGF_);
-    if(status.balance > 0 && status.balance / coveredMinutes > pending)
+    // Free: stock minus what is asked for and planned
+    const int free = status.free;
+    if(status.balance > 0 && free >= 0)
         return true;
-    // No surplus left: enough stock for what is used now, what the unmeasured consumers and the new building would use
-    // by their work times
-    const double needed =
-      std::max(static_cast<double>(MIN_STOCK),
-               SURPLUS_FACTOR * (status.consumptionPerMinute + pending + consumer.nominalStepsPerMinute));
-    return status.stock >= needed;
-}
-
-double EconomyPlanner::GetUnmeasuredConsumption(const GoodType input) const
-{
-    // Consumers of the ware which do not work for a full balance length yet: building sites (also those whose command
-    // is still on its way), buildings without worker or starting up. Each by the work time of its recipe
-    const unsigned startupGFs = BALANCE_MINUTES * EconomyStatistics::GetGFsPerMinute();
-    const std::vector<Recipe>& recipes = civAI_.GetGraph().GetRecipes();
-    double result = 0;
-    std::vector<BuildingType> counted;
-    for(const unsigned idx : consumers_[input])
-    {
-        const Recipe& recipe = recipes[idx];
-        if(helpers::contains(counted, recipe.building))
-            continue;
-        counted.push_back(recipe.building);
-        unsigned num = snapshot_.buildings[recipe.building].numSites;
-        for(const nobUsual* building : player_.GetBuildingRegister().GetBuildings(recipe.building))
-        {
-            const auto it = workingSince_.find(building->GetPos());
-            if(it == workingSince_.end() || it->second + startupGFs > currentGF_)
-                ++num;
-        }
-        num += aijh_.GetConstruction().GetNumPendingSites(recipe.building);
-        result += num * recipe.nominalStepsPerMinute;
-    }
-    return result;
+    // Nothing more produced than used: enough free stock for what is used now and what the new building would use by
+    // its work time
+    const double needed = std::max(static_cast<double>(MIN_STOCK),
+                                   SURPLUS_FACTOR * (status.consumptionPerMinute + consumer.nominalStepsPerMinute));
+    return free >= needed;
 }
 
 unsigned EconomyPlanner::GetSituation() const
@@ -360,7 +441,7 @@ EconomyPlanner::WayCheck EconomyPlanner::CheckWay(const unsigned recipeIdx, cons
         return result;
     }
     result.blocked = false;
-    if(numWorking > 0 && productivity < GOOD_PRODUCTIVITY)
+    if(numWorking > 0 && productivity < HIGH_PRODUCTIVITY * 100)
     {
         // The existing ones lag behind: no new building, find out why
         result.numNew = 0;
@@ -382,6 +463,7 @@ EconomyPlanner::WayCheck EconomyPlanner::CheckWay(const unsigned recipeIdx, cons
                 if(!ways.empty())
                     inputReason += " (" + ways.front().reason + ")";
             }
+            result.missingInputs.push_back(input);
             return {false, 0u};
         }
         return {true, ways.front().numNew};
@@ -527,14 +609,6 @@ void EconomyPlanner::Remove(const unsigned id)
     }
 }
 
-bool EconomyPlanner::HasOrder(const BuildingType bld, const GoodType forWare, const bool consumer) const
-{
-    return helpers::contains_if(orders_, [&](const Order& order) {
-        return order.building == bld && order.forWare == forWare && order.consumer == consumer
-               && order.kind == OrderKind::Needed;
-    });
-}
-
 bool EconomyPlanner::HasProducerOrder(const GoodType good) const
 {
     return helpers::contains_if(orders_, [good](const Order& order) {
@@ -561,23 +635,20 @@ bool EconomyPlanner::IsInChain(unsigned orderId, const GoodType good, const Buil
 
 bool EconomyPlanner::IsClearingWoodcutter(const MapPoint pt) const
 {
-    return helpers::contains(clearingWoodcutters_, pt);
+    return player_.IsClearingWoodcutter(pt) || helpers::contains(clearingPending_, pt);
 }
 
 std::vector<const Order*> EconomyPlanner::GetList() const
 {
-    // Roots: needed before expanding. Needed: shortages by urgency, then the rest (surpluses, helpers, trees) in order
-    // of creation. Expanding in order of their sequence (blocked ones moved to the end). The orders created for an
-    // order come directly above it
-    std::vector<const Order*> roots;
-    for(const Order& order : orders_)
-    {
-        if(order.parent == 0)
-            roots.push_back(&order);
-    }
+    // 1. Self-solving orders (they get the material they lack before everybody else), then needed, then expanding.
+    // 2. Within these the levels of the basic economy (ai.lua), then all other buildings.
+    // 3. Needed: shortages by urgency (minutes until empty), then the rest (surpluses, helpers, trees) in order of
+    //    creation. Expanding: in order of their sequence (blocked ones moved to the end).
+    // The orders created for an order come above it (an order created for another one is needed and moves up to its
+    // own level if that is better)
     const auto urgency = [this](const Order& order) {
         if(order.kind == OrderKind::Expanding)
-            return std::numeric_limits<double>::max();
+            return 0.;
         if(order.building == BuildingType::Storehouse)
             return 0.;
         const GoodType good = order.building == BuildingType::Forester ? GoodType::Wood : order.forWare;
@@ -585,29 +656,85 @@ std::vector<const Order*> EconomyPlanner::GetList() const
             return std::numeric_limits<double>::max() / 2;
         return wares_[good].minutesUntilEmpty;
     };
-    std::stable_sort(roots.begin(), roots.end(), [&](const Order* lhs, const Order* rhs) {
-        const double l = urgency(*lhs), r = urgency(*rhs);
-        if(l != r)
-            return l < r;
-        return lhs->sequence < rhs->sequence;
+    struct Entry
+    {
+        const Order* order;
+        unsigned group, level;
+        double urgency;
+        unsigned rootSequence, depth;
+    };
+    std::vector<Entry> entries;
+    entries.reserve(orders_.size());
+    for(const Order& order : orders_)
+    {
+        const Order* root = &order;
+        unsigned depth = 0;
+        while(root->parent != 0)
+        {
+            const Order* parent = Find(root->parent);
+            if(!parent)
+                break;
+            root = parent;
+            ++depth;
+        }
+        const unsigned group = order.selfSolving ? 0u : root->kind == OrderKind::Needed ? 1u : 2u;
+        entries.push_back({&order, group, GetEffectiveLevel(order), urgency(*root), root->sequence, depth});
+    }
+    std::stable_sort(entries.begin(), entries.end(), [](const Entry& lhs, const Entry& rhs) {
+        if(lhs.group != rhs.group)
+            return lhs.group < rhs.group;
+        if(lhs.level != rhs.level)
+            return lhs.level < rhs.level;
+        if(lhs.urgency != rhs.urgency)
+            return lhs.urgency < rhs.urgency;
+        if(lhs.rootSequence != rhs.rootSequence)
+            return lhs.rootSequence < rhs.rootSequence;
+        if(lhs.depth != rhs.depth)
+            return lhs.depth > rhs.depth;
+        return lhs.order->sequence < rhs.order->sequence;
     });
     std::vector<const Order*> result;
-    const auto addWithChildren = [&](const auto& self, const Order& order) -> void {
-        std::vector<const Order*> children;
-        for(const Order& child : orders_)
-        {
-            if(child.parent == order.id)
-                children.push_back(&child);
-        }
-        std::sort(children.begin(), children.end(),
-                  [](const Order* lhs, const Order* rhs) { return lhs->sequence < rhs->sequence; });
-        for(const Order* child : children)
-            self(self, *child);
-        result.push_back(&order);
-    };
-    for(const Order* root : roots)
-        addWithChildren(addWithChildren, *root);
+    result.reserve(entries.size());
+    for(const Entry& entry : entries)
+        result.push_back(entry.order);
     return result;
+}
+
+unsigned EconomyPlanner::GetEffectiveLevel(const Order& order) const
+{
+    // Level 0 in the game data means "not part of the basic economy": after all levels
+    constexpr unsigned notBasic = std::numeric_limits<unsigned>::max();
+    const civ::TechTree& techTree = player_.GetGameWorld().GetTechTree();
+    unsigned result = notBasic;
+    for(const Order* current = &order; current; current = current->parent ? Find(current->parent) : nullptr)
+    {
+        const unsigned level = techTree.GetAIBasicEconomyLevel(current->building);
+        if(level > 0)
+            result = std::min(result, level);
+    }
+    return result;
+}
+
+bool EconomyPlanner::IsChainBlocked(unsigned id) const
+{
+    for(const Order* order = Find(id); order; order = order->parent ? Find(order->parent) : nullptr)
+    {
+        if(order->state == OrderState::Blocked && order->retry.kind == RetryCondition::Kind::Situation)
+            return true;
+    }
+    return false;
+}
+
+void EconomyPlanner::RemoveUnplacedChildren(const unsigned id)
+{
+    std::vector<unsigned> children;
+    for(const Order& order : orders_)
+    {
+        if(order.parent == id && order.state != OrderState::Placed)
+            children.push_back(order.id);
+    }
+    for(const unsigned child : children)
+        Remove(child);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -681,7 +808,8 @@ void EconomyPlanner::CreateOrders()
         {
             const SupplyState state =
               order.forWare == GoodType::Nothing ? SupplyState::Shortage : wares_[order.forWare].state;
-            if(order.kind == OrderKind::Expanding && state != SupplyState::Normal)
+            // Clearing woodcutters and quarries come from the trees and stones on the map, not from the stock
+            if(order.kind == OrderKind::Expanding && state != SupplyState::Normal && !order.clearing)
                 obsolete.push_back(order.id);
             else if(order.kind == OrderKind::Needed && order.consumer && state != SupplyState::Surplus)
                 obsolete.push_back(order.id);
@@ -704,14 +832,14 @@ void EconomyPlanner::CreateOrders()
     for(const unsigned id : obsolete)
         Remove(id);
 
-    // Shortages: more producers
+    // Shortages: more producers (as many as the deficit needs, see ResolveShortage)
     for(const auto good : helpers::enumRange<GoodType>())
     {
-        if(wares_[good].state == SupplyState::Shortage && !HasProducerOrder(good))
+        if(wares_[good].state == SupplyState::Shortage)
             ResolveShortage(good, 0);
     }
-    // Asked for "any of" (e.g. food of a mine) and not enough of all of them in stock: the easiest one
-    for(const OpenDemand& demand : snapshot_.openDemand)
+    // Asked for or planned "any of" (e.g. food of a mine) and not enough of all of them in stock: the easiest one
+    for(const OpenDemand& demand : anyOfDemand_)
     {
         if(demand.wares.size() < 2u)
             continue;
@@ -747,12 +875,13 @@ void EconomyPlanner::CreateOrders()
               }))
             AddExpandingOrder(good);
     }
+    AddClearingOrders();
     AddForesterOrders();
 }
 
 bool EconomyPlanner::IsAnyOfDemand(const GoodType good) const
 {
-    for(const OpenDemand& demand : snapshot_.openDemand)
+    for(const OpenDemand& demand : anyOfDemand_)
     {
         if(demand.wares.size() < 2u || !helpers::contains(demand.wares, good))
             continue;
@@ -788,12 +917,19 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const unsigned parent)
         if(!ways.empty())
             reason += " (" + ways.front().reason + ")";
         Order* blocked = Find(parent);
-        if(!blocked && !ways.empty() && parent == 0)
+        if(!blocked && !ways.empty() && parent == 0 && !HasProducerOrder(good))
         {
             Order order;
             order.building = civAI_.GetGraph().GetRecipes()[ways.front().recipe].building;
             order.forWare = good;
+            // The inputs it cannot get are kept for it (orders below must not use them)
+            order.inputsMissing = ways.front().missingInputs;
             blocked = &Add(std::move(order));
+        } else if(blocked && !helpers::contains(blocked->inputsMissing, good))
+        {
+            const Recipe* recipe = FindRecipe(blocked->building);
+            if(recipe && helpers::contains(recipe->inputs, good))
+                blocked->inputsMissing.push_back(good);
         }
         if(blocked)
         {
@@ -813,7 +949,7 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const unsigned parent)
     }
     const Recipe& recipe = civAI_.GetGraph().GetRecipes()[ways.front().recipe];
     const auto [productivity, numWorking] = GetProductivity(recipe.building);
-    if(numWorking > 0 && productivity < GOOD_PRODUCTIVITY)
+    if(numWorking > 0 && productivity < HIGH_PRODUCTIVITY * 100)
     {
         // The existing producers lag behind: work on why instead of building more
         resolving_.push_back(good);
@@ -837,9 +973,9 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const unsigned parent)
         resolving_.pop_back();
         return;
     }
-    // As many new producers as the measured deficit needs: deficit per minute / output per minute of one producer.
-    // The output of one producer is measured (producers working now) or, without them, taken from the work time of
-    // the recipe. At least one
+    // As many producers as the measured deficit needs: deficit per minute / output per minute of one producer, at
+    // least one. The output of one producer is measured (producers working now) or, without them, taken from the work
+    // time of the recipe. Producers ordered already or starting up count (their output is not measured yet)
     unsigned count = 1;
     const WareStatus& status = wares_[good];
     if(status.balance < 0)
@@ -855,8 +991,7 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const unsigned parent)
     }
     const unsigned existing =
       static_cast<unsigned>(std::count_if(orders_.begin(), orders_.end(), [&](const Order& order) {
-          return order.building == recipe.building && order.forWare == good && !order.consumer
-                 && order.kind == OrderKind::Needed && order.state != OrderState::Placed;
+          return order.forWare == good && !order.consumer && order.kind == OrderKind::Needed;
       }));
     for(unsigned i = existing; i < count; ++i)
     {
@@ -955,12 +1090,38 @@ void EconomyPlanner::AddExpandingOrder(const GoodType good)
     const std::vector<WayCheck> ways = RankProducers(good, true, 0);
     if(ways.empty() || ways.front().blocked)
         return;
+    const BuildingType bld = civAI_.GetGraph().GetRecipes()[ways.front().recipe].building;
+    // Woodcutters and quarries expand where trees and stones are (AddClearingOrders), not by the stock
+    if((bld == BuildingType::Woodcutter || bld == BuildingType::Quarry))
+        return;
     Order order;
-    order.building = civAI_.GetGraph().GetRecipes()[ways.front().recipe].building;
+    order.building = bld;
     order.forWare = good;
     order.kind = OrderKind::Expanding;
-    order.clearing = order.building == BuildingType::Woodcutter;
     Add(std::move(order));
+}
+
+void EconomyPlanner::AddClearingOrders()
+{
+    // Clearing woodcutters and quarries clear the land: one order each as long as there are trees / stone piles in the
+    // territory (a place with enough in reach is searched when its turn comes)
+    const ResourceProfile owned = civAI_.GetMap().GetTotalOwned();
+    const auto add = [&](const BuildingType bld, const GoodType good, const Source source, const unsigned minAmount) {
+        if(!managed_[bld] || !player_.IsBuildingEnabled(bld) || owned.GetAmount(source) < minAmount)
+            return;
+        if(helpers::contains_if(orders_, [bld](const Order& order) {
+               return order.building == bld && order.clearing && order.state != OrderState::Placed;
+           }))
+            return;
+        Order order;
+        order.building = bld;
+        order.forWare = good;
+        order.kind = OrderKind::Expanding;
+        order.clearing = true;
+        Add(std::move(order));
+    };
+    add(BuildingType::Woodcutter, GoodType::Wood, Source{SourceKind::Trees, 0}, CLEARING_MIN_TREES);
+    add(BuildingType::Quarry, GoodType::Stones, Source{SourceKind::StonePiles, 0}, QUARRY_MIN_STONE_PILES);
 }
 
 void EconomyPlanner::AddStorehouseOrder(const unsigned parent)
@@ -979,16 +1140,19 @@ void EconomyPlanner::AddForesterOrders()
 {
     if(!managed_[BuildingType::Forester])
         return;
+    // A woodcutter for good (not clearing) that worked a balance length with a productivity below HIGH_PRODUCTIVITY
+    // gets a forester in its reach, unless one is there already (or its site or order)
     const GameWorldBase& world = player_.GetGameWorld();
     const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    const unsigned startupGFs = BALANCE_MINUTES * EconomyStatistics::GetGFsPerMinute();
     const BuildingRegister& buildings = player_.GetBuildingRegister();
     for(const nobUsual* woodcutter : buildings.GetBuildings(BuildingType::Woodcutter))
     {
         const MapPoint pos = woodcutter->GetPos();
-        if(IsClearingWoodcutter(pos) || !woodcutter->HasWorker()
-           || CountTrees(player_, pos, woodcutterRadius) >= FORESTER_BELOW_TREES)
+        const auto working = workingSince_.find(pos);
+        if(IsClearingWoodcutter(pos) || working == workingSince_.end() || working->second + startupGFs > currentGF_
+           || woodcutter->GetProductivity() >= HIGH_PRODUCTIVITY * 100)
             continue;
-        // A forester (or its building site or order) in reach of the woodcutter serves it already
         const auto isNear = [&](const MapPoint pt) { return world.CalcDistance(pt, pos) <= woodcutterRadius; };
         if(helpers::contains_if(buildings.GetBuildings(BuildingType::Forester),
                                 [&](const nobUsual* forester) { return isNear(forester->GetPos()); })
@@ -1004,7 +1168,7 @@ void EconomyPlanner::AddForesterOrders()
         Order order;
         order.building = BuildingType::Forester;
         order.near = pos;
-        order.reason = "Bäume für Holzfäller";
+        order.reason = "Holzfäller unter hoher Produktivität";
         Add(std::move(order));
     }
 }
@@ -1015,17 +1179,55 @@ void EconomyPlanner::AddForesterOrders()
 void EconomyPlanner::ProcessList()
 {
     unsigned searchBudget = SEARCHES_PER_STEP;
+    keptInputs_.clear();
+    militaryKept_ = BuildingType::Headquarters;
+    std::vector<const Order*> list = GetList();
     std::vector<unsigned> ids;
-    for(const Order* order : GetList())
+    for(const Order* order : list)
         ids.push_back(order->id);
+    bool militaryDone = false;
     for(const unsigned id : ids)
+    {
+        const Order* order = Find(id);
+        // Military buildings are expanding (ai.lua) and are still placed by the old AI: before the first expanding
+        // order the material for its next military building is kept free
+        if(!militaryDone && order && order->kind == OrderKind::Expanding && !order->selfSolving)
+        {
+            KeepMaterialForMilitary();
+            militaryDone = true;
+        }
         ProcessOrder(id, searchBudget);
+    }
+    if(!militaryDone)
+        KeepMaterialForMilitary();
 }
 
-void EconomyPlanner::MoveToEnd(Order& order, const std::string& reason)
+void EconomyPlanner::KeepMaterialForMilitary()
+{
+    const AIJH::AIConstruction& construction = aijh_.GetConstruction();
+    if(!construction.CanStartMilitarySite())
+        return;
+    // The cheapest military building the player may build
+    unsigned bestCost = std::numeric_limits<unsigned>::max();
+    for(const BuildingType bld : BuildingProperties::militaryBldTypes)
+    {
+        if(player_.IsBuildingEnabled(bld) && getTotalCost(bld) < bestCost)
+        {
+            bestCost = getTotalCost(bld);
+            militaryKept_ = bld;
+        }
+    }
+    if(militaryKept_ == BuildingType::Headquarters)
+        return;
+    AIJH::ConstructionMaterial taken{};
+    takeMaterial(freeMaterial_, militaryKept_, taken);
+}
+
+void EconomyPlanner::MoveToEnd(Order& order, const std::string& reason, const RetryCondition& retry)
 {
     order.state = OrderState::Blocked;
     order.reason = reason;
+    order.retry = retry;
     order.sequence = nextSequence_++;
 }
 
@@ -1034,23 +1236,66 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     Order* order = Find(id);
     if(!order || order->state == OrderState::Placed)
         return;
-    const bool needed = order->kind == OrderKind::Needed;
-    if(needed && order->state == OrderState::Blocked && !IsRetryMet(order->retry, order->building))
-        return;
-    // Waits for the orders created for it
-    const auto child = std::find_if(orders_.begin(), orders_.end(), [id](const Order& other) {
-        return other.parent == id && other.state != OrderState::Placed;
-    });
-    if(child != orders_.end())
+    // Created for an order that cannot be built until the situation changes: of no use (e.g. the well for a brewery
+    // without grain)
+    if(order->parent != 0 && IsChainBlocked(order->parent))
     {
-        order->state = OrderState::Waiting;
-        order->reason = "wartet auf " + buildingName(child->building);
+        Remove(id);
         return;
+    }
+    const bool needed = order->kind == OrderKind::Needed;
+    const RetryCondition situationChanges{RetryCondition::Kind::Situation, GetSituation()};
+    // The inputs this order lacks are kept for it: no order below it gets a building using them
+    for(const GoodType input : order->inputsMissing)
+        keptInputs_.emplace(input, id);
+    // Blocked: tried again when its condition is met (material there, situation changed ...), not every step
+    if(!order->selfSolving && order->state == OrderState::Blocked && !IsRetryMet(order->retry, order->building))
+        return;
+    // Waits for the orders created for it. A self-solving order is the solution itself and does not wait
+    if(!order->selfSolving)
+    {
+        const auto child = std::find_if(orders_.begin(), orders_.end(), [id](const Order& other) {
+            return other.parent == id && other.state != OrderState::Placed;
+        });
+        if(child != orders_.end())
+        {
+            order->state = OrderState::Waiting;
+            order->reason = "wartet auf " + buildingName(child->building);
+            return;
+        }
     }
 
     // Inputs (the surplus a consumer is for suffices by definition)
     if(const Recipe* recipe = FindRecipe(order->building))
     {
+        // Inputs kept for an order above: this one must wait (any of: only if all of them are kept)
+        std::vector<const Order*> keptFor;
+        std::vector<GoodType> keptWares;
+        for(const GoodType input : recipe->inputs)
+        {
+            if(order->consumer && input == order->forWare)
+                continue;
+            const auto kept = keptInputs_.find(input);
+            if(kept != keptInputs_.end() && kept->second != id)
+            {
+                keptWares.push_back(input);
+                keptFor.push_back(Find(kept->second));
+            }
+        }
+        const bool blockedByKept =
+          recipe->consumeEach ? !keptWares.empty() : !keptWares.empty() && keptWares.size() == recipe->inputs.size();
+        if(blockedByKept)
+        {
+            const std::string reason = wareName(keptWares.front()) + " vorbehalten für "
+                                       + (keptFor.front() ? buildingName(keptFor.front()->building) : "-");
+            if(needed)
+            {
+                order->state = OrderState::Waiting;
+                order->reason = reason;
+            } else
+                MoveToEnd(*order, reason, RetryCondition{});
+            return;
+        }
         std::vector<GoodType> missing;
         bool anySuffices = recipe->inputs.empty();
         for(const GoodType input : recipe->inputs)
@@ -1061,34 +1306,62 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
                 missing.push_back(input);
         }
         const bool suffices = recipe->consumeEach ? missing.empty() : anySuffices;
-        if(!suffices)
+        order->inputsMissing = suffices ? std::vector<GoodType>() : missing;
+        if(suffices)
         {
+            // Not the reason anymore: free for the orders below
+            for(auto it = keptInputs_.begin(); it != keptInputs_.end();)
+                it = it->second == id ? keptInputs_.erase(it) : std::next(it);
+        } else
+        {
+            // The missing inputs are the reason: kept for this order from now on
+            for(const GoodType input : missing)
+                keptInputs_.emplace(input, id);
             if(!needed)
             {
-                MoveToEnd(*order, "Eingang fehlt: " + wareName(missing.front()));
+                // Checked again every step (cheap, no place search)
+                MoveToEnd(*order, "Eingang fehlt: " + wareName(missing.front()), RetryCondition{});
+                return;
+            }
+            // Every missing input must be possible, otherwise the building cannot work: then no orders for the
+            // others (no well for a brewery that gets no grain)
+            std::string noWay;
+            if(recipe->consumeEach)
+            {
+                for(const GoodType input : missing)
+                {
+                    const std::vector<WayCheck> ways = RankProducers(input, false, 0);
+                    if(ways.empty() || ways.front().blocked)
+                    {
+                        noWay = "kein Weg zu " + wareName(input);
+                        if(!ways.empty())
+                            noWay += " (" + ways.front().reason + ")";
+                        break;
+                    }
+                }
+            } else if(ChooseWare(missing) == GoodType::Nothing)
+            {
+                std::string names;
+                for(const GoodType input : missing)
+                    names += (names.empty() ? "" : "/") + wareName(input);
+                noWay = "kein Weg zu " + names;
+            }
+            if(!noWay.empty())
+            {
+                order->state = OrderState::Blocked;
+                order->reason = noWay;
+                order->retry = situationChanges;
+                RemoveUnplacedChildren(id);
                 return;
             }
             order->state = OrderState::Waiting;
             order->reason = "Eingang fehlt: " + wareName(missing.front());
             const std::vector<GoodType> toResolve =
               recipe->consumeEach ? missing : std::vector<GoodType>{ChooseWare(missing)};
-            if(toResolve.front() == GoodType::Nothing)
-            {
-                // Any of the inputs would do, but none can be made now
-                std::string names;
-                for(const GoodType input : missing)
-                    names += (names.empty() ? "" : "/") + wareName(input);
-                order->state = OrderState::Blocked;
-                order->reason = "kein Weg zu " + names;
-                order->retry = {RetryCondition::Kind::Situation, GetSituation()};
-                return;
-            }
             for(const GoodType input : toResolve)
             {
-                // Made for an order above already: a loop (the ware is needed to make itself). A producer of the
-                // input is ordered or starts up already (for another order): wait for its effect
-                if(input == GoodType::Nothing || HasChildFor(id, input)
-                   || IsInChain(id, input, BuildingType::Headquarters) || HasProducerOrder(input))
+                // Made for an order above already: a loop (the ware is needed to make itself)
+                if(HasChildFor(id, input) || IsInChain(id, input, BuildingType::Headquarters))
                     continue;
                 ResolveShortage(input, id); // May add orders: `order` is not valid anymore
             }
@@ -1100,12 +1373,12 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     const std::string rule = CheckRules(*order, retry);
     if(!rule.empty())
     {
-        if(!needed)
+        if(!needed && !order->selfSolving)
         {
-            MoveToEnd(*order, rule);
+            MoveToEnd(*order, rule, retry);
             return;
         }
-        order->state = OrderState::Blocked;
+        order->state = order->selfSolving ? OrderState::Waiting : OrderState::Blocked;
         order->reason = rule;
         order->retry = retry;
         SolveRule(id, retry);
@@ -1122,14 +1395,20 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
             return;
         AIJH::ConstructionMaterial taken{};
         takeMaterial(freeMaterial_, building, taken);
-        if(clearing)
-            clearingWoodcutters_.push_back(pos);
+        // Placed: its inputs are planned from now on (and its costs if it was not counted at the start of the step)
+        AddPlanned(building, true, !helpers::contains(plannedOrderIds_, id), true);
+        if(clearing && building == BuildingType::Woodcutter)
+        {
+            aijh_.GetInterface().SetClearingWoodcutter(pos, true);
+            clearingPending_.push_back(pos);
+        }
         if(!needed)
         {
             // Expanding orders have no start-up time
             Remove(id);
             return;
         }
+        order = Find(id);
         order->state = OrderState::Placed;
         order->placedAt = pos;
         order->reason.clear();
@@ -1143,11 +1422,11 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     }
     if(!needed)
     {
-        MoveToEnd(*order, "kein Bauplatz");
+        MoveToEnd(*order, "kein Bauplatz", situationChanges);
         return;
     }
     // No place for this way: the next way to the ware is tried, this one again when the situation changed
-    if(order->forWare != GoodType::Nothing && !order->consumer)
+    if(order->forWare != GoodType::Nothing && !order->consumer && !order->clearing)
     {
         failedWays_.push_back({order->forWare, order->building, GetSituation()});
         Remove(id);
@@ -1155,7 +1434,8 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     }
     order->state = OrderState::Blocked;
     order->reason = "kein Bauplatz";
-    order->retry = {RetryCondition::Kind::Situation, GetSituation()};
+    order->retry = situationChanges;
+    RemoveUnplacedChildren(id);
 }
 
 std::string EconomyPlanner::CheckRules(const Order& order, RetryCondition& retry) const
@@ -1167,10 +1447,12 @@ std::string EconomyPlanner::CheckRules(const Order& order, RetryCondition& retry
         return "nicht erforscht";
     }
     const AIJH::AIConstruction& construction = aijh_.GetConstruction();
-    if(!HasMaterial(bld))
+    std::vector<GoodType> missingMaterial;
+    std::string material = DescribeMissingMaterial(bld, missingMaterial);
+    if(!material.empty())
     {
         retry = {RetryCondition::Kind::Material, GetSituation()};
-        return "Baumaterial fehlt";
+        return material;
     }
     if(!construction.HasEnoughBuildersAvailable())
     {
@@ -1268,10 +1550,10 @@ void EconomyPlanner::SolveRule(const unsigned id, const RetryCondition& retry)
     {
         case RetryCondition::Kind::Material:
         {
-            // Keep the material that is there for this order (orders below and other buildings must not take it), and
-            // make more of what is missing
+            // Keep the material that is there for this order (orders below and other buildings must not take it)
             const AIJH::ConstructionMaterial free = freeMaterial_;
             takeMaterial(freeMaterial_, bld, reservedMaterial_);
+            std::vector<std::pair<GoodType, unsigned>> lacking;
             for(const CostEntry& entry : BUILDING_COSTS[bld])
             {
                 int available = 0;
@@ -1279,11 +1561,41 @@ void EconomyPlanner::SolveRule(const unsigned id, const RetryCondition& retry)
                     available += std::max(0, free[good]);
                 if(available >= static_cast<int>(entry.amount))
                     continue;
-                const GoodType good = entry.wares.size() == 1u ? entry.wares.front() : ChooseWare(entry.wares);
-                if(good == GoodType::Nothing || HasChildFor(id, good) || IsInChain(id, good, BuildingType::Headquarters)
-                   || HasProducerOrder(good))
+                GoodType good = entry.wares.size() == 1u ? entry.wares.front() : ChooseWare(entry.wares);
+                if(good == GoodType::Nothing)
+                    good = entry.wares.front();
+                lacking.emplace_back(good, entry.amount - available);
+            }
+            if(lacking.empty())
+                break;
+            // Why it is missing, e.g. "Bretter: frei -4, Bilanz -3; Sägewerk: ... -> Holz: ..."
+            const std::string why = ExplainWare(lacking.front().first, 2);
+            // Material made by a chain the building is part of (a woodcutter lacking boards): it is the solution
+            // itself. It gets what comes back to the warehouses before everybody else, building sites outside the chain
+            // whose material is not built in yet are cancelled. Other material: its producers are ordered for it
+            std::vector<std::pair<GoodType, unsigned>> selfSolved;
+            std::vector<GoodType> toOrder;
+            for(const auto& [good, amount] : lacking)
+            {
+                if(order->selfSolving && helpers::contains(GetChain(good), bld))
+                {
+                    selfSolved.emplace_back(good, amount);
+                    reservedMaterial_[good] += amount;
+                } else
+                    toOrder.push_back(good);
+            }
+            const std::string cancelled = selfSolved.empty() ? std::string() : CancelSitesFor(selfSolved);
+            order = Find(id);
+            if(!selfSolved.empty())
+                order->reason = "Vorrang (löst den Mangel selbst): " + order->reason;
+            order->reason += " – " + why;
+            if(!cancelled.empty())
+                order->reason += "; abgebrochen: " + cancelled;
+            for(const GoodType good : toOrder)
+            {
+                if(HasChildFor(id, good) || IsInChain(id, good, BuildingType::Headquarters))
                     continue;
-                ResolveShortage(good, id);
+                ResolveShortage(good, id); // May add orders: `order` is not valid anymore
             }
             break;
         }
@@ -1295,6 +1607,174 @@ void EconomyPlanner::SolveRule(const unsigned id, const RetryCondition& retry)
             // Builders and tools: the tools are ordered (OrderTools). Situation: research or territory needed
             break;
     }
+}
+
+std::string EconomyPlanner::DescribeMissingMaterial(const BuildingType bld, std::vector<GoodType>& missing) const
+{
+    std::string result;
+    for(const CostEntry& entry : BUILDING_COSTS[bld])
+    {
+        int available = 0, stock = 0, forSites = 0, forOrdersAbove = 0;
+        std::string names;
+        for(const GoodType good : entry.wares)
+        {
+            available += std::max(0, freeMaterial_[good]);
+            stock += static_cast<int>(snapshot_.inWarehouses[good]);
+            forSites += static_cast<int>(snapshot_.inWarehouses[good]) - stepFreeMaterial_[good];
+            forOrdersAbove += std::max(0, stepFreeMaterial_[good]) - std::max(0, freeMaterial_[good]);
+            names += (names.empty() ? "" : "/") + wareName(good);
+        }
+        if(available >= static_cast<int>(entry.amount))
+            continue;
+        missing.push_back(entry.wares.front());
+        std::ostringstream out;
+        out << names << " fehlt: " << static_cast<unsigned>(entry.amount) << " nötig, " << available << " frei (Lager "
+            << stock << ", Baustellen brauchen noch " << forSites << ", für Aufträge darüber " << forOrdersAbove << ")";
+        result += (result.empty() ? "" : "; ") + out.str();
+    }
+    return result;
+}
+
+std::string EconomyPlanner::ExplainWare(const GoodType good, const unsigned depth)
+{
+    const WareStatus& status = wares_[good];
+    std::ostringstream out;
+    out << wareName(good) << ": frei " << status.free << ", Bilanz " << status.balance;
+    const std::vector<WayCheck> ways = RankProducers(good, false, 0);
+    if(ways.empty())
+        return out.str() + ", kein Erzeuger";
+    if(ways.front().blocked)
+        return out.str() + ", " + ways.front().reason;
+    const Recipe& recipe = civAI_.GetGraph().GetRecipes()[ways.front().recipe];
+    const BuildingTypeState& state = snapshot_.buildings[recipe.building];
+    const unsigned working = state.numBuildings - state.withoutWorker;
+    out << "; " << buildingName(recipe.building) << ": " << working << " arbeiten";
+    if(working > 0)
+        out << " (Produktivität " << state.GetProductivity() << " %)";
+    if(state.numSites > 0)
+        out << ", " << state.numSites << " Baustellen";
+    if(state.withoutWorker > 0)
+        out << ", " << state.withoutWorker << " ohne Arbeiter";
+    if(depth > 0)
+    {
+        for(const GoodType input : recipe.inputs)
+        {
+            if(!InputSuffices(input, recipe))
+                return out.str() + " -> " + ExplainWare(input, depth - 1);
+        }
+    }
+    return out.str();
+}
+
+std::vector<BuildingType> EconomyPlanner::GetChain(const GoodType good)
+{
+    const auto cached = chainCache_.find(good);
+    if(cached != chainCache_.end())
+        return cached->second;
+    // The best producer of the ware, and for each of its inputs that does not suffice the best producer of that input
+    // and so on. Example boards: sawmill; wood does not suffice: woodcutter and forester
+    const std::vector<Recipe>& recipes = civAI_.GetGraph().GetRecipes();
+    std::vector<BuildingType> chain;
+    std::vector<GoodType> todo{good}, seen;
+    while(!todo.empty())
+    {
+        const GoodType current = todo.back();
+        todo.pop_back();
+        if(helpers::contains(seen, current))
+            continue;
+        seen.push_back(current);
+        const std::vector<WayCheck> ways = RankProducers(current, false, 0);
+        if(ways.empty() || ways.front().blocked)
+            continue;
+        const Recipe& recipe = recipes[ways.front().recipe];
+        if(!helpers::contains(chain, recipe.building))
+            chain.push_back(recipe.building);
+        for(const Renewer& renewer : civAI_.GetGraph().GetRenewers())
+        {
+            if(renewer.source.kind == recipe.source.kind && renewer.source.index == recipe.source.index
+               && recipe.source.kind != SourceKind::None && !helpers::contains(chain, renewer.building))
+                chain.push_back(renewer.building);
+        }
+        for(const GoodType input : recipe.inputs)
+        {
+            if(!InputSuffices(input, recipe))
+                todo.push_back(input);
+        }
+    }
+    chainCache_[good] = chain;
+    return chain;
+}
+
+void EconomyPlanner::MarkSelfSolving()
+{
+    for(Order& order : orders_)
+        order.selfSolving = false;
+    for(Order& order : orders_)
+    {
+        if(order.state == OrderState::Placed)
+            continue;
+        std::vector<GoodType> missing;
+        if(DescribeMissingMaterial(order.building, missing).empty())
+            continue;
+        for(const GoodType good : missing)
+        {
+            const std::vector<BuildingType> chain = GetChain(good);
+            if(helpers::contains(chain, order.building))
+                order.selfSolving = true;
+        }
+    }
+}
+
+std::string EconomyPlanner::CancelSitesFor(const std::vector<std::pair<GoodType, unsigned>>& lacking)
+{
+    // Once per step: the cancelled sites need some time to give their material back
+    if(cancelledThisStep_)
+        return std::string();
+    cancelledThisStep_ = true;
+    std::ostringstream result;
+    const EconomyStatistics& stats = player_.GetEconomyStatistics();
+    for(const auto& [good, amount] : lacking)
+    {
+        // Only when stuck: nothing of it made in the balance length and not enough in the warehouses. Otherwise the
+        // material comes by itself and the other sites keep theirs
+        if(stats.GetProduced(good, BALANCE_MINUTES, currentGF_) > 0 || snapshot_.inWarehouses[good] >= amount)
+            continue;
+        const std::vector<BuildingType> chain = GetChain(good);
+        // Sites outside the chain whose builder has not built in anything yet. What comes back: the wares on the way
+        // there and those not ordered yet (wares already lying at the site are lost)
+        std::vector<std::pair<unsigned, const noBuildingSite*>> candidates;
+        for(const noBuildingSite* site : player_.GetBuildingRegister().GetBuildingSites())
+        {
+            const BuildingType bld = site->GetBuildingType();
+            if(helpers::contains(chain, bld) || site->IsHarborBuildingSiteFromSea())
+                continue;
+            const std::vector<noBuildingSite::Material>& materials = site->GetMaterials();
+            const BuildingCosts& costs = BUILDING_COSTS[bld];
+            bool builtIn = false;
+            unsigned comesBack = 0;
+            for(unsigned i = 0; i < materials.size() && i < costs.size(); ++i)
+            {
+                builtIn |= materials[i].used > 0;
+                if(helpers::contains(costs[i].wares, good))
+                    comesBack += costs[i].amount - std::min<unsigned>(costs[i].amount, materials[i].delivered.size());
+            }
+            if(!builtIn && comesBack > 0)
+                candidates.emplace_back(comesBack, site);
+        }
+        std::stable_sort(candidates.begin(), candidates.end(),
+                         [](const auto& lhs, const auto& rhs) { return lhs.first > rhs.first; });
+        unsigned freed = 0;
+        for(const auto& [comesBack, site] : candidates)
+        {
+            if(freed >= amount)
+                break;
+            aijh_.GetInterface().DestroyBuilding(site->GetPos());
+            freed += comesBack;
+            result << (result.tellp() > 0 ? ", " : "") << buildingName(site->GetBuildingType()) << " (" << comesBack
+                   << " " << wareName(good) << ")";
+        }
+    }
+    return result.str();
 }
 
 bool EconomyPlanner::HasMaterial(const BuildingType bld) const
@@ -1360,9 +1840,14 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
         MapPoint pos;
         if(order.building == BuildingType::Woodcutter)
             pos = aijh_.FindWoodcutterPosition(center, order.clearing);
+        else if(order.building == BuildingType::Quarry && order.clearing)
+            pos = aijh_.FindQuarryPosition(center);
         else if(order.building == BuildingType::Forester)
-            pos = aijh_.FindForesterPosition(center, clearingWoodcutters_);
-        else
+        {
+            std::vector<MapPoint> clearing = player_.GetClearingWoodcutters();
+            clearing.insert(clearing.end(), clearingPending_.begin(), clearingPending_.end());
+            pos = aijh_.FindForesterPosition(center, clearing);
+        } else
             pos = aijh_.FindPositionForBuildingAround(order.building, center);
         if(pos.isValid())
         {
@@ -1409,6 +1894,21 @@ void EconomyPlanner::OrderTools()
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+unsigned EconomyPlanner::CountStonePiles(const GamePlayer& player, const MapPoint pt, const unsigned radius)
+{
+    const GameWorldBase& world = player.GetGameWorld();
+    unsigned result = 0;
+    world.CheckPointsInRadius(
+      pt, radius,
+      [&](const MapPoint curPt, unsigned) {
+          if(world.GetNO(curPt)->GetType() == NodalObjectType::Granite)
+              ++result;
+          return false;
+      },
+      true);
+    return result;
+}
+
 unsigned EconomyPlanner::CountTrees(const GamePlayer& player, const MapPoint pt, const unsigned radius)
 {
     const GameWorldBase& world = player.GetGameWorld();
@@ -1434,15 +1934,18 @@ std::string EconomyPlanner::GetReport() const
     {
         const WareStatus& status = wares_[good];
         if(status.state == SupplyState::Shortage)
-            out << " " << wareName(good) << " (Bestand " << status.stock << ", Bilanz " << status.balance
-                << ", angefragt " << status.openDemand << ");";
+        {
+            out << " " << wareName(good) << " (Bestand " << status.stock << ", frei " << status.free << ", Bilanz "
+                << status.balance << "; angefragt: offen " << status.openDemand << ", unterwegs " << status.inTransit
+                << ", geplant " << status.planned << ");";
+        }
     }
     out << "\n  Überschuss:";
     for(const auto good : helpers::enumRange<GoodType>())
     {
         const WareStatus& status = wares_[good];
         if(status.state == SupplyState::Surplus && hasUse_[good])
-            out << " " << wareName(good) << " (" << status.stock << ");";
+            out << " " << wareName(good) << " (frei " << status.free << ");";
     }
     out << "\n  Liste:\n";
     unsigned pos = 0;
@@ -1451,15 +1954,24 @@ std::string EconomyPlanner::GetReport() const
     {
         out << "    " << ++pos << ". " << buildingName(order->building)
             << (order->kind == OrderKind::Needed ? " (benötigt" : " (expandierend");
+        const unsigned level = player_.GetGameWorld().GetTechTree().GetAIBasicEconomyLevel(order->building);
+        if(level > 0)
+            out << ", Stufe " << level;
         if(order->forWare != GoodType::Nothing)
             out << (order->consumer ? ", verarbeitet " : ", für ") << wareName(order->forWare);
+        // What it is for: "Water für Brewery"
+        if(const Order* parent = order->parent ? Find(order->parent) : nullptr)
+            out << " für " << buildingName(parent->building);
         if(order->clearing)
-            out << ", rodend";
+            out << (order->building == BuildingType::Woodcutter ? ", rodend" : ", nach Vorkommen");
         out << ") " << stateNames[static_cast<unsigned>(order->state)];
         if(!order->reason.empty())
             out << ": " << order->reason;
         out << "\n";
     }
+    if(militaryKept_ != BuildingType::Headquarters)
+        out << "    Material für " << buildingName(militaryKept_)
+            << " (Militär der alten KI) vor den expandierenden Aufträgen freigehalten\n";
     out << "  Zeit: " << static_cast<unsigned>(lastStepUs_) << " us (max " << static_cast<unsigned>(maxStepUs_)
         << " us)\n";
     return out.str();

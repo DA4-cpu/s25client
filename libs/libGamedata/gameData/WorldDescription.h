@@ -38,6 +38,11 @@ struct WorldDescription
     /// AI of the civilization mode: buildings it may build to make the economy bigger (rttr:SetAIExpandingBuildings).
     /// All others it only builds when the economy needs them
     std::vector<std::string> aiExpandingBuildings;
+    /// AI of the civilization mode: buildings of the basic economy by level, the first level most important
+    /// (rttr:SetAIBasicEconomy). Their orders come first within the needed and within the expanding orders
+    std::vector<std::vector<std::string>> aiBasicEconomy;
+    /// AI of the civilization mode: wares whose start stock is no surplus (rttr:SetAIStartStockNoSurplus)
+    std::vector<std::string> aiStartStockNoSurplus;
     /// New wares of the civilization mode in order of definition
     std::vector<WareDesc> wares;
     /// Additional tags of built-in wares: Ware identifier -> tags

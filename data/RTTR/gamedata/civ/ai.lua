@@ -19,3 +19,19 @@ rttr:SetAIExpandingBuildings{
     -- Verarbeitung
     "Sawmill", "Charburner", "Brewery", "Armory", "Mint", "Metalworks", "Copperworks", "BoneCarver", "LeatherWorks",
 }
+
+-- rttr:SetAIBasicEconomy{ { ... }, { ... } }
+--   Grundwirtschaft in Stufen, die erste Stufe am wichtigsten. Innerhalb der benötigten und innerhalb der
+--   expandierenden Aufträge kommen zuerst die Gebäude der ersten Stufe, dann die der zweiten, dann alle anderen.
+--   Benötigt kommt immer vor expandierend. Ein Auftrag, der für einen anderen gebaut wird (z. B. das Sägewerk für
+--   die Bretter einer Brauerei), rückt in seine eigene Stufe auf.
+rttr:SetAIBasicEconomy{
+    { "Woodcutter", "Quarry", "Sawmill", "Forester" },
+    { "IronMine", "CopperMine", "CoalMine", "Charburner", "Metalworks", "Copperworks", "Ironsmelter", "Armory" },
+}
+
+-- rttr:SetAIStartStockNoSurplus{ ... }
+--   Waren, deren Startvorrat für die KI kein Überschuss ist. Liegt von ihnen mehr im Lager als die Schwelle, baut die
+--   KI trotzdem keine Verbraucher dafür, solange der Startvorrat nicht aufgebraucht ist. So expandiert sie am Anfang
+--   mit Holzfällern, Sägewerken und Steinbrüchen, statt den Vorrat nur zu verarbeiten.
+rttr:SetAIStartStockNoSurplus{ "Stones", "Wood", "Boards" }

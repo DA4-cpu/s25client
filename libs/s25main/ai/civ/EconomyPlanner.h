@@ -46,10 +46,20 @@ struct WareStatus
     int balance = 0;
     /// Consumed per minute in the last BALANCE_MINUTES minutes
     double consumptionPerMinute = 0;
-    /// Asked for but not sent yet (building sites, inputs, tool slots, coins, research ...)
+    /// Requested ("angefragt") in three parts:
+    /// open: asked for by the game but not sent yet (building sites, inputs, tool slots, coins, research ...),
     unsigned openDemand = 0;
+    /// in transit: on the way to the building that asked for it (left the stock already, only shown),
+    unsigned inTransit = 0;
+    /// planned: construction costs of the orders of the list and of the building sites just ordered, input spaces of
+    /// building sites and of planned buildings (they will ask for these wares)
+    unsigned planned = 0;
+    /// Stock minus open minus planned: what is really free. Negative: more is requested than there is
+    int free = 0;
+    /// Start stock not used yet (only for the wares of rttr:SetAIStartStockNoSurplus, otherwise 0): no surplus
+    unsigned startStockLeft = 0;
     SupplyState state = SupplyState::Normal;
-    /// Shortage: minutes until the stock is gone at the current balance (0 if wares are asked for which are not there).
+    /// Shortage: minutes until the free stock is gone at the current balance (0 if more is requested than there is).
     /// Sorts the shortages: the most urgent first
     double minutesUntilEmpty = 0;
 };
@@ -119,6 +129,12 @@ struct Order
     /// Woodcutter: clears the land (expanding, no forester, demolished when no trees are left) instead of supplying
     /// wood for good
     bool clearing = false;
+    /// The building is part of the chain that makes the construction material it lacks (e.g. a woodcutter lacking
+    /// boards). It is not blocked by that: it gets the material before all other orders and buildings
+    bool selfSolving = false;
+    /// Inputs that are the reason it cannot be built (missing, no way). Orders below it in the list must not get a
+    /// building that uses them (the wares are kept for this one)
+    std::vector<GoodType> inputsMissing;
     /// Next warehouse/military building to search a place around and how many were searched in this round (the search
     /// is spread over several steps if the computing budget runs out)
     unsigned nextCenter = 0, centersTried = 0;
@@ -141,12 +157,13 @@ public:
     static constexpr unsigned SURPLUS_FACTOR = 10;
     /// ... but at least this stock
     static constexpr unsigned MIN_STOCK = 8;
-    /// Producers with a lower average productivity (percent) do not get another one: first find why they do not work
-    static constexpr unsigned GOOD_PRODUCTIVITY = 80;
-    /// Clearing woodcutters are placed where at least this many trees are in reach
+    /// High productivity (share of the time working). Producers below it do not get another one: first find why they
+    /// do not work. A woodcutter for good below it gets a forester
+    static constexpr double HIGH_PRODUCTIVITY = 0.8;
+    /// Clearing woodcutters are placed where at least this many trees are in reach (independent of the wood stock)
     static constexpr unsigned CLEARING_MIN_TREES = 8;
-    /// A woodcutter for good with fewer trees in reach needs a forester
-    static constexpr unsigned FORESTER_BELOW_TREES = 5;
+    /// Quarries are placed where at least this many stone piles are in reach (independent of the stone stock)
+    static constexpr unsigned QUARRY_MIN_STONE_PILES = 1;
     /// Tools of each kind the player keeps in stock beyond what is asked for (tool orders)
     static constexpr unsigned TOOLS_IN_STOCK = 1;
     /// Computing budget: place searches (around one warehouse or military building each) per planning step
@@ -176,6 +193,8 @@ public:
 
     /// Trees (any size) in the radius around the point
     static unsigned CountTrees(const GamePlayer& player, MapPoint pt, unsigned radius);
+    /// Stone piles in the radius around the point
+    static unsigned CountStonePiles(const GamePlayer& player, MapPoint pt, unsigned radius);
 
 private:
     /// How a way to a ware looks now (for the choice between alternatives)
@@ -191,6 +210,8 @@ private:
         unsigned recipe = 0;
         /// Blocked: why, for the list (e.g. "kein Lehmvorkommen im Gebiet")
         std::string reason;
+        /// Blocked because of these inputs (no way to make them, not enough there)
+        std::vector<GoodType> missingInputs;
     };
     /// A way to a ware for which no place was found. Not tried again before the situation changed
     struct FailedWay
@@ -200,10 +221,23 @@ private:
         unsigned situation;
     };
 
+    /// Planned wares (see WareStatus::planned) from the snapshot, the orders of the list and the sites just ordered
+    void UpdatePlanned();
+    /// Construction costs and/or input spaces of one more building of the type. updateStatus: also in the state of the
+    /// wares (a building placed in this step)
+    void AddPlanned(BuildingType bld, bool updateStatus, bool withCosts, bool withInputs);
+    /// The unplaced order will be built when the resources are there (not blocked until the situation changes): its
+    /// construction costs and inputs are planned
+    bool IsPlanned(const Order& order) const;
     void UpdateWareStatus();
     void UpdateWorkingBuildings();
     void UpdatePlacedOrders();
     void CreateOrders();
+    /// Orders whose building is part of the chain making the construction material they lack
+    void MarkSelfSolving();
+    /// Military buildings are placed by the old AI until the planner does it (step 3 of DESIGN.md): the material for
+    /// its next one (the cheapest military building) is kept free before the expanding orders
+    void KeepMaterialForMilitary();
     void ProcessList();
     void OrderTools();
 
@@ -212,6 +246,9 @@ private:
     /// Use the surplus of the ware: choose a consumer and add the order
     void ResolveSurplus(GoodType good);
     void AddExpandingOrder(GoodType good);
+    /// Clearing woodcutters and quarries: from the trees and stone piles in the territory, not from the stock
+    void AddClearingOrders();
+    /// Woodcutters for good with low productivity get a forester
     void AddForesterOrders();
     /// Storehouse for more helpers (the warehouses create them)
     void AddStorehouseOrder(unsigned parent);
@@ -225,9 +262,17 @@ private:
     GoodType ChooseWare(const std::vector<GoodType>& wares);
     /// True if the input suffices for one more consumer of the recipe
     bool InputSuffices(GoodType input, const Recipe& consumer) const;
-    /// Consumption per minute (by the work times) of the consumers of the ware the statistic does not show yet:
-    /// building sites (also ordered ones not on the map yet), buildings without worker or starting up
-    double GetUnmeasuredConsumption(GoodType input) const;
+    /// Buildings of the chain that makes the ware now: the best producer, the best producers of its inputs ... (and
+    /// the forester if a woodcutter is part of it)
+    std::vector<BuildingType> GetChain(GoodType good);
+    /// Why the ware is missing, following its producers: "Holz: frei 0, Bilanz -3; Holzfäller: keiner arbeitet"
+    std::string ExplainWare(GoodType good, unsigned depth);
+    /// The construction material missing for the building in detail, e.g. "Bretter fehlen: 2 nötig, 0 frei (Lager 6,
+    /// für Baustellen 6, für Aufträge darüber 0)". Empty if nothing is missing. `missing`: the wares that are missing
+    std::string DescribeMissingMaterial(BuildingType bld, std::vector<GoodType>& missing) const;
+    /// Self-solving order lacking material (ware and amount): cancel building sites outside the chain whose material is
+    /// not built in yet until enough comes back. Returns what was cancelled, for the reason
+    std::string CancelSitesFor(const std::vector<std::pair<GoodType, unsigned>>& lacking);
     /// Average productivity (percent) of the buildings of the type which worked longer than the start-up time, and
     /// their number
     std::pair<unsigned, unsigned> GetProductivity(BuildingType bld) const;
@@ -245,10 +290,17 @@ private:
     Order& Add(Order order);
     /// Removes the order and the not yet placed orders created for it
     void Remove(unsigned id);
-    bool HasOrder(BuildingType bld, GoodType forWare, bool consumer) const;
     /// A needed order makes the ware (not placed yet, or placed and starting up)
     bool HasProducerOrder(GoodType good) const;
     bool HasChildFor(unsigned parent, GoodType good) const;
+    /// Removes the not yet placed orders created for this one (it cannot be built, they would be of no use)
+    void RemoveUnplacedChildren(unsigned id);
+    /// The order or one above it is blocked until the situation changes (no way, no place, not researched)
+    bool IsChainBlocked(unsigned id) const;
+    /// Rank of the order in the basic economy for sorting (ai.lua; 1 = first level, 2 = second ..., then all others).
+    /// An order created for another one moves up to its own level if that is better, otherwise it stays with the
+    /// order it is for (it must come above it)
+    unsigned GetEffectiveLevel(const Order& order) const;
 
     void ProcessOrder(unsigned id, unsigned& searchBudget);
     /// Checks the rules. Returns the reason of the first rule not met (empty: all met) and sets the retry condition
@@ -256,8 +308,9 @@ private:
     /// Needed order: work on the unmet rule (e.g. order the producer of the missing material)
     void SolveRule(unsigned id, const RetryCondition& retry);
     MapPoint SearchPlace(Order& order, unsigned& searchBudget, bool& searchedAll);
-    /// Expanding order which cannot be placed now: to the end of the list
-    void MoveToEnd(Order& order, const std::string& reason);
+    /// Expanding order which cannot be placed now: to the end of the list. `retry`: what it waits for (material ...:
+    /// its costs stay planned; situation: not)
+    void MoveToEnd(Order& order, const std::string& reason, const RetryCondition& retry);
 
     /// The construction material for the building is there (after what the orders above in the list took)
     bool HasMaterial(BuildingType bld) const;
@@ -291,8 +344,26 @@ private:
     helpers::EnumArray<bool, BuildingType> managed_{};
     /// First GF a building (by its position) was seen with a worker: start-up time and productivity
     std::map<MapPoint, unsigned, MapPointLess> workingSince_;
-    /// Woodcutters placed to clear land
-    std::vector<MapPoint> clearingWoodcutters_;
+    /// Clearing woodcutters placed whose mark (game command, kept in the savegame) is not executed yet
+    std::vector<MapPoint> clearingPending_;
+    /// Planned wares this step (see WareStatus::planned) and the planned entries "any of"
+    helpers::EnumArray<unsigned, GoodType> planned_{};
+    std::vector<OpenDemand> plannedAnyOf_;
+    /// Orders whose construction costs are counted as planned at the start of the step
+    std::vector<unsigned> plannedOrderIds_;
+    /// Entries "any of" asked for (open) or planned: food of mines, construction costs with several materials
+    std::vector<OpenDemand> anyOfDemand_;
+    /// GetChain per ware in this step
+    std::map<GoodType, std::vector<BuildingType>> chainCache_;
+    /// Construction material in the warehouses not needed by building sites at the start of the step (for the reasons)
+    AIJH::ConstructionMaterial stepFreeMaterial_{};
+    /// Building sites cancelled for self-solving orders this step (one cancel round per step)
+    bool cancelledThisStep_ = false;
+    /// Military building whose material was kept free in this step (Headquarters: none)
+    BuildingType militaryKept_ = BuildingType::Headquarters;
+    /// Inputs kept for an order higher in the list that cannot be built without them (ware -> order). Orders further
+    /// down using one of them are not built in this step
+    std::map<GoodType, unsigned> keptInputs_;
 
     /// Construction material in the current step: free in the warehouses, minus what the orders processed so far took
     /// (placed or kept for needed orders waiting for material)

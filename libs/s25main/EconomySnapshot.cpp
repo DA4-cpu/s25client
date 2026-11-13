@@ -6,6 +6,7 @@
 #include "BuildingRegister.h"
 #include "GamePlayer.h"
 #include "LeatherLoader.h"
+#include "Ware.h"
 #include "buildings/noBuildingSite.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobHarborBuilding.h"
@@ -55,7 +56,34 @@ void addDemand(EconomySnapshot& snapshot, std::vector<GoodType> wares, const uns
     if(amount > 0 && !wares.empty())
         snapshot.openDemand.push_back({std::move(wares), amount, purpose});
 }
+} // namespace
 
+void addInputSpaces(std::vector<OpenDemand>& demand, const BuildingType bld)
+{
+    const BldWorkDescription& workDesc = BLD_WORK_DESC[bld];
+    if(workDesc.waresNeeded.empty() || workDesc.numSpacesPerWare == 0)
+        return;
+    if(workDesc.useOneWareEach)
+    {
+        for(const GoodType good : workDesc.waresNeeded)
+        {
+            if(good != GoodType::Nothing)
+                demand.push_back({{good}, workDesc.numSpacesPerWare, WareUse::Production});
+        }
+    } else
+    {
+        std::vector<GoodType> anyOf;
+        for(const GoodType good : workDesc.waresNeeded)
+        {
+            if(good != GoodType::Nothing)
+                anyOf.push_back(good);
+        }
+        if(!anyOf.empty())
+            demand.push_back({std::move(anyOf), workDesc.numSpacesPerWare, WareUse::Production});
+    }
+}
+
+namespace {
 void addWaiting(BuildingTypeState& state, std::vector<GoodType> wares)
 {
     for(WaitingForInput& entry : state.waitingForInput)
@@ -175,6 +203,8 @@ EconomySnapshot takeEconomySnapshot(const GamePlayer& player)
             if(costs[i].amount > have)
                 addDemand(snapshot, costs[i].wares, costs[i].amount - have, WareUse::Construction);
         }
+        if(BuildingProperties::IsUsual(bld))
+            addInputSpaces(snapshot.siteInputs, bld);
     }
 
     for(const auto bld : helpers::enumRange<BuildingType>())
@@ -237,6 +267,14 @@ EconomySnapshot takeEconomySnapshot(const GamePlayer& player)
                     addDemand(snapshot, {tech.cost[i].good}, tech.cost[i].amount - paid, WareUse::Research);
             }
         }
+    }
+
+    // Wares on their way to a consumer
+    for(const Ware* ware : player.GetWares())
+    {
+        const noBaseBuilding* goal = ware->GetGoal();
+        if(goal && !BuildingProperties::IsWareHouse(goal->GetBuildingType()) && ware->type != GoodType::Nothing)
+            ++snapshot.inTransit[ware->type];
     }
 
     for(const nobBaseWarehouse* warehouse : buildings.GetStorehouses())

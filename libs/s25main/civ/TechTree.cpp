@@ -72,6 +72,25 @@ TechTree::TechTree(const WorldDescription& desc)
             throw GameDataError("Expanding building of the AI is an invalid building '" + name + "'");
         aiExpanding_[*bld] = true;
     }
+    std::fill(aiBasicLevel_.begin(), aiBasicLevel_.end(), 0u);
+    for(unsigned level = 0; level < desc.aiBasicEconomy.size(); ++level)
+    {
+        for(const std::string& name : desc.aiBasicEconomy[level])
+        {
+            const auto bld = content_->FindBuilding(name, true);
+            if(!bld)
+                throw GameDataError("Basic economy of the AI contains an invalid building '" + name + "'");
+            aiBasicLevel_[*bld] = level + 1;
+        }
+    }
+    std::fill(aiStartStockNoSurplus_.begin(), aiStartStockNoSurplus_.end(), false);
+    for(const std::string& name : desc.aiStartStockNoSurplus)
+    {
+        const auto good = content_->FindGood(name);
+        if(!good)
+            throw GameDataError("Start stock of the AI that is no surplus contains an invalid ware '" + name + "'");
+        aiStartStockNoSurplus_[*good] = true;
+    }
     techs_.reserve(desc.technologies.size());
     for(const TechnologyDesc& techDesc : desc.technologies)
     {
