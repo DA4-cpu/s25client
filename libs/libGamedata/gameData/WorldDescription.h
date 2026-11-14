@@ -47,6 +47,14 @@ struct WorldDescription
     /// (rttr:SetAIBuildingLimit)
     unsigned aiBuildingLimitBase = 3, aiBuildingLimitPerStartArea = 1;
     bool aiBuildingLimitSet = false;
+    /// AI of the civilization mode: the storage counts as full at this percentage (rttr:SetAIStorageFull)
+    unsigned aiStorageFullPercent = 90;
+    /// Civilization mode: wares a warehouse holds at most: building identifier -> number (rttr:SetWarehouseCapacity).
+    /// Warehouses not listed hold any number
+    std::map<std::string, unsigned> warehouseCapacity;
+    /// Civilization mode: a worker puts his product at the flag only if not more than this many wares lie there
+    /// afterwards (rttr:SetFlagWorkLimit). 8: every place of the flag is used (like the original)
+    unsigned flagWorkLimit = 8;
     /// New wares of the civilization mode in order of definition
     std::vector<WareDesc> wares;
     /// Additional tags of built-in wares: Ware identifier -> tags

@@ -56,6 +56,9 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("SetAIBasicEconomy", &GameDataLoader::SetAIBasicEconomy)
         .addFunction("SetAIStartStockNoSurplus", &GameDataLoader::SetAIStartStockNoSurplus)
         .addFunction("SetAIBuildingLimit", &GameDataLoader::SetAIBuildingLimit)
+        .addFunction("SetAIStorageFull", &GameDataLoader::SetAIStorageFull)
+        .addFunction("SetWarehouseCapacity", &GameDataLoader::SetWarehouseCapacity)
+        .addFunction("SetFlagWorkLimit", &GameDataLoader::SetFlagWorkLimit)
         .addFunction("AddWare", &GameDataLoader::AddWare)
         .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
@@ -452,6 +455,40 @@ void GameDataLoader::SetAIBuildingLimit(const kaguya::LuaTable& data)
     worldDesc_.aiBuildingLimitBase = getValue("base");
     worldDesc_.aiBuildingLimitPerStartArea = getValue("perStartArea");
     worldDesc_.aiBuildingLimitSet = true;
+}
+
+void GameDataLoader::SetAIStorageFull(const unsigned percent)
+{
+    if(percent < 1 || percent > 100)
+        throw GameDataError("rttr:SetAIStorageFull: the value must be in [1, 100] (percent of the capacity)");
+    worldDesc_.aiStorageFullPercent = percent;
+}
+
+void GameDataLoader::SetWarehouseCapacity(const kaguya::LuaTable& data)
+{
+    const std::string context = "Capacity of the warehouses (rttr:SetWarehouseCapacity)";
+    const std::string example = "{ Headquarters = 500, Storehouse = 200 }";
+    const std::vector<std::string> keys = data.keys<std::string>();
+    if(keys.empty() || keys.size() != data.keys<kaguya::LuaRef>().size())
+        throw GameDataError(context + ": expected a table like " + example);
+    for(const std::string& building : keys)
+    {
+        const kaguya::LuaRef value = data[building];
+        if(value.type() != kaguya::LuaRef::TYPE_NUMBER)
+            throw GameDataError(context + ": the capacity of '" + building + "' is no number (" + example + ")");
+        const double number = value.get<double>();
+        if(number < 1 || number > 100000 || number != static_cast<double>(static_cast<unsigned>(number)))
+            throw GameDataError(context + ": the capacity of '" + building + "' must be a whole number in [1, 100000]");
+        if(!worldDesc_.warehouseCapacity.emplace(building, static_cast<unsigned>(number)).second)
+            throw GameDataError(context + ": '" + building + "' is defined twice");
+    }
+}
+
+void GameDataLoader::SetFlagWorkLimit(const unsigned numWares)
+{
+    if(numWares < 1 || numWares > 8)
+        throw GameDataError("rttr:SetFlagWorkLimit: the value must be in [1, 8] (a flag holds 8 wares)");
+    worldDesc_.flagWorkLimit = numWares;
 }
 
 void GameDataLoader::SetAIStartStockNoSurplus(const kaguya::LuaTable& data)

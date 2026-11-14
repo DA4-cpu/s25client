@@ -94,6 +94,15 @@ void Game::RunGF()
     // Civilization mode: Pay research costs and complete technologies
     if(em_->GetCurrentGF() % civ::RESEARCH_UPDATE_INTERVAL == 0)
         civ::update(world_);
+    // Civilization mode: wares waiting at flags because all warehouses were full look for a goal again
+    if(civ::isEnabled(world_) && em_->GetCurrentGF() % civ::WAITING_WARES_INTERVAL == 0)
+    {
+        for(unsigned i = 0; i < world_.GetNumPlayers(); ++i)
+        {
+            if(world_.GetPlayer(i).isUsed())
+                world_.GetPlayer(i).FindGoalsForWaitingWares();
+        }
+    }
 
     if(world_.HasLua())
         world_.GetLua().EventGameFrame(em_->GetCurrentGF());

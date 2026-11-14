@@ -16,6 +16,7 @@
 #include "civ/Research.h"
 #include "civ/TechTree.h"
 #include "factories/AIFactory.h"
+#include "factories/BuildingFactory.h"
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
 #include "worldFixtures/MockLocalGameState.h"
@@ -131,6 +132,17 @@ struct PlannerFixture : public WorldWithGCExecution<1, 32, 32>
     {
         planner()->Step();
         executeCommands();
+    }
+    /// Let the game and the AI run
+    void runAI(unsigned numGFs)
+    {
+        for(unsigned gf = 0; gf < numGFs; gf++)
+        {
+            em.ExecuteNextGF();
+            ai->RunGF(em.GetCurrentGF(), gf % 5 == 0);
+            if(gf % 5 == 4)
+                executeCommands();
+        }
     }
     void executeCommands()
     {
@@ -301,6 +313,54 @@ BOOST_FIXTURE_TEST_CASE(ExpandingOrdersArePlacedAndLeaveTheList, PlannerFixture)
     BOOST_TEST(findSite(PIT).isValid());
     // Expanding orders have no start-up time
     BOOST_TEST(findOrder(PIT) == -1);
+}
+
+BOOST_FIXTURE_TEST_CASE(FullStorageAllowsOnlyNeededOrders, PlannerFixture)
+{
+    // The HQ holds 85 wares and has 80 (40 boards, 40 stones): more than 90 %. The pit (expanding) must wait, a
+    // storehouse is ordered
+    WorldDescription desc = makeDesc({"Pit"});
+    desc.warehouseCapacity = {{"Headquarters", 85}};
+    startGame(desc);
+    placeDeposits();
+    startAI();
+    step();
+    BOOST_TEST(planner()->IsStorageFull());
+    const civai::Order& pit = getOrder(PIT);
+    BOOST_TEST_INFO(pit.reason);
+    BOOST_TEST(pit.reason.find("Lager voll (80 von 85)") == 0u);
+    BOOST_TEST(!findSite(PIT).isValid());
+    const civai::Order& storehouse = getOrder(BuildingType::Storehouse);
+    BOOST_TEST((storehouse.kind == civai::OrderKind::Needed));
+    BOOST_TEST(storehouse.forStorage);
+    BOOST_TEST_INFO(storehouse.reason);
+    BOOST_TEST((storehouse.state == civai::OrderState::Placed));
+}
+
+BOOST_FIXTURE_TEST_CASE(PlansWithAWarehouseFromLua, PlannerFixture)
+{
+    // A warehouse defined in lua (workshop 2) is no production building: the AI plans around it
+    WorldDescription desc = makeDesc({"Pit"});
+    WorkshopDesc shed;
+    shed.name = "Shed";
+    shed.title = "ShedTitle";
+    shed.size = "small";
+    shed.cost = {{{"Boards"}, 2}};
+    shed.look = "Storehouse";
+    shed.warehouseCapacity = 50;
+    shed.warehouseWares = {{"Boards"}};
+    desc.workshops.push_back(shed);
+    startGame(desc);
+    placeDeposits();
+    BuildingFactory::CreateBuilding(world, getCustomBuilding(2), world.MakeMapPoint(hqPos + Position(-4, 2)), curPlayer,
+                                    Nation::Romans);
+    startAI();
+    BOOST_TEST(!planner()->IsManaged(getCustomBuilding(2)));
+    for(unsigned i = 0; i < 5; i++)
+        step();
+    runAI(600);
+    BOOST_TEST(findSite(PIT).isValid());
+    BOOST_TEST(findOrder(getCustomBuilding(2)) == -1);
 }
 
 BOOST_FIXTURE_TEST_CASE(BuildingLimitDependsOnTheLand, PlannerFixture)

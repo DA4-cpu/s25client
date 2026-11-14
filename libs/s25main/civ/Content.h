@@ -140,6 +140,10 @@ struct CustomBuilding
     std::vector<unsigned> productChoiceEntries;
     /// Library: stores up to this many knowledge media and produces nothing. 0: normal workshop
     unsigned libraryCapacity = 0;
+    /// Warehouse (warehouse = { ... } in lua): stores only these wares (and no people), has no worker. Empty: no
+    /// warehouse. Its capacity: Content::GetWarehouseCapacity
+    std::vector<GoodType> warehouseWares;
+    bool IsWarehouse() const { return !warehouseWares.empty(); }
     /// Collector: Index of the map object (Content::GetMapObject) the worker collects like the stonemason. -1: none
     int collectObject = -1;
     /// Collector: Maximum distance of the map objects
@@ -285,6 +289,15 @@ public:
     std::optional<GoodType> FindGood(const std::string& identifier) const;
     /// Building (built-in usable building or custom) for the identifier
     std::optional<BuildingType> FindBuilding(const std::string& identifier, bool allowHeadquarters = false) const;
+    /// The building is a warehouse defined in lua (workshop with warehouse = { ... })
+    bool IsCustomWarehouse(BuildingType bld) const;
+    /// A warehouse of the type stores the ware. Built-in warehouses store all wares
+    bool WarehouseStores(BuildingType bld, GoodType good) const;
+    /// Wares a warehouse of the type holds at most (rttr:SetWarehouseCapacity). 0: any number
+    unsigned GetWarehouseCapacity(BuildingType bld) const { return warehouseCapacity_[bld]; }
+    /// A worker puts his product at the flag only if not more than this many wares lie there afterwards
+    /// (rttr:SetFlagWorkLimit). 8: all places of the flag
+    unsigned GetFlagWorkLimit() const { return flagWorkLimit_; }
 
     /// Names of the used custom slots in order. Used to check that a savegame fits the lua definitions
     std::vector<std::string> GetSignature() const;
@@ -316,6 +329,8 @@ private:
     helpers::EnumArray<BuildingCosts, BuildingType> costs_;
     bool fromLua_ = false;
     unsigned toolReorderPercent_ = 10;
+    helpers::EnumArray<unsigned, BuildingType> warehouseCapacity_{};
+    unsigned flagWorkLimit_ = 8;
 };
 
 /// Content of the running game. Empty unless a game in the civilization mode is running.

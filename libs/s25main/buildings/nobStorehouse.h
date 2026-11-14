@@ -12,6 +12,8 @@ class nobStorehouse : public nobBaseWarehouse
     friend class SerializedGameData;
     friend class BuildingFactory;
     nobStorehouse(MapPoint pos, unsigned char player, Nation nation);
+    /// Warehouse of another type: a warehouse defined in lua (civilization mode)
+    nobStorehouse(BuildingType type, MapPoint pos, unsigned char player, Nation nation);
     nobStorehouse(SerializedGameData& sgd, unsigned obj_id);
 
 public:

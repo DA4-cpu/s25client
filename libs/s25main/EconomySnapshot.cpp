@@ -277,12 +277,18 @@ EconomySnapshot takeEconomySnapshot(const GamePlayer& player)
             ++snapshot.inTransit[ware->type];
     }
 
+    bool unlimited = false;
     for(const nobBaseWarehouse* warehouse : buildings.GetStorehouses())
     {
+        unlimited |= warehouse->GetCapacity() == 0;
+        snapshot.storageCapacity += warehouse->GetCapacity();
+        snapshot.storageLoad += warehouse->GetLoad();
         for(const auto good : helpers::enumRange<GoodType>())
             snapshot.inWarehouses[good] += warehouse->GetNumRealWares(good);
         for(const auto job : helpers::enumRange<Job>())
             snapshot.inWarehousesPeople[job] += warehouse->GetNumRealFigures(job);
     }
+    if(unlimited)
+        snapshot.storageCapacity = 0;
     return snapshot;
 }

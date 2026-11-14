@@ -64,6 +64,9 @@ struct EconomySnapshot
     helpers::EnumArray<unsigned, Job> inWarehousesPeople{};
     /// Building sites and buildings waiting for a worker of the job
     helpers::EnumArray<unsigned, Job> jobsWanted{};
+    /// Civilization mode: wares all warehouses hold at most and what they hold now (with the wares on their way to
+    /// them). Capacity 0: no limit
+    unsigned storageCapacity = 0, storageLoad = 0;
     /// Wares on their way to the building that asked for them (not to a warehouse). They left the stock already
     helpers::EnumArray<unsigned, GoodType> inTransit{};
     /// Input spaces of the building sites: the finished buildings will ask for these wares (any of `wares` for the

@@ -894,6 +894,7 @@ void EconomyPlanner::CreateOrders()
     }
     AddClearingOrders();
     AddForesterOrders();
+    AddStorageOrder();
 }
 
 bool EconomyPlanner::IsAnyOfDemand(const GoodType good) const
@@ -1161,6 +1162,35 @@ void EconomyPlanner::AddStorehouseOrder(const unsigned parent)
     Add(std::move(order));
 }
 
+bool EconomyPlanner::IsStorageFull() const
+{
+    const unsigned percent = player_.GetGameWorld().GetTechTree().GetAIStorageFullPercent();
+    return snapshot_.storageCapacity > 0 && snapshot_.storageLoad * 100u >= snapshot_.storageCapacity * percent;
+}
+
+void EconomyPlanner::AddStorageOrder()
+{
+    const bool exists =
+      helpers::contains_if(orders_, [](const Order& order) { return order.building == BuildingType::Storehouse; });
+    if(!IsStorageFull())
+    {
+        // Not full anymore: the storehouse is not needed (unless it is placed already)
+        helpers::erase_if(orders_,
+                          [](const Order& order) { return order.forStorage && order.state != OrderState::Placed; });
+        return;
+    }
+    // One at a time: the next one when this one is finished and the storage is still full
+    if(exists || snapshot_.buildings[BuildingType::Storehouse].numSites > 0
+       || aijh_.GetConstruction().GetNumPendingSites(BuildingType::Storehouse) > 0
+       || !player_.IsBuildingEnabled(BuildingType::Storehouse))
+        return;
+    Order order;
+    order.building = BuildingType::Storehouse;
+    order.forStorage = true;
+    order.reason = "Lager voll";
+    Add(std::move(order));
+}
+
 void EconomyPlanner::AddForesterOrders()
 {
     if(!managed_[BuildingType::Forester])
@@ -1263,6 +1293,15 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     // The inputs this order lacks are kept for it: no order below it gets a building using them
     for(const GoodType input : order->inputsMissing)
         keptInputs_.emplace(input, id);
+    // Storage full: only needed orders (and those solving their own problem)
+    if(!needed && !order->selfSolving && IsStorageFull())
+    {
+        MoveToEnd(*order,
+                  "Lager voll (" + std::to_string(snapshot_.storageLoad) + " von "
+                    + std::to_string(snapshot_.storageCapacity) + ")",
+                  RetryCondition{});
+        return;
+    }
     // Blocked: tried again when its condition is met (material there, situation changed ...), not every step
     if(!order->selfSolving && order->state == OrderState::Blocked && !IsRetryMet(order->retry, order->building))
         return;
@@ -1869,7 +1908,12 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
             pos = aijh_.FindWoodcutterPosition(center, order.clearing);
         else if(order.building == BuildingType::Quarry && order.clearing)
             pos = aijh_.FindQuarryPosition(center);
-        else if(order.building == BuildingType::Forester)
+        else if(order.forStorage)
+        {
+            // More space is needed: also next to another warehouse (the old AI keeps its storehouses apart)
+            pos = aijh_.SimpleFindPosition(center, BUILDING_SIZE[order.building], 15,
+                                           AIJH::AIConstruction::GetBorderReserve(order.building));
+        } else if(order.building == BuildingType::Forester)
         {
             std::vector<MapPoint> clearing = player_.GetClearingWoodcutters();
             clearing.insert(clearing.end(), clearingPending_.begin(), clearingPending_.end());
@@ -1973,6 +2017,11 @@ std::string EconomyPlanner::GetReport() const
         const WareStatus& status = wares_[good];
         if(status.state == SupplyState::Surplus && hasUse_[good])
             out << " " << wareName(good) << " (frei " << status.free << ");";
+    }
+    if(snapshot_.storageCapacity > 0)
+    {
+        out << "\n  Lager: " << snapshot_.storageLoad << " von " << snapshot_.storageCapacity
+            << (IsStorageFull() ? " (voll: nur benötigte Aufträge)" : "");
     }
     out << "\n  Liste:\n";
     unsigned pos = 0;

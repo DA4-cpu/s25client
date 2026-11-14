@@ -224,6 +224,35 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         cost = parseBuildingCost(*costValue, context + ", cost");
     luaData.getOrThrow(look, "look");
 
+    if(auto warehouseTable = luaData.getOptional<kaguya::LuaTable>("warehouse"))
+    {
+        // A warehouse for some wares: no worker, no production
+        CheckedLuaTable warehouseData(*warehouseTable);
+        warehouseData.getOrThrow(warehouseCapacity, "capacity");
+        if(warehouseCapacity == 0 || warehouseCapacity > 100000)
+            throw GameDataError(context + ": warehouse capacity must be in [1, 100000]");
+        auto waresTable = warehouseData.getOrThrow<kaguya::LuaTable>("wares");
+        for(const kaguya::LuaRef& entry : waresTable.values())
+            warehouseWares.push_back(parseTagQuery(entry, context + ", warehouse wares"));
+        if(warehouseWares.empty())
+            throw GameDataError(context + ": warehouse wares is empty (the wares it stores, e.g. { \"Wood\" })");
+        warehouseData.checkUnused();
+        if(size == "mine")
+            throw GameDataError(context + ": a warehouse is no mine");
+        for(const char* key :
+            {"worker", "inputs", "consume", "library", "collect", "plant", "mine", "output", "outputs",
+             "inheritProperties", "outputChoice", "storage", "workTime", "waitTime", "tools", "outputRatio"})
+        {
+            if(luaData.getOptional<kaguya::LuaRef>(key))
+                throw GameDataError(context + ": a warehouse has no '" + key + "' (it only stores wares)");
+        }
+        if(const auto knowledgeTable = luaData.getOptional<kaguya::LuaTable>("knowledge"))
+            knowledge = parseKnowledge(*knowledgeTable, true, context + ", knowledge");
+        aiNearBorder = luaData.getOrDefault("aiNearBorder", false);
+        luaData.checkUnused();
+        return;
+    }
+
     {
         auto workerTable = luaData.getOrThrow<kaguya::LuaTable>("worker");
         CheckedLuaTable workerData(workerTable);

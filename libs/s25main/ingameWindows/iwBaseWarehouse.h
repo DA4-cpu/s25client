@@ -35,4 +35,11 @@ protected:
     void Msg_ButtonClick(unsigned ctrl_id) override;
 
     void SetPage(unsigned page) override;
+    /// Civilization mode: shows the load and the capacity of the warehouse in the title, e.g. "Storehouse 120/200"
+    void Msg_PaintBefore() override;
+
+private:
+    /// Title without the load
+    std::string baseTitle_;
+    unsigned shownLoad_ = 0;
 };

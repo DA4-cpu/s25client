@@ -12,6 +12,7 @@
 #include "Ware.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "civ/Research.h"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/serializeEnums.h"
@@ -213,7 +214,7 @@ void nofBuildingWorker::WorkingReady()
         // Mehr als eine volle Fahne wird nacheinander abgelegt
         std::vector<GoodType> waresToPut = GetWaresToCarryOut();
         const unsigned numNow = GetNumWaresToPutNow(waresToPut.size());
-        if(workplace->GetFlag()->GetNumFreeSpaces() >= numNow)
+        if(HasSpaceForWaresAtFlag())
         {
             for(unsigned i = 0; i < numNow; ++i)
                 PutWareAtFlag(waresToPut[i]);
@@ -258,7 +259,10 @@ std::vector<GoodType> nofBuildingWorker::GetWaresToCarryOut() const
 
 bool nofBuildingWorker::HasSpaceForWaresAtFlag() const
 {
-    return workplace->GetFlag()->GetNumFreeSpaces() >= GetNumWaresToPutNow(GetWaresToCarryOut().size());
+    // Civilization mode: places of the flag stay free for wares passing by (construction material), see
+    // rttr:SetFlagWorkLimit
+    const unsigned keptFree = 8u - civ::getActiveContent().GetFlagWorkLimit();
+    return workplace->GetFlag()->GetNumFreeSpaces() >= GetNumWaresToPutNow(GetWaresToCarryOut().size()) + keptFree;
 }
 
 void nofBuildingWorker::PutWareAtFlag(const GoodType good)

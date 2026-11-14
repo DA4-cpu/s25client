@@ -661,6 +661,25 @@ void GamePlayer::FindClientForLostWares()
     }
 }
 
+void GamePlayer::FindGoalsForWaitingWares()
+{
+    // Wares lying at a flag without goal (all warehouses were full): a building that needs them now or a warehouse
+    // with space again
+    for(Ware* ware : ware_list)
+    {
+        if(!ware->IsLostWare() || !ware->IsWaitingAtFlag())
+            continue;
+        noBaseBuilding* goal = FindClientForWare(*ware);
+        if(!goal)
+            continue;
+        ware->SetGoal(goal);
+        ware->RecalcRoute();
+        if(ware->GetGoal() && ware->GetNextDir() != RoadPathDirection::None
+           && ware->GetNextDir() != RoadPathDirection::Ship)
+            ware->CallCarrier();
+    }
+}
+
 void GamePlayer::RoadDestroyed()
 {
     // Alle Waren, die an Flagge liegen und in Lagerhäusern, müssen gucken, ob sie ihr Ziel noch erreichen können, jetzt
@@ -680,9 +699,7 @@ void GamePlayer::RoadDestroyed()
             noBaseBuilding* wareGoal = ware->GetGoal();
             if(wareGoal && ware->GetNextDir() == RoadPathDirection::NorthWest
                && wareLocation.GetPos() == wareGoal->GetFlagPos()
-               && ((wareGoal->GetBuildingType() != BuildingType::Storehouse
-                    && wareGoal->GetBuildingType() != BuildingType::Headquarters
-                    && wareGoal->GetBuildingType() != BuildingType::HarborBuilding)
+               && (!BuildingProperties::IsWareHouse(wareGoal->GetBuildingType())
                    || wareGoal->GetType() == NodalObjectType::Buildingsite))
             {
                 Direction newWareDir = Direction::NorthWest;

@@ -12,6 +12,7 @@
 #include "buildings/nobTemple.h"
 #include "buildings/nobUsual.h"
 #include "world/GameWorldBase.h"
+#include "gameData/BuildingProperties.h"
 
 noBuilding* BuildingFactory::CreateBuilding(GameWorldBase& world, const BuildingType type, const MapPoint pt,
                                             const unsigned char player, const Nation nation)
@@ -28,7 +29,13 @@ noBuilding* BuildingFactory::CreateBuilding(GameWorldBase& world, const Building
         case BuildingType::Fortress: bld = new nobMilitary(type, pt, player, nation); break;
         case BuildingType::Shipyard: bld = new nobShipYard(pt, player, nation); break;
         case BuildingType::Temple: bld = new nobTemple(pt, player, nation); break;
-        default: bld = new nobUsual(type, pt, player, nation); break;
+        default:
+            // Warehouses defined in lua (civilization mode)
+            if(BuildingProperties::IsWareHouse(type))
+                bld = new nobStorehouse(type, pt, player, nation);
+            else
+                bld = new nobUsual(type, pt, player, nation);
+            break;
     }
     world.SetNO(pt, bld);
     // Don't do this in ctor as building might not be fully initialized yet

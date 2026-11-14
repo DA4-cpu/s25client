@@ -18,6 +18,8 @@ namespace civ {
 
 /// Interval in game frames in which research costs are paid (2s at normal speed)
 constexpr unsigned RESEARCH_UPDATE_INTERVAL = 40;
+/// GFs between two searches of a goal for the wares waiting at flags because all warehouses were full
+constexpr unsigned WAITING_WARES_INTERVAL = 100;
 
 /// True if the civilization mode (tech tree) is active in this game
 bool isEnabled(const GameWorldBase& world);

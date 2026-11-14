@@ -53,7 +53,7 @@ bool AcceptsWare::operator()(const nobBaseWarehouse& wh) const
     // Einlagern darf nicht verboten sein
     // Schilder beachten!
     const GoodType good = ConvertShields(type);
-    return !wh.GetInventorySetting(good).IsSet(EInventorySetting::Stop);
+    return !wh.GetInventorySetting(good).IsSet(EInventorySetting::Stop) && wh.CanStoreWare(good);
 }
 
 bool AcceptsFigure::operator()(const nobBaseWarehouse& wh) const
@@ -63,7 +63,7 @@ bool AcceptsFigure::operator()(const nobBaseWarehouse& wh) const
     if(job == Job::BoatCarrier)
         job = Job::Helper;
 
-    return !wh.GetInventorySetting(job).IsSet(EInventorySetting::Stop);
+    return !wh.GetInventorySetting(job).IsSet(EInventorySetting::Stop) && wh.StoresPeople();
 }
 
 bool CollectsWare::operator()(const nobBaseWarehouse& wh) const
@@ -71,7 +71,7 @@ bool CollectsWare::operator()(const nobBaseWarehouse& wh) const
     // Einlagern muss gewollt sein
     // Schilder beachten!
     GoodType gt = ConvertShields(type);
-    return (wh.GetInventorySetting(gt).IsSet(EInventorySetting::Collect));
+    return wh.GetInventorySetting(gt).IsSet(EInventorySetting::Collect) && wh.CanStoreWare(gt);
 }
 
 bool CollectsFigure::operator()(const nobBaseWarehouse& wh) const
@@ -80,12 +80,13 @@ bool CollectsFigure::operator()(const nobBaseWarehouse& wh) const
     Job job = type;
     if(job == Job::BoatCarrier)
         job = Job::Helper;
-    return (wh.GetInventorySetting(job).IsSet(EInventorySetting::Collect));
+    return wh.GetInventorySetting(job).IsSet(EInventorySetting::Collect) && wh.StoresPeople();
 }
 
 bool HasWareButNoCollect::operator()(const nobBaseWarehouse& wh) const
 {
-    return HasMinWares::operator()(wh) && !CollectsWare::operator()(wh);
+    return HasMinWares::operator()(wh)
+           && !wh.GetInventorySetting(ConvertShields(HasMinWares::type)).IsSet(EInventorySetting::Collect);
 }
 
 bool HasFigureButNoCollect::operator()(const nobBaseWarehouse& wh) const

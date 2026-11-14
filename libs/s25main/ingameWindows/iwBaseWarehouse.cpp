@@ -22,6 +22,7 @@
 #include "world/GameWorldBase.h"
 #include "world/GameWorldView.h"
 #include "gameData/BuildingConsts.h"
+#include "gameData/BuildingProperties.h"
 #include "gameData/const_gui_ids.h"
 #include <stdexcept>
 
@@ -254,7 +255,7 @@ void iwBaseWarehouse::Msg_ButtonClick(const unsigned ctrl_id)
                       .ReplaceWindow(
                         std::make_unique<iwHarborBuilding>(gwv, gcFactory, dynamic_cast<nobHarborBuilding*>(*it)))
                       .SetPos(GetPos());
-                } else if((*it)->GetBuildingType() == BuildingType::Storehouse)
+                } else if(BuildingProperties::IsWareHouse((*it)->GetBuildingType()))
                 {
                     WINDOWMANAGER
                       .ReplaceWindow(
@@ -317,6 +318,21 @@ void iwBaseWarehouse::UpdateOverlays()
         for(const unsigned value : page.values)
             UpdateOverlay(value, page.isWare);
     }
+}
+
+void iwBaseWarehouse::Msg_PaintBefore()
+{
+    iwWares::Msg_PaintBefore();
+    if(!wh || wh->GetCapacity() == 0)
+        return;
+    const unsigned load = wh->GetLoad();
+    // The windows of the HQ and the harbor set their title after this constructor: take it over once
+    if(baseTitle_.empty())
+        baseTitle_ = GetTitle();
+    else if(load == shownLoad_)
+        return;
+    shownLoad_ = load;
+    SetTitle(baseTitle_ + " " + std::to_string(load) + "/" + std::to_string(wh->GetCapacity()));
 }
 
 void iwBaseWarehouse::OnChange(unsigned changeId)

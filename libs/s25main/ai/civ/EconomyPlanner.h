@@ -134,6 +134,8 @@ struct Order
     /// The building is part of the chain that makes the construction material it lacks (e.g. a woodcutter lacking
     /// boards). It is not blocked by that: it gets the material before all other orders and buildings
     bool selfSolving = false;
+    /// Storehouse ordered because the storage is full (removed when it is not full anymore)
+    bool forStorage = false;
     /// Inputs that are the reason it cannot be built (missing, no way). Orders below it in the list must not get a
     /// building that uses them (the wares are kept for this one)
     std::vector<GoodType> inputsMissing;
@@ -195,6 +197,9 @@ public:
     unsigned GetBuildingLimit() const;
     /// Buildings, building sites and ordered sites of the type
     unsigned GetNumBuildings(BuildingType bld) const;
+    /// The warehouses are full: their load reached the percentage of ai.lua (rttr:SetAIStorageFull) of their capacity.
+    /// Then only needed orders are built and one more storehouse is ordered
+    bool IsStorageFull() const;
     /// Text for the log: shortages, surpluses and the list with reasons
     std::string GetReport() const;
     /// Duration of the last step and the maximum (microseconds)
@@ -262,6 +267,8 @@ private:
     void AddForesterOrders();
     /// Storehouse for more helpers (the warehouses create them)
     void AddStorehouseOrder(unsigned parent);
+    /// Storage full: a needed storehouse (one at a time)
+    void AddStorageOrder();
 
     /// Producers of the ware usable as a way, the best first: not blocked, fewest new buildings, highest productivity
     /// of the existing ones, lowest construction costs. onlyExpanding: only buildings of ai.lua

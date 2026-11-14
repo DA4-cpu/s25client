@@ -1344,8 +1344,40 @@ Werkzeug.
 Blockierte Aufträge suchen deshalb erst wieder, wenn ihre Bedingung erfüllt ist.
 
 **Offen:**
-- Lagerkapazität (Regel „nur benötigte Aufträge, wenn das Lager voll ist“).
 - Militär im Planer (Schritt 3).
+
+## Lagerkapazität (Stand 2026-11-14)
+
+Entscheidungen des Nutzers (2026-11-14). Nur im Zivilisationsmodus; Einstellungen in
+`data/RTTR/gamedata/civ/storage.lua`. Tests: `CivStorageSuite`.
+
+- **Kapazität:** `rttr:SetWarehouseCapacity{ Headquarters = 500, HarborBuilding = 300, Storehouse = 200 }`.
+  - Gezählt werden nur Waren, keine Personen (`nobBaseWarehouse::GetLoad`).
+  - Waren auf dem Weg zum Lager zählen schon mit.
+  - Lager ohne Eintrag fassen beliebig viel.
+- **Volles Lager:** Es nimmt keine Waren mehr an (`nobBaseWarehouse::CanStoreWare`, geprüft in den
+  Lagersuchbedingungen `FW::AcceptsWare`, `FW::CollectsWare`).
+- **Ausnahme:** Was im Lager selbst entsteht (Startvorrat, Werkzeuge zurückkehrender Arbeiter, Lua, Cheats), wird immer
+  eingelagert, auch über die Grenze.
+- **Alle Lager voll:** Die Ware bleibt ohne Ziel an der Flagge ihres Gebäudes liegen.
+  - Alle 100 GF (`civ::WAITING_WARES_INTERVAL`) sucht sie erneut: zuerst einen Abnehmer (Baustelle, Werkstatt), sonst
+    ein Lager mit Platz (`GamePlayer::FindGoalsForWaitingWares`).
+  - Im Original suchen Waren ohne Ziel nur Lager; ohne die Abnehmersuche blieben Bretter liegen, während Baustellen
+    warten.
+- **Arbeitsstopp an der Flagge:** `rttr:SetFlagWorkLimit(7)`. Ein Arbeiter legt sein Produkt nur ab, wenn danach
+  höchstens 7 Waren an der Flagge liegen; sonst wartet er im Gebäude. So bleibt ein Platz für durchlaufendes
+  Baumaterial frei.
+- **Anzeige:** Die Belegung steht im Titel des Lagerfensters, z. B. „Lagerhaus 120/200“.
+- **Lager aus Lua:** `rttr:AddWorkshop{ ..., warehouse = { wares = { "Wood", "Stones" }, capacity = 100 } }`.
+  - Es nimmt nur die genannten Waren auf (Tag-Abfragen) und keine Personen, erzeugt keine Gehilfen, hat keinen
+    Arbeiter.
+  - Technisch ist es ein `nobStorehouse` mit eigenem Gebäudetyp; `BuildingProperties::IsWareHouse` gilt auch dafür.
+  - Der Schlüssel heißt `warehouse`, weil `storage` schon die Eingangsplätze einer Werkstatt meint.
+  - Die KI baut solche Lager noch nicht.
+- **KI:** `rttr:SetAIStorageFull(90)` in `ai.lua`. Ab 90 % Belegung aller Lager zusammen gibt es nur noch benötigte
+  Aufträge, und ein benötigter Auftrag „Lagerhaus“ entsteht (einer zur Zeit, auch direkt neben einem anderen Lager).
+- **Vergleich** (7 Karten, 2 KI, 2 h): Land 74 238 (ohne Kapazität 74 559). Die KI erreicht die 90 % selten, weil die
+  alte KI weiter eigene Lagerhäuser baut. Das Hauptquartier startet mit 308 von 500 Waren.
 
 ## KI-Bauregeln (Wunsch des Nutzers 2026-10-23, gilt in allen Spielen)
 

@@ -185,6 +185,9 @@ public:
         RTTR_Assert(IsWareRegistred(ware));
         ware_list.remove(&ware);
     }
+    /// Civilization mode (capacity of the warehouses): wares waiting at a flag without goal look for a building that
+    /// needs them or a warehouse with space
+    void FindGoalsForWaitingWares();
     bool IsWareRegistred(const Ware& ware);
     /// Wares outside the warehouses (on roads, at flags, waiting to leave a warehouse, on ships)
     const std::list<Ware*>& GetWares() const { return ware_list; }

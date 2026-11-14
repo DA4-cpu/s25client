@@ -100,6 +100,8 @@ public:
     /// type (ai.lua)
     unsigned GetAIBuildingLimitBase() const { return aiBuildingLimitBase_; }
     unsigned GetAIBuildingLimitPerStartArea() const { return aiBuildingLimitPerStartArea_; }
+    /// AI: the storage counts as full at this percentage of its capacity (ai.lua)
+    unsigned GetAIStorageFullPercent() const { return aiStorageFullPercent_; }
     /// Byproducts of the building (in order of definition)
     const std::vector<Byproduct>& GetByproducts(BuildingType bld) const { return byproducts_[bld]; }
     /// Wares, workshops and tags defined in lua
@@ -114,7 +116,7 @@ private:
     helpers::EnumArray<bool, BuildingType> aiExpanding_;
     helpers::EnumArray<unsigned, BuildingType> aiBasicLevel_;
     helpers::EnumArray<bool, GoodType> aiStartStockNoSurplus_;
-    unsigned aiBuildingLimitBase_, aiBuildingLimitPerStartArea_;
+    unsigned aiBuildingLimitBase_, aiBuildingLimitPerStartArea_, aiStorageFullPercent_;
     helpers::EnumArray<std::vector<Byproduct>, BuildingType> byproducts_;
 };
 

@@ -81,6 +81,16 @@ rttr:AddWorkshop{...}:
               pro Produkt eine Einheit des Erzes im Umkreis von 2 Knoten ab. Ist nichts mehr da, kommt die Meldung
               "Diese Mine ist erschöpft". Eingänge wie bei den eingebauten Minen, z.B.
               inputs = { "Fish", "Meat", "Bread" }, consume = "any".
+  warehouse   optional: macht das Gebäude zum Lager statt zur Werkstatt:
+              warehouse = { wares = { "Wood", "Stones", "Lehm" }, capacity = 100 }.
+              wares = die Waren, die es aufnimmt (Tag-Abfragen wie bei inputs), capacity = Höchstzahl aller Waren
+              zusammen (siehe storage.lua). Es nimmt nur diese Waren auf und keine Personen, erzeugt keine Gehilfen
+              und hat keinen Arbeiter. Baustellen und Werkstätten holen ihre Waren auch von dort.
+              Ein Lager hat nur name, title, description, size, cost, look, knowledge und aiNearBorder; worker, inputs,
+              output, workTime usw. sind nicht erlaubt. Die KI baut solche Lager noch nicht.
+              Beispiel:
+                rttr:AddWorkshop{ name = "WoodYard", title = "Holzlager", size = "medium", cost = { Boards = 3 },
+                    look = "Storehouse", warehouse = { wares = { "Wood", "Boards" }, capacity = 100 } }
   workTime    Arbeitszeit pro Produkt in Sekunden (Sammler und Plantagen: pro Gang)
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
   knowledge   optional: Wissenspunkte des fertigen Gebäudes wie in knowledge.lua, z.B. knowledge = { IWP = 2 }.

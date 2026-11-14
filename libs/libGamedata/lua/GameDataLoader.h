@@ -35,6 +35,9 @@ private:
     void SetAIBasicEconomy(const kaguya::LuaTable& data);
     void SetAIStartStockNoSurplus(const kaguya::LuaTable& data);
     void SetAIBuildingLimit(const kaguya::LuaTable& data);
+    void SetAIStorageFull(unsigned percent);
+    void SetWarehouseCapacity(const kaguya::LuaTable& data);
+    void SetFlagWorkLimit(unsigned numWares);
     void AddWare(const kaguya::LuaTable& data);
     void SetWareTags(const kaguya::LuaTable& data);
     void AddWorkshop(const kaguya::LuaTable& data);

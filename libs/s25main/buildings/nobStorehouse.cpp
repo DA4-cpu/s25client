@@ -7,7 +7,12 @@
 #include "postSystem/PostMsgWithBuilding.h"
 
 nobStorehouse::nobStorehouse(const MapPoint pos, const unsigned char player, const Nation nation)
-    : nobBaseWarehouse(BuildingType::Storehouse, pos, player, nation)
+    : nobStorehouse(BuildingType::Storehouse, pos, player, nation)
+{}
+
+nobStorehouse::nobStorehouse(const BuildingType type, const MapPoint pos, const unsigned char player,
+                             const Nation nation)
+    : nobBaseWarehouse(type, pos, player, nation)
 {
     // Post versenden
     SendPostMessage(player, std::make_unique<PostMsgWithBuilding>(

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "BuildingProperties.h"
+#include "civ/Content.h"
 #include "helpers/EnumRange.h"
 #include "gameData/BuildingConsts.h"
 
@@ -51,7 +52,8 @@ bool BuildingProperties::IsWareHouse(BuildingType bld)
         case BuildingType::Headquarters:
         case BuildingType::HarborBuilding:
         case BuildingType::Storehouse: return true;
-        default: return false;
+        // Warehouses defined in lua (civilization mode)
+        default: return isCustomBuilding(bld) && civ::getActiveContent().IsCustomWarehouse(bld);
     }
 }
 

@@ -580,14 +580,14 @@ bool dskGameInterface::ContextClick(const MouseCoords& mc)
             if(bt == BuildingType::Headquarters)
                 WINDOWMANAGER.Show(
                   std::make_unique<iwHQ>(gwv, GAMECLIENT, worldViewer.GetWorldNonConst().GetSpecObj<nobHQ>(cSel)));
-            // Lagerhäuser
-            else if(bt == BuildingType::Storehouse)
-                WINDOWMANAGER.Show(std::make_unique<iwBaseWarehouse>(
-                  gwv, GAMECLIENT, worldViewer.GetWorldNonConst().GetSpecObj<nobStorehouse>(cSel)));
             // Hafengebäude
             else if(bt == BuildingType::HarborBuilding)
                 WINDOWMANAGER.Show(std::make_unique<iwHarborBuilding>(
                   gwv, GAMECLIENT, worldViewer.GetWorldNonConst().GetSpecObj<nobHarborBuilding>(cSel)));
+            // Lagerhäuser (auch Lager aus Lua)
+            else if(BuildingProperties::IsWareHouse(bt))
+                WINDOWMANAGER.Show(std::make_unique<iwBaseWarehouse>(
+                  gwv, GAMECLIENT, worldViewer.GetWorldNonConst().GetSpecObj<nobStorehouse>(cSel)));
             // Militärgebäude
             else if(BuildingProperties::IsMilitary(bt))
                 WINDOWMANAGER.Show(std::make_unique<iwMilitaryBuilding>(

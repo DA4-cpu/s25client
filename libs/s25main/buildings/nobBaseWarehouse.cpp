@@ -563,8 +563,8 @@ void nobBaseWarehouse::HandleRecrutingEvent()
 
 void nobBaseWarehouse::HandleProduceHelperEvent()
 {
-    // Nur bei unter 100 Trägern, weitere "produzieren"
-    if(inventory[Job::Helper] < 100)
+    // Nur bei unter 100 Trägern, weitere "produzieren" (not in warehouses defined in lua: they store only wares)
+    if(StoresPeople() && inventory[Job::Helper] < 100)
     {
         inventory.Add(Job::Helper);
 
@@ -734,6 +734,32 @@ void nobBaseWarehouse::AddWaitingWare(std::unique_ptr<Ware> ware)
     ware->WaitInWarehouse(this);
     waiting_wares.push_back(std::move(ware));
     AddLeavingEvent();
+}
+
+unsigned nobBaseWarehouse::GetCapacity() const
+{
+    return civ::getActiveContent().GetWarehouseCapacity(bldType_);
+}
+
+unsigned nobBaseWarehouse::GetLoad() const
+{
+    unsigned result = static_cast<unsigned>(dependent_wares.size());
+    for(const auto good : helpers::enumRange<GoodType>())
+        result += inventory.real[good];
+    return result;
+}
+
+bool nobBaseWarehouse::CanStoreWare(const GoodType good) const
+{
+    if(!civ::getActiveContent().WarehouseStores(bldType_, good))
+        return false;
+    const unsigned capacity = GetCapacity();
+    return capacity == 0 || GetLoad() < capacity;
+}
+
+bool nobBaseWarehouse::StoresPeople() const
+{
+    return !civ::getActiveContent().IsCustomWarehouse(bldType_);
 }
 
 bool nobBaseWarehouse::FreePlaceAtFlag()

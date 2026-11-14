@@ -175,6 +175,10 @@ struct WorkshopDesc
     /// Library: Orders and stores up to this many knowledge media (all wares with knowledge points) and produces
     /// nothing. 0: normal workshop
     unsigned libraryCapacity = 0;
+    /// Warehouse: holds up to this many wares of the kinds in warehouseWares (tag queries) and nothing else, no
+    /// people. It has no worker and produces nothing. 0: no warehouse
+    unsigned warehouseCapacity = 0;
+    std::vector<TagQuery> warehouseWares;
     /// Number of wares stored per input
     unsigned storage = 6;
     /// Seconds of work per product and seconds of waiting before

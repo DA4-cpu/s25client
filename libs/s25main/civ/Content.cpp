@@ -258,6 +258,34 @@ Content::Content(const WorldDescription& desc) : Content()
         bld.look = *look;
         bld.aiNearBorder = wsDesc.aiNearBorder;
 
+        if(wsDesc.warehouseCapacity > 0)
+        {
+            // Warehouse: stores the wares matching the queries, no worker (the slot of the worker stays empty)
+            for(const TagQuery& query : wsDesc.warehouseWares)
+            {
+                const std::vector<GoodType> matching = FindWares(query);
+                if(matching.empty())
+                    throw GameDataError(context + ": warehouse wares " + joinTags(query) + " matches no ware");
+                for(const GoodType good : matching)
+                {
+                    if(!helpers::contains(bld.warehouseWares, good))
+                        bld.warehouseWares.push_back(good);
+                }
+            }
+            warehouseCapacity_[getCustomBuilding(i)] = wsDesc.warehouseCapacity;
+            bld.workDesc.job = std::nullopt;
+            bld.workDesc.producedWare = std::nullopt;
+            bld.workDesc.numSpacesPerWare = 0;
+            buildings_.push_back(std::move(bld));
+            CustomWorker noWorker;
+            noWorker.name = wsDesc.name;
+            noWorker.title = wsDesc.title;
+            noWorker.tool = GoodType::Nothing;
+            noWorker.look = Job::Helper;
+            workers_.push_back(std::move(noWorker));
+            continue;
+        }
+
         // Worker
         CustomWorker worker;
         worker.name = wsDesc.name;
@@ -527,6 +555,17 @@ Content::Content(const WorldDescription& desc) : Content()
         costs_[*bld] = resolveCost(entry.second, context);
     }
 
+    // Capacity of the warehouses
+    for(const auto& entry : desc.warehouseCapacity)
+    {
+        const auto bld = FindBuilding(entry.first, true);
+        if(!bld || !BuildingProperties::IsWareHouse(*bld))
+            throw GameDataError("Capacity of the warehouses: '" + entry.first
+                                + "' is no warehouse (Headquarters, Storehouse, HarborBuilding)");
+        warehouseCapacity_[*bld] = entry.second;
+    }
+    flagWorkLimit_ = desc.flagWorkLimit;
+
     // Output ratio of built-in buildings (workshops have it in rttr:AddWorkshop)
     for(const auto& entry : desc.buildingOutputRatios)
     {
@@ -706,6 +745,18 @@ const CustomWare* Content::GetWare(GoodType good) const
         return nullptr;
     const unsigned idx = getCustomGoodIdx(good);
     return idx < wares_.size() ? &wares_[idx] : nullptr;
+}
+
+bool Content::IsCustomWarehouse(const BuildingType bld) const
+{
+    const CustomBuilding* building = GetBuilding(bld);
+    return building && building->IsWarehouse();
+}
+
+bool Content::WarehouseStores(const BuildingType bld, const GoodType good) const
+{
+    const CustomBuilding* building = GetBuilding(bld);
+    return !building || !building->IsWarehouse() || helpers::contains(building->warehouseWares, good);
 }
 
 const CustomBuilding* Content::GetBuilding(BuildingType bld) const

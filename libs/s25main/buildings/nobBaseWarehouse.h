@@ -160,6 +160,16 @@ public:
 
     /// Gibt Anzahl der Waren bzw. Figuren zurück
     unsigned GetNumRealWares(GoodType type) const { return inventory.real[type]; }
+    /// Civilization mode: wares the warehouse holds at most (rttr:SetWarehouseCapacity). 0: any number
+    unsigned GetCapacity() const;
+    /// Wares in the warehouse and on their way to it
+    unsigned GetLoad() const;
+    /// A ware of the type may be sent here: the capacity is not reached and the warehouse stores this ware (warehouses
+    /// defined in lua store only some). Wares that come into being in the warehouse (start stock, tools of returning
+    /// workers ...) are stored anyway
+    bool CanStoreWare(GoodType good) const;
+    /// Warehouses defined in lua store only wares: no people come here and no helpers are born here
+    bool StoresPeople() const;
     unsigned GetNumRealFigures(Job job) const { return inventory.real[job]; }
     unsigned GetNumRealArmoredFigures(ArmoredSoldier job) const { return inventory.real[job]; }
     unsigned GetNumVisualWares(GoodType type) const { return inventory.visual[type]; }
