@@ -43,6 +43,10 @@ struct WorldDescription
     std::vector<std::vector<std::string>> aiBasicEconomy;
     /// AI of the civilization mode: wares whose start stock is no surplus (rttr:SetAIStartStockNoSurplus)
     std::vector<std::string> aiStartStockNoSurplus;
+    /// AI of the civilization mode: at most base + perStartArea * (land / land of the HQ) buildings of a type
+    /// (rttr:SetAIBuildingLimit)
+    unsigned aiBuildingLimitBase = 3, aiBuildingLimitPerStartArea = 1;
+    bool aiBuildingLimitSet = false;
     /// New wares of the civilization mode in order of definition
     std::vector<WareDesc> wares;
     /// Additional tags of built-in wares: Ware identifier -> tags

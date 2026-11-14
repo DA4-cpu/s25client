@@ -98,6 +98,8 @@ struct RetryCondition
         Builder,
         /// A helper is free in a warehouse
         Helpers,
+        /// Fewer buildings of the type than the limit (land grew or one was demolished)
+        Limit,
         /// The tool the building needs is in a warehouse
         Tool,
         /// The territory or the researched technologies changed (new place, new deposit, new building allowed)
@@ -166,6 +168,9 @@ public:
     static constexpr unsigned QUARRY_MIN_STONE_PILES = 1;
     /// Tools of each kind the player keeps in stock beyond what is asked for (tool orders)
     static constexpr unsigned TOOLS_IN_STOCK = 1;
+    /// A chain is stuck if nothing of its ware was made in this many minutes (and the warehouses do not have enough):
+    /// then building sites may be cancelled for an order that solves it
+    static constexpr unsigned STUCK_MINUTES = 3;
     /// Computing budget: place searches (around one warehouse or military building each) per planning step
     static constexpr unsigned SEARCHES_PER_STEP = 8;
 
@@ -185,6 +190,11 @@ public:
     bool IsClearingWoodcutter(MapPoint pt) const;
     /// The planner decides about this building type (the old AI does not build it)
     bool IsManaged(BuildingType bld) const { return managed_[bld]; }
+    /// Most buildings of one type: base + per start area * start areas (ai.lua, rttr:SetAIBuildingLimit). A start area
+    /// is the land of an HQ; the land is counted in whole start areas, at least 1
+    unsigned GetBuildingLimit() const;
+    /// Buildings, building sites and ordered sites of the type
+    unsigned GetNumBuildings(BuildingType bld) const;
     /// Text for the log: shortages, surpluses and the list with reasons
     std::string GetReport() const;
     /// Duration of the last step and the maximum (microseconds)

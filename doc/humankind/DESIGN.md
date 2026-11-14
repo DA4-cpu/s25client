@@ -1225,10 +1225,12 @@ AIJH-KI.
   - Rodender Holzfäller ab `CLEARING_MIN_TREES` = 8 Bäumen.
   - Steinbruch ab `QUARRY_MIN_STONE_PILES` = 1 Steinhaufen.
   - Werkzeugvorrat `TOOLS_IN_STOCK` = 1.
+  - Kette steckt fest nach `STUCK_MINUTES` = 3 Minuten ohne Herstellung.
 - In `data/RTTR/gamedata/civ/ai.lua`:
   - `rttr:SetAIExpandingBuildings` (expandierende Gebäude).
   - `rttr:SetAIBasicEconomy` (Grundwirtschaft in Stufen).
   - `rttr:SetAIStartStockNoSurplus` (Startvorräte ohne Überschuss: Steine, Holz, Bretter).
+  - `rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 }` (Höchstzahl je Gebäudetyp).
 
 **Zuständigkeit:**
 - Der Planer entscheidet über alle Gebäude, die Waren herstellen (eingebaute und aus Lua), außer der Werft, dazu über
@@ -1271,6 +1273,17 @@ Eltern-Auftrag.
 **Anzahl je Mangel:** benötigt = mindestens 1, sonst Defizit/min ÷ Ausstoß eines Erzeugers/min. Der Ausstoß ist
 gemessen, ohne arbeitende Erzeuger laut Arbeitszeit. Bestellte und anlaufende Erzeuger werden abgezogen.
 
+**Höchstzahl je Gebäudetyp** (Nutzer 2026-11-14): base + perStartArea × Startgebiete.
+- Ein Startgebiet ist das Land eines Hauptquartiers (Radius 10, 331 Knoten). Gezählt wird ganz (abgerundet),
+  mindestens 1.
+- Mit 3 und 1: am Start 4 Gebäude je Typ, bei doppelter Landgröße 5, bei dreifacher 6.
+- Gezählt werden Gebäude, Baustellen und bestellte Baustellen der Typen mit Arbeiter (nicht Militär und Lager).
+- Ist die Höchstzahl erreicht, wartet der Auftrag („Höchstzahl erreicht: 4 von 4“), bis Land dazukommt oder ein Gebäude
+  wegfällt. Ein Mangel bestellt nie mehr Erzeuger, als die Höchstzahl erlaubt.
+
+**Expandierende Aufträge:** höchstens einer je Gebäudetyp in der Liste, z. B. eine Schlosserei, nicht eine je
+Werkzeug.
+
 **Abarbeitung eines Auftrags:**
 - Kind-Aufträge für fehlende Eingänge entstehen nur, wenn **alle** fehlenden Eingänge herstellbar sind. Sonst ist der
   Auftrag blockiert, und seine noch nicht platzierten Kinder fallen weg (kein Brunnen für eine Brauerei ohne Getreide).
@@ -1286,7 +1299,7 @@ gemessen, ohne arbeitende Erzeuger laut Arbeitszeit. Bestellte und anlaufende Er
   - Der Auftrag wird nicht blockiert, sondern rückt an die Spitze der Liste.
   - Er bekommt das Material vor allen anderen, auch vor dem Militär der alten KI.
   - Er wartet nicht auf Kind-Aufträge für dieses Material.
-  - Steckt die Kette fest (in der Bilanzlänge nichts davon hergestellt und nicht genug im Lager), werden Baustellen
+  - Steckt die Kette fest (in `STUCK_MINUTES` nichts davon hergestellt und nicht genug im Lager), werden Baustellen
     außerhalb der Kette abgebrochen, in die noch nichts verbaut ist (höchstens eine Runde je Planungsschritt), bis genug
     zurückkommt. Im Versuch, Baustellen schon bei jedem Materialmangel abzubrechen, sank das Land auf 75 % (ständiges
     Abbrechen und Neubauen, auch von Militärbaustellen).
@@ -1299,8 +1312,9 @@ gemessen, ohne arbeitende Erzeuger laut Arbeitszeit. Bestellte und anlaufende Er
 - Ein Steinbruch entsteht genauso, sobald ein Steinhaufen im Gebiet ist; er braucht mindestens 1 Steinhaufen in
   Reichweite des Steinmetzes.
 - Beide sind expandierend (Stufe 1). Es gibt jeweils einen offenen Auftrag; nach dem Platzieren entsteht der nächste.
-- Ein dauerhafter Holzfäller bekommt einen Förster in Reichweite, wenn seine Produktivität nach einer Bilanzlänge unter
-  80 % liegt und dort noch kein Förster steht.
+- Ein dauerhafter Holzfäller bekommt einen Förster, wenn seine Produktivität nach einer Bilanzlänge unter 80 % liegt.
+  Ob schon Förster in Reichweite stehen, ist egal (Nutzer 2026-11-14). Je Holzfäller gibt es einen Auftrag zur Zeit;
+  der nächste kommt, wenn der letzte seine Anlaufzeit hinter sich hat.
 - Ob ein Holzfäller rodet, merkt sich das Spiel über den Spielbefehl `SetClearingWoodcutter`; das steht im Spielstand
   (Version 27).
 
@@ -1308,17 +1322,19 @@ gemessen, ohne arbeitende Erzeuger laut Arbeitszeit. Bestellte und anlaufende Er
 
 **Vergleich** (7 Karten, 2 KI, je Karte ein Lauf):
 
-| | alte Planung | Liste, erste Fassung | Liste, überarbeitet |
-|---|---|---|---|
-| Land nach 1 h (4 Karten) | 34 339 | 43 578 | 43 706 |
-| Land nach 2 h | 82 334 | 79 787 | 72 990 |
-| Gebäude nach 2 h | 2724 | 1804 | 1886 |
-| Militärgebäude nach 2 h | 1546 | 1214 | 854 |
-| Forschung (Ø Technologien) | 15,5 | 15,0 | 15,2 |
-| Spieler mit weniger als 1000 Land | 0 | 3 | 0 |
+| | alte Planung | Liste, erste Fassung | überarbeitet | mit Höchstzahl |
+|---|---|---|---|---|
+| Land nach 1 h (4 Karten) | 34 339 | 43 578 | 43 706 | 41 092 |
+| Land nach 2 h | 82 334 | 79 787 | 72 990 | 74 559 |
+| Gebäude nach 2 h | 2724 | 1804 | 1886 | 2090 |
+| Militärgebäude nach 2 h | 1546 | 1214 | 854 | 1243 |
+| Forschung (Ø Technologien) | 15,5 | 15,0 | 15,2 | 16 |
+| Spieler mit weniger als 1000 Land | 0 | 3 | 0 | 0 |
 
-- Nach einer Stunde liegt die neue KI vorn. Nach zwei Stunden hat sie weniger Militär: Die alte KI baut es weiter
-  selbst, und der Planer hält nur das Material für ihr nächstes Militärgebäude frei.
+- Nach einer Stunde liegt die neue KI vorn. Nach zwei Stunden hat sie etwas weniger Land und Militär: Die alte KI
+  baut das Militär weiter selbst, und der Planer hält nur das Material für ihr nächstes Militärgebäude frei.
+- Mit der Höchstzahl je Typ gibt es mehr Militär (die Bretter gehen nicht mehr in viele gleiche Gebäude), und alle
+  Spieler erforschen alle 16 Technologien.
 - Kein Spieler bricht mehr zusammen. In der ersten Fassung fehlten drei Spielern früh Holz und Bretter.
 - Versuche:
   - Ohne die Liste der Startvorräte brachen 3 von 8 Spielern zusammen.

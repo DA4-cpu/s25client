@@ -55,6 +55,7 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("SetAIExpandingBuildings", &GameDataLoader::SetAIExpandingBuildings)
         .addFunction("SetAIBasicEconomy", &GameDataLoader::SetAIBasicEconomy)
         .addFunction("SetAIStartStockNoSurplus", &GameDataLoader::SetAIStartStockNoSurplus)
+        .addFunction("SetAIBuildingLimit", &GameDataLoader::SetAIBuildingLimit)
         .addFunction("AddWare", &GameDataLoader::AddWare)
         .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
@@ -423,6 +424,34 @@ void GameDataLoader::SetAIBasicEconomy(const kaguya::LuaTable& data)
         }
         worldDesc_.aiBasicEconomy.push_back(std::move(level));
     }
+}
+
+void GameDataLoader::SetAIBuildingLimit(const kaguya::LuaTable& data)
+{
+    const std::string context = "Building limit of the AI (rttr:SetAIBuildingLimit)";
+    if(worldDesc_.aiBuildingLimitSet)
+        throw GameDataError(context + " is defined twice");
+    const std::string example = "{ base = 3, perStartArea = 1 }";
+    std::vector<std::string> keys = data.keys<std::string>();
+    if(keys.size() != data.keys<kaguya::LuaRef>().size())
+        throw GameDataError(context + ": expected a table like " + example);
+    for(const std::string& key : keys)
+    {
+        if(key != "base" && key != "perStartArea")
+            throw GameDataError(context + ": unknown entry '" + key + "', expected a table like " + example);
+    }
+    const auto getValue = [&](const std::string& key) {
+        const kaguya::LuaRef value = data[key];
+        if(value.type() != kaguya::LuaRef::TYPE_NUMBER)
+            throw GameDataError(context + ": '" + key + "' is missing or no number (" + example + ")");
+        const double number = value.get<double>();
+        if(number < 0 || number > 1000 || number != static_cast<double>(static_cast<unsigned>(number)))
+            throw GameDataError(context + ": '" + key + "' must be a whole number in [0, 1000]");
+        return static_cast<unsigned>(number);
+    };
+    worldDesc_.aiBuildingLimitBase = getValue("base");
+    worldDesc_.aiBuildingLimitPerStartArea = getValue("perStartArea");
+    worldDesc_.aiBuildingLimitSet = true;
 }
 
 void GameDataLoader::SetAIStartStockNoSurplus(const kaguya::LuaTable& data)

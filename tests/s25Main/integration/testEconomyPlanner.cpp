@@ -303,6 +303,52 @@ BOOST_FIXTURE_TEST_CASE(ExpandingOrdersArePlacedAndLeaveTheList, PlannerFixture)
     BOOST_TEST(findOrder(PIT) == -1);
 }
 
+BOOST_FIXTURE_TEST_CASE(BuildingLimitDependsOnTheLand, PlannerFixture)
+{
+    // Limit base 0 + 1 per start area: one pit on the land of the HQ
+    WorldDescription desc = makeDesc({"Pit"});
+    desc.aiBuildingLimitBase = 0;
+    desc.aiBuildingLimitPerStartArea = 1;
+    startGame(desc);
+    placeDeposits();
+    placeDeposits(Position(-4, 4));
+    startAI();
+    BOOST_TEST(planner()->GetBuildingLimit() == 1u);
+    step();
+    BOOST_TEST_REQUIRE(findSite(PIT).isValid());
+    step();
+    const civai::Order& order = getOrder(PIT);
+    BOOST_TEST_INFO(order.reason);
+    BOOST_TEST(order.reason == "Höchstzahl erreicht: 1 von 1");
+    BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().size() == 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(OneExpandingOrderPerBuildingType, PlannerFixture)
+{
+    // The carver makes two knowledge media, both in normal state, and is in the list of ai.lua: one expanding order,
+    // not one per medium
+    WorldDescription desc = makeDesc({"Carver"});
+    for(unsigned i = 0; i < 2; i++)
+    {
+        WareDesc ware = makeWare(i == 0 ? "CarvedL" : "CarvedI");
+        ware.kind = "Carved";
+        ware.knowledge[i] = 1;
+        desc.wares.push_back(ware);
+    }
+    WorkshopDesc carver = makeWorkshop("Carver");
+    carver.output = {"Carved"};
+    carver.outputChoice = "knowledge";
+    desc.workshops.push_back(carver);
+    startGame(desc);
+    startAI();
+    step();
+    // Placed right away (expanding orders leave the list): one site, not two
+    unsigned numCarvers = 0;
+    for(const noBuildingSite* site : world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites())
+        numCarvers += site->GetBuildingType() == getCustomBuilding(2) ? 1 : 0;
+    BOOST_TEST(numCarvers == 1u);
+}
+
 BOOST_FIXTURE_TEST_CASE(NeededOrderKeepsItsMaterial, PlannerFixture)
 {
     WorldDescription desc = makeDesc();

@@ -96,6 +96,10 @@ public:
     unsigned GetAIBasicEconomyLevel(BuildingType bld) const { return aiBasicLevel_[bld]; }
     /// AI: the start stock of the ware is no surplus (ai.lua)
     bool IsAIStartStockNoSurplus(GoodType good) const { return aiStartStockNoSurplus_[good]; }
+    /// AI: at most GetAIBuildingLimitBase() + GetAIBuildingLimitPerStartArea() * (land / land of the HQ) buildings of a
+    /// type (ai.lua)
+    unsigned GetAIBuildingLimitBase() const { return aiBuildingLimitBase_; }
+    unsigned GetAIBuildingLimitPerStartArea() const { return aiBuildingLimitPerStartArea_; }
     /// Byproducts of the building (in order of definition)
     const std::vector<Byproduct>& GetByproducts(BuildingType bld) const { return byproducts_[bld]; }
     /// Wares, workshops and tags defined in lua
@@ -110,6 +114,7 @@ private:
     helpers::EnumArray<bool, BuildingType> aiExpanding_;
     helpers::EnumArray<unsigned, BuildingType> aiBasicLevel_;
     helpers::EnumArray<bool, GoodType> aiStartStockNoSurplus_;
+    unsigned aiBuildingLimitBase_, aiBuildingLimitPerStartArea_;
     helpers::EnumArray<std::vector<Byproduct>, BuildingType> byproducts_;
 };
 

@@ -83,6 +83,8 @@ TechTree::TechTree(const WorldDescription& desc)
             aiBasicLevel_[*bld] = level + 1;
         }
     }
+    aiBuildingLimitBase_ = desc.aiBuildingLimitBase;
+    aiBuildingLimitPerStartArea_ = desc.aiBuildingLimitPerStartArea;
     std::fill(aiStartStockNoSurplus_.begin(), aiStartStockNoSurplus_.end(), false);
     for(const std::string& name : desc.aiStartStockNoSurplus)
     {

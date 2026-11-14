@@ -27,6 +27,7 @@
 #include "gameData/BuildingProperties.h"
 #include "gameData/GoodConsts.h"
 #include "gameData/JobConsts.h"
+#include "gameData/MilitaryConsts.h"
 #include "gameData/ToolConsts.h"
 #include "s25util/Log.h"
 #include <algorithm>
@@ -396,6 +397,22 @@ bool EconomyPlanner::InputSuffices(const GoodType input, const Recipe& consumer)
     const double needed = std::max(static_cast<double>(MIN_STOCK),
                                    SURPLUS_FACTOR * (status.consumptionPerMinute + consumer.nominalStepsPerMinute));
     return free >= needed;
+}
+
+unsigned EconomyPlanner::GetBuildingLimit() const
+{
+    const civ::TechTree& techTree = player_.GetGameWorld().GetTechTree();
+    // Land of an HQ: the nodes in its radius
+    constexpr unsigned startArea = 1 + 3 * HQ_RADIUS * (HQ_RADIUS + 1);
+    const unsigned land = player_.GetStatisticCurrentValue(StatisticType::Country);
+    const unsigned numStartAreas = std::max(1u, land / startArea);
+    return techTree.GetAIBuildingLimitBase() + techTree.GetAIBuildingLimitPerStartArea() * numStartAreas;
+}
+
+unsigned EconomyPlanner::GetNumBuildings(const BuildingType bld) const
+{
+    return static_cast<unsigned>(player_.GetBuildingRegister().GetBuildings(bld).size())
+           + snapshot_.buildings[bld].numSites + aijh_.GetConstruction().GetNumPendingSites(bld);
 }
 
 unsigned EconomyPlanner::GetSituation() const
@@ -989,6 +1006,9 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const unsigned parent)
         if(outputPerMinute > 0)
             count = std::max(1u, static_cast<unsigned>(std::ceil(-status.balance / minutes / outputPerMinute)));
     }
+    // Not more than the limit allows (one order stays to show why the ware is missing)
+    const unsigned limit = GetBuildingLimit(), numBuildings = GetNumBuildings(recipe.building);
+    count = std::min(count, std::max(1u, limit > numBuildings ? limit - numBuildings : 0u));
     const unsigned existing =
       static_cast<unsigned>(std::count_if(orders_.begin(), orders_.end(), [&](const Order& order) {
           return order.forWare == good && !order.consumer && order.kind == OrderKind::Needed;
@@ -1092,7 +1112,12 @@ void EconomyPlanner::AddExpandingOrder(const GoodType good)
         return;
     const BuildingType bld = civAI_.GetGraph().GetRecipes()[ways.front().recipe].building;
     // Woodcutters and quarries expand where trees and stones are (AddClearingOrders), not by the stock
-    if((bld == BuildingType::Woodcutter || bld == BuildingType::Quarry))
+    if(bld == BuildingType::Woodcutter || bld == BuildingType::Quarry)
+        return;
+    // At most one expanding order per building type in the list (e.g. one metalworks, not one per tool)
+    if(helpers::contains_if(orders_, [bld](const Order& order) {
+           return order.kind == OrderKind::Expanding && order.building == bld && order.state != OrderState::Placed;
+       }))
         return;
     Order order;
     order.building = bld;
@@ -1141,29 +1166,19 @@ void EconomyPlanner::AddForesterOrders()
     if(!managed_[BuildingType::Forester])
         return;
     // A woodcutter for good (not clearing) that worked a balance length with a productivity below HIGH_PRODUCTIVITY
-    // gets a forester in its reach, unless one is there already (or its site or order)
-    const GameWorldBase& world = player_.GetGameWorld();
-    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    // gets a forester, also if there are foresters in its reach already. One order at a time: the next one after the
+    // forester ordered for it finished its start-up time
     const unsigned startupGFs = BALANCE_MINUTES * EconomyStatistics::GetGFsPerMinute();
-    const BuildingRegister& buildings = player_.GetBuildingRegister();
-    for(const nobUsual* woodcutter : buildings.GetBuildings(BuildingType::Woodcutter))
+    for(const nobUsual* woodcutter : player_.GetBuildingRegister().GetBuildings(BuildingType::Woodcutter))
     {
         const MapPoint pos = woodcutter->GetPos();
         const auto working = workingSince_.find(pos);
         if(IsClearingWoodcutter(pos) || working == workingSince_.end() || working->second + startupGFs > currentGF_
            || woodcutter->GetProductivity() >= HIGH_PRODUCTIVITY * 100)
             continue;
-        const auto isNear = [&](const MapPoint pt) { return world.CalcDistance(pt, pos) <= woodcutterRadius; };
-        if(helpers::contains_if(buildings.GetBuildings(BuildingType::Forester),
-                                [&](const nobUsual* forester) { return isNear(forester->GetPos()); })
-           || helpers::contains_if(buildings.GetBuildingSites(),
-                                   [&](const noBuildingSite* site) {
-                                       return site->GetBuildingType() == BuildingType::Forester
-                                              && isNear(site->GetPos());
-                                   })
-           || helpers::contains_if(orders_, [&](const Order& order) {
-                  return order.building == BuildingType::Forester && order.near == pos;
-              }))
+        if(helpers::contains_if(orders_, [&](const Order& order) {
+               return order.building == BuildingType::Forester && order.near == pos;
+           }))
             continue;
         Order order;
         order.building = BuildingType::Forester;
@@ -1446,6 +1461,16 @@ std::string EconomyPlanner::CheckRules(const Order& order, RetryCondition& retry
         retry = {RetryCondition::Kind::Situation, GetSituation()};
         return "nicht erforscht";
     }
+    if(BuildingProperties::IsUsual(bld))
+    {
+        const unsigned limit = GetBuildingLimit();
+        const unsigned num = GetNumBuildings(bld);
+        if(num >= limit)
+        {
+            retry = {RetryCondition::Kind::Limit, GetSituation()};
+            return "Höchstzahl erreicht: " + std::to_string(num) + " von " + std::to_string(limit);
+        }
+    }
     const AIJH::AIConstruction& construction = aijh_.GetConstruction();
     std::vector<GoodType> missingMaterial;
     std::string material = DescribeMissingMaterial(bld, missingMaterial);
@@ -1600,6 +1625,7 @@ void EconomyPlanner::SolveRule(const unsigned id, const RetryCondition& retry)
             break;
         }
         case RetryCondition::Kind::Helpers: AddStorehouseOrder(id); break;
+        case RetryCondition::Kind::Limit:
         case RetryCondition::Kind::Now:
         case RetryCondition::Kind::Builder:
         case RetryCondition::Kind::Tool:
@@ -1735,9 +1761,9 @@ std::string EconomyPlanner::CancelSitesFor(const std::vector<std::pair<GoodType,
     const EconomyStatistics& stats = player_.GetEconomyStatistics();
     for(const auto& [good, amount] : lacking)
     {
-        // Only when stuck: nothing of it made in the balance length and not enough in the warehouses. Otherwise the
-        // material comes by itself and the other sites keep theirs
-        if(stats.GetProduced(good, BALANCE_MINUTES, currentGF_) > 0 || snapshot_.inWarehouses[good] >= amount)
+        // Only when stuck: nothing of it made in STUCK_MINUTES and not enough in the warehouses. Otherwise the material
+        // comes by itself and the other sites keep theirs
+        if(stats.GetProduced(good, STUCK_MINUTES, currentGF_) > 0 || snapshot_.inWarehouses[good] >= amount)
             continue;
         const std::vector<BuildingType> chain = GetChain(good);
         // Sites outside the chain whose builder has not built in anything yet. What comes back: the wares on the way
@@ -1794,6 +1820,7 @@ bool EconomyPlanner::IsRetryMet(const RetryCondition& retry, const BuildingType 
         case RetryCondition::Kind::Material: return HasMaterial(bld);
         case RetryCondition::Kind::Builder: return aijh_.GetConstruction().HasEnoughBuildersAvailable();
         case RetryCondition::Kind::Helpers: return GetFreeHelpers() > 0;
+        case RetryCondition::Kind::Limit: return GetNumBuildings(bld) < GetBuildingLimit();
         case RetryCondition::Kind::Tool: return IsWorkerAvailable(bld) && HasRequiredTools(bld);
         case RetryCondition::Kind::Situation: return false;
     }

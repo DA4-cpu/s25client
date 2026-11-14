@@ -363,6 +363,8 @@ BOOST_AUTO_TEST_CASE(ExpandingBuildingsOfTheGameData)
     for(const GoodType good : {GoodType::Stones, GoodType::Wood, GoodType::Boards})
         BOOST_TEST(techTree.IsAIStartStockNoSurplus(good));
     BOOST_TEST(!techTree.IsAIStartStockNoSurplus(GoodType::IronOre));
+    BOOST_TEST(techTree.GetAIBuildingLimitBase() == 3u);
+    BOOST_TEST(techTree.GetAIBuildingLimitPerStartArea() == 1u);
 }
 
 BOOST_AUTO_TEST_CASE(BasicEconomyAndStartStockFromLua)
@@ -399,6 +401,26 @@ rttr:SetAIStartStockNoSurplus{ "Wood", "Loam" })",
     WorldDescription unknownDesc;
     BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIStartStockNoSurplus{ "Wod" })", unknownDesc));
     BOOST_CHECK_THROW(civ::TechTree{unknownDesc}, GameDataError);
+}
+
+BOOST_AUTO_TEST_CASE(BuildingLimitFromLua)
+{
+    WorldDescription desc;
+    BOOST_TEST_REQUIRE(loadLua(R"(rttr:SetAIBuildingLimit{ base = 5, perStartArea = 2 })", desc));
+    const civ::TechTree techTree(desc);
+    BOOST_TEST(techTree.GetAIBuildingLimitBase() == 5u);
+    BOOST_TEST(techTree.GetAIBuildingLimitPerStartArea() == 2u);
+    for(const std::string& invalid : {std::string(R"(rttr:SetAIBuildingLimit{ base = 3 })"),
+                                      std::string(R"(rttr:SetAIBuildingLimit{ base = -1, perStartArea = 1 })"),
+                                      std::string(R"(rttr:SetAIBuildingLimit{ base = 1.5, perStartArea = 1 })"),
+                                      std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1, max = 2 })"),
+                                      std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 }
+rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 })")})
+    {
+        WorldDescription invalidDesc;
+        BOOST_TEST_INFO(invalid);
+        BOOST_TEST(!loadLua(invalid, invalidDesc));
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

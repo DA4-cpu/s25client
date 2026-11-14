@@ -35,3 +35,10 @@ rttr:SetAIBasicEconomy{
 --   KI trotzdem keine Verbraucher dafür, solange der Startvorrat nicht aufgebraucht ist. So expandiert sie am Anfang
 --   mit Holzfällern, Sägewerken und Steinbrüchen, statt den Vorrat nur zu verarbeiten.
 rttr:SetAIStartStockNoSurplus{ "Stones", "Wood", "Boards" }
+
+-- rttr:SetAIBuildingLimit{ base = ..., perStartArea = ... }
+--   Höchstzahl der Gebäude je Typ (Holzfäller, Steinbruch, Sägewerk ...): base + perStartArea × Startgebiete.
+--   Ein Startgebiet ist das Land eines Hauptquartiers (Radius 10, 331 Knoten), gezählt wird ganz (abgerundet), am
+--   Anfang 1. Beispiel mit base = 3, perStartArea = 1: am Start 4 Steinbrüche, bei doppelter Landgröße 5, bei
+--   dreifacher 6.
+rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 }
