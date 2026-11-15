@@ -7,8 +7,8 @@
 #include "civ/Content.h"
 #include "civ/Identifiers.h"
 #include "civ/TechTree.h"
-#include "helpers/EnumRange.h"
 #include "figures/nofFarmhand.h"
+#include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
 #include "world/GameWorldBase.h"
 #include "gameData/BuildingConsts.h"
@@ -196,12 +196,25 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
 
 void EconomyGraph::AddRenewers(const GameWorldBase& world)
 {
-    // The forester is the only building which only makes a source grow (plantations of lua plant and harvest
-    // themselves and are recipes)
-    if(makeIsUnusedBuilding(world.GetGGS())(BuildingType::Forester))
-        return;
-    const unsigned reach = nofFarmhand::GetWorkRadius(*BLD_WORK_DESC[BuildingType::Forester].job);
-    renewers_.push_back({BuildingType::Forester, {SourceKind::Trees, 0}, reach});
+    // Buildings which only make a source grow: the forester, and the plantations of lua without a product (they plant
+    // the map object which collectors take). Plantations with a product harvest themselves and are recipes
+    const auto isUnused = makeIsUnusedBuilding(world.GetGGS());
+    if(!isUnused(BuildingType::Forester))
+    {
+        const unsigned reach = nofFarmhand::GetWorkRadius(*BLD_WORK_DESC[BuildingType::Forester].job);
+        renewers_.push_back({BuildingType::Forester, {SourceKind::Trees, 0}, reach});
+    }
+    const civ::Content& content = world.GetTechTree().GetContent();
+    for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
+    {
+        const BuildingType bld = getCustomBuilding(i);
+        const civ::CustomBuilding& building = *content.GetBuilding(bld);
+        if(!building.IsPlanter() || building.product != GoodType::Nothing || !building.productChoices.empty()
+           || !building.productByInput.empty() || isUnused(bld))
+            continue;
+        renewers_.push_back(
+          {bld, {SourceKind::MapObject, static_cast<unsigned>(building.plantObject)}, building.plantRadius});
+    }
 }
 
 std::string EconomyGraph::GetSourceName(const Source& source) const

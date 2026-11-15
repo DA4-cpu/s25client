@@ -54,6 +54,7 @@
 #include "gameData/ToolConsts.h"
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
@@ -1687,6 +1688,7 @@ void AIPlayerJH::HandleNoMoreResourcesReachable(const MapPoint pt, BuildingType 
         // and every other building without resources is torn down. New buildings come from the planner
         if(bld == BuildingType::Woodcutter && !economyPlanner_->IsClearingWoodcutter(pt))
             return;
+        economyPlanner_->OnTornDown(pt, bld);
         aii.DestroyBuilding(pt);
         if(bld == BuildingType::Fishery)
             resourceMaps[AIResource::Fish].avoidPosition(pt);
@@ -3260,9 +3262,11 @@ MapPoint AIPlayerJH::FindWoodcutterPosition(const MapPoint& around, const bool c
       AIConstruction::GetBorderReserve(BuildingType::Woodcutter), [&](const MapPoint pos) {
           if(!clearing)
           {
-              return !helpers::contains_if(clearingWoodcutters, [&](const MapPoint clearingPos) {
-                  return gwb.CalcDistance(pos, clearingPos) < 2 * woodcutterRadius;
-              });
+              return civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius)
+                       >= civai::EconomyPlanner::RENEW_BELOW
+                     && !helpers::contains_if(clearingWoodcutters, [&](const MapPoint clearingPos) {
+                            return gwb.CalcDistance(pos, clearingPos) < 2 * woodcutterRadius;
+                        });
           }
           return civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius)
                    >= civai::EconomyPlanner::CLEARING_MIN_TREES
@@ -3282,15 +3286,45 @@ MapPoint AIPlayerJH::FindQuarryPosition(const MapPoint& around)
                                  });
 }
 
+MapPoint AIPlayerJH::FindHarvesterPositionBeside(const BuildingType type, const MapPoint& renewerPos,
+                                                 const unsigned radius,
+                                                 const std::vector<MapPoint>& clearingWoodcutters)
+{
+    const unsigned borderReserve = AIConstruction::GetBorderReserve(type);
+    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    MapPoint bestPos = MapPoint::Invalid();
+    unsigned bestDistance = std::numeric_limits<unsigned>::max();
+    for(const MapPoint& curPt : gwb.GetPointsInRadius(renewerPos, radius))
+    {
+        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || !aii.IsOwnTerritory(curPt)
+           || aii.isHarborPosClose(curPt, 2, true) || !canUseBq(aii.GetBuildingQuality(curPt), BUILDING_SIZE[type]))
+            continue;
+        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
+            continue;
+        if(type == BuildingType::Woodcutter && helpers::contains_if(clearingWoodcutters, [&](const MapPoint pt) {
+               return gwb.CalcDistance(curPt, pt) < 2 * woodcutterRadius;
+           }))
+            continue;
+        const unsigned distance = gwb.CalcDistance(curPt, renewerPos);
+        if(distance < bestDistance)
+        {
+            bestDistance = distance;
+            bestPos = curPt;
+        }
+    }
+    return bestPos;
+}
+
 MapPoint AIPlayerJH::FindForesterPosition(const MapPoint& woodcutterPos,
-                                          const std::vector<MapPoint>& clearingWoodcutters)
+                                          const std::vector<MapPoint>& clearingWoodcutters, const unsigned radius)
 {
     const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
     const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
     // In reach of the woodcutter, the best place to plant there. Rules of the old AI: enough space to plant, not at
     // the border. Not near clearing woodcutters
     return FindBestPositionWhere(
-      woodcutterPos, AIResource::Plantspace, BUILDING_SIZE[BuildingType::Forester], woodcutterRadius,
+      woodcutterPos, AIResource::Plantspace, BUILDING_SIZE[BuildingType::Forester],
+      radius > 0 ? radius : woodcutterRadius,
       AIConstruction::GetBorderReserve(BuildingType::Forester), [&](const MapPoint pos) {
           if(GetDensity(pos, AIResource::Plantspace, 7u) < 10u || GetDensity(pos, AIResource::Borderland, 1u) > 1u)
               return false;

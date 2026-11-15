@@ -1227,7 +1227,7 @@ unten sind die Entscheidungen des Nutzers vom 14.11. abends.
     Lua) ab `MIN_DEPOSITS_IN_REACH` = 1 Vorkommen.
   - Förster, wenn weniger als `RENEW_BELOW` = 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen.
   - Werkzeugvorrat `TOOLS_IN_STOCK` = 1.
-  - Kette steckt fest nach `STUCK_MINUTES` = 3 Minuten ohne Herstellung.
+  - Kette steckt fest nach `STUCK_MINUTES` = 9 Minuten ohne Herstellung (Wert des Nutzers, vorher 3).
 - In `data/RTTR/gamedata/civ/ai.lua`: Expansionsliste, Grundwirtschaft, Startvorräte ohne Überschuss, Höchstzahl je
   Gebäudetyp, Lager voll.
 
@@ -1246,8 +1246,12 @@ unten sind die Entscheidungen des Nutzers vom 14.11. abends.
   Vorkommen (Holzfäller, Steinbruch, Sammler aus Lua), sobald genug Vorkommen im Gebiet sind.
 - Ein expandierender Auftrag löst nie ein Problem und hat keine Rechte: kein Vorrang, kein vorbehaltenes Material, keine
   Kind-Aufträge, kein Abbruch von Baustellen. Fehlt ihm etwas, wandert er ans Ende.
-- **Überschreiben:** Ein benötigter Auftrag ersetzt den gleichen expandierenden (gleiches Gebäude, gleiche Ware). Ein
-  Auftrag für einen anderen übernimmt den gleichen Auftrag aus der Statistik (mit seinem Stand), weil er höher steht.
+- **Überschreiben:** Ein benötigter Auftrag ersetzt den gleichen expandierenden (gleiches Gebäude, gleiche Ware).
+- **Eine Lösung für mehrere** (Nutzer, 2026-11-15): Fehlt einem Auftrag eine Ware (Eingang, Baumaterial) und gibt es für
+  sie schon einen benötigten Auftrag desselben Gebäudes (für einen anderen Auftrag, aus der Statistik oder schon
+  platziert), ist dieser die Lösung für beide; es kommt keiner dazu. Er steht über allen, für die er gilt (Log:
+  „Sawmill (benötigt: Baumaterial, für Boards für Farm, Well)“). Ersetzt die frühere Übernahme des Auftrags aus der
+  Statistik. Auch ein blockierter Auftrag ohne Weg gilt für alle Bedarfe derselben Ware mit demselben Gebäude.
 
 **Warengruppen („Bedarfsgruppen“, statt Sonderregeln für „eins von“):**
 - Eine Gruppe sind die Waren, die ein Abnehmer gleichwertig nimmt: die Eingänge „eins von“ (Nahrung der Minen), ein
@@ -1270,7 +1274,8 @@ Schild, Bier) bestellt, soweit sie nicht reichen, und ein Lager für Gehilfen, w
   fehlende Menge in einer Bilanzlänge; stehende Gebäude = ihr Verbrauch laut Arbeitszeit.
 - Erzeuger = ⌈(Menge − kommende − stehende) ÷ Ausstoß eines Erzeugers⌉, jeden Schritt neu (sinkt auch).
   - Kommend: Baustellen, bestellte Baustellen und Gebäude in den ersten 5 Minuten (ihr Ausstoß laut Arbeitszeit,
-    anteilig bis er in der Bilanz steht).
+    anteilig bis er in der Bilanz steht). Nicht die expandierender Aufträge und nicht rodende Holzfäller (ein
+    expandierender Auftrag löst nie ein Problem); sie zählen, sobald sie herstellen (Bilanz).
   - Stehend: Gebäude, die aus einem bearbeiteten Grund stehen (siehe unten), mit dem, was sie bringen, wenn er
     behoben ist.
   - Ausstoß: gemessen bei den Erzeugern, die arbeiten (ohne stehende und erschöpfte), sonst laut Arbeitszeit.
@@ -1302,7 +1307,9 @@ es keine expandierenden Aufträge.
 Ein Auftrag für einen anderen steht nie unter ihm (Gruppe und Stufe gelten für die ganze Kette).
 
 **Abarbeitung:**
-- Ein benötigter Auftrag, dem Baumaterial fehlt, behält das vorhandene in jedem Schritt (nicht nur im ersten).
+- Ein benötigter Auftrag, dem Baumaterial fehlt, behält das vorhandene in jedem Schritt (nicht nur im ersten). Er bearbeitet
+  seine unerfüllte Regel in jedem Schritt (Baumaterial, Bauarbeiter, Gehilfen): Ist seine Lösung weggefallen (z. B. kein
+  Platz für das Sägewerk), wird sie neu bestellt.
 - Löst er sein eigenes Problem, bekommt er das Material vor allen anderen; steckt die Kette 3 Minuten fest, werden
   Baustellen außerhalb der Kette ohne verbautes Material abgebrochen, nicht aber Baustellen benötigter Aufträge.
 - Vorbehaltene Eingänge, Kind-Aufträge nur wenn alle Eingänge herstellbar, Höchstzahl je Gebäudetyp nur für
@@ -1315,6 +1322,53 @@ Ein Auftrag für einen anderen steht nie unter ihm (Gruppe und Stufe gelten für
 **Holzfäller und Förster:** Ein dauerhafter (benötigter) Holzfäller steht nicht im Bereich eines rodenden (beide
 Radien). Ein Förster ist benötigt, wenn weniger als 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen (Anzahl
 aus dem Spiel, Regel für jede Quelle mit Erneuerer). Einer je Holzfäller zur Zeit; fehlt sein Werkzeug, wartet einer.
+
+**Platzwahl** (Stand 2026-11-15 abends): nach dem, was das Gebäude bearbeitet, nicht nach dem Gebäudetyp.
+- Abbauer (bauen ein Vorkommen der Karte ab) nur, wo genug davon in Reichweite ist, geprüft nach jeder Platzsuche:
+  rodender Holzfäller `CLEARING_MIN_TREES` (8), dauerhafter Abbauer einer Quelle mit Erneuerer `RENEW_BELOW` (11, weniger
+  hieße sofort einen Förster), andere Vorkommen `MIN_DEPOSITS_IN_REACH` (1), Erz und Fisch 1 Feld.
+- Steinhaufen immer wie beim Steinbruch nach Vorkommen (auch benötigte), Kartenobjekte aus Lua beim Sammler, Erz, Fisch,
+  Tiere, Ackerland wie bisher.
+- Verarbeitende Gebäude (ohne Quelle auf der Karte) an jedem freien Platz nahe der Lager, ohne die Sonderregeln der alten
+  KI für einzelne Typen (z. B. „Sägewerke 22 Felder auseinander“, die benötigte Sägewerke verhindert hat).
+
+**Anbauer und Abbauer** (Nutzer, 2026-11-15): Findet ein benötigter dauerhafter Abbauer keinen Platz mit genug Vorkommen
+in Reichweite, wird zuerst ein Anbauer für ihn beauftragt (Erneuerer der Quelle: Förster, Plantage aus Lua ohne Produkt;
+Anlass „erneuert“, Kind des Abbauers, steht über ihm). Steht dessen Baustelle, kommt der Abbauer direkt daneben (nächster
+Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge in Reichweite nicht, alle anderen Regeln gelten
+(Material, Bauarbeiter, Grenze, nicht im Bereich rodender Holzfäller). Der Anbauer erneuert danach um diesen Abbauer
+(kein zweiter während seiner Anlaufzeit). Findet auch der Anbauer keinen Platz: kein Bauplatz für diesen Weg.
+
+**Bericht** (Log „ECONOMY“, jede Spielminute):
+- „Mangel ohne eigenen Auftrag“: warum ein Mangel keinen Auftrag hat, z. B. „gedeckt: fehlen 1,8/min, kommend 2,7/min,
+  stehend 0/min, andere Aufträge 1“ oder „Woodcutter: kein Bauplatz, es kommt keiner dazu (4 stehen)“.
+- „Zuletzt abgerissen“: Abbauer, die die alte KI wegen „nichts mehr in Reichweite“ abreißt, mit Anlass, Vorkommen beim
+  Platzieren und Zeit mit Arbeiter (auch als eigene Logzeile).
+- „offen: neu, im nächsten Schritt“: im Schritt entstanden (z. B. ein Kind-Auftrag). „offen: suche Bauplatz“: die Suche
+  (8 Lager/Militärgebäude je Schritt) geht im nächsten Schritt weiter.
+- Ein „eins von“-Eingang nennt die ganze Gruppe („Eingang fehlt: Fish/Meat/Bread“).
+
+**Vergleich zum Nachtrag** (Karte und Einstellungen aus dem Replay des Nutzers vom 15.11., 8 KI, 40 Spielminuten,
+Zufallswerte 7 und 11, Berichte jede Minute; vorher = `e8f9b46` mit den neuen Logzeilen):
+
+| | vorher | neu |
+|---|---|---|
+| Berichte mit Holzmangel ohne benötigten Holzfäller | 83 / 85 | 53 / 43 |
+| Berichte mit zwei Aufträgen derselben Lösung für verschiedene Aufträge | 11 / 4 | 0 / 0 |
+| Land nach 40 min (8 Spieler) | 34 616 / 35 838 | 35 417 / 34 340 |
+| Gebäude nach 40 min | 644 / 626 | 677 / 683 |
+| Rechenzeit je Schritt, Mittel / Spitze | 0,98 ms / 159 ms | 0,90 ms / 12 ms |
+
+- Was bleibt: Holzmangel, den kommende benötigte Holzfäller decken (Regel: kein weiterer, bis er arbeitet), und am Anfang
+  „kein Bauplatz“: Rund um das Hauptquartier stehen die rodenden Holzfäller, in ihrem Bereich darf weder ein dauerhafter
+  Holzfäller noch ein Förster stehen.
+- Abgerissen wurden nur Abbauer, die mindestens 3 Minuten gearbeitet hatten. Am kürzesten leben Steinbrüche mit 1–3
+  Steinhaufen, Lehmgruben mit 1–2 Vorkommen und Minen mit 1–2 Erzfeldern in Reichweite (Mindestwert 1).
+
+**Prüfen auf der Karte eines Spiels:** `ai-battle --from-replay <datei.rpl> --ai aijh ...` nimmt Karte und Einstellungen
+(Addons, Ziel, Startwaren) aus einer Aufzeichnung und spielt sie mit KI-Spielern. Ein Replay lässt sich nicht genau
+nachspielen: Die alte KI würfelt mit echtem Zufall. Das Addon „Gebäude ohne Rohstoffe abreißen“ wird in `ai-battle`
+abgeschaltet (es gilt nur für den lokalen Spieler, den es dort nicht gibt).
 
 **Vergleich** (7 Karten, je 2 KI, je 3 Zufallswerte = 42 Spieler, gegen die Fassung vom 14.11., `7f59ed0`):
 
@@ -1336,9 +1390,10 @@ aus dem Spiel, Regel für jede Quelle mit Erneuerer). Einer je Holzfäller zur Z
 - Rechenzeit (Release): im Mittel unter 1,5 ms je Schritt, Spitzen bis 26 ms; Liste höchstens 67 Einträge.
 
 **Offen:**
-- Militär im Planer (Schritt 3).
-- Forschung: wählt noch das Spiel für die KI (`civ::chooseResearchForAI`). Bleibt z. B. die Schlosserei unerforscht,
-  fehlen später alle Werkzeuge.
+- Militär im Planer (Schritt 3). Danach soll sich auch „weniger Militär nach 2 h“ klären.
+- Forschung (Schritt 4, nach dem Militär): wählt noch das Spiel für die KI (`civ::chooseResearchForAI`).
+- Mangel eines Zwischenprodukts, dessen Endprodukt im Überschuss liegt: bewusst keine Regel (Nutzer, 2026-11-15).
+- Umbau der Eingänge nach Tags (ein Eingang je Tag, mehr als 3, Mischen).
 
 ## Lagerkapazität (Stand 2026-11-14)
 

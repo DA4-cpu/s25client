@@ -167,3 +167,27 @@ rttr:AddWare{
     look = "Grain",
     transport = "Grain",
 }
+
+rttr:AddWare{
+    name = "WoodOne",
+    title = "WoodOne",
+    kind = "Holzstamm",
+    look = "Wood",
+    transport = "Wood",
+}
+
+rttr:AddWare{
+    name = "WoodTwo",
+    title = "WoodTwo",
+    kind = "Holzstamm",
+    look = "Wood",
+    transport = "Wood",
+}
+
+rttr:AddWare{
+    name = "WoodThree",
+    title = "WoodThree",
+    kind = "Holzstamm",
+    look = "Wood",
+    transport = "Wood",
+}

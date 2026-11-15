@@ -4,8 +4,10 @@
 
 #include "GlobalGameSettings.h"
 #include "HeadlessGame.h"
+#include "PlayerInfo.h"
 #include "QuickStartGame.h"
 #include "RTTR_Version.h"
+#include "Replay.h"
 #include "RttrConfig.h"
 #include "addons/Addon.h"
 #include "addons/AddonBool.h"
@@ -14,6 +16,7 @@
 #include "ai/random.h"
 #include "files.h"
 #include "random/Random.h"
+#include "gameTypes/MapInfo.h"
 #include "s25util/StringConversion.h"
 #include "s25util/System.h"
 
@@ -77,6 +80,7 @@ int main(int argc, char** argv)
     optional<std::string> savegame_path;
     optional<std::string> lua_path;
     optional<std::string> settings_path;
+    optional<std::string> from_replay;
     unsigned random_init = static_cast<unsigned>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
     unsigned random_ai_init = random_init;
 
@@ -84,7 +88,8 @@ int main(int argc, char** argv)
     // clang-format off
     desc.add_options()
         ("help,h", "Show help")
-        ("map,m", po::value<std::string>()->required(),"Map to load")
+        ("map,m", po::value<std::string>(),"Map to load")
+        ("from-replay", po::value(&from_replay),"Replay to take the map and the game settings (addons, objective, wares) from instead of --map")
         ("ai", po::value<std::vector<std::string>>()->required(),"AI player(s) to add (aijh | dummy)")
         ("objective", po::value<std::string>()->default_value("domination"),"domination(default) | conquer")
         ("wares", po::value<std::string>()->default_value("normal"),"Starting wares: vlow | low | normal (default) | alot")
@@ -152,12 +157,44 @@ int main(int argc, char** argv)
         RANDOM.Init(random_init);
         AI::getRandomGenerator().seed(random_ai_init);
 
-        const bfs::path mapPath = RTTRCONFIG.ExpandPath(options["map"].as<std::string>());
         const std::vector<AI::Info> ais = ParseAIOptions(options["ai"].as<std::vector<std::string>>());
 
         GlobalGameSettings ggs;
+        bfs::path mapPath;
+        if(from_replay)
+        {
+            // The map and the settings of a recorded game: the same game with AI players only
+            const bfs::path replayPath = RTTRCONFIG.ExpandPath(*from_replay);
+            Replay replay;
+            if(!replay.LoadHeader(replayPath))
+                throw std::runtime_error("Could not read the replay " + replayPath.string() + ": "
+                                         + replay.GetLastErrorMsg());
+            MapInfo mapInfo;
+            if(!replay.LoadGameData(mapInfo))
+                throw std::runtime_error("Could not read the game data of the replay: " + replay.GetLastErrorMsg());
+            if(mapInfo.savegame)
+                throw std::runtime_error("The replay starts from a savegame, not from a map");
+            mapPath = bfs::temp_directory_path() / ("ai-battle-" + replayPath.stem().string() + ".map");
+            if(!mapInfo.mapData.DecompressToFile(mapPath))
+                throw std::runtime_error("Could not write the map of the replay to " + mapPath.string());
+            ggs = replay.ggs;
+            bnw::cout << "Map and settings from replay " << replayPath << " (map " << replay.GetMapName()
+                      << "), players there:" << std::endl;
+            for(unsigned i = 0; i < replay.GetNumPlayers(); ++i)
+                bnw::cout << "  " << i << ": " << replay.GetPlayer(i).name << std::endl;
+        } else if(options.count("map"))
+            mapPath = RTTRCONFIG.ExpandPath(options["map"].as<std::string>());
+        else
+        {
+            bnw::cerr << "Error: --map or --from-replay is required" << std::endl;
+            return 1;
+        }
+
         const auto objective = options["objective"].as<std::string>();
-        if(objective == "domination")
+        if(from_replay && options["objective"].defaulted())
+        {
+            // From the replay
+        } else if(objective == "domination")
             ggs.objective = GameObjective::TotalDomination;
         else if(objective == "conquer")
             ggs.objective = GameObjective::Conquer3_4;
@@ -168,7 +205,10 @@ int main(int argc, char** argv)
         }
 
         const auto wares = options["wares"].as<std::string>();
-        if(wares == "vlow")
+        if(from_replay && options["wares"].defaulted())
+        {
+            // From the replay
+        } else if(wares == "vlow")
             ggs.startWares = StartWares::VLow;
         else if(wares == "low")
             ggs.startWares = StartWares::Low;
@@ -207,6 +247,14 @@ int main(int argc, char** argv)
             }
         }
 
+        // The addon tears down buildings of the local player of the game client, which does not exist here (all
+        // players are AI players, the AI tears down its own buildings)
+        if(ggs.isEnabled(AddonId::DEMOLISH_BLD_WO_RES))
+        {
+            ggs.setSelection(AddonId::DEMOLISH_BLD_WO_RES, 0);
+            bnw::cout << "Addon \"demolish buildings without resources\" switched off (only for the local player)"
+                      << std::endl;
+        }
         HeadlessGame game(ggs, mapPath, ais, lua_path ? RTTRCONFIG.ExpandPath(*lua_path) : bfs::path{});
         if(replay_path)
             game.RecordReplay(RTTRCONFIG.ExpandPath(*replay_path), random_init);

@@ -329,19 +329,21 @@ BOOST_AUTO_TEST_CASE(ExpandingBuildingsOfTheGameData)
     const auto copperworks = techTree.GetContent().FindBuilding("Copperworks");
     BOOST_TEST_REQUIRE(copperworks.has_value());
     BOOST_TEST(techTree.IsAIExpanding(*copperworks));
-    // Basic economy of the user: woodcutter, quarry, sawmill, forester first; mines, smelters and smiths second
+    // Basic economy of the user: woodcutter, quarry, sawmill, forester first; mines, smelters, smiths and the brewery
+    // second
     for(const BuildingType bld :
         {BuildingType::Woodcutter, BuildingType::Quarry, BuildingType::Sawmill, BuildingType::Forester})
         BOOST_TEST(techTree.GetAIBasicEconomyLevel(bld) == 1u);
-    for(const BuildingType bld : {BuildingType::IronMine, BuildingType::CoalMine, BuildingType::Charburner,
-                                  BuildingType::Metalworks, BuildingType::Ironsmelter, BuildingType::Armory})
+    for(const BuildingType bld :
+        {BuildingType::IronMine, BuildingType::CoalMine, BuildingType::Charburner, BuildingType::Metalworks,
+         BuildingType::Ironsmelter, BuildingType::Armory, BuildingType::Brewery})
         BOOST_TEST(techTree.GetAIBasicEconomyLevel(bld) == 2u);
     BOOST_TEST(techTree.GetAIBasicEconomyLevel(*copperworks) == 2u);
-    BOOST_TEST(techTree.GetAIBasicEconomyLevel(BuildingType::Brewery) == 0u);
+    BOOST_TEST(techTree.GetAIBasicEconomyLevel(BuildingType::Mill) == 0u);
     for(const GoodType good : {GoodType::Stones, GoodType::Wood, GoodType::Boards})
         BOOST_TEST(techTree.IsAIStartStockNoSurplus(good));
     BOOST_TEST(!techTree.IsAIStartStockNoSurplus(GoodType::IronOre));
-    BOOST_TEST(techTree.GetAIBuildingLimitBase() == 3u);
+    BOOST_TEST(techTree.GetAIBuildingLimitBase() == 2u);
     BOOST_TEST(techTree.GetAIBuildingLimitPerStartArea() == 1u);
 }
 

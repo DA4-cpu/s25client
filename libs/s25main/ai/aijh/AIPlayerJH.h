@@ -30,7 +30,7 @@ struct CustomBuilding;
 namespace civai {
 class CivAI;
 class EconomyPlanner;
-}
+} // namespace civai
 
 namespace AIJH {
 class BuildingPlanner;
@@ -308,10 +308,15 @@ public:
     /// Places a building site at the point and connects it to the roads (the caller checked everything else)
     bool PlaceBuilding(BuildingType type, MapPoint pos);
     /// Civilization mode: place for a woodcutter around the point, at the best wood. clearing: at least
-    /// EconomyPlanner::CLEARING_MIN_TREES trees in its reach and away from every forester (both radii). For good: away
-    /// from the clearing woodcutters (they would cut its trees, both radii)
+    /// EconomyPlanner::CLEARING_MIN_TREES trees in its reach and away from every forester (both radii). For good: at
+    /// least EconomyPlanner::RENEW_BELOW trees in its reach (fewer: a forester is ordered first) and away from the
+    /// clearing woodcutters (they would cut its trees, both radii)
     MapPoint FindWoodcutterPosition(const MapPoint& around, bool clearing,
                                     const std::vector<MapPoint>& clearingWoodcutters);
+    /// Civilization mode: place for a harvester beside the renewer planted for it (the source in its reach does not
+    /// count): the nearest place within `radius` of the renewer. A woodcutter not where clearing woodcutters work
+    MapPoint FindHarvesterPositionBeside(BuildingType type, const MapPoint& renewerPos, unsigned radius,
+                                         const std::vector<MapPoint>& clearingWoodcutters);
     /// Civilization mode: place for a quarry around the point with at least EconomyPlanner::MIN_DEPOSITS_IN_REACH
     /// stone piles in reach of the stonemason
     MapPoint FindQuarryPosition(const MapPoint& around);
@@ -321,8 +326,10 @@ public:
     MapPoint FindBestPositionWhere(const MapPoint& pt, AIResource res, BuildingQuality size, unsigned radius,
                                    unsigned borderReserve, const T_Condition& condition, unsigned maxTries = 8);
     /// Civilization mode: place for a forester in reach of the woodcutter at the point, not where clearing woodcutters
-    /// work (both radii)
-    MapPoint FindForesterPosition(const MapPoint& woodcutterPos, const std::vector<MapPoint>& clearingWoodcutters);
+    /// work (both radii). radius > 0: within this radius of the point instead (a forester for a woodcutter which has no
+    /// place yet)
+    MapPoint FindForesterPosition(const MapPoint& woodcutterPos, const std::vector<MapPoint>& clearingWoodcutters,
+                                  unsigned radius = 0);
 
 private:
     Subscription subBuilding, subExpedition, subResource, subRoad, subShip, subBQ;

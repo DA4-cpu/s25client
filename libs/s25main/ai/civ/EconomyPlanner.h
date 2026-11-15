@@ -27,6 +27,7 @@ namespace civai {
 
 class CivAI;
 struct Recipe;
+struct Renewer;
 struct Source;
 
 /// State of a ware, of a group of wares or of the soldiers, from the measured statistic (DESIGN.md, "Neufassung der
@@ -51,7 +52,8 @@ struct WareStatus
     /// Consumed per minute in the last BALANCE_MINUTES minutes
     double consumptionPerMinute = 0;
     /// Requested ("angefragt") in three parts:
-    /// open: asked for by the game but not sent yet (building sites, inputs, tool slots, coins, research, soldiers ...),
+    /// open: asked for by the game but not sent yet (building sites, inputs, tool slots, coins, research, soldiers
+    /// ...),
     unsigned openDemand = 0;
     /// in transit: on the way to the building that asked for it (left the stock already, only shown),
     unsigned inTransit = 0;
@@ -184,14 +186,22 @@ struct Order
     unsigned group = 0;
     /// Idle: the type of the buildings standing still
     BuildingType forBuilding = BuildingType::Headquarters;
-    /// Order this one was created for (Input, Material, Tools, Helpers). 0: none
+    /// Order this one was created for (Input, Material, Tools, Helpers, Renewal for a harvester without a place). 0:
+    /// none
     unsigned parent = 0;
+    /// Other orders this one is the solution for too (the same building for the same ware, e.g. one sawmill for the
+    /// boards of a farm and of a well). It stands above them as well
+    std::vector<unsigned> alsoFor;
     OrderState state = OrderState::Open;
     /// Why it waits or is blocked, for the log, e.g. "Boards fehlt: ..."
     std::string reason;
     RetryCondition retry;
-    /// Place it near this point (renewer near its harvester). Invalid: search near warehouses/military buildings
+    /// Place it near this point (renewer near its harvester, harvester beside its renewer). Invalid: search near
+    /// warehouses/military buildings
     MapPoint near = MapPoint::Invalid();
+    /// Harvester for good without a place with enough of its source in reach: placed beside the site of the renewer
+    /// ordered for it (at `near`), the source in reach does not count
+    bool besideRenewer = false;
     /// Harvester of a renewable source which clears the land (no renewer, demolished when nothing is left)
     bool clearing = false;
     /// Needed order whose building is part of the chain making the construction material it lacks, and which can work
@@ -236,7 +246,7 @@ public:
     static constexpr unsigned TOOLS_IN_STOCK = 1;
     /// A chain is stuck if nothing of its ware was made in this many minutes (and the warehouses do not have enough):
     /// then building sites may be cancelled for an order that solves it
-    static constexpr unsigned STUCK_MINUTES = 3;
+    static constexpr unsigned STUCK_MINUTES = 9;
     /// Computing budget: place searches (around one warehouse or military building each) per planning step
     static constexpr unsigned SEARCHES_PER_STEP = 8;
 
@@ -264,7 +274,8 @@ public:
     /// The planner decides about this building type (the old AI does not build it)
     bool IsManaged(BuildingType bld) const { return managed_[bld]; }
     /// Most buildings of one type for expanding orders: base + per start area * start areas (ai.lua,
-    /// rttr:SetAIBuildingLimit). A start area is the land of an HQ; the land is counted in whole start areas, at least 1
+    /// rttr:SetAIBuildingLimit). A start area is the land of an HQ; the land is counted in whole start areas, at least
+    /// 1
     unsigned GetBuildingLimit() const;
     /// Buildings, building sites and ordered sites of the type
     unsigned GetNumBuildings(BuildingType bld) const;
@@ -273,6 +284,8 @@ public:
     bool IsStorageFull() const;
     /// Text for the log: shortages, surpluses and the list with reasons
     std::string GetReport() const;
+    /// The old AI tears down a building of the player with nothing left in reach (for the report)
+    void OnTornDown(MapPoint pt, BuildingType bld);
     /// Duration of the last step and the maximum (microseconds)
     double GetLastStepUs() const { return lastStepUs_; }
     double GetMaxStepUs() const { return maxStepUs_; }
@@ -459,6 +472,18 @@ private:
     const Recipe* FindRecipe(BuildingType bld) const;
     /// Recipes making the source the renewer renews (harvesters)
     bool IsRenewable(const Source& source) const;
+    /// The renewer of the source which the player may build, nullptr if there is none
+    const Renewer* FindRenewer(const Source& source) const;
+    /// How much of its source a harvester needs in reach at its place: clearing woodcutters CLEARING_MIN_TREES,
+    /// harvesters for good of a renewable source RENEW_BELOW (fewer: a renewer comes first), other deposits
+    /// MIN_DEPOSITS_IN_REACH, ore and fish 1
+    unsigned GetMinSourceInReach(const Order& order, const Recipe& recipe) const;
+    /// The site or the building starting up does not count as coming: placed by an expanding order (it never solves a
+    /// problem) or a clearing woodcutter
+    bool IsExpandingSite(MapPoint pt) const;
+    /// The production of the ware changed in this step (a producer was placed): what the producers add is computed
+    /// again
+    void ForgetCapacity(BuildingType bld);
     /// The order or one above it makes the ware or is of the building type (one more would be a loop). Headquarters as
     /// building: only the ware is checked
     bool IsInChain(unsigned orderId, GoodType good, BuildingType bld) const;
@@ -579,6 +604,8 @@ private:
     AIJH::ConstructionMaterial stepFreeMaterial_{};
     /// Building sites cancelled for self-solving orders this step (one cancel round per step)
     bool cancelledThisStep_ = false;
+    /// Depth of GetSortKey following the orders an order is also for (guard against loops)
+    mutable unsigned sortKeyDepth_ = 0;
     /// Military building whose material was kept free in this step (Headquarters: none)
     BuildingType militaryKept_ = BuildingType::Headquarters;
     /// Inputs kept for an order higher in the list that cannot be built without them (ware -> order). Orders further
@@ -599,6 +626,24 @@ private:
     std::vector<GoodType> checking_, resolving_;
     /// Number of loops found while checking ways (results depending on a loop are not cached)
     unsigned numLoops_ = 0;
+
+    /// Building sites placed by the planner: when and why (to tell needed from expanding sites, and for the report when
+    /// one is torn down)
+    struct Placement
+    {
+        unsigned gf;
+        BuildingType building;
+        OrderCause cause;
+        OrderKind kind;
+        /// Of its source in reach when it was placed, -1 if not counted (no source on the map, animals ...)
+        int sourceInReach;
+    };
+    std::map<MapPoint, Placement, MapPointLess> placements_;
+    /// The last buildings torn down because nothing was left in their reach (for the report)
+    std::vector<std::string> tornDown_;
+    /// Shortages (by group) and soldier wares without an order in this step: why (for the report)
+    std::map<unsigned, std::string> shortageNotes_;
+    std::map<GoodType, std::string> soldierNotes_;
 
     double lastStepUs_ = 0, maxStepUs_ = 0;
     unsigned numSteps_ = 0;

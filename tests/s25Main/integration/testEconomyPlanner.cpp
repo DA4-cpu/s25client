@@ -17,11 +17,11 @@
 #include "civ/TechTree.h"
 #include "factories/AIFactory.h"
 #include "factories/BuildingFactory.h"
+#include "figures/nofFarmhand.h"
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
 #include "worldFixtures/MockLocalGameState.h"
 #include "worldFixtures/WorldWithGCExecution.h"
-#include "figures/nofFarmhand.h"
 #include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noGranite.h"
 #include "nodeObjs/noTree.h"
@@ -30,6 +30,7 @@
 #include "gameData/ToolConsts.h"
 #include "gameData/WorldDescription.h"
 #include <boost/test/unit_test.hpp>
+#include <algorithm>
 #include <memory>
 
 // Planner of the production buildings of the civilization mode: the priority list (DESIGN.md "Neufassung der
@@ -645,7 +646,7 @@ BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
     // (nothing built in yet) is cancelled for it
     startGame(makeDesc({}, {{"Wood", 5}}), 1);
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
-    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
     startAI();
     // The site of the barracks is placed after the old AI ran (it would decide about it itself)
     MapPoint sitePos = MapPoint::Invalid();
@@ -663,11 +664,14 @@ BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
     BOOST_TEST_REQUIRE(findSite(BuildingType::Barracks).isValid());
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
     // The woodcutter for the wood of the research can work and makes what the sawmill (boards) lacks: priority. It is
-    // taken over by the sawmill as its input (one woodcutter for both)
+    // the solution for the input of the sawmill too (one woodcutter for both)
     step();
     const civai::Order& order = getOrder(BuildingType::Woodcutter);
     BOOST_TEST((order.kind == civai::OrderKind::Needed));
-    BOOST_TEST((order.cause == civai::OrderCause::Input));
+    BOOST_TEST((order.cause == civai::OrderCause::Shortage));
+    BOOST_TEST_REQUIRE(order.alsoFor.size() == 1u);
+    BOOST_TEST(order.alsoFor.front() == getOrder(BuildingType::Sawmill).id);
+    BOOST_TEST(findOrder(BuildingType::Woodcutter) < findOrder(BuildingType::Sawmill));
     BOOST_TEST(!order.clearing);
     BOOST_TEST(order.selfSolving);
     BOOST_TEST_INFO(order.reason);
@@ -991,6 +995,107 @@ BOOST_FIXTURE_TEST_CASE(GroupsOfWaresAConsumerTakes, PlannerFixture)
     BOOST_TEST_REQUIRE(sandAlone);
     BOOST_TEST(!sandAlone->demanded);
     BOOST_TEST(sandAlone->status.stock == 5u);
+}
+
+BOOST_FIXTURE_TEST_CASE(OneSolutionForTwoOrders, PlannerFixture)
+{
+    // The pit (loam) and the mixer (mortar) lack boards, none are in stock: one sawmill is the solution for both. It
+    // stands above both of them
+    WorldDescription desc = makeDesc({}, {{"Loam", 5}, {"Mortar", 5}});
+    desc.wares.push_back(makeWare("Mortar"));
+    WorkshopDesc mixer = makeWorkshop("Mixer");
+    mixer.output = {"Mortar"};
+    desc.workshops.push_back(mixer);
+    const BuildingType MIXER = getCustomBuilding(2);
+    startGame(desc, 0);
+    placeDeposits();
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    for(unsigned i = 0; i < 3; i++)
+    {
+        step();
+        std::vector<const civai::Order*> sawmills;
+        for(const civai::Order* order : list())
+        {
+            if(order->building == BuildingType::Sawmill)
+                sawmills.push_back(order);
+        }
+        BOOST_TEST_REQUIRE(sawmills.size() == 1u);
+        const civai::Order& sawmill = *sawmills.front();
+        const civai::Order& pit = getOrder(PIT);
+        const civai::Order& mixerOrder = getOrder(MIXER);
+        const auto isFor = [&](const civai::Order& order) {
+            return sawmill.parent == order.id || helpers::contains(sawmill.alsoFor, order.id);
+        };
+        BOOST_TEST(isFor(pit));
+        BOOST_TEST(isFor(mixerOrder));
+        BOOST_TEST(findOrder(BuildingType::Sawmill) < findOrder(PIT));
+        BOOST_TEST(findOrder(BuildingType::Sawmill) < findOrder(MIXER));
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(ExpandingSiteIsNoSolution, PlannerFixture)
+{
+    // A clearing woodcutter is placed (expanding). Then the research needs lots of wood: the clearing site does not
+    // count as coming (an expanding order never solves a problem), a needed woodcutter is ordered
+    startGame(makeDesc({}, {{"Wood", 200}}));
+    hq().AddToInventory(GoodCounts::make(GoodType::Axe, 3), true);
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    startAI();
+    step();
+    const MapPoint clearingPos = findSite(BuildingType::Woodcutter);
+    BOOST_TEST_REQUIRE(clearingPos.isValid());
+    BOOST_TEST_REQUIRE(planner()->IsClearingWoodcutter(clearingPos));
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    BOOST_TEST_REQUIRE((ware(GoodType::Wood).state == civai::SupplyState::Shortage));
+    const bool needed = helpers::contains_if(list(), [](const civai::Order* order) {
+        return order->building == BuildingType::Woodcutter && order->kind == civai::OrderKind::Needed
+               && !order->clearing;
+    });
+    BOOST_TEST(needed);
+}
+
+BOOST_FIXTURE_TEST_CASE(HarvesterBesideItsRenewer, PlannerFixture)
+{
+    // Wood is short, no place has enough trees for a woodcutter for good (fewer than RENEW_BELOW, and too few for a
+    // clearing one): a forester is ordered for it first, the woodcutter is placed beside its site
+    startGame(makeDesc({}, {{"Wood", 5}}));
+    hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Shovel, 2), true);
+    placeTrees(Position(-5, 3), 4);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    const civai::Order& woodcutter = getOrder(BuildingType::Woodcutter);
+    const unsigned woodcutterId = woodcutter.id;
+    BOOST_TEST((woodcutter.kind == civai::OrderKind::Needed));
+    BOOST_TEST((woodcutter.state == civai::OrderState::Waiting));
+    BOOST_TEST_INFO(woodcutter.reason);
+    BOOST_TEST(woodcutter.reason.find("kein Bauplatz mit") == 0u);
+    const civai::Order& forester = getOrder(BuildingType::Forester);
+    BOOST_TEST((forester.cause == civai::OrderCause::Renewal));
+    BOOST_TEST(forester.parent == woodcutterId);
+    BOOST_TEST(findOrder(BuildingType::Forester) < findOrder(BuildingType::Woodcutter));
+    // The forester is placed, then the woodcutter beside its site
+    step();
+    const MapPoint foresterPos = findSite(BuildingType::Forester);
+    BOOST_TEST_REQUIRE(foresterPos.isValid());
+    BOOST_TEST(!findSite(BuildingType::Woodcutter).isValid());
+    step();
+    const MapPoint woodcutterPos = findSite(BuildingType::Woodcutter);
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST_REQUIRE(woodcutterPos.isValid());
+    BOOST_TEST(world.CalcDistance(woodcutterPos, foresterPos) <= nofFarmhand::GetWorkRadius(Job::Forester));
+    BOOST_TEST(!planner()->IsClearingWoodcutter(woodcutterPos));
+    // The forester renews around the woodcutter now: no second one for it
+    step();
+    const auto isRenewerOf = [&](const civai::Order* order) {
+        return order->building == BuildingType::Forester && order->near == woodcutterPos;
+    };
+    const std::vector<const civai::Order*> orders = list();
+    BOOST_TEST(std::count_if(orders.begin(), orders.end(), isRenewerOf) == 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

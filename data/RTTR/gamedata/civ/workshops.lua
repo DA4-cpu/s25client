@@ -249,3 +249,16 @@ rttr:AddWorkshop{
     outputChoice = "tools",
     workTime = 120,
 }
+
+rttr:AddWorkshop{
+    name = "Sawwmill",
+    title = "Sawwmill",
+    size = "medium",
+    cost = { Boards = 2 },
+    look = "Sawmill",
+    worker = { title = "Copperworker", tool = "none", look = "Metalworker" },
+    inputs = { "Holzstamm"},
+    consume = "any",
+    output = { "Boards" },
+    workTime = 120,
+}

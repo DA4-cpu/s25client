@@ -52,26 +52,26 @@ rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nu
 
 rttr:AddToolMaterial{ name = "Iron", title = "Eisen" }
 
-rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 150, speed = 100 } -- Zange
-rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 150, speed = 100 } -- Hammer
-rttr:AddTool{ ware = "Axe",        material = "Iron", durability = 150, speed = 100 } -- Axt
-rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 150, speed = 100 } -- Säge
-rttr:AddTool{ ware = "PickAxe",    material = "Iron", durability = 150, speed = 100 } -- Spitzhacke
-rttr:AddTool{ ware = "Shovel",     material = "Iron", durability = 150, speed = 100 } -- Schaufel
-rttr:AddTool{ ware = "Crucible",   material = "Iron", durability = 150, speed = 100 } -- Schmelztiegel
-rttr:AddTool{ ware = "RodAndLine", material = "Iron", durability = 150, speed = 100 } -- Angel
-rttr:AddTool{ ware = "Scythe",     material = "Iron", durability = 150, speed = 100 } -- Sense
-rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 150, speed = 100 } -- Beil
-rttr:AddTool{ ware = "Rollingpin", material = "Iron", durability = 150, speed = 100 } -- Nudelholz
-rttr:AddTool{ ware = "Bow",        material = "Iron", durability = 150, speed = 100 } -- Bogen
+rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 100, speed = 50 } -- Zange
+rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 100, speed = 100 } -- Hammer
+rttr:AddTool{ ware = "Axe",        material = "Iron", durability = 100, speed = 100 } -- Axt
+rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 100, speed = 100 } -- Säge
+rttr:AddTool{ ware = "PickAxe",    material = "Iron", durability = 100, speed = 100 } -- Spitzhacke
+rttr:AddTool{ ware = "Shovel",     material = "Iron", durability = 100, speed = 100 } -- Schaufel
+rttr:AddTool{ ware = "Crucible",   material = "Iron", durability = 100, speed = 100 } -- Schmelztiegel
+rttr:AddTool{ ware = "RodAndLine", material = "Iron", durability = 100, speed = 100 } -- Angel
+rttr:AddTool{ ware = "Scythe",     material = "Iron", durability = 100, speed = 100 } -- Sense
+rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 100, speed = 100 } -- Beil
+rttr:AddTool{ ware = "Rollingpin", material = "Iron", durability = 100, speed = 100 } -- Nudelholz
+rttr:AddTool{ ware = "Bow",        material = "Iron", durability = 100, speed = 100 } -- Bogen
 
 rttr:AddToolMaterial{ name = "Copper", title = "Copper" }
 
-rttr:AddTool{ ware = "CopperTongs",      material = "Copper", durability = 100, speed = 50 } -- Zange
-rttr:AddTool{ ware = "CopperHammer",     material = "Copper", durability = 100, speed = 50 } -- Hammer
-rttr:AddTool{ ware = "CopperAxe",        material = "Copper", durability = 100, speed = 50 } -- Axt
-rttr:AddTool{ ware = "CopperSaw",        material = "Copper", durability = 100, speed = 50 } -- Säge
-rttr:AddTool{ ware = "CopperPickAxe",    material = "Copper", durability = 100, speed = 50 } -- Spitzhacke
+rttr:AddTool{ ware = "CopperTongs",      material = "Copper", durability = 50, speed = 50 } -- Zange
+rttr:AddTool{ ware = "CopperHammer",     material = "Copper", durability = 50, speed = 50 } -- Hammer
+rttr:AddTool{ ware = "CopperAxe",        material = "Copper", durability = 50, speed = 50 } -- Axt
+rttr:AddTool{ ware = "CopperSaw",        material = "Copper", durability = 50, speed = 50 } -- Säge
+rttr:AddTool{ ware = "CopperPickAxe",    material = "Copper", durability = 50, speed = 50 } -- Spitzhacke
 
 rttr:SetToolReorder(10)
 
