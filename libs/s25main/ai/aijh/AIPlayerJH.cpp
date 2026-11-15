@@ -3249,49 +3249,37 @@ MapPoint AIPlayerJH::FindBestPositionWhere(const MapPoint& pt, const AIResource 
     return MapPoint::Invalid();
 }
 
-MapPoint AIPlayerJH::FindWoodcutterPosition(const MapPoint& around, const bool clearing,
-                                            const std::vector<MapPoint>& clearingWoodcutters)
+MapPoint AIPlayerJH::FindScoredPosition(const BuildingType type, const MapPoint& around, const unsigned radius,
+                                        const std::function<bool(MapPoint, double&)>& score, double& bestScore) const
 {
-    constexpr unsigned searchRadius = 15;
-    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
-    const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
-    // Clearing: at least CLEARING_MIN_TREES trees in reach, far enough from foresters (their trees are for the
-    // woodcutters for good). For good: not where a clearing woodcutter cuts the trees
-    return FindBestPositionWhere(
-      around, AIResource::Wood, BUILDING_SIZE[BuildingType::Woodcutter], searchRadius,
-      AIConstruction::GetBorderReserve(BuildingType::Woodcutter), [&](const MapPoint pos) {
-          if(!clearing)
-          {
-              return civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius)
-                       >= civai::EconomyPlanner::RENEW_BELOW
-                     && !helpers::contains_if(clearingWoodcutters, [&](const MapPoint clearingPos) {
-                            return gwb.CalcDistance(pos, clearingPos) < 2 * woodcutterRadius;
-                        });
-          }
-          return civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius)
-                   >= civai::EconomyPlanner::CLEARING_MIN_TREES
-                 && !construction->OtherUsualBuildingInRadius(pos, woodcutterRadius + foresterRadius,
-                                                             BuildingType::Forester);
-      });
-}
-
-MapPoint AIPlayerJH::FindQuarryPosition(const MapPoint& around)
-{
-    constexpr unsigned searchRadius = 15;
-    const unsigned radius = nofFarmhand::GetWorkRadius(Job::Stonemason);
-    return FindBestPositionWhere(around, AIResource::Stones, BUILDING_SIZE[BuildingType::Quarry], searchRadius,
-                                 AIConstruction::GetBorderReserve(BuildingType::Quarry), [&](const MapPoint pos) {
-                                     return civai::EconomyPlanner::CountStonePiles(player, pos, radius)
-                                            >= civai::EconomyPlanner::MIN_DEPOSITS_IN_REACH;
-                                 });
+    const unsigned borderReserve = AIConstruction::GetBorderReserve(type);
+    const BuildingQuality size = BUILDING_SIZE[type];
+    MapPoint bestPos = MapPoint::Invalid();
+    for(const MapPoint& curPt : gwb.GetPointsInRadiusWithCenter(around, radius))
+    {
+        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || aiMap[curPt].siteOrdered || !aii.IsOwnTerritory(curPt)
+           || !canUseBq(aii.GetBuildingQuality(curPt), size))
+            continue;
+        if(size != BuildingQuality::Mine && aii.isHarborPosClose(curPt, 2, true))
+            continue;
+        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
+            continue;
+        double value = 0;
+        if(!score(curPt, value))
+            continue;
+        if(!bestPos.isValid() || value > bestScore)
+        {
+            bestPos = curPt;
+            bestScore = value;
+        }
+    }
+    return bestPos;
 }
 
 MapPoint AIPlayerJH::FindHarvesterPositionBeside(const BuildingType type, const MapPoint& renewerPos,
-                                                 const unsigned radius,
-                                                 const std::vector<MapPoint>& clearingWoodcutters)
+                                                 const unsigned radius)
 {
     const unsigned borderReserve = AIConstruction::GetBorderReserve(type);
-    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
     MapPoint bestPos = MapPoint::Invalid();
     unsigned bestDistance = std::numeric_limits<unsigned>::max();
     for(const MapPoint& curPt : gwb.GetPointsInRadius(renewerPos, radius))
@@ -3300,10 +3288,6 @@ MapPoint AIPlayerJH::FindHarvesterPositionBeside(const BuildingType type, const 
            || aii.isHarborPosClose(curPt, 2, true) || !canUseBq(aii.GetBuildingQuality(curPt), BUILDING_SIZE[type]))
             continue;
         if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
-            continue;
-        if(type == BuildingType::Woodcutter && helpers::contains_if(clearingWoodcutters, [&](const MapPoint pt) {
-               return gwb.CalcDistance(curPt, pt) < 2 * woodcutterRadius;
-           }))
             continue;
         const unsigned distance = gwb.CalcDistance(curPt, renewerPos);
         if(distance < bestDistance)
@@ -3329,7 +3313,7 @@ MapPoint AIPlayerJH::FindForesterPosition(const MapPoint& woodcutterPos,
           if(GetDensity(pos, AIResource::Plantspace, 7u) < 10u || GetDensity(pos, AIResource::Borderland, 1u) > 1u)
               return false;
           return !helpers::contains_if(clearingWoodcutters, [&](const MapPoint clearingPos) {
-              return gwb.CalcDistance(pos, clearingPos) < woodcutterRadius + foresterRadius;
+              return gwb.CalcDistance(pos, clearingPos) <= woodcutterRadius + foresterRadius;
           });
       });
 }

@@ -1234,10 +1234,11 @@ unten sind die Entscheidungen des Nutzers vom 14.11. abends.
 **Benötigt und expandierend** hängen allein vom Anlass ab, nie vom Gebäudetyp:
 - **Benötigt:** Es gibt ein gemessenes Problem, und das Gebäude ist seine Lösung. Jedes Gebäude kann benötigt sein.
   Jeder Auftrag nennt seinen Anlass (`OrderCause`, im Log nach „benötigt:“):
-  - Mangel einer Warengruppe (Erzeuger), auch als Verbraucher eines Überschusses, wenn dessen Produkt im Mangel ist.
+  - Mangel einer Warengruppe (Prognose unter 0): Erzeuger, auch als Verbraucher eines Überschusses, wenn dessen
+    Produkt im Mangel ist.
   - Eingang oder Baumaterial, das einem benötigten Auftrag fehlt (Kind-Auftrag, steht über ihm).
   - Gebäude eines Typs stehen, weil ein Eingang fehlt („steht still“).
-  - Werkzeughersteller: Werkzeuge werden gebraucht, und es gibt keinen Hersteller oder alle sind ausgelastet.
+  - Werkzeughersteller: Werkzeuge fehlen laut Prognose, und die vorhandenen Hersteller schaffen sie nicht.
   - Soldaten fehlen: die Waren zum Rekrutieren.
   - Gehilfen fehlen, Lager voll: ein Lager.
   - Wenige Bäume am dauerhaften Holzfäller: ein Förster.
@@ -1257,7 +1258,7 @@ unten sind die Entscheidungen des Nutzers vom 14.11. abends.
 - Eine Gruppe sind die Waren, die ein Abnehmer gleichwertig nimmt: die Eingänge „eins von“ (Nahrung der Minen), ein
   Baukosten-Eintrag nach Tags, die Werkzeuge eines Platzes und einer Art (Eisen- und Kupferaxt), dazu jede Ware allein.
   Die Gruppen kommen aus den Spieldaten und aus dem, was das Spiel anfragt; im Code ist keine Ware genannt.
-- Bestand, Bilanz, Verbrauch einer Gruppe sind die Summen ihrer Waren. Angefragt und geplant zählt ein Eintrag für jede
+- Bestand, Herstellung, Verbrauch einer Gruppe sind die Summen ihrer Waren. Angefragt und geplant zählt ein Eintrag für jede
   Gruppe, die alle seine Waren enthält.
 - Über Aufträge entscheiden nur Gruppen, die ein Abnehmer genau so nimmt („demanded“). Die Ware einer Gruppe: die
   vorher gewählte, solange sie herstellbar ist, sonst die beste (bei Werkzeugen das bessere: Tempo und Ertrag, dann
@@ -1268,43 +1269,63 @@ Lager zu einem Militärgebäude (Statistik `soldiersCreated/Used`, Spielstand 28
 Militärgebäude. Fehlen Soldaten, werden die Rekrutierungswaren (`SOLDIER_RECRUIT_WARES` aus den Spieldaten: Schwert,
 Schild, Bier) bestellt, soweit sie nicht reichen, und ein Lager für Gehilfen, wenn keine frei sind.
 
-**Anzahl:**
-- Jeder Bedarf hat eine Menge pro Minute: Mangel = Defizit der Bilanz + was über den Bestand hinaus angefragt ist (in
-  einer Bilanzlänge); ein Eingang = Verbrauch des Gebäudes laut Arbeitszeit minus Überschuss der Bilanz; Baumaterial =
-  fehlende Menge in einer Bilanzlänge; stehende Gebäude = ihr Verbrauch laut Arbeitszeit.
-- Erzeuger = ⌈(Menge − kommende − stehende) ÷ Ausstoß eines Erzeugers⌉, jeden Schritt neu (sinkt auch).
-  - Kommend: Baustellen, bestellte Baustellen und Gebäude in den ersten 5 Minuten (ihr Ausstoß laut Arbeitszeit,
-    anteilig bis er in der Bilanz steht). Nicht die expandierender Aufträge und nicht rodende Holzfäller (ein
-    expandierender Auftrag löst nie ein Problem); sie zählen, sobald sie herstellen (Bilanz).
-  - Stehend: Gebäude, die aus einem bearbeiteten Grund stehen (siehe unten), mit dem, was sie bringen, wenn er
-    behoben ist.
-  - Ausstoß: gemessen bei den Erzeugern, die arbeiten (ohne stehende und erschöpfte), sonst laut Arbeitszeit.
-  - Alle benötigten Aufträge für Gebäude, die die Ware machen, zählen mit, auch für ein anderes Produkt (eine
-    Waffenschmiede für Schilde macht auch Schwerter).
-- Natürliche Grenzen: Reichen die Eingänge eines Erzeugers nicht oder kann kein Arbeiter oder Werkzeug für ihn kommen,
-  wartet einer (seine Eingänge, Werkzeuge und Gehilfen werden bestellt), weitere erst danach. Nie mehr neue Aufträge
-  als Bauarbeiter, die sie bauen könnten. Für einen anderen Auftrag höchstens einer je Ware.
-- Ein Auftrag ist erledigt, sobald sein Gebäude fertig ist; ab dann zählt es in der Statistik. Nur ein Förster bleibt
-  bis nach seiner Anlaufzeit (der Wald wächst langsam).
+**Prognose** (Nutzer, 2026-11-15 nachmittags; ersetzt „Bilanz negativ = Mangel“): Jede Ware, Gruppe und die Soldaten
+haben einen Wert für die nächste Bilanzlänge (5 Minuten):
+
+**Prognose = (Bestand − Angefragt) + voraussichtliche Herstellung − voraussichtlicher Verbrauch**
+
+- Angefragt = alles Verplante: offen angefragt, Baukosten der benötigten Aufträge, Eingangsplätze und Werkzeuge kommender
+  Gebäude.
+- Herstellung = gemessen in der letzten Bilanzlänge + kommende Erzeuger (Baustellen, bestellte Baustellen, Gebäude in
+  der Anlaufzeit, auch expandierende) laut Arbeitszeit + stehende Erzeuger, deren Grund bearbeitet wird.
+- Verbrauch = gemessener Verbrauch als Eingang von Gebäuden + kommende Verbraucher + stehende Verbraucher, sobald sie
+  arbeiten. Was für Bau, Werkzeug, Soldaten, Forschung verbraucht wird, zählt hier nicht: Es wird vorher angefragt und
+  steht in „Angefragt“ (sonst doppelt).
+- Stehende Gebäude, die auf einen Eingang warten, zählen nur, wenn die Prognose dieses Eingangs (ohne die stehenden
+  Gebäude gerechnet) nicht negativ ist.
+- **Mangel:** Prognose unter 0. **Überschuss:** Prognose über der Schwelle (10 × Verbrauch/min, mindestens 8, ohne
+  unverbrauchten Startvorrat). Sonst normal.
+- **Eingang reicht** für einen weiteren Verbraucher: Überschuss, oder die Prognose bleibt mit seinem Verbrauch laut
+  Arbeitszeit bei 0 oder darüber. Gilt auch für Werkzeughersteller (die frühere Sonderregel „Bestand deckt die
+  fehlenden Werkzeuge“ sperrte den Hersteller, je mehr Werkzeuge fehlten).
+- Wird in einem Schritt ein Gebäude platziert, zählt es sofort in der Prognose (die Aufträge darunter sehen es).
+
+**Anzahl** (Bilanzregel, für jeden Anlass): Erzeuger = ⌈fehlende Menge pro Minute ÷ Ausstoß eines Erzeugers⌉, jeden
+Schritt neu (sinkt auch). Die Prognose enthält die kommenden und stehenden Erzeuger schon.
+- Fehlend: Mangel = −Prognose ÷ 5; Eingang eines Auftrags = sein Verbrauch laut Arbeitszeit − Prognose ÷ 5; Baumaterial
+  = −Prognose ÷ 5 (nur wenn die Prognose negativ ist: Gleicht die Wirtschaft das Fehlende in einer Bilanzlänge aus,
+  entsteht kein Auftrag); stehende Gebäude = ihr Verbrauch − Prognose ohne sie ÷ 5.
+- Ausstoß: gemessen bei den Erzeugern, die arbeiten (ohne stehende und erschöpfte), sonst laut Arbeitszeit.
+- Alle benötigten Aufträge für Gebäude, die die Ware machen, zählen mit, auch für ein anderes Produkt.
+- Diese Grenzen bleiben: Reichen die Eingänge eines Erzeugers nicht oder kann kein Arbeiter oder Werkzeug für ihn
+  kommen, wartet einer. Für einen anderen Auftrag höchstens einer je Ware. Nie mehr wartende benötigte Aufträge als
+  Bauarbeiter (über alle Anlässe gezählt; ein Auftrag je Bedarf kommt immer, er zeigt, was fehlt).
+- Ein Auftrag ist erledigt, sobald sein Gebäude fertig ist. Nur ein Förster bleibt bis nach seiner Anlaufzeit.
 
 **Gebäude unter 80 % Produktivität:** jedes einzeln. Grund: kein Arbeiter (Gehilfen), kein Werkzeug, Eingang fehlt
 (Auftrag „steht still“ für den Eingang), Fahne voll, nichts mehr in Reichweite (erschöpft, zählt nicht). Ohne Grund
 („unbekannt“) zählt es, wie es arbeitet: weitere Erzeuger dürfen kommen.
 
-**Werkzeuge:** nur über den Vorrat. Soll je Art = angefragt (Arbeiter, Werkzeugplätze, Werkzeuge als Ware, z. B. für
-die Forschung) + 1. Mit dem Addon „Werkzeugbestellung“ wird das Fehlende bestellt (Regler 0), sonst der Regler je Art
-auf die fehlende Zahl gestellt (höchstens 10). Ein Werkzeughersteller (Metalworks, Copperworks) wird nur benötigt, wenn
-keiner da ist oder alle ausgelastet sind; steht einer für einen Eingang, wird der Eingang beschafft. Sein Eingang
-reicht, wenn der Bestand die bestellten und fehlenden Werkzeuge deckt (er arbeitet auf Bestellung). Für Werkzeuge gibt
-es keine expandierenden Aufträge.
+**Werkzeuge** (Nutzer, 2026-11-15 nachmittags: mit der Wirtschaft verknüpft, nicht nur nach Bestellungen):
+- Werkzeuge sind Waren mit Prognose. Gruppen: alle Werkzeuge einer Art (Eisen- und Kupferaxt), eines Werkzeugplatzes,
+  ein einzelnes Werkzeug (z. B. als Forschungskosten).
+- Angefragt zählt auch, was kommende Gebäude brauchen werden (Baustellen, bestellte Baustellen, benötigte Aufträge: das
+  Werkzeug für den Arbeiter, die Werkzeuge der Plätze), dazu der Vorrat `TOOLS_IN_STOCK` = 1 je Art. So entsteht der
+  Mangel, bevor das Gebäude fertig ist.
+- Bestellt wird das Fehlende je Art (Addon „Werkzeugbestellung“, sonst der Regler je Art, höchstens 10).
+- Werkzeughersteller nach der Bilanzregel: fehlende Werkzeuge aller Gruppen, die er macht, pro Minute, minus was seine
+  Hersteller noch schaffen (kommende, freie Zeit der arbeitenden, stehende mit bearbeitetem Grund) ÷ Arbeitsschritte
+  eines Herstellers.
+- Werkzeughersteller dürfen expandierend kommen (Expansionsliste), aber nicht, solange ein Hersteller freie Zeit hat.
 
 **Sortierung der Liste:**
-1. Benötigte, die ihr eigenes Problem lösen (nur benötigte, deren Gebäude in der Kette des fehlenden Baumaterials liegt
-   und arbeiten kann), dann alle anderen benötigten, dann expandierende.
-2. Darin die Stufen der Grundwirtschaft (`ai.lua`), dann alle anderen.
-3. Darin Werkzeughersteller, Lager für Gehilfen und bei vollem Lager zuerst (ohne sie arbeitet nichts), dann nach
-   Dringlichkeit (Minuten bis leer), expandierende in Reihenfolge.
-Ein Auftrag für einen anderen steht nie unter ihm (Gruppe und Stufe gelten für die ganze Kette).
+1. Benötigte, die ihr eigenes Problem lösen, dann alle anderen benötigten, dann expandierende.
+2. Benötigte: die Stufen der Grundwirtschaft (`ai.lua`), dann alle anderen. Darin Werkzeughersteller, Lager für
+   Gehilfen und bei vollem Lager zuerst, dann nach der Prognose dessen, wofür sie sind (die niedrigste zuerst).
+3. Expandierende (Nutzer, 2026-11-15): nur nach der Wirtschaft, keine Stufen, keine andere Regel. Wert = Prognose des
+   Produkts; bei Verbrauchern (Prognose des Produkts − Prognose der Eingänge) ÷ 2, in Stück. Der kleinste Wert zuerst:
+   Ein schwaches Produkt und ein Überschuss am Eingang schieben nach oben, ein knapper Eingang nach unten.
+Ein Auftrag für einen anderen steht nie unter ihm.
 
 **Abarbeitung:**
 - Ein benötigter Auftrag, dem Baumaterial fehlt, behält das vorhandene in jedem Schritt (nicht nur im ersten). Er bearbeitet
@@ -1319,51 +1340,72 @@ Ein Auftrag für einen anderen steht nie unter ihm (Gruppe und Stufe gelten für
 - Blockierte Aufträge: nicht erforscht → bei neuer Forschung; kein Weg → jeden Schritt geprüft; kein Bauplatz → bei
   mehr Land oder weniger Gebäuden.
 
-**Holzfäller und Förster:** Ein dauerhafter (benötigter) Holzfäller steht nicht im Bereich eines rodenden (beide
-Radien). Ein Förster ist benötigt, wenn weniger als 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen (Anzahl
-aus dem Spiel, Regel für jede Quelle mit Erneuerer). Einer je Holzfäller zur Zeit; fehlt sein Werkzeug, wartet einer.
+**Holzfäller und Förster:** Rodende Holzfäller und Förster stehen nie so, dass sich ihre Radien überschneiden (Abstand
+größer als Radius des rodenden Holzfällers + Radius des Försters, in beide Richtungen): Der Förster würde den Wald
+nachpflanzen, und der rodende Holzfäller würde nie abgerissen. Dauerhafte Holzfäller dürfen überall stehen, auch im
+Bereich rodender; ihr Förster darf dort nicht hin, sie stehen dann still, bis der rodende abgerissen ist (Absicht des
+Nutzers). Ein Förster ist benötigt, wenn weniger als 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen. Einer
+je Holzfäller zur Zeit; es warten höchstens so viele Förster-Aufträge, wie Werkzeuge für sie im Lager sind (mindestens
+einer).
 
-**Platzwahl** (Stand 2026-11-15 abends): nach dem, was das Gebäude bearbeitet, nicht nach dem Gebäudetyp.
-- Abbauer (bauen ein Vorkommen der Karte ab) nur, wo genug davon in Reichweite ist, geprüft nach jeder Platzsuche:
-  rodender Holzfäller `CLEARING_MIN_TREES` (8), dauerhafter Abbauer einer Quelle mit Erneuerer `RENEW_BELOW` (11, weniger
-  hieße sofort einen Förster), andere Vorkommen `MIN_DEPOSITS_IN_REACH` (1), Erz und Fisch 1 Feld.
-- Steinhaufen immer wie beim Steinbruch nach Vorkommen (auch benötigte), Kartenobjekte aus Lua beim Sammler, Erz, Fisch,
-  Tiere, Ackerland wie bisher.
-- Verarbeitende Gebäude (ohne Quelle auf der Karte) an jedem freien Platz nahe der Lager, ohne die Sonderregeln der alten
-  KI für einzelne Typen (z. B. „Sägewerke 22 Felder auseinander“, die benötigte Sägewerke verhindert hat).
+**Eltern-Auftrag folgt sofort** (Nutzer, 2026-11-15 nachmittags): Ist für jeden fehlenden Eingang eines Auftrags ein
+Erzeuger platziert (Baustelle steht), wird der Auftrag sofort gebaut, möglichst nah an einer dieser Baustellen; nicht
+erst, wenn der Erzeuger arbeitet. Weitere Eingänge desselben Auftrags kommen nah an den ersten. Gilt nicht für
+Baumaterial. Solange ein Auftrag auf eine solche Baustelle wartet, plant die KI alle 20 GF (`FOLLOW_UP_GFS`), unabhängig
+vom Schwierigkeitsgrad.
+
+**Platzwahl** (Nutzer, 2026-11-15 nachmittags): nach dem, was das Gebäude bearbeitet. Jeder erlaubte Platz bekommt eine
+Bewertung, der beste der abgesuchten Plätze gewinnt (bis zu 8 Lager/Militärgebäude je Schritt, Radius 15). Gewichte in
+`EconomyPlanner.h` (Startwerte von Claude):
+- `SCORE_SOURCE` = 1 je Vorkommen in Reichweite (höchstens 40): größere Vorkommen bevorzugt.
+- `SCORE_PREFERRED` = 60: nah an der Baustelle eines Eingangs, der für den Auftrag platziert wurde.
+- `SCORE_PARTNER` = 30: nah am nächsten Erzeuger eines Eingangs oder Abnehmer des Produkts.
+- `SCORE_WAREHOUSE` = 20: Erzeuger von Baumaterial (Produkt steht in irgendwelchen Baukosten) nah am nächsten Lager.
+- `SCORE_SAME_TYPE` = −15 je Gebäude desselben Typs in der Nähe: bei Erzeugern von Baumaterial (Radius 8) und Abbauern
+  (doppelte Reichweite).
+- Die Nähe-Werte fallen bis `PARTNER_RADIUS` = 15 auf 0.
+- Nie bebaut: Felder und mögliche Feldplätze. Bei Plantagen aus Lua genau die Knoten, auf denen eine Pflanze steht oder
+  die Plantage pflanzen könnte (auch für die Fahne), bei Bauernhof und Köhler die Feldknoten der alten KI (Radius 3).
+- Mindestmenge in Reichweite: rodender Holzfäller 8 Bäume, dauerhafter Abbauer einer Quelle mit Erneuerer 11, sonst 1.
+- Mit Bewertung: verarbeitende Gebäude, Abbauer von Bäumen, Steinhaufen, Kartenobjekten aus Lua und Erz. Mit den Regeln
+  der alten KI (erster passender Platz): Fisch, Tiere, Ackerland, Wasser, Plantagen, Förster.
 
 **Anbauer und Abbauer** (Nutzer, 2026-11-15): Findet ein benötigter dauerhafter Abbauer keinen Platz mit genug Vorkommen
 in Reichweite, wird zuerst ein Anbauer für ihn beauftragt (Erneuerer der Quelle: Förster, Plantage aus Lua ohne Produkt;
 Anlass „erneuert“, Kind des Abbauers, steht über ihm). Steht dessen Baustelle, kommt der Abbauer direkt daneben (nächster
 Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge in Reichweite nicht, alle anderen Regeln gelten
-(Material, Bauarbeiter, Grenze, nicht im Bereich rodender Holzfäller). Der Anbauer erneuert danach um diesen Abbauer
+(Material, Bauarbeiter, Grenze). Der Anbauer erneuert danach um diesen Abbauer
 (kein zweiter während seiner Anlaufzeit). Findet auch der Anbauer keinen Platz: kein Bauplatz für diesen Weg.
 
 **Bericht** (Log „ECONOMY“, jede Spielminute):
-- „Mangel ohne eigenen Auftrag“: warum ein Mangel keinen Auftrag hat, z. B. „gedeckt: fehlen 1,8/min, kommend 2,7/min,
-  stehend 0/min, andere Aufträge 1“ oder „Woodcutter: kein Bauplatz, es kommt keiner dazu (4 stehen)“.
+- „Mangel ohne eigenen Auftrag“: warum ein Mangel keinen Auftrag hat, z. B. „gedeckt: fehlen 1,8/min,
+  andere Aufträge 1 (je 1,3/min)“ oder „Woodcutter: kein Bauplatz, es kommt keiner dazu (4 stehen)“.
+- Jede Ware im Mangel und Überschuss mit ihrer Prognose: „Prognose −21 = frei −27 + Herstellung 15,0 − Verbrauch 8,9“.
+  Eigener Abschnitt „Werkzeugmangel“ je Werkzeuggruppe.
 - „Zuletzt abgerissen“: Abbauer, die die alte KI wegen „nichts mehr in Reichweite“ abreißt, mit Anlass, Vorkommen beim
   Platzieren und Zeit mit Arbeiter (auch als eigene Logzeile).
 - „offen: neu, im nächsten Schritt“: im Schritt entstanden (z. B. ein Kind-Auftrag). „offen: suche Bauplatz“: die Suche
   (8 Lager/Militärgebäude je Schritt) geht im nächsten Schritt weiter.
 - Ein „eins von“-Eingang nennt die ganze Gruppe („Eingang fehlt: Fish/Meat/Bread“).
 
-**Vergleich zum Nachtrag** (Karte und Einstellungen aus dem Replay des Nutzers vom 15.11., 8 KI, 40 Spielminuten,
-Zufallswerte 7 und 11, Berichte jede Minute; vorher = `e8f9b46` mit den neuen Logzeilen):
+**Vergleich zur Prognose** (Karte und Einstellungen aus dem Replay des Nutzers vom 15.11., 8 KI; vorher = `4623c4e`):
 
 | | vorher | neu |
 |---|---|---|
-| Berichte mit Holzmangel ohne benötigten Holzfäller | 83 / 85 | 53 / 43 |
-| Berichte mit zwei Aufträgen derselben Lösung für verschiedene Aufträge | 11 / 4 | 0 / 0 |
-| Land nach 40 min (8 Spieler) | 34 616 / 35 838 | 35 417 / 34 340 |
-| Gebäude nach 40 min | 644 / 626 | 677 / 683 |
-| Rechenzeit je Schritt, Mittel / Spitze | 0,98 ms / 159 ms | 0,90 ms / 12 ms |
+| Berichte mit Holzmangel, 40 min, Zufallswert 7 / 11 | 205 / 180 | 24 / 46 |
+| davon ohne benötigten Holzfäller | 53 / 43 | 4 / 6 |
+| Mangel-Einträge mit über 100 im Lager, 2 h | 243 | 0 |
+| Berichte „Förster blockiert: Werkzeug fehlt“, 2 h | 3 604 | 657 |
+| Berichte „Werkzeug fehlt“ insgesamt, 2 h | 5 401 | 2 098 |
+| Abgerissene Abbauer, 2 h | 1 091 | 632 |
+| Land nach 40 min (Summe 8 Spieler), Zufallswert 7 / 11 | 35 417 / 34 340 | 33 331 / 33 260 |
+| Gebäude nach 40 min | 677 / 683 | 657 / 694 |
+| Land / Gebäude nach 2 h (Zufallswert 7) | 55 908 / 1 803 | 55 050 / 2 427 |
+| Forschung nach 2 h (Ø Technologien) | 22,8 | 22,8 |
+| Rechenzeit je Schritt (Mittel, 2 h) | 2,0 ms | 1,8 ms |
 
-- Was bleibt: Holzmangel, den kommende benötigte Holzfäller decken (Regel: kein weiterer, bis er arbeitet), und am Anfang
-  „kein Bauplatz“: Rund um das Hauptquartier stehen die rodenden Holzfäller, in ihrem Bereich darf weder ein dauerhafter
-  Holzfäller noch ein Förster stehen.
-- Abgerissen wurden nur Abbauer, die mindestens 3 Minuten gearbeitet hatten. Am kürzesten leben Steinbrüche mit 1–3
-  Steinhaufen, Lehmgruben mit 1–2 Vorkommen und Minen mit 1–2 Erzfeldern in Reichweite (Mindestwert 1).
+- Land und Gebäude streuen stark (ein bis zwei Läufe, Krieg der alten KI).
+- Seltene Spitzen bis 45 ms (Platzsuche mit Bewertung über 8 Mittelpunkte).
 
 **Prüfen auf der Karte eines Spiels:** `ai-battle --from-replay <datei.rpl> --ai aijh ...` nimmt Karte und Einstellungen
 (Addons, Ziel, Startwaren) aus einer Aufzeichnung und spielt sie mit KI-Spielern. Ein Replay lässt sich nicht genau

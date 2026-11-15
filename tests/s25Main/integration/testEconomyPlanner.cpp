@@ -236,17 +236,39 @@ BOOST_FIXTURE_TEST_CASE(ShortageOrdersTheChainFromTheBottom, PlannerFixture)
     BOOST_TEST((pit.forWare == LOAM));
     BOOST_TEST(findOrder(PIT) < findOrder(KILN));
 
-    // Next step: the pit is placed. The kiln waits until loam suffices
+    // Next step: the pit is placed. The kiln follows at once, beside the site of the pit (not once the pit works)
     step();
     BOOST_TEST((getOrder(PIT).state == civai::OrderState::Placed));
-    BOOST_TEST(findSite(PIT).isValid());
-    BOOST_TEST((getOrder(KILN).state == civai::OrderState::Waiting));
-    BOOST_TEST(!findSite(KILN).isValid());
-    // No second pit while the first is coming (site)
+    const MapPoint pitPos = findSite(PIT);
+    BOOST_TEST_REQUIRE(pitPos.isValid());
+    if(!findSite(KILN).isValid())
+        step();
+    const MapPoint kilnPos = findSite(KILN);
+    BOOST_TEST_REQUIRE(kilnPos.isValid());
+    BOOST_TEST(world.CalcDistance(pitPos, kilnPos) <= 4u);
+    // What the sites will make counts: the clay is not short anymore, no second kiln
     step();
-    BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().size() == 1u);
     step();
-    BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().size() == 1u);
+    BOOST_TEST((ware(CLAY).state != civai::SupplyState::Shortage));
+    unsigned numKilns = 0;
+    for(const noBuildingSite* site : world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites())
+        numKilns += site->GetBuildingType() == KILN ? 1u : 0u;
+    BOOST_TEST(numKilns == 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(EnoughStockIsNoShortage, PlannerFixture)
+{
+    // The research asks for 5 clay, 40 are there: the forecast (stock minus requested, plus what will be made, minus
+    // what will be used) is not negative. No shortage, no kiln
+    startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(CLAY, 40), true);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    BOOST_TEST(ware(CLAY).openDemand == 5u);
+    BOOST_TEST(ware(CLAY).forecast == 35.);
+    BOOST_TEST((ware(CLAY).state != civai::SupplyState::Shortage));
+    BOOST_TEST(findOrder(KILN) == -1);
 }
 
 BOOST_FIXTURE_TEST_CASE(NoWayShowsTheReason, PlannerFixture)
@@ -611,7 +633,6 @@ BOOST_FIXTURE_TEST_CASE(StartStockIsNoSurplus, PlannerFixture)
     desc.aiStartStockNoSurplus = {"Loam"};
     startGame(desc);
     hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
-    placeDeposits();
     startAI();
     step();
     BOOST_TEST(ware(LOAM).startStockLeft == 20u);
@@ -829,7 +850,6 @@ unsigned numKilnsForClay(PlannerFixture& fixture, const unsigned amount, const u
     fixture.startAI();
     BOOST_TEST_REQUIRE(civ::setResearch(fixture.world, fixture.curPlayer, 0));
     fixture.planner()->Step();
-    BOOST_TEST(fixture.ware(CLAY).missingPerMinute == amount / 5.);
     unsigned numKilns = 0;
     for(const civai::Order* order : fixture.list())
     {
@@ -1012,6 +1032,8 @@ BOOST_FIXTURE_TEST_CASE(OneSolutionForTwoOrders, PlannerFixture)
     placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
     startAI();
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    // The costs of the orders count from the step after they were made
+    step();
     for(unsigned i = 0; i < 3; i++)
     {
         step();
@@ -1096,6 +1118,26 @@ BOOST_FIXTURE_TEST_CASE(HarvesterBesideItsRenewer, PlannerFixture)
     };
     const std::vector<const civai::Order*> orders = list();
     BOOST_TEST(std::count_if(orders.begin(), orders.end(), isRenewerOf) == 1);
+}
+
+BOOST_FIXTURE_TEST_CASE(ToolsOfComingBuildingsAreAskedFor, PlannerFixture)
+{
+    // Wood is needed, a woodcutter is ordered. No axe is there to recruit its worker: the axe counts as asked for
+    // (planned) before the building is finished, with the one the player keeps in stock. It is ordered
+    ggs.setSelection(AddonId::TOOL_ORDERING, 1);
+    startGame(makeDesc({}, {{"Wood", 5}}));
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    BOOST_TEST_REQUIRE(findOrder(BuildingType::Woodcutter) >= 0);
+    step();
+    const civai::WareGroup* axes = planner()->FindGroup({GoodType::Axe});
+    BOOST_TEST_REQUIRE(axes);
+    BOOST_TEST(axes->tools);
+    BOOST_TEST(axes->status.planned >= 1u + civai::EconomyPlanner::TOOLS_IN_STOCK);
+    BOOST_TEST((axes->status.state == civai::SupplyState::Shortage));
+    BOOST_TEST(world.GetPlayer(curPlayer).GetToolsOrdered(Tool::Axe) >= 2u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

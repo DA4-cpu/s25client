@@ -34,11 +34,12 @@ struct Source;
 /// Planung")
 enum class SupplyState : uint8_t
 {
-    /// Balance negative, or more is asked for than the warehouses have: more producers are needed
+    /// Forecast negative: what is free and what will be made in the next balance length does not cover what will be
+    /// used. More producers are needed
     Shortage,
-    /// Balance not negative and stock at most the threshold: the normal state of a working economy
+    /// Forecast not negative and at most the threshold: the normal state of a working economy
     Normal,
-    /// Balance not negative and stock above the threshold: more consumers are needed to use it
+    /// Forecast above the threshold: more consumers are needed to use it
     Surplus
 };
 
@@ -65,11 +66,14 @@ struct WareStatus
     /// Start stock not used yet (only for the wares of rttr:SetAIStartStockNoSurplus, otherwise 0): no surplus
     unsigned startStockLeft = 0;
     SupplyState state = SupplyState::Normal;
-    /// Shortage: minutes until the free stock is gone at the current balance (0 if more is requested than there is).
-    /// Sorts the shortages: the most urgent first
-    double minutesUntilEmpty = 0;
-    /// Shortage: wares per minute missing, the deficit of the balance plus what is asked for beyond the stock (to be
-    /// delivered within one balance length). 0 otherwise
+    /// Forecast for the next balance length: wares made and used. Measured in the last balance length, plus what the
+    /// coming producers and consumers (building sites, buildings starting up) will make and use by their work time,
+    /// plus buildings standing still for a reason that is worked on
+    double forecastProduction = 0, forecastConsumption = 0;
+    /// free + forecastProduction - forecastConsumption. Decides the state, the number of producers and the order of
+    /// the list
+    double forecast = 0;
+    /// Shortage: wares per minute missing (the negative forecast over one balance length). 0 otherwise
     double missingPerMinute = 0;
 };
 
@@ -249,6 +253,27 @@ public:
     static constexpr unsigned STUCK_MINUTES = 9;
     /// Computing budget: place searches (around one warehouse or military building each) per planning step
     static constexpr unsigned SEARCHES_PER_STEP = 8;
+    /// While an order waits for the building site of an order placed for it, the planner checks every this many GFs
+    /// (independent of the level of the AI), so the building follows without delay
+    static constexpr unsigned FOLLOW_UP_GFS = 20;
+
+    // Choice of the place: every allowed place gets a score, the best one of the places searched wins
+    /// Radius around a warehouse or military building in which places are searched
+    static constexpr unsigned SEARCH_RADIUS = 15;
+    /// Harvesters: per node of their source in reach (at most SCORE_SOURCE_MAX nodes count)
+    static constexpr double SCORE_SOURCE = 1.0;
+    static constexpr unsigned SCORE_SOURCE_MAX = 40;
+    /// Next to the building site of an input ordered for the building (falls to 0 at PARTNER_RADIUS)
+    static constexpr double SCORE_PREFERRED = 60.0;
+    /// Next to the nearest producer of an input or consumer of the product (falls to 0 at PARTNER_RADIUS)
+    static constexpr double SCORE_PARTNER = 30.0;
+    static constexpr unsigned PARTNER_RADIUS = 15;
+    /// Producers of construction material: next to the nearest warehouse (falls to 0 at PARTNER_RADIUS)
+    static constexpr double SCORE_WAREHOUSE = 20.0;
+    /// Producers of construction material and harvesters: per building of the same type within SAME_TYPE_RADIUS
+    /// (harvesters: twice their reach)
+    static constexpr double SCORE_SAME_TYPE = -15.0;
+    static constexpr unsigned SAME_TYPE_RADIUS = 8;
 
     EconomyPlanner(AIJH::AIPlayerJH& aijh, const CivAI& civAI);
 
@@ -334,8 +359,8 @@ private:
         unsigned group = 0;
         /// Idle: the type of the buildings standing still
         BuildingType forBuilding = BuildingType::Headquarters;
-        /// Wares per minute that are missing: as many producers as they need (the orders of other needs for the ware
-        /// count). Negative: one producer unless one is coming (tool makers)
+        /// Wares per minute that are missing by the forecast (it counts the coming producers and consumers): as many
+        /// producers as they need (the orders of other needs for the ware count)
         double perMinute = 0;
         /// At most this many orders for the need (one for an order or for buildings standing still). 0: no limit
         unsigned maxOrders = 0;
@@ -386,14 +411,34 @@ private:
     void UpdatePlanned();
     /// Construction costs and/or input spaces of one more building of the type. updateStatus: also in the state of the
     /// wares (a building placed in this step)
-    void AddPlanned(BuildingType bld, bool updateStatus, bool withCosts, bool withInputs);
+    void AddPlanned(BuildingType bld, bool updateStatus, bool withCosts, bool withInputs, bool withTools);
     void AddPlannedEntry(const OpenDemand& entry, bool updateStatus);
     /// The unplaced order will be built when the resources are there: its construction costs are planned
     bool IsPlanned(const Order& order) const;
     void UpdateWareStatus();
     void UpdateSoldierStatus();
-    /// State and urgency from stock, balance, free and consumption
-    void FinishStatus(WareStatus& status, double coveredMinutes) const;
+    /// Forecast, state and missing amount from free, forecast production and consumption
+    void FinishStatus(WareStatus& status) const;
+    /// Forecast production and consumption of every ware (wareProduction_, wareConsumption_, groupConsumption_).
+    /// withStanding: also the buildings standing still for a reason worked on
+    void ComputeFlows(bool withStanding);
+    /// Status of all groups from the snapshot and the flows
+    void ComputeStatuses();
+    /// A building of the type was placed in this step: what it will make and use is part of the forecast now
+    void AddComingBuilding(BuildingType bld);
+    /// Diagnose with the result kept for the step
+    Diagnosis GetDiagnosis(const nobUsual& building, const Recipe& recipe, std::vector<GoodType>& missingInputs);
+    /// The building standing still for missing inputs will get them: their forecast (without the standing buildings)
+    /// is not negative
+    bool WillGetInputs(const Recipe& recipe, const std::vector<GoodType>& missingInputs) const;
+    /// Expanding orders are sorted by this only, lowest first: the forecast of the product, and for a consumer the
+    /// mean of it and the negative forecast of its inputs (a consumer of a surplus comes first)
+    double GetExpandingScore(const Order& order) const;
+    /// Where the building of the order should stand close to: the site of an input ordered for it, or the site of
+    /// another input ordered for the same order. Invalid: nowhere special
+    MapPoint GetPreferredPoint(const Order& order) const;
+    /// A plantation of the player has or could put a field on the point (or on the flag of a building there)
+    bool IsFieldPlace(MapPoint pt) const;
     void UpdateWorkingBuildings();
     void UpdatePlacedOrders();
 
@@ -411,8 +456,13 @@ private:
     void ResolveSoldiers();
     /// Tools are ordered: a tool maker if there is none or all are busy, inputs for those standing still
     void ResolveTools();
-    /// The group of tools needs a maker: asked for beyond the stock, or tools of its kind are ordered or missing
-    bool IsToolMakerNeeded(unsigned groupIdx) const;
+    /// Work steps per minute the makers of tools of the type can still do: coming ones, free time of the working
+    /// ones, those standing still for a reason worked on
+    double GetToolMakerCapacity(BuildingType bld);
+    /// Tools a building of the type will ask for: the tool to recruit its worker, the tools of its slots
+    void AddToolDemand(std::vector<OpenDemand>& demand, BuildingType bld) const;
+    /// Buildings of the type that can be equipped now: by the tools in stock they need (at least 1)
+    unsigned GetNumEquippable(BuildingType bld) const;
     /// Tools missing per kind: asked for and TOOLS_IN_STOCK more, minus the stock and the tools ordered
     void UpdateToolNeeds();
     void AddExpandingOrder(GoodType good);
@@ -436,9 +486,8 @@ private:
     WayCheck CheckWay(unsigned recipeIdx, GoodType good, unsigned depth, GoodType given = GoodType::Nothing);
     /// The ware of the list which is best to make now (any of them would do). Nothing if none can be made
     GoodType ChooseWare(const std::vector<GoodType>& wares);
-    /// True if the input suffices for one more consumer of the recipe: with a positive balance and free stock, or
-    /// enough free stock for 10 minutes of its work time (SURPLUS_FACTOR). A tool maker: the stock covers the tools
-    /// ordered and missing of its kinds
+    /// True if the input suffices for one more consumer of the recipe: it is in surplus, or its forecast stays at 0
+    /// or above with what the new building uses in one balance length by its work time
     bool InputSuffices(GoodType input, const Recipe& consumer) const;
     /// The inputs of the recipe suffice for one more building (all of them, or one of them for "any of")
     bool InputsSuffice(const Recipe& recipe, GoodType given = GoodType::Nothing) const;
@@ -452,8 +501,6 @@ private:
     bool MakesWare(BuildingType bld, GoodType good) const;
     /// A building of the type would work once finished: a worker for it can come and its tools are there
     bool CanWorkWhenBuilt(BuildingType bld) const;
-    /// Made more than used of the ware per minute (positive balance), 0 if not
-    double GetSparePerMinute(GoodType good) const;
     /// Buildings of the chain that makes the ware now: the best producer, the best producers of its inputs ... (and
     /// the renewer of a source it uses)
     std::vector<BuildingType> GetChain(GoodType good);
@@ -478,12 +525,6 @@ private:
     /// harvesters for good of a renewable source RENEW_BELOW (fewer: a renewer comes first), other deposits
     /// MIN_DEPOSITS_IN_REACH, ore and fish 1
     unsigned GetMinSourceInReach(const Order& order, const Recipe& recipe) const;
-    /// The site or the building starting up does not count as coming: placed by an expanding order (it never solves a
-    /// problem) or a clearing woodcutter
-    bool IsExpandingSite(MapPoint pt) const;
-    /// The production of the ware changed in this step (a producer was placed): what the producers add is computed
-    /// again
-    void ForgetCapacity(BuildingType bld);
     /// The order or one above it makes the ware or is of the building type (one more would be a loop). Headquarters as
     /// building: only the ware is checked
     bool IsInChain(unsigned orderId, GoodType good, BuildingType bld) const;
@@ -535,6 +576,9 @@ private:
     /// must not take it)
     void KeepMaterial(const Order& order);
     MapPoint SearchPlace(Order& order, unsigned& searchBudget, bool& searchedAll);
+    /// The best place for the building of the order around the center by the score of the place (SCORE_...)
+    MapPoint FindScoredPlace(const Order& order, const Recipe* recipe, MapPoint center, MapPoint preferred,
+                             double& score) const;
     /// Expanding order which cannot be placed now: to the end of the list
     void MoveToEnd(Order& order, const std::string& reason, const RetryCondition& retry);
     void OrderTools();
@@ -644,6 +688,19 @@ private:
     /// Shortages (by group) and soldier wares without an order in this step: why (for the report)
     std::map<unsigned, std::string> shortageNotes_;
     std::map<GoodType, std::string> soldierNotes_;
+
+    /// Forecast per ware for the next balance length (ComputeFlows)
+    helpers::EnumArray<double, GoodType> wareProduction_{}, wareConsumption_{}, baseForecast_{};
+    /// Forecast consumption of "any of these wares" (sorted) by coming and standing consumers
+    std::vector<std::pair<std::vector<GoodType>, double>> groupConsumption_;
+    /// baseForecast_ is computed: buildings standing still for inputs count if they will get them
+    bool baseReady_ = false;
+    std::map<MapPoint, std::pair<Diagnosis, std::vector<GoodType>>, MapPointLess> diagnosisCache_;
+    /// The ware is construction material of any building
+    helpers::EnumArray<bool, GoodType> isMaterial_{};
+    /// An order waits for the building site of an order placed for it: plan again soon
+    bool followUp_ = false;
+    unsigned lastReportMinute_ = std::numeric_limits<unsigned>::max();
 
     double lastStepUs_ = 0, maxStepUs_ = 0;
     unsigned numSteps_ = 0;
