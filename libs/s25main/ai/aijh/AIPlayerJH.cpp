@@ -1250,8 +1250,9 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
         {
             foundPos =
               FindBestPosition(around, AIResource::Plantspace, BUILDING_SIZE[type], searchRadius, 86, borderReserve);
-            if(foundPos.isValid() && !BQsurroundcheck(foundPos, 4, true, 20)
-               || aii.isBuildingNearby(BuildingType::Forester, foundPos, 8))
+            if(foundPos.isValid()
+               && (!BQsurroundcheck(foundPos, 4, true, 20)
+                   || aii.isBuildingNearby(BuildingType::Forester, foundPos, 8)))
                 foundPos = MapPoint::Invalid();
             break;
         }
@@ -1374,7 +1375,7 @@ MapPoint AIPlayerJH::FindPlantationPosition(const MapPoint& around, BuildingType
     return bestPos;
 }
 
-static const char* AIResourceToString(AIResource res)
+[[maybe_unused]] static const char* AIResourceToString(AIResource res)
 {
     switch(res)
     {
@@ -3246,21 +3247,28 @@ MapPoint AIPlayerJH::FindBestPositionWhere(const MapPoint& pt, const AIResource 
     return MapPoint::Invalid();
 }
 
-MapPoint AIPlayerJH::FindWoodcutterPosition(const MapPoint& around, const bool clearing)
+MapPoint AIPlayerJH::FindWoodcutterPosition(const MapPoint& around, const bool clearing,
+                                            const std::vector<MapPoint>& clearingWoodcutters)
 {
     constexpr unsigned searchRadius = 15;
     const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
     const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
     // Clearing: at least CLEARING_MIN_TREES trees in reach, far enough from foresters (their trees are for the
-    // woodcutters for good)
-    return FindBestPositionWhere(around, AIResource::Wood, BUILDING_SIZE[BuildingType::Woodcutter], searchRadius,
-                                 AIConstruction::GetBorderReserve(BuildingType::Woodcutter), [&](const MapPoint pos) {
-                                     return !clearing
-                                            || (civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius)
-                                                  >= civai::EconomyPlanner::CLEARING_MIN_TREES
-                                                && !construction->OtherUsualBuildingInRadius(
-                                                  pos, woodcutterRadius + foresterRadius, BuildingType::Forester));
-                                 });
+    // woodcutters for good). For good: not where a clearing woodcutter cuts the trees
+    return FindBestPositionWhere(
+      around, AIResource::Wood, BUILDING_SIZE[BuildingType::Woodcutter], searchRadius,
+      AIConstruction::GetBorderReserve(BuildingType::Woodcutter), [&](const MapPoint pos) {
+          if(!clearing)
+          {
+              return !helpers::contains_if(clearingWoodcutters, [&](const MapPoint clearingPos) {
+                  return gwb.CalcDistance(pos, clearingPos) < 2 * woodcutterRadius;
+              });
+          }
+          return civai::EconomyPlanner::CountTrees(player, pos, woodcutterRadius)
+                   >= civai::EconomyPlanner::CLEARING_MIN_TREES
+                 && !construction->OtherUsualBuildingInRadius(pos, woodcutterRadius + foresterRadius,
+                                                             BuildingType::Forester);
+      });
 }
 
 MapPoint AIPlayerJH::FindQuarryPosition(const MapPoint& around)
@@ -3270,7 +3278,7 @@ MapPoint AIPlayerJH::FindQuarryPosition(const MapPoint& around)
     return FindBestPositionWhere(around, AIResource::Stones, BUILDING_SIZE[BuildingType::Quarry], searchRadius,
                                  AIConstruction::GetBorderReserve(BuildingType::Quarry), [&](const MapPoint pos) {
                                      return civai::EconomyPlanner::CountStonePiles(player, pos, radius)
-                                            >= civai::EconomyPlanner::QUARRY_MIN_STONE_PILES;
+                                            >= civai::EconomyPlanner::MIN_DEPOSITS_IN_REACH;
                                  });
 }
 

@@ -34,6 +34,7 @@
 #include "world/GameWorld.h"
 #include "nodeObjs/noFlag.h"
 #include "gameData/JobConsts.h"
+#include "gameData/MilitaryConsts.h"
 #include "gameData/SettingTypeConv.h"
 #include "gameData/ShieldConsts.h"
 #include "s25util/Log.h"
@@ -516,10 +517,9 @@ void nobBaseWarehouse::HandleRecrutingEvent()
     // wie in den military_settings angegeben.
     // Wird evtl gerundet, dann fair nach Zufall ;) ).
 
-    unsigned max_recruits;
-    max_recruits = std::min(inventory[GoodType::Sword], inventory[GoodType::ShieldRomans]);
-    max_recruits = std::min(inventory[GoodType::Beer], max_recruits);
-    max_recruits = std::min(inventory[Job::Helper], max_recruits);
+    unsigned max_recruits = inventory[Job::Helper];
+    for(const GoodType good : SOLDIER_RECRUIT_WARES)
+        max_recruits = std::min(inventory[good], max_recruits);
 
     GamePlayer& owner = world->GetPlayer(player);
     const unsigned recruiting_ratio = owner.GetMilitarySetting(0);
@@ -533,19 +533,17 @@ void nobBaseWarehouse::HandleRecrutingEvent()
 
     inventory.Add(Job::Private, real_recruits);
     owner.IncreaseInventoryJob(Job::Private, real_recruits);
+    owner.CountSoldiersCreated(real_recruits);
 
     inventory.Remove(Job::Helper, real_recruits);
     owner.DecreaseInventoryJob(Job::Helper, real_recruits);
     owner.CountHelpersUsed(real_recruits);
 
-    inventory.Remove(GoodType::Sword, real_recruits);
-    owner.DecreaseInventoryWare(GoodType::Sword, real_recruits, WareUse::Soldiers);
-
-    inventory.Remove(GoodType::ShieldRomans, real_recruits);
-    owner.DecreaseInventoryWare(GoodType::ShieldRomans, real_recruits, WareUse::Soldiers);
-
-    inventory.Remove(GoodType::Beer, real_recruits);
-    owner.DecreaseInventoryWare(GoodType::Beer, real_recruits, WareUse::Soldiers);
+    for(const GoodType good : SOLDIER_RECRUIT_WARES)
+    {
+        inventory.Remove(good, real_recruits);
+        owner.DecreaseInventoryWare(good, real_recruits, WareUse::Soldiers);
+    }
 
     // Evtl. versuchen nächsten zu rekrutieren
     TryRecruiting();
@@ -1015,6 +1013,8 @@ void nobBaseWarehouse::OrderTroops(nobMilitary& goal, std::array<unsigned, NUM_S
             }
             goal.GotWorker(curRank, *soldier);
             AddLeavingFigure(std::move(soldier));
+            // Leaves the stock of soldiers for good (economy statistic)
+            world->GetPlayer(player).CountSoldiersUsed(1);
             --max;
             --counts[i - 1];
         }
@@ -1168,8 +1168,14 @@ bool nobBaseWarehouse::CanRecruitSoldiers()
 {
     // Minimal number of helpers required according to current setting, at least 1
     const unsigned needed_helpers = std::max(1, 100 - 10 * world->GetPlayer(player).GetMilitarySetting(0));
-    return (inventory[Job::Helper] >= needed_helpers && inventory[GoodType::Sword] && inventory[GoodType::ShieldRomans]
-            && inventory[GoodType::Beer]);
+    if(inventory[Job::Helper] < needed_helpers)
+        return false;
+    for(const GoodType good : SOLDIER_RECRUIT_WARES)
+    {
+        if(!inventory[good])
+            return false;
+    }
+    return true;
 }
 
 void nobBaseWarehouse::TryRecruiting()
@@ -1267,10 +1273,6 @@ bool nobBaseWarehouse::CanRecruit(const Job job) const
         // Do we have a helper and a tool (if required)?
         return inventory[Job::Helper] > 0
                && (*requiredTool == GoodType::Nothing || IsRecruitedWithoutTool(job) || inventory[*requiredTool] > 0);
-        // Für den Bauarbeiter mind. 2 Hämmer verlangen, damit einer für
-        // Armorer/Geologist/Shipwright reserviert bleibt
-        const unsigned requiredAmount = (job == Job::Builder) ? 2u : 1u;
-        //const unsigned requiredAmount = (job == Job::Forester) ? 2u : 1u;
     } else // Cannot recruit
         return false;
 }

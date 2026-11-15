@@ -2061,6 +2061,16 @@ void GamePlayer::CountHelpersUsed(const unsigned count)
     economyStatistics_.AddHelpersUsed(count, world.GetEvMgr().GetCurrentGF());
 }
 
+void GamePlayer::CountSoldiersCreated(const unsigned count)
+{
+    economyStatistics_.AddSoldiersCreated(count, world.GetEvMgr().GetCurrentGF());
+}
+
+void GamePlayer::CountSoldiersUsed(const unsigned count)
+{
+    economyStatistics_.AddSoldiersUsed(count, world.GetEvMgr().GetCurrentGF());
+}
+
 void GamePlayer::RegisterShip(noShip& ship)
 {
     ships.push_back(&ship);

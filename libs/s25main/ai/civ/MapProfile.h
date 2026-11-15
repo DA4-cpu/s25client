@@ -50,6 +50,10 @@ public:
     /// Scan the next `numRegions` regions again
     void Update(unsigned numRegions);
 
+    /// Nodes in the radius around the point (with the point) which have the source: a tree, a stone pile, a deposit of
+    /// the map object, ore of the type, fish or water in the ground. Only for these kinds (see Recipe::reach)
+    static unsigned CountSourceNodes(const GameWorldBase& world, MapPoint pt, unsigned radius, const Source& source);
+
     unsigned GetNumRegions() const { return static_cast<unsigned>(regions_.size()); }
     const ResourceProfile& GetRegion(unsigned idx) const { return regions_[idx]; }
     unsigned GetRegionIdx(MapPoint pt) const;

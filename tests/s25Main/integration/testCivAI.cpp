@@ -91,28 +91,6 @@ WorldDescription makeDesc(bool lockPit = false)
     return desc;
 }
 
-/// Extras for the planner: the hut (workshop 2) is built of clay and makes nothing, the digger (workshop 3) collects
-/// clay directly from clay banks (map object 1)
-WorldDescription makePlannerDesc()
-{
-    WorldDescription desc = makeDesc();
-    WorkshopDesc hut = makeWorkshop("Hut");
-    hut.cost = {{{"Clay"}, 3}};
-    desc.workshops.push_back(hut);
-    MapObjectDesc bank;
-    bank.name = "ClayBank";
-    bank.title = "ClayBankTitle";
-    bank.sizes = 2;
-    bank.look = "Granite1";
-    desc.mapObjects.push_back(bank);
-    WorkshopDesc digger = makeWorkshop("Digger");
-    digger.collectObject = "ClayBank";
-    digger.collectRadius = 6;
-    digger.output = {"Clay"};
-    desc.workshops.push_back(digger);
-    return desc;
-}
-
 constexpr GoodType LOAM = GoodType::Custom0;
 const GoodType CLAY = getCustomGood(1);
 const BuildingType PIT = getCustomBuilding(0);

@@ -128,7 +128,8 @@
 /// 25: Civilization mode: Construction costs from lua (materials of building sites per cost entry)
 /// 26: Economy statistic of the players (wares gained and used per minute)
 /// 27: Clearing woodcutters of the AI of the civilization mode
-static const unsigned currentGameDataVersion = 27;
+/// 28: Soldiers recruited and sent to military buildings per minute in the economy statistic
+static const unsigned currentGameDataVersion = 28;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

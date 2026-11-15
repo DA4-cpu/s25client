@@ -75,6 +75,16 @@ void EconomyStatistics::AddHelpersUsed(const unsigned count, const unsigned gf)
     addSaturated(Current(gf).helpersUsed, count);
 }
 
+void EconomyStatistics::AddSoldiersCreated(const unsigned count, const unsigned gf)
+{
+    addSaturated(Current(gf).soldiersCreated, count);
+}
+
+void EconomyStatistics::AddSoldiersUsed(const unsigned count, const unsigned gf)
+{
+    addSaturated(Current(gf).soldiersUsed, count);
+}
+
 const EconomyMinute* EconomyStatistics::GetMinute(const unsigned minutesAgo, const unsigned gf) const
 {
     const unsigned queryMinute = gf / GetGFsPerMinute();
@@ -155,6 +165,16 @@ unsigned EconomyStatistics::GetHelpersUsed(const unsigned minutes, const unsigne
     return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.helpersUsed; });
 }
 
+unsigned EconomyStatistics::GetSoldiersCreated(const unsigned minutes, const unsigned gf) const
+{
+    return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.soldiersCreated; });
+}
+
+unsigned EconomyStatistics::GetSoldiersUsed(const unsigned minutes, const unsigned gf) const
+{
+    return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.soldiersUsed; });
+}
+
 void EconomyStatistics::Serialize(SerializedGameData& sgd) const
 {
     // Only the counts that are not 0: most wares are not used in a minute
@@ -199,6 +219,8 @@ void EconomyStatistics::Serialize(SerializedGameData& sgd) const
         pushEntries(minute.gained, minute.used, [&sgd](const uint16_t value) { sgd.PushUnsignedShort(value); });
         sgd.PushUnsignedShort(minute.helpersCreated);
         sgd.PushUnsignedShort(minute.helpersUsed);
+        sgd.PushUnsignedShort(minute.soldiersCreated);
+        sgd.PushUnsignedShort(minute.soldiersUsed);
     }
     pushEntries(totalGained_, totalUsed_, [&sgd](const uint32_t value) { sgd.PushUnsignedInt(value); });
 }
@@ -234,6 +256,11 @@ void EconomyStatistics::Deserialize(SerializedGameData& sgd)
         popEntries(minute.gained, minute.used, [&sgd]() { return sgd.PopUnsignedShort(); });
         minute.helpersCreated = sgd.PopUnsignedShort();
         minute.helpersUsed = sgd.PopUnsignedShort();
+        if(sgd.GetGameDataVersion() >= 28)
+        {
+            minute.soldiersCreated = sgd.PopUnsignedShort();
+            minute.soldiersUsed = sgd.PopUnsignedShort();
+        }
     }
     popEntries(totalGained_, totalUsed_, [&sgd]() { return sgd.PopUnsignedInt(); });
 }

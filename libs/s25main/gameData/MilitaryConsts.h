@@ -6,9 +6,13 @@
 
 #include "DrawPoint.h"
 #include "helpers/MultiArray.h"
+#include "gameTypes/GoodTypes.h"
 #include "gameTypes/JobTypes.h"
 #include "gameData/NationConsts.h"
 #include <array>
+
+/// Wares a warehouse takes (one of each, together with a helper) to recruit a soldier
+constexpr std::array<GoodType, 3> SOLDIER_RECRUIT_WARES = {GoodType::Sword, GoodType::ShieldRomans, GoodType::Beer};
 
 /// Größe der Militärquadrate (in Knotenpunkten), in die die Welt eingeteilt wurde für Militärgebäude
 constexpr uint16_t MILITARY_SQUARE_SIZE = 20;

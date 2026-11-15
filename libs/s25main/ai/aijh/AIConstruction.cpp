@@ -29,9 +29,11 @@
 #include "gameTypes/JobTypes.h"
 #include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
+#include "gameData/JobConsts.h"
 #include "s25util/warningSuppression.h"
 #include <boost/range/adaptor/reversed.hpp>
 #include <algorithm>
+#include <optional>
 #include <array>
 #include <cstdlib>
 #include <limits>
@@ -780,12 +782,19 @@ bool AIConstruction::HasEnoughBuildersAvailable() const
     // der schon für eine Baustelle losgeschickt wurde, aber noch nicht aus dem Lager heraus ist, zählt im angezeigten
     // Bestand noch mit - dann würde die KI für ihn eine zweite Baustelle eröffnen.
     unsigned availableBuilders = 0, availableHammers = 0, availableHelpers = 0;
+    // Werkzeug, das ein Träger braucht, um Bauarbeiter zu werden (aus den Spieldaten)
+    std::optional<GoodType> builderTool = JOB_CONSTS[Job::Builder].tool;
+    if(builderTool && *builderTool == GoodType::Nothing)
+        builderTool.reset();
     for(const nobBaseWarehouse* wh : aii.GetStorehouses())
     {
         // Bauarbeiter, die schon ausgebildet und einsatzbereit in einem Lagerhaus/HQ liegen
         availableBuilders += wh->GetNumRealFigures(Job::Builder);
-        // Hämmer, mit denen bei Bedarf noch ein freier Träger zum Bauarbeiter ausgebildet werden könnte
-        availableHammers += wh->GetNumRealWares(GoodType::Hammer);
+        // Werkzeuge (Hammer), mit denen bei Bedarf noch ein freier Träger zum Bauarbeiter ausgebildet werden könnte
+        if(builderTool)
+            availableHammers += wh->GetNumRealWares(*builderTool);
+        else
+            availableHammers += wh->GetNumRealFigures(Job::Helper);
         // Dafür wird zusätzlich ein freier Träger benötigt - ohne den nützt der Hammer nichts
         availableHelpers += wh->GetNumRealFigures(Job::Helper);
     }

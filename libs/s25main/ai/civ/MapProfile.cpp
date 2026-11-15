@@ -89,6 +89,42 @@ void MapProfile::Update(const unsigned numRegions)
     }
 }
 
+unsigned MapProfile::CountSourceNodes(const GameWorldBase& world, const MapPoint pt, const unsigned radius,
+                                      const Source& source)
+{
+    const auto hasSource = [&](const MapPoint curPt) {
+        const noBase* obj = world.GetNO(curPt);
+        const Resource resources = world.GetNode(curPt).resources;
+        switch(source.kind)
+        {
+            case SourceKind::Trees: return obj->GetType() == NodalObjectType::Tree;
+            case SourceKind::StonePiles: return obj->GetType() == NodalObjectType::Granite;
+            case SourceKind::MapObject:
+                return obj->GetType() == NodalObjectType::Deposit
+                       && static_cast<const noDeposit*>(obj)->GetObjectIdx() == source.index;
+            case SourceKind::Ore:
+                return resources.getAmount() > 0 && resources.getType() == static_cast<ResourceType>(source.index);
+            case SourceKind::Fish: return resources.getAmount() > 0 && resources.getType() == ResourceType::Fish;
+            case SourceKind::Water: return resources.getAmount() > 0 && resources.getType() == ResourceType::Water;
+            case SourceKind::None:
+            case SourceKind::Animals:
+            case SourceKind::Land:
+            case SourceKind::Plantable: return false;
+        }
+        return false;
+    };
+    unsigned result = 0;
+    world.CheckPointsInRadius(
+      pt, radius,
+      [&](const MapPoint curPt, unsigned) {
+          if(hasSource(curPt))
+              ++result;
+          return false;
+      },
+      true);
+    return result;
+}
+
 unsigned MapProfile::GetRegionIdx(const MapPoint pt) const
 {
     return (pt.y / REGION_SIZE) * numRegionsX_ + pt.x / REGION_SIZE;

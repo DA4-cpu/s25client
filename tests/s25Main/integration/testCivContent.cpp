@@ -858,7 +858,7 @@ rttr:AddWorkshop{ name = "Library", size = "medium", cost = { Boards = 2 }, look
         result.replace(result.find(search), search.size(), replacement);
         return result;
     };
-    for(const std::string invalid :
+    for(const std::string& invalid :
         {wares + library + "rttr:SetKnowledgeDistribution{ LWP = 11 }",
          wares + library + "rttr:SetKnowledgeDistribution{ LWP = 1 }\nrttr:SetKnowledgeDistribution{ LWP = 1 }",
          wares + library + "rttr:SetKnowledgeDistribution{ XWP = 1 }",
@@ -1338,8 +1338,10 @@ BOOST_FIXTURE_TEST_CASE(AIBuildsWorkshopsAndLibraries, BiggerCivWorldFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 1);
     WorldDescription desc = makeLibraryDesc(20);
-    // The research needs knowledge only media can give: the planner of the new AI wants a carver (bones in stock), the
-    // old rule for libraries one library for the media waiting in the warehouse
+    // The research needs knowledge only media can give: the planner of the new AI wants a carver (bones in surplus, the
+    // media are normal: it expands with it like ai.lua allows), the old rule for libraries one library for the media
+    // waiting in the warehouse
+    desc.aiExpandingBuildings = {"Carver"};
     TechnologyDesc tech;
     tech.name = "tech";
     tech.title = "Tech";

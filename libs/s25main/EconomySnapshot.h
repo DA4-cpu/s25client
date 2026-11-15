@@ -78,6 +78,8 @@ struct EconomySnapshot
 };
 
 EconomySnapshot takeEconomySnapshot(const GamePlayer& player);
+/// Wares the military buildings ask for themselves (coins to promote soldiers, armor)
+std::vector<GoodType> getMilitaryWares();
 /// Input spaces of a building of the type: the wares it will ask for when it works (one entry "any of" for buildings
 /// using any of their inputs, e.g. the food of a mine)
 void addInputSpaces(std::vector<OpenDemand>& demand, BuildingType bld);

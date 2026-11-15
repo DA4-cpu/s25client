@@ -21,6 +21,7 @@
 #include "helpers/containerUtils.h"
 #include "worldFixtures/MockLocalGameState.h"
 #include "worldFixtures/WorldWithGCExecution.h"
+#include "figures/nofFarmhand.h"
 #include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noGranite.h"
 #include "nodeObjs/noTree.h"
@@ -222,12 +223,15 @@ BOOST_FIXTURE_TEST_CASE(ShortageOrdersTheChainFromTheBottom, PlannerFixture)
     // The kiln makes clay of loam. Nobody makes loam: the pit is ordered for the kiln and comes above it
     const civai::Order& kiln = getOrder(KILN);
     BOOST_TEST((kiln.kind == civai::OrderKind::Needed));
+    BOOST_TEST((kiln.cause == civai::OrderCause::Shortage));
     BOOST_TEST((kiln.forWare == CLAY));
-    BOOST_TEST(!kiln.consumer);
+    BOOST_TEST((kiln.usesWare == GoodType::Nothing));
     BOOST_TEST((kiln.state == civai::OrderState::Waiting));
     BOOST_TEST(kiln.reason.find("Eingang fehlt") == 0u);
     const civai::Order& pit = getOrder(PIT);
     BOOST_TEST(pit.parent == kiln.id);
+    BOOST_TEST((pit.cause == civai::OrderCause::Input));
+    BOOST_TEST((pit.kind == civai::OrderKind::Needed));
     BOOST_TEST((pit.forWare == LOAM));
     BOOST_TEST(findOrder(PIT) < findOrder(KILN));
 
@@ -237,7 +241,9 @@ BOOST_FIXTURE_TEST_CASE(ShortageOrdersTheChainFromTheBottom, PlannerFixture)
     BOOST_TEST(findSite(PIT).isValid());
     BOOST_TEST((getOrder(KILN).state == civai::OrderState::Waiting));
     BOOST_TEST(!findSite(KILN).isValid());
-    // No second pit while the first starts up
+    // No second pit while the first is coming (site)
+    step();
+    BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().size() == 1u);
     step();
     BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().size() == 1u);
 }
@@ -261,47 +267,82 @@ BOOST_FIXTURE_TEST_CASE(NoWayShowsTheReason, PlannerFixture)
     BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(SurplusOrdersAConsumer, PlannerFixture)
+BOOST_FIXTURE_TEST_CASE(SurplusOfANormalProductIsExpanding, PlannerFixture)
 {
-    startGame(makeDesc());
-    placeDeposits();
-    // 20 loam and nobody uses it: surplus (more than the minimum stock of 8)
+    // 20 loam and nobody uses it: surplus (more than the minimum stock of 8). Clay is normal (no research): no problem,
+    // the kiln may only expand, it is in the list of ai.lua. No boards: it stays in the list
+    startGame(makeDesc({"Kiln"}), 0);
     hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
     startAI();
     step();
     BOOST_TEST((ware(LOAM).state == civai::SupplyState::Surplus));
+    BOOST_TEST((ware(CLAY).state == civai::SupplyState::Normal));
     const civai::Order& kiln = getOrder(KILN);
-    BOOST_TEST(kiln.consumer);
-    BOOST_TEST((kiln.forWare == LOAM));
-    BOOST_TEST((kiln.state == civai::OrderState::Placed));
+    BOOST_TEST((kiln.kind == civai::OrderKind::Expanding));
+    BOOST_TEST((kiln.forWare == CLAY));
+    BOOST_TEST((kiln.usesWare == LOAM));
+    BOOST_TEST_INFO(kiln.reason);
+    BOOST_TEST(kiln.reason.find("Boards fehlt") == 0u);
+    // With boards it is placed and leaves the list
+    hq().AddToInventory(GoodCounts::make(GoodType::Boards, 2), true);
+    step();
     BOOST_TEST(findSite(KILN).isValid());
-    // Nothing else: loam is not short
-    BOOST_TEST(findOrder(PIT) == -1);
 }
 
-BOOST_FIXTURE_TEST_CASE(SurplusIsThereForItsConsumer, PlannerFixture)
+BOOST_FIXTURE_TEST_CASE(SurplusOfANormalProductNotInTheList, PlannerFixture)
 {
-    // No deposits: nobody can make loam. The 20 loam in stock would not keep a kiln busy for 10 minutes, but they are
-    // a surplus and the kiln is ordered to use them
+    // The same without the kiln in the list of ai.lua: nothing
     startGame(makeDesc());
     hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
     startAI();
     step();
     BOOST_TEST((ware(LOAM).state == civai::SupplyState::Surplus));
-    BOOST_TEST((getOrder(KILN).state == civai::OrderState::Placed));
+    BOOST_TEST(findOrder(KILN) == -1);
+}
+
+BOOST_FIXTURE_TEST_CASE(SurplusIsUsedForAShortProduct, PlannerFixture)
+{
+    // Clay is short (research), loam in surplus: the needed kiln is the producer. The surplus is there for it: no pit
+    // (no deposits anyway), the kiln is placed
+    startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    const civai::Order& kiln = getOrder(KILN);
+    BOOST_TEST((kiln.kind == civai::OrderKind::Needed));
+    BOOST_TEST((kiln.cause == civai::OrderCause::Shortage));
+    BOOST_TEST((kiln.state == civai::OrderState::Placed));
     BOOST_TEST(findSite(KILN).isValid());
 }
 
 BOOST_FIXTURE_TEST_CASE(ExpandOnlyWithTheBuildingsOfTheList, PlannerFixture)
 {
-    // Loam is in normal state (none there, none used). The pit is not in the list of ai.lua: no order
+    // Clay is in normal state (none there, none used, the research costs it). The kiln is not in the list of ai.lua:
+    // no order
     startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(LOAM, 8), true);
+    startAI();
+    step();
+    BOOST_TEST((ware(CLAY).state == civai::SupplyState::Normal));
+    BOOST_TEST(findOrder(KILN) == -1);
+    BOOST_TEST(!findSite(KILN).isValid());
+}
+
+BOOST_FIXTURE_TEST_CASE(HarvestersOfDepositsExpandWithoutTheList, PlannerFixture)
+{
+    // The pit collects deposits (map objects of lua): like woodcutters and quarries it clears them, independent of the
+    // stock and of the list of ai.lua
+    startGame(makeDesc(), 0);
     placeDeposits();
     startAI();
     step();
-    BOOST_TEST((ware(LOAM).state == civai::SupplyState::Normal));
-    BOOST_TEST(findOrder(PIT) == -1);
-    BOOST_TEST(!findSite(PIT).isValid());
+    const civai::Order& pit = getOrder(PIT);
+    BOOST_TEST((pit.kind == civai::OrderKind::Expanding));
+    BOOST_TEST((pit.cause == civai::OrderCause::Deposits));
+    hq().AddToInventory(GoodCounts::make(GoodType::Boards, 2), true);
+    step();
+    BOOST_TEST(findSite(PIT).isValid());
 }
 
 BOOST_FIXTURE_TEST_CASE(ExpandingOrdersArePlacedAndLeaveTheList, PlannerFixture)
@@ -332,7 +373,7 @@ BOOST_FIXTURE_TEST_CASE(FullStorageAllowsOnlyNeededOrders, PlannerFixture)
     BOOST_TEST(!findSite(PIT).isValid());
     const civai::Order& storehouse = getOrder(BuildingType::Storehouse);
     BOOST_TEST((storehouse.kind == civai::OrderKind::Needed));
-    BOOST_TEST(storehouse.forStorage);
+    BOOST_TEST((storehouse.cause == civai::OrderCause::Storage));
     BOOST_TEST_INFO(storehouse.reason);
     BOOST_TEST((storehouse.state == civai::OrderState::Placed));
 }
@@ -506,8 +547,14 @@ BOOST_FIXTURE_TEST_CASE(NoOrdersForInputsOfABuildingThatCannotWork, PlannerFixtu
     BOOST_TEST((order.state == civai::OrderState::Blocked));
     BOOST_TEST_INFO(order.reason);
     BOOST_TEST(order.reason.find("kein Weg zu SandTitle") != std::string::npos);
-    BOOST_TEST(findOrder(PIT) == -1);
-    BOOST_TEST(!findSite(PIT).isValid());
+    // No order for its loam (the pit may come as harvester of the deposits, expanding)
+    const unsigned glassworksId = order.id;
+    for(const civai::Order* other : list())
+    {
+        BOOST_TEST(other->parent != glassworksId);
+        if(other->building == PIT)
+            BOOST_TEST((other->kind == civai::OrderKind::Expanding));
+    }
 }
 
 BOOST_FIXTURE_TEST_CASE(MissingInputIsKeptForTheOrderAbove, PlannerFixture)
@@ -573,27 +620,34 @@ BOOST_FIXTURE_TEST_CASE(StartStockIsNoSurplus, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(PlannedWaresOfSites, PlannerFixture)
 {
-    startGame(makeDesc());
+    startGame(makeDesc({"Kiln"}));
     hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
     startAI();
     step();
     BOOST_TEST_REQUIRE(findSite(KILN).isValid());
     step();
-    // The kiln site will ask for its input spaces of loam: planned, not free anymore
+    // The kiln sites will ask for their input spaces of loam: planned, not free anymore. Expanding orders have no
+    // start-up time: a second kiln comes while the loam is still in surplus
+    unsigned numSites = 0;
+    for(const noBuildingSite* site : world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites())
+        numSites += site->GetBuildingType() == KILN ? 1u : 0u;
     const unsigned spaces = BLD_WORK_DESC[KILN].numSpacesPerWare;
-    BOOST_TEST(ware(LOAM).planned == spaces);
-    BOOST_TEST(ware(LOAM).free == 20 - static_cast<int>(spaces));
+    BOOST_TEST(numSites >= 1u);
+    BOOST_TEST(ware(LOAM).planned == numSites * spaces);
+    BOOST_TEST(ware(LOAM).free == 20 - static_cast<int>(numSites * spaces));
     BOOST_TEST(ware(LOAM).inTransit == 0u);
 }
 
 BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
 {
-    // 1 board, promised to a barracks site, and no boards made. The clearing woodcutter needs 2 and is part of the
-    // board chain (sawmill without wood): it is not blocked, the barracks site (nothing built in yet) is cancelled for
-    // it
-    startGame(makeDesc(), 1);
+    // The research costs wood: a woodcutter is needed. 1 board, promised to a barracks site, and no boards made. The
+    // woodcutter needs 2 and is part of the board chain (sawmill without wood): it is not blocked, the barracks site
+    // (nothing built in yet) is cancelled for it
+    startGame(makeDesc({}, {{"Wood", 5}}), 1);
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
     placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    startAI();
+    // The site of the barracks is placed after the old AI ran (it would decide about it itself)
     MapPoint sitePos = MapPoint::Invalid();
     for(const Position offset : {Position(5, -3), Position(6, 2), Position(3, 5), Position(-3, -4)})
     {
@@ -607,9 +661,14 @@ BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
     }
     BOOST_TEST_REQUIRE(sitePos.isValid());
     BOOST_TEST_REQUIRE(findSite(BuildingType::Barracks).isValid());
-    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    // The woodcutter for the wood of the research can work and makes what the sawmill (boards) lacks: priority. It is
+    // taken over by the sawmill as its input (one woodcutter for both)
     step();
     const civai::Order& order = getOrder(BuildingType::Woodcutter);
+    BOOST_TEST((order.kind == civai::OrderKind::Needed));
+    BOOST_TEST((order.cause == civai::OrderCause::Input));
+    BOOST_TEST(!order.clearing);
     BOOST_TEST(order.selfSolving);
     BOOST_TEST_INFO(order.reason);
     BOOST_TEST(order.reason.find("Vorrang") == 0u);
@@ -618,7 +677,42 @@ BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
     // The board is free again, one more comes: the woodcutter gets them before anybody else
     hq().AddToInventory(GoodCounts::make(GoodType::Boards, 1), true);
     step();
-    BOOST_TEST(findSite(BuildingType::Woodcutter).isValid());
+    const MapPoint pos = findSite(BuildingType::Woodcutter);
+    BOOST_TEST_REQUIRE(pos.isValid());
+    BOOST_TEST(!planner()->IsClearingWoodcutter(pos));
+}
+
+BOOST_FIXTURE_TEST_CASE(ExpandingOrderNeverSolvesAProblem, PlannerFixture)
+{
+    // Without a need for wood or boards: the clearing woodcutter is expanding. It lacks boards (1 of 2), but it solves
+    // no problem: no priority, it waits at the end of the list
+    startGame(makeDesc(), 1);
+    hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    startAI();
+    step();
+    step();
+    const civai::Order* clearing = nullptr;
+    for(const civai::Order* order : list())
+    {
+        if(order->building == BuildingType::Woodcutter && order->clearing)
+            clearing = order;
+    }
+    BOOST_TEST_REQUIRE(clearing);
+    BOOST_TEST((clearing->kind == civai::OrderKind::Expanding));
+    BOOST_TEST((clearing->cause == civai::OrderCause::Deposits));
+    BOOST_TEST(!clearing->selfSolving);
+    BOOST_TEST_INFO(clearing->reason);
+    BOOST_TEST(clearing->reason.find("Boards fehlt") == 0u);
+    // All needed orders stand above it
+    bool expandingSeen = false;
+    for(const civai::Order* other : list())
+    {
+        if(other->kind == civai::OrderKind::Expanding)
+            expandingSeen = true;
+        else
+            BOOST_TEST(!expandingSeen);
+    }
 }
 
 BOOST_FIXTURE_TEST_CASE(ClearingMarkIsSaved, PlannerFixture)
@@ -690,6 +784,213 @@ BOOST_FIXTURE_TEST_CASE(OrdersOneToolOfEachKind, PlannerFixture)
     step();
     for(const auto tool : helpers::enumRange<Tool>())
         BOOST_TEST(player.GetToolsOrdered(tool) <= 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(NeededOrderReplacesTheExpandingOne, PlannerFixture)
+{
+    // The pit is ordered as harvester of the deposits (expanding) and then for the kiln (needed, clay is short): the
+    // needed one replaces the expanding one (same building and ware). Needed orders ignore the limit per building type
+    WorldDescription desc = makeDesc();
+    desc.aiBuildingLimitBase = 0;
+    desc.aiBuildingLimitPerStartArea = 0;
+    startGame(desc);
+    placeDeposits();
+    startAI();
+    BOOST_TEST(planner()->GetBuildingLimit() == 0u);
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    unsigned numPits = 0;
+    for(const civai::Order* order : list())
+    {
+        if(order->building != PIT)
+            continue;
+        ++numPits;
+        BOOST_TEST((order->kind == civai::OrderKind::Needed));
+        BOOST_TEST((order->cause == civai::OrderCause::Input));
+    }
+    BOOST_TEST(numPits == 1u);
+    // Placed although the limit is 0
+    step();
+    BOOST_TEST(findSite(PIT).isValid());
+    BOOST_TEST((getOrder(PIT).state == civai::OrderState::Placed));
+}
+
+namespace {
+/// The research asks for `amount` clay: amount / 5 per minute are missing (to be there within one balance length).
+/// `loam` in stock. Returns the number of kilns ordered for it
+unsigned numKilnsForClay(PlannerFixture& fixture, const unsigned amount, const unsigned loam)
+{
+    fixture.startGame(makeDesc({}, {{"Clay", amount}}));
+    fixture.hq().AddToInventory(GoodCounts::make(LOAM, loam), true);
+    fixture.startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(fixture.world, fixture.curPlayer, 0));
+    fixture.planner()->Step();
+    BOOST_TEST(fixture.ware(CLAY).missingPerMinute == amount / 5.);
+    unsigned numKilns = 0;
+    for(const civai::Order* order : fixture.list())
+    {
+        if(order->building == KILN)
+        {
+            ++numKilns;
+            BOOST_TEST((order->cause == civai::OrderCause::Shortage));
+        }
+    }
+    return numKilns;
+}
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(OneProducerForASmallDeficit, PlannerFixture)
+{
+    // 1 clay per minute: one kiln makes more than that by its work time (loam in surplus: its input suffices)
+    BOOST_TEST(numKilnsForClay(*this, 5, 100) == 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(ProducersByTheDeficit, PlannerFixture)
+{
+    // 10 clay per minute: more than one kiln makes by its work time
+    BOOST_TEST(numKilnsForClay(*this, 50, 100) > 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(OneProducerWaitsForItsInputs, PlannerFixture)
+{
+    // The same without loam: the input of the kiln does not suffice. One kiln waits for it (the loam is ordered for
+    // it), more once it suffices
+    BOOST_TEST(numKilnsForClay(*this, 50, 0) == 1u);
+}
+
+namespace {
+/// Finished woodcutter near the trees placed before. Returns its position
+MapPoint placeWoodcutter(PlannerFixture& fixture)
+{
+    for(const Position offset : {Position(-3, 5), Position(-6, 6), Position(-7, 1), Position(-2, 1), Position(-4, -1)})
+    {
+        const MapPoint pt = fixture.world.MakeMapPoint(fixture.hqPos + offset);
+        if(fixture.world.GetBQ(pt, fixture.curPlayer) >= BuildingQuality::Hut)
+        {
+            BuildingFactory::CreateBuilding(fixture.world, BuildingType::Woodcutter, pt, fixture.curPlayer,
+                                            Nation::Romans);
+            return pt;
+        }
+    }
+    return MapPoint::Invalid();
+}
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(RenewerWhenTheSourceGetsFew, PlannerFixture)
+{
+    // A woodcutter for good with fewer than RENEW_BELOW trees in reach gets a forester near it
+    startGame(makeDesc());
+    placeTrees(Position(-5, 3), 5);
+    const MapPoint pos = placeWoodcutter(*this);
+    BOOST_TEST_REQUIRE(pos.isValid());
+    const unsigned radius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    BOOST_TEST_REQUIRE(civai::EconomyPlanner::CountTrees(world.GetPlayer(curPlayer), pos, radius)
+                       < civai::EconomyPlanner::RENEW_BELOW);
+    startAI();
+    planner()->Step();
+    const civai::Order& forester = getOrder(BuildingType::Forester);
+    BOOST_TEST((forester.cause == civai::OrderCause::Renewal));
+    BOOST_TEST((forester.kind == civai::OrderKind::Needed));
+    BOOST_TEST((forester.near == pos));
+    // One per woodcutter at a time
+    planner()->Step();
+    unsigned numForesters = 0;
+    for(const civai::Order* order : list())
+        numForesters += order->building == BuildingType::Forester ? 1u : 0u;
+    BOOST_TEST(numForesters == 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(NoRenewerWithEnoughOfTheSource, PlannerFixture)
+{
+    startGame(makeDesc());
+    placeTrees(Position(-5, 3), 18);
+    const MapPoint pos = placeWoodcutter(*this);
+    BOOST_TEST_REQUIRE(pos.isValid());
+    const unsigned radius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    BOOST_TEST_REQUIRE(civai::EconomyPlanner::CountTrees(world.GetPlayer(curPlayer), pos, radius)
+                       >= civai::EconomyPlanner::RENEW_BELOW);
+    startAI();
+    step();
+    BOOST_TEST(findOrder(BuildingType::Forester) == -1);
+}
+
+BOOST_FIXTURE_TEST_CASE(SoldiersAreAWare, PlannerFixture)
+{
+    // A barracks asks for soldiers, the warehouses have none: soldiers are short. Swords and shields are there, beer
+    // not: the beer is needed for the soldiers (the brewery), not swords or shields
+    startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(GoodType::Sword, 10), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::ShieldRomans, 10), true);
+    MapPoint barracksPos = MapPoint::Invalid();
+    for(const Position offset : {Position(5, -3), Position(6, 2), Position(3, 5), Position(-3, -4)})
+    {
+        const MapPoint pt = world.MakeMapPoint(hqPos + offset);
+        if(world.GetBQ(pt, curPlayer) >= BuildingQuality::Hut)
+        {
+            BuildingFactory::CreateBuilding(world, BuildingType::Barracks, pt, curPlayer, Nation::Romans);
+            barracksPos = pt;
+            break;
+        }
+    }
+    BOOST_TEST_REQUIRE(barracksPos.isValid());
+    startAI();
+    planner()->Step();
+    const civai::WareStatus& soldiers = planner()->GetSoldierStatus();
+    BOOST_TEST_INFO("Soldiers: stock " << soldiers.stock << ", open " << soldiers.openDemand);
+    BOOST_TEST((soldiers.state == civai::SupplyState::Shortage));
+    const civai::Order& brewery = getOrder(BuildingType::Brewery);
+    BOOST_TEST((brewery.cause == civai::OrderCause::Soldiers));
+    BOOST_TEST((brewery.forWare == GoodType::Beer));
+    BOOST_TEST(findOrder(BuildingType::Armory) == -1);
+}
+
+BOOST_FIXTURE_TEST_CASE(OneToolMakerWhenThereIsNone, PlannerFixture)
+{
+    // Tools are ordered (one of each kind) and nobody makes them: one tool maker, not one per tool
+    ggs.setSelection(AddonId::TOOL_ORDERING, 1);
+    startGame(makeDesc());
+    startAI();
+    step();
+    step();
+    unsigned numMakers = 0;
+    for(const civai::Order* order : list())
+    {
+        if(order->building != BuildingType::Metalworks)
+            continue;
+        ++numMakers;
+        BOOST_TEST((order->cause == civai::OrderCause::Tools));
+        BOOST_TEST((order->kind == civai::OrderKind::Needed));
+    }
+    BOOST_TEST(numMakers == 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(GroupsOfWaresAConsumerTakes, PlannerFixture)
+{
+    // The mixer takes sand or gravel (any of them): one group of both. Sand and gravel alone are no group a consumer
+    // takes; the group has the stock of both
+    WorldDescription desc = makeDesc();
+    desc.wares.push_back(makeWare("Sand"));
+    desc.wares.push_back(makeWare("Gravel"));
+    desc.wares.push_back(makeWare("Concrete"));
+    WorkshopDesc mixer = makeWorkshop("Mixer");
+    mixer.inputs = {{"Sand"}, {"Gravel"}};
+    mixer.consumeEach = false;
+    mixer.output = {"Concrete"};
+    desc.workshops.push_back(mixer);
+    startGame(desc);
+    const GoodType sand = getCustomGood(2), gravel = getCustomGood(3);
+    hq().AddToInventory(GoodCounts::make(sand, 5), true);
+    hq().AddToInventory(GoodCounts::make(gravel, 6), true);
+    startAI();
+    step();
+    const civai::WareGroup* both = planner()->FindGroup({sand, gravel});
+    BOOST_TEST_REQUIRE(both);
+    BOOST_TEST(both->demanded);
+    BOOST_TEST(both->status.stock == 11u);
+    const civai::WareGroup* sandAlone = planner()->FindGroup({sand});
+    BOOST_TEST_REQUIRE(sandAlone);
+    BOOST_TEST(!sandAlone->demanded);
+    BOOST_TEST(sandAlone->status.stock == 5u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

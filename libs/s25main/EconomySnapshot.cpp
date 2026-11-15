@@ -183,6 +183,11 @@ void addUsualBuilding(EconomySnapshot& snapshot, const nobUsual& building)
 }
 } // namespace
 
+std::vector<GoodType> getMilitaryWares()
+{
+    return {GoodType::Coins, GoodType::Armor};
+}
+
 EconomySnapshot takeEconomySnapshot(const GamePlayer& player)
 {
     EconomySnapshot snapshot;

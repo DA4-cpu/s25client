@@ -200,6 +200,9 @@ public:
     /// Helpers created by a warehouse / who became a worker, soldier or carrier (economy statistic)
     void CountHelpersCreated(unsigned count);
     void CountHelpersUsed(unsigned count);
+    /// Soldiers recruited in a warehouse / sent from a warehouse to a military building (economy statistic)
+    void CountSoldiersCreated(unsigned count);
+    void CountSoldiersUsed(unsigned count);
     /// Exact statistic of the economy (see EconomyStatistics)
     const EconomyStatistics& GetEconomyStatistics() const { return economyStatistics_; }
     /// AI: woodcutters (by position) that clear the land instead of supplying wood for good (game command

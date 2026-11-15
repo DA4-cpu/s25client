@@ -1212,139 +1212,133 @@ Statistik läuft in allen Spielen mit, nicht nur im Zivilisationsmodus.
   Produktivität. Außerdem Waren und Personen in den Lagern.
 - Tests: `EconomyStatisticsSuite`.
 
-### Stand Schritt 2: Prioritätenliste (2026-11-13, überarbeitet nach Rückmeldung des Nutzers)
+### Stand Schritt 2: Prioritätenliste (Neufassung 2026-11-15 nach Prüfung mit dem Nutzer)
 
 Code: `ai/civ/EconomyPlanner.*`, Tests `EconomyPlannerSuite`. Der Planer läuft im Zivilisationsmodus in jeder
-AIJH-KI.
+AIJH-KI. Diese Fassung ersetzt die vom 13./14.11.: Die Prüfung am 14.11. fand Fehler gegen das Konzept, die Regeln
+unten sind die Entscheidungen des Nutzers vom 14.11. abends.
 
 **Einstellungen:**
 - In `ai/civ/EconomyPlanner.h`:
-  - Bilanzlänge `BALANCE_MINUTES` = 5 (auch die Anlaufzeit).
+  - Bilanzlänge `BALANCE_MINUTES` = 5 (auch die Zeit, nach der die Produktivität eines neuen Gebäudes zählt).
   - Schwelle: `SURPLUS_FACTOR` = 10 × Verbrauch/min, mindestens `MIN_STOCK` = 8.
   - Hohe Produktivität `HIGH_PRODUCTIVITY` = 0,8.
-  - Rodender Holzfäller ab `CLEARING_MIN_TREES` = 8 Bäumen.
-  - Steinbruch ab `QUARRY_MIN_STONE_PILES` = 1 Steinhaufen.
+  - Rodende Holzfäller ab `CLEARING_MIN_TREES` = 8 Bäumen, Sammler anderer Vorkommen (Steinhaufen, Kartenobjekte aus
+    Lua) ab `MIN_DEPOSITS_IN_REACH` = 1 Vorkommen.
+  - Förster, wenn weniger als `RENEW_BELOW` = 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen.
   - Werkzeugvorrat `TOOLS_IN_STOCK` = 1.
   - Kette steckt fest nach `STUCK_MINUTES` = 3 Minuten ohne Herstellung.
-- In `data/RTTR/gamedata/civ/ai.lua`:
-  - `rttr:SetAIExpandingBuildings` (expandierende Gebäude).
-  - `rttr:SetAIBasicEconomy` (Grundwirtschaft in Stufen).
-  - `rttr:SetAIStartStockNoSurplus` (Startvorräte ohne Überschuss: Steine, Holz, Bretter).
-  - `rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 }` (Höchstzahl je Gebäudetyp).
+- In `data/RTTR/gamedata/civ/ai.lua`: Expansionsliste, Grundwirtschaft, Startvorräte ohne Überschuss, Höchstzahl je
+  Gebäudetyp, Lager voll.
 
-**Zuständigkeit:**
-- Der Planer entscheidet über alle Gebäude, die Waren herstellen (eingebaute und aus Lua), außer der Werft, dazu über
-  den Förster. Für diese Gebäude setzt `BuildingPlanner` `buildingsWanted = 0`.
-- AIJH bleibt zuständig für Militär, Hafen, Werft, Eselzucht, Bibliothek, Straßen und die Bauplatzsuche.
-- Lagerhäuser bestellt der Planer nur als Lösung für fehlende Gehilfen.
-- **Übergang bis Schritt 3:** Vor den expandierenden Aufträgen hält der Planer das Material für das nächste
-  Militärgebäude der alten KI frei (die billigste erlaubte Art, nur wenn die alte KI gerade eines beginnen darf).
+**Benötigt und expandierend** hängen allein vom Anlass ab, nie vom Gebäudetyp:
+- **Benötigt:** Es gibt ein gemessenes Problem, und das Gebäude ist seine Lösung. Jedes Gebäude kann benötigt sein.
+  Jeder Auftrag nennt seinen Anlass (`OrderCause`, im Log nach „benötigt:“):
+  - Mangel einer Warengruppe (Erzeuger), auch als Verbraucher eines Überschusses, wenn dessen Produkt im Mangel ist.
+  - Eingang oder Baumaterial, das einem benötigten Auftrag fehlt (Kind-Auftrag, steht über ihm).
+  - Gebäude eines Typs stehen, weil ein Eingang fehlt („steht still“).
+  - Werkzeughersteller: Werkzeuge werden gebraucht, und es gibt keinen Hersteller oder alle sind ausgelastet.
+  - Soldaten fehlen: die Waren zum Rekrutieren.
+  - Gehilfen fehlen, Lager voll: ein Lager.
+  - Wenige Bäume am dauerhaften Holzfäller: ein Förster.
+- **Expandierend:** Es gibt kein Problem. Nur Gebäude der Expansionsliste (eine Erlaubnis), für eine Ware im Zustand
+  „normal“ oder als Verbraucher eines Überschusses mit normalem Produkt. Dazu unabhängig von der Liste die Sammler von
+  Vorkommen (Holzfäller, Steinbruch, Sammler aus Lua), sobald genug Vorkommen im Gebiet sind.
+- Ein expandierender Auftrag löst nie ein Problem und hat keine Rechte: kein Vorrang, kein vorbehaltenes Material, keine
+  Kind-Aufträge, kein Abbruch von Baustellen. Fehlt ihm etwas, wandert er ans Ende.
+- **Überschreiben:** Ein benötigter Auftrag ersetzt den gleichen expandierenden (gleiches Gebäude, gleiche Ware). Ein
+  Auftrag für einen anderen übernimmt den gleichen Auftrag aus der Statistik (mit seinem Stand), weil er höher steht.
 
-**Takt:** Schwer alle 20 GF, Mittel alle 100 GF, Leicht alle 400 GF. Der Bericht steht jede Spielminute im Log
-(„ECONOMY player …“).
+**Warengruppen („Bedarfsgruppen“, statt Sonderregeln für „eins von“):**
+- Eine Gruppe sind die Waren, die ein Abnehmer gleichwertig nimmt: die Eingänge „eins von“ (Nahrung der Minen), ein
+  Baukosten-Eintrag nach Tags, die Werkzeuge eines Platzes und einer Art (Eisen- und Kupferaxt), dazu jede Ware allein.
+  Die Gruppen kommen aus den Spieldaten und aus dem, was das Spiel anfragt; im Code ist keine Ware genannt.
+- Bestand, Bilanz, Verbrauch einer Gruppe sind die Summen ihrer Waren. Angefragt und geplant zählt ein Eintrag für jede
+  Gruppe, die alle seine Waren enthält.
+- Über Aufträge entscheiden nur Gruppen, die ein Abnehmer genau so nimmt („demanded“). Die Ware einer Gruppe: die
+  vorher gewählte, solange sie herstellbar ist, sonst die beste (bei Werkzeugen das bessere: Tempo und Ertrag, dann
+  Haltbarkeit aus `tools.lua`).
 
-**Statistik „angefragt“** je Ware:
-- **offen:** vom Spiel angefragt, noch nicht losgeschickt.
-- **unterwegs:** auf dem Weg zum anfragenden Gebäude. Nur angezeigt, nicht abgezogen, weil die Ware das Lager schon
-  verlassen hat.
-- **geplant:**
-  - Baukosten der benötigten Aufträge der Liste und der bestellten, noch nicht stehenden Baustellen.
-  - Eingangsplätze der Baustellen und der bestellten Baustellen.
-  - Eingangsplätze nicht platzierter Aufträge zählen nicht, sonst blockieren sich mehrere Aufträge mit demselben
-    Eingang gegenseitig.
-- **frei** = Bestand − offen − geplant.
-- **Mangel:** Bilanz < 0 oder frei < 0.
-- **Überschuss:** Bilanz ≥ 0 und frei − (noch nicht verbrauchter Startvorrat) > Schwelle. Startvorrat zählt nur bei
-  den Waren aus `SetAIStartStockNoSurplus`.
-- **Eingang reicht:** Bilanz > 0 und frei ≥ 0, oder bei Bilanz = 0: frei ≥ max(8, 10 × (Verbrauch + Verbrauch des
-  neuen Gebäudes)).
+**Soldaten als Ware:** Bestand = Soldaten in den Lagern, hergestellt = rekrutiert, verbraucht = ein Soldat verlässt ein
+Lager zu einem Militärgebäude (Statistik `soldiersCreated/Used`, Spielstand 28), angefragt = fehlende Soldaten der
+Militärgebäude. Fehlen Soldaten, werden die Rekrutierungswaren (`SOLDIER_RECRUIT_WARES` aus den Spieldaten: Schwert,
+Schild, Bier) bestellt, soweit sie nicht reichen, und ein Lager für Gehilfen, wenn keine frei sind.
+
+**Anzahl:**
+- Jeder Bedarf hat eine Menge pro Minute: Mangel = Defizit der Bilanz + was über den Bestand hinaus angefragt ist (in
+  einer Bilanzlänge); ein Eingang = Verbrauch des Gebäudes laut Arbeitszeit minus Überschuss der Bilanz; Baumaterial =
+  fehlende Menge in einer Bilanzlänge; stehende Gebäude = ihr Verbrauch laut Arbeitszeit.
+- Erzeuger = ⌈(Menge − kommende − stehende) ÷ Ausstoß eines Erzeugers⌉, jeden Schritt neu (sinkt auch).
+  - Kommend: Baustellen, bestellte Baustellen und Gebäude in den ersten 5 Minuten (ihr Ausstoß laut Arbeitszeit,
+    anteilig bis er in der Bilanz steht).
+  - Stehend: Gebäude, die aus einem bearbeiteten Grund stehen (siehe unten), mit dem, was sie bringen, wenn er
+    behoben ist.
+  - Ausstoß: gemessen bei den Erzeugern, die arbeiten (ohne stehende und erschöpfte), sonst laut Arbeitszeit.
+  - Alle benötigten Aufträge für Gebäude, die die Ware machen, zählen mit, auch für ein anderes Produkt (eine
+    Waffenschmiede für Schilde macht auch Schwerter).
+- Natürliche Grenzen: Reichen die Eingänge eines Erzeugers nicht oder kann kein Arbeiter oder Werkzeug für ihn kommen,
+  wartet einer (seine Eingänge, Werkzeuge und Gehilfen werden bestellt), weitere erst danach. Nie mehr neue Aufträge
+  als Bauarbeiter, die sie bauen könnten. Für einen anderen Auftrag höchstens einer je Ware.
+- Ein Auftrag ist erledigt, sobald sein Gebäude fertig ist; ab dann zählt es in der Statistik. Nur ein Förster bleibt
+  bis nach seiner Anlaufzeit (der Wald wächst langsam).
+
+**Gebäude unter 80 % Produktivität:** jedes einzeln. Grund: kein Arbeiter (Gehilfen), kein Werkzeug, Eingang fehlt
+(Auftrag „steht still“ für den Eingang), Fahne voll, nichts mehr in Reichweite (erschöpft, zählt nicht). Ohne Grund
+(„unbekannt“) zählt es, wie es arbeitet: weitere Erzeuger dürfen kommen.
+
+**Werkzeuge:** nur über den Vorrat. Soll je Art = angefragt (Arbeiter, Werkzeugplätze, Werkzeuge als Ware, z. B. für
+die Forschung) + 1. Mit dem Addon „Werkzeugbestellung“ wird das Fehlende bestellt (Regler 0), sonst der Regler je Art
+auf die fehlende Zahl gestellt (höchstens 10). Ein Werkzeughersteller (Metalworks, Copperworks) wird nur benötigt, wenn
+keiner da ist oder alle ausgelastet sind; steht einer für einen Eingang, wird der Eingang beschafft. Sein Eingang
+reicht, wenn der Bestand die bestellten und fehlenden Werkzeuge deckt (er arbeitet auf Bestellung). Für Werkzeuge gibt
+es keine expandierenden Aufträge.
 
 **Sortierung der Liste:**
-1. Aufträge, die ihr eigenes Problem lösen (siehe unten), dann benötigt, dann expandierend.
-2. Darin die Stufen der Grundwirtschaft:
-   - 1: Holzfäller, Steinbruch, Sägewerk, Förster.
-   - 2: Eisenmine, Kupfermine, Kohlemine, Köhler, Schlosserei, Kupferwerk, Eisenschmelze, Waffenschmiede.
-   - danach alle anderen.
-3. Benötigt nach Dringlichkeit (Minuten bis leer), expandierend in Reihenfolge.
+1. Benötigte, die ihr eigenes Problem lösen (nur benötigte, deren Gebäude in der Kette des fehlenden Baumaterials liegt
+   und arbeiten kann), dann alle anderen benötigten, dann expandierende.
+2. Darin die Stufen der Grundwirtschaft (`ai.lua`), dann alle anderen.
+3. Darin Werkzeughersteller, Lager für Gehilfen und bei vollem Lager zuerst (ohne sie arbeitet nichts), dann nach
+   Dringlichkeit (Minuten bis leer), expandierende in Reihenfolge.
+Ein Auftrag für einen anderen steht nie unter ihm (Gruppe und Stufe gelten für die ganze Kette).
 
-Ein Auftrag, der für einen anderen entsteht, rückt in seine eigene Stufe auf, steht aber nie unter seinem
-Eltern-Auftrag.
+**Abarbeitung:**
+- Ein benötigter Auftrag, dem Baumaterial fehlt, behält das vorhandene in jedem Schritt (nicht nur im ersten).
+- Löst er sein eigenes Problem, bekommt er das Material vor allen anderen; steckt die Kette 3 Minuten fest, werden
+  Baustellen außerhalb der Kette ohne verbautes Material abgebrochen, nicht aber Baustellen benötigter Aufträge.
+- Vorbehaltene Eingänge, Kind-Aufträge nur wenn alle Eingänge herstellbar, Höchstzahl je Gebäudetyp nur für
+  expandierende Aufträge (benötigte ignorieren sie).
+- Kein Bauplatz für einen Erzeuger: Stehen schon welche, ist der Weg nicht gesperrt (sie machen die Ware), es kommt nur
+  keiner dazu. Wieder versucht, wenn sich das Gebiet ändert oder etwas erforscht wird.
+- Blockierte Aufträge: nicht erforscht → bei neuer Forschung; kein Weg → jeden Schritt geprüft; kein Bauplatz → bei
+  mehr Land oder weniger Gebäuden.
 
-**Anzahl je Mangel:** benötigt = mindestens 1, sonst Defizit/min ÷ Ausstoß eines Erzeugers/min. Der Ausstoß ist
-gemessen, ohne arbeitende Erzeuger laut Arbeitszeit. Bestellte und anlaufende Erzeuger werden abgezogen.
+**Holzfäller und Förster:** Ein dauerhafter (benötigter) Holzfäller steht nicht im Bereich eines rodenden (beide
+Radien). Ein Förster ist benötigt, wenn weniger als 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen (Anzahl
+aus dem Spiel, Regel für jede Quelle mit Erneuerer). Einer je Holzfäller zur Zeit; fehlt sein Werkzeug, wartet einer.
 
-**Höchstzahl je Gebäudetyp** (Nutzer 2026-11-14): base + perStartArea × Startgebiete.
-- Ein Startgebiet ist das Land eines Hauptquartiers (Radius 10, 331 Knoten). Gezählt wird ganz (abgerundet),
-  mindestens 1.
-- Mit 3 und 1: am Start 4 Gebäude je Typ, bei doppelter Landgröße 5, bei dreifacher 6.
-- Gezählt werden Gebäude, Baustellen und bestellte Baustellen der Typen mit Arbeiter (nicht Militär und Lager).
-- Ist die Höchstzahl erreicht, wartet der Auftrag („Höchstzahl erreicht: 4 von 4“), bis Land dazukommt oder ein Gebäude
-  wegfällt. Ein Mangel bestellt nie mehr Erzeuger, als die Höchstzahl erlaubt.
+**Vergleich** (7 Karten, je 2 KI, je 3 Zufallswerte = 42 Spieler, gegen die Fassung vom 14.11., `7f59ed0`):
 
-**Expandierende Aufträge:** höchstens einer je Gebäudetyp in der Liste, z. B. eine Schlosserei, nicht eine je
-Werkzeug.
+| | vorige Fassung | neu |
+|---|---|---|
+| Land nach 1 h | 161 762 | 164 799 |
+| Gebäude nach 1 h | 3 684 | 4 147 |
+| Militärgebäude nach 1 h | 1 234 | 1 222 |
+| Forschung nach 1 h (Ø Technologien) | 11,6 | 12,8 |
+| Land nach 2 h | 182 223 | 184 749 |
+| Gebäude nach 2 h | 5 088 | 4 895 |
+| Militärgebäude nach 2 h | 2 642 | 1 982 |
+| Spieler unter 1000 Land nach 2 h | 6 | 10 |
 
-**Abarbeitung eines Auftrags:**
-- Kind-Aufträge für fehlende Eingänge entstehen nur, wenn **alle** fehlenden Eingänge herstellbar sind. Sonst ist der
-  Auftrag blockiert, und seine noch nicht platzierten Kinder fallen weg (kein Brunnen für eine Brauerei ohne Getreide).
-  Steht ein Eltern-Auftrag blockiert, fallen auch später entstandene Kinder weg.
-- **Vorbehaltene Eingänge:** Fehlt einem Auftrag ein Eingang (oder gibt es keinen Weg dazu), ist dieser Eingang für
-  alle Aufträge darunter vorbehalten. Sie werden nicht gebaut, solange er fehlt. Beispiel: Die benötigte
-  Waffenschmiede ohne Kohle sperrt Kohle für ein expandierendes Kupferwerk darunter. Das gilt nur, wenn der Eingang
-  der Grund ist, nicht bei fehlendem Baumaterial.
-- **Genauer Grund statt „Baumaterial fehlt“,** z. B. „Boards fehlt: 2 nötig, 0 frei (Lager 6, Baustellen brauchen
-  noch 6, für Aufträge darüber 0) – Boards: frei −4, Bilanz −3; Sawmill: 2 arbeiten (Produktivität 40 %) -> Wood: …“.
-- **Löst ein Auftrag sein eigenes Problem:** Ein Gebäude gehört zur Kette des fehlenden Baumaterials, z. B. ein
-  Holzfäller ohne Bretter, wenn die Bretter an fehlendem Holz hängen. Dann gilt:
-  - Der Auftrag wird nicht blockiert, sondern rückt an die Spitze der Liste.
-  - Er bekommt das Material vor allen anderen, auch vor dem Militär der alten KI.
-  - Er wartet nicht auf Kind-Aufträge für dieses Material.
-  - Steckt die Kette fest (in `STUCK_MINUTES` nichts davon hergestellt und nicht genug im Lager), werden Baustellen
-    außerhalb der Kette abgebrochen, in die noch nichts verbaut ist (höchstens eine Runde je Planungsschritt), bis genug
-    zurückkommt. Im Versuch, Baustellen schon bei jedem Materialmangel abzubrechen, sank das Land auf 75 % (ständiges
-    Abbrechen und Neubauen, auch von Militärbaustellen).
-- Blockierte Aufträge (auch expandierende) werden erst wieder versucht, wenn ihre Bedingung erfüllt ist oder sich die
-  Lage ändert. Nur fehlende Eingänge werden jeden Schritt geprüft.
-
-**Holzfäller, Steinbruch, Förster:**
-- Ein rodender Holzfäller entsteht, sobald im Gebiet mindestens 8 Bäume stehen, unabhängig vom Holzbestand. Er wird
-  dort gesetzt, wo mindestens 8 Bäume in Reichweite sind, mit Abstand zu Förstern.
-- Ein Steinbruch entsteht genauso, sobald ein Steinhaufen im Gebiet ist; er braucht mindestens 1 Steinhaufen in
-  Reichweite des Steinmetzes.
-- Beide sind expandierend (Stufe 1). Es gibt jeweils einen offenen Auftrag; nach dem Platzieren entsteht der nächste.
-- Ein dauerhafter Holzfäller bekommt einen Förster, wenn seine Produktivität nach einer Bilanzlänge unter 80 % liegt.
-  Ob schon Förster in Reichweite stehen, ist egal (Nutzer 2026-11-14). Je Holzfäller gibt es einen Auftrag zur Zeit;
-  der nächste kommt, wenn der letzte seine Anlaufzeit hinter sich hat.
-- Ob ein Holzfäller rodet, merkt sich das Spiel über den Spielbefehl `SetClearingWoodcutter`; das steht im Spielstand
-  (Version 27).
-
-**Werkzeuge:** nur Bestellungen, je Werkzeugart angefragt + 1, der Verteilungsregler auf 0.
-
-**Vergleich** (7 Karten, 2 KI, je Karte ein Lauf):
-
-| | alte Planung | Liste, erste Fassung | überarbeitet | mit Höchstzahl |
-|---|---|---|---|---|
-| Land nach 1 h (4 Karten) | 34 339 | 43 578 | 43 706 | 41 092 |
-| Land nach 2 h | 82 334 | 79 787 | 72 990 | 74 559 |
-| Gebäude nach 2 h | 2724 | 1804 | 1886 | 2090 |
-| Militärgebäude nach 2 h | 1546 | 1214 | 854 | 1243 |
-| Forschung (Ø Technologien) | 15,5 | 15,0 | 15,2 | 16 |
-| Spieler mit weniger als 1000 Land | 0 | 3 | 0 | 0 |
-
-- Nach einer Stunde liegt die neue KI vorn. Nach zwei Stunden hat sie etwas weniger Land und Militär: Die alte KI
-  baut das Militär weiter selbst, und der Planer hält nur das Material für ihr nächstes Militärgebäude frei.
-- Mit der Höchstzahl je Typ gibt es mehr Militär (die Bretter gehen nicht mehr in viele gleiche Gebäude), und alle
-  Spieler erforschen alle 16 Technologien.
-- Kein Spieler bricht mehr zusammen. In der ersten Fassung fehlten drei Spielern früh Holz und Bretter.
-- Versuche:
-  - Ohne die Liste der Startvorräte brachen 3 von 8 Spielern zusammen.
-  - Ohne rodende Holzfäller und Steinbrüche nach Vorkommen war das Land nach 1 h 6 % kleiner.
-
-**Rechenzeit** (Debug-Build): im Mittel 2–5 ms je Schritt, Spitzen bis etwa 50 ms. Teuer ist die Bauplatzsuche.
-Blockierte Aufträge suchen deshalb erst wieder, wenn ihre Bedingung erfüllt ist.
+- Karten: GreenPlains, Bergstrasse, DerGrosseSee, Hochebene, AufBreiter, TueranTuer, Landstr; Zufallswerte 7, 11, 23;
+  Addon nur Zivilisationsmodus. Nach 2 h entscheidet oft der Krieg (Vorherrschaft): Die Ergebnisse streuen stark.
+- Weniger Militär nach 2 h: Das Militär baut noch die alte KI; der Planer hält ihr Material nur vor den expandierenden
+  Aufträgen frei, die benötigten (jetzt mehr) kommen davor.
+- Rechenzeit (Release): im Mittel unter 1,5 ms je Schritt, Spitzen bis 26 ms; Liste höchstens 67 Einträge.
 
 **Offen:**
 - Militär im Planer (Schritt 3).
+- Forschung: wählt noch das Spiel für die KI (`civ::chooseResearchForAI`). Bleibt z. B. die Schlosserei unerforscht,
+  fehlen später alle Werkzeuge.
 
 ## Lagerkapazität (Stand 2026-11-14)
 

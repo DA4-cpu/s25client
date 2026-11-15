@@ -7,7 +7,9 @@
 #include "helpers/EnumArray.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
+#include "gameTypes/JobTypes.h"
 #include "gameTypes/Resource.h"
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -64,6 +66,9 @@ struct Recipe
     std::vector<unsigned> byproductAmounts;
     std::vector<int> byproductTechs;
     Source source;
+    /// Radius around the building in which its worker takes the source (trees, stone piles, fish, ore, map objects of
+    /// lua). 0: the source cannot be counted around the building (animals, land, water, plants) or there is none
+    unsigned reach = 0;
     /// Tool slots without which the building does not work (tool reform, base speed 0): any ware of each slot
     std::vector<std::vector<GoodType>> requiredTools;
     /// Not buildable at the start: one of these technologies unlocks it
@@ -79,6 +84,8 @@ struct Renewer
 {
     BuildingType building;
     Source source;
+    /// Radius around the building in which it renews the source
+    unsigned reach = 0;
 };
 
 /// Production graph of the game: which buildings make which wares from what. Built once at the start of the game from
@@ -99,7 +106,7 @@ public:
 private:
     void AddBuiltinRecipes(const GameWorldBase& world);
     void AddCustomRecipes(const GameWorldBase& world);
-    void AddRecipe(const GameWorldBase& world, Recipe recipe, unsigned cycleGFs);
+    void AddRecipe(const GameWorldBase& world, Recipe recipe, unsigned cycleGFs, std::optional<Job> job);
     void AddRenewers(const GameWorldBase& world);
 
     std::vector<Recipe> recipes_;

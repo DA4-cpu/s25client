@@ -308,9 +308,11 @@ public:
     /// Places a building site at the point and connects it to the roads (the caller checked everything else)
     bool PlaceBuilding(BuildingType type, MapPoint pos);
     /// Civilization mode: place for a woodcutter around the point, at the best wood. clearing: at least
-    /// EconomyPlanner::CLEARING_MIN_TREES trees in its reach and away from every forester (both radii)
-    MapPoint FindWoodcutterPosition(const MapPoint& around, bool clearing);
-    /// Civilization mode: place for a quarry around the point with at least EconomyPlanner::QUARRY_MIN_STONE_PILES
+    /// EconomyPlanner::CLEARING_MIN_TREES trees in its reach and away from every forester (both radii). For good: away
+    /// from the clearing woodcutters (they would cut its trees, both radii)
+    MapPoint FindWoodcutterPosition(const MapPoint& around, bool clearing,
+                                    const std::vector<MapPoint>& clearingWoodcutters);
+    /// Civilization mode: place for a quarry around the point with at least EconomyPlanner::MIN_DEPOSITS_IN_REACH
     /// stone piles in reach of the stonemason
     MapPoint FindQuarryPosition(const MapPoint& around);
     /// The best place for the resource around the point (like FindBestPosition) that also fulfills `condition`. The

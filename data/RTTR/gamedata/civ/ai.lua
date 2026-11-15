@@ -5,10 +5,14 @@
 -- KI des Zivilisationsmodus.
 --
 -- rttr:SetAIExpandingBuildings{ ... }
---   Gebäude, die die KI bauen darf, um ihre Wirtschaft zu vergrößern ("expandierende" Aufträge, maximale
---   Ausbeutung). Alle anderen baut sie nur, wenn die Wirtschaft sie braucht ("benötigte" Aufträge: Mangel ausgleichen
---   oder einen Überschuss verarbeiten). Ein Förster z. B. wird nur gebraucht, wenn Bäume fehlen, und macht die
---   Wirtschaft nicht größer. Expansion über Endproduzenten unterstützt die Wirtschaft gezielter.
+--   Gebäude, die die KI ohne Problem bauen darf, um ihre Wirtschaft zu vergrößern ("expandierende" Aufträge, maximale
+--   Ausbeutung): für eine Ware im Zustand "normal" oder als Verbraucher eines Überschusses, dessen Produkt "normal" ist.
+--   Die Liste ist eine Erlaubnis, keine Eigenschaft des Gebäudes: Gibt es ein gemessenes Problem (Mangel, fehlender
+--   Eingang oder fehlendes Baumaterial eines benötigten Auftrags, stehende Gebäude, fehlende Soldaten, Werkzeuge,
+--   Gehilfen, volles Lager, wenige Bäume am Holzfäller), baut die KI jedes Gebäude als "benötigten" Auftrag. Ein
+--   expandierender Auftrag löst nie ein Problem; ein benötigter ersetzt den gleichen expandierenden (gleiches Gebäude,
+--   gleiche Ware). Unabhängig von der Liste expandieren die Sammler von Vorkommen (Holzfäller, Steinbruch, Sammler aus
+--   workshops.lua), sobald genug Vorkommen im Gebiet sind (EconomyPlanner.h: CLEARING_MIN_TREES, MIN_DEPOSITS_IN_REACH).
 --   Namen wie in buildingcosts.lua bzw. der Name der Werkstatt aus workshops.lua.
 rttr:SetAIExpandingBuildings{
     -- Militär und Lager
@@ -37,7 +41,8 @@ rttr:SetAIBasicEconomy{
 rttr:SetAIStartStockNoSurplus{ "Stones", "Wood", "Boards" }
 
 -- rttr:SetAIBuildingLimit{ base = ..., perStartArea = ... }
---   Höchstzahl der Gebäude je Typ (Holzfäller, Steinbruch, Sägewerk ...): base + perStartArea × Startgebiete.
+--   Höchstzahl der Gebäude je Typ (Holzfäller, Steinbruch, Sägewerk ...) für expandierende Aufträge: base +
+--   perStartArea × Startgebiete. Benötigte Aufträge lösen ein Problem und beachten sie nicht.
 --   Ein Startgebiet ist das Land eines Hauptquartiers (Radius 10, 331 Knoten), gezählt wird ganz (abgerundet), am
 --   Anfang 1. Beispiel mit base = 3, perStartArea = 1: am Start 4 Steinbrüche, bei doppelter Landgröße 5, bei
 --   dreifacher 6.
@@ -45,5 +50,6 @@ rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 }
 
 -- rttr:SetAIStorageFull(Prozent)
 --   Ab dieser Belegung aller Lager zusammen (siehe storage.lua) gilt das Lager für die KI als voll: Sie baut dann nur
---   noch benötigte Gebäude und bestellt ein weiteres Lagerhaus.
+--   noch benötigte Gebäude und bestellt ein weiteres Lagerhaus (das billigste erlaubte Lager, das alle Waren und
+--   Personen aufnimmt).
 rttr:SetAIStorageFull(90)

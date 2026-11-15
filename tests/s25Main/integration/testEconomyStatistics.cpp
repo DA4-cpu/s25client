@@ -17,6 +17,7 @@
 #include "worldFixtures/MockLocalGameState.h"
 #include "worldFixtures/WorldWithGCExecution.h"
 #include "gameTypes/GameTypesOutput.h"
+#include "gameData/MilitaryConsts.h"
 #include <boost/test/unit_test.hpp>
 
 // Exact economy statistic of the players: every ware entering or leaving the stock, per minute
@@ -244,6 +245,32 @@ BOOST_FIXTURE_TEST_CASE(StatisticIsSaved, EconomyFixture)
     BOOST_TEST(stats().GetProduced(GoodType::Boards, 10, savedGf) == producedBefore);
     BOOST_TEST(stats().GetBalance(GoodType::Wood, 10, savedGf) == balanceBefore);
     checkStockMatchesCounts(player());
+}
+
+BOOST_FIXTURE_TEST_CASE(SoldiersRecruitedAndSentAreCounted, EconomyFixture)
+{
+    // A warehouse recruits soldiers from helpers and the recruiting wares; a soldier sent to a military building leaves
+    // the stock of soldiers. Both are counted per minute and kept in the savegame
+    for(const GoodType good : SOLDIER_RECRUIT_WARES)
+        hq().AddToInventory(GoodCounts::make(good, 3), true);
+    hq().AddToInventory(PeopleCounts::make(Job::Helper, 10), true);
+    RTTR_EXEC_TILL(3000, stats().GetSoldiersCreated(10, gf()) >= 3u);
+    BOOST_TEST(stats().GetSoldiersCreated(10, gf()) == 3u);
+    BOOST_TEST(stats().GetSoldiersUsed(10, gf()) == 0u);
+    placeConnectedBuilding(BuildingType::Barracks, Position(4, 2));
+    RTTR_EXEC_TILL(3000, stats().GetSoldiersUsed(10, gf()) > 0u);
+    const unsigned used = stats().GetSoldiersUsed(10, gf());
+    BOOST_TEST(used <= 3u);
+
+    const unsigned savedGf = gf();
+    SerializedGameData sgd;
+    sgd.MakeSnapshot(*game);
+    MockLocalGameState lgs;
+    em.Clear();
+    world.Unload();
+    sgd.ReadSnapshot(*game, lgs);
+    BOOST_TEST(stats().GetSoldiersCreated(10, savedGf) == 3u);
+    BOOST_TEST(stats().GetSoldiersUsed(10, savedGf) == used);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
