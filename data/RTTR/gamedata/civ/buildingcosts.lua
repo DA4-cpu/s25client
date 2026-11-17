@@ -24,54 +24,63 @@ Der Hafen kostet immer 4 Bretter und 6 Steine (Expeditionen bringen genau diese 
 hier. Nicht genannte Gebäude behalten ihre bisherigen Kosten.
 Beim Abriss mit Rückerstattung (Addon) gibt es von jedem Eintrag die erste passende Ware zurück.
 
+Gebäude sollen später je nach aus welchen Materialien erbaut worden sind Eigenschaften erhalten. So kann man bspw. eine Baracke aus Adobes oder aus Holz bauen,
+und diese können sich auch mischen. Für jedes Baumaterial müssen dafür Eigenschaften für Dämmung, 
+Stabilität (Wie viele Lebenspunkte erhält das Gebäude) in konkreten Werten angegeben werden: 
+Adobes: Dämmung = 40 (von 0-100 wobei 0 extrem schlecht und 100 sehr gut ist), Stabilität = 20 (ohne Obergrenze); Wood: Dämmung = 10, Stabilität = 50;
+Stones: D = 25, S = 90, Boards:  D = 20, Stabilität = 50; LoamBrick: D = 90; StoneBlock: D = 35, S = 120; Thatch: D = 40, S = 10; Reed = D = 40, S = 20;
+Wird die Baracke nun aus 2 Holz, 2 Adobes und 2 Thatch errichtet erhält sie für Dämmung den durchschnittlichen Wert aller verwendeten Baumaterialien und die Lebenspunkte 
+ist die Summe der Stabilität aller verwendeten Materialien: D = 30, S = 160. Die Bedeutung von D und S muss ich noch genau im Konzept festlegen. Nicht jedes
+Baumaterial hat diese Eigenschaften bspw. hat Rope keine Eigenschaften. Dieses Baumaterial zählt dann einfach nicht zur Rechnung dazu
+
 Die Werte unten sind die bisherigen Baukosten.
 ]]
 
 rttr:SetBuildingCost{
     -- Militär
-    Barracks       = { Boards = 2 },             -- Baracke
-    Guardhouse     = { Boards = 2, Stones = 3 }, -- Wachstube
-    Watchtower     = { Boards = 3, Stones = 5 }, -- Wachturm
-    Fortress       = { Boards = 4, Stones = 7 }, -- Festung
-    LookoutTower   = { Boards = 4 },             -- Spähturm
-    Catapult       = { Boards = 4, Stones = 2 }, -- Katapult
+    Barracks       = { { tags = "BasicBuildingMaterial", amount = 4 }, { tags = "BasicRoofMaterial", amount = 2 } },             -- Baracke
+    Guardhouse     = { { tags = "BasicBuildingMaterial", amount = 6 }, { tags = "BasicRoofMaterial", amount = 3 } }, -- Wachstube
+    Watchtower     = { BasicBuildingMaterial = 3, Stones = 4, BasicRoofMaterial = 5 }, -- Wachturm
+    Fortress       = { BasicBuildingMaterial = 5, Stones = 8, BasicRoofMaterial = 6 }, -- Festung
+    LookoutTower   = { BasicBuildingMaterial = 4 },             -- Spähturm
+    Catapult       = { BasicBuildingMaterial = 4 }, -- Katapult
 
     -- Lager
-    Storehouse     = { Boards = 4, Stones = 3 }, -- Lagerhaus
+    Storehouse     = { BasicBuildingMaterial = 6, BasicRoofMaterial = 6  }, -- Lagerhaus
 
     -- Holz, Stein, Bergbau
-    Woodcutter     = { Boards = 2 },             -- Holzfäller
-    Forester       = { Boards = 2 },             -- Förster
-    Sawmill        = { Boards = 2, Stones = 2 }, -- Sägewerk
-    Quarry         = { Boards = 2 },             -- Steinbruch
-    GraniteMine    = { Boards = 4 },             -- Granitmine
-    CoalMine       = { Boards = 4 },             -- Kohlemine
-    IronMine       = { Boards = 4 },             -- Eisenmine
-    GoldMine       = { Boards = 4 },             -- Goldmine
-    Charburner     = { Boards = 4, Stones = 3 }, -- Köhler (Köhlerei-Addon)
+    Woodcutter     = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },             -- hier soll noch Dachmaterial ergänzt werden
+    Forester       = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2},             -- Förster
+    Sawmill        = { BasicBuildingMaterial = 6, BasicRoofMaterial = 3 }, -- Sägewerk
+    Quarry         = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },             -- Steinbruch
+    GraniteMine    = { BasicBuildingMaterial = 4, Rope = 1 },             -- Granitmine
+    CoalMine       = { BasicBuildingMaterial = 4, Rope = 1  },             -- Kohlemine
+    IronMine       = { BasicBuildingMaterial = 4, Rope = 1  },             -- Eisenmine
+    GoldMine       = { BasicBuildingMaterial = 4, Rope = 1  },             -- Goldmine
+    Charburner     = { BasicBuildingMaterial = 6, BasicRoofMaterial = 3 }, -- Köhler (Köhlerei-Addon)
 
     -- Nahrung und Landwirtschaft
-    Fishery        = { Boards = 2 },             -- Fischer
-    Hunter         = { Boards = 2 },             -- Jäger
-    Well           = { Boards = 2 },             -- Brunnen
-    Farm           = { Boards = 3, Stones = 3 }, -- Bauernhof
-    Mill           = { Boards = 2, Stones = 2 }, -- Mühle
-    Bakery         = { Boards = 2, Stones = 2 }, -- Bäcker
-    PigFarm        = { Boards = 3, Stones = 3 }, -- Schweinezucht
-    Slaughterhouse = { Boards = 2, Stones = 2 }, -- Fleischerei
-    Brewery        = { Boards = 2, Stones = 2 }, -- Brauerei
-    DonkeyBreeder  = { Boards = 3, Stones = 3 }, -- Eselzucht
-    Vineyard       = { Boards = 4, Stones = 4 }, -- Weinberg (Wein-Addon)
-    Winery         = { Boards = 2, Stones = 3 }, -- Winzerei (Wein-Addon)
+    Fishery        = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },             -- Fischer
+    Hunter         = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },             -- Jäger
+    Well           = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Rope = 1 },             -- Brunnen
+    Farm           = { BasicBuildingMaterial = 6, BasicRoofMaterial = 4 }, -- Bauernhof
+    Mill           = { BasicBuildingMaterial = 6, BasicRoofMaterial = 2 }, -- Mühle
+    Bakery         = { BasicBuildingMaterial = 2, BasicRoofMaterial = 2, Stones = 4 }, -- Bäcker
+    PigFarm        = { BasicBuildingMaterial = 8, BasicRoofMaterial = 6 }, -- Schweinezucht
+    Slaughterhouse = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 }, -- Fleischerei
+    Brewery        = { BasicBuildingMaterial = 6, BasicRoofMaterial = 3 }, -- Brauerei
+    DonkeyBreeder  = { BasicBuildingMaterial = 8, BasicRoofMaterial = 6 }, -- Eselzucht
+    Vineyard       = { BasicBuildingMaterial = 2, BasicRoofMaterial = 2 }, -- Weinberg (Wein-Addon)
+    Winery         = { BasicBuildingMaterial = 6, BasicRoofMaterial = 4 }, -- Winzerei (Wein-Addon)
 
     -- Metall und Handwerk
-    Ironsmelter    = { Boards = 2, Stones = 2 }, -- Eisenschmelze
-    Metalworks     = { Boards = 2, Stones = 2 }, -- Schlosserei
-    Armory         = { Boards = 2, Stones = 2 }, -- Waffenschmiede
-    Mint           = { Boards = 2, Stones = 2 }, -- Münzprägerei
-    Shipyard       = { Boards = 2, Stones = 3 }, -- Werft
-    Temple         = { Boards = 4, Stones = 7 }, -- Tempel (Wein-Addon)
-    Skinner        = { Boards = 2 },             -- Abdecker (Leder-Addon)
-    Tannery        = { Boards = 2, Stones = 2 }, -- Gerberei (Leder-Addon)
-    LeatherWorks   = { Boards = 2, Stones = 2 }, -- Lederei (Leder-Addon)
+    Ironsmelter    = { BasicBuildingMaterial = 4, BasicRoofMaterial = 4, Stones = 4 }, -- Eisenschmelze
+    Metalworks     = { BasicBuildingMaterial = 4, BasicRoofMaterial = 4, Stones = 2 }, -- Schlosserei
+    Armory         = { BasicBuildingMaterial = 5, BasicRoofMaterial = 5, Stones = 5 }, -- Waffenschmiede
+    Mint           = { BasicBuildingMaterial = 5, BasicRoofMaterial = 5, Stones = 5 }, -- Münzprägerei
+    Shipyard       = { BasicBuildingMaterial = 6, BasicRoofMaterial = 6, Rope = 2 }, -- Werft
+    Temple         = { BasicBuildingMaterial = 4, BasicRoofMaterial = 6, Stones = 8, Rope = 2 }, -- Tempel (Wein-Addon)
+    Skinner        = { BasicBuildingMaterial = 4, BasicRoofMaterial = 1  },             -- Abdecker (Leder-Addon)
+    Tannery        = { BasicBuildingMaterial = 4, BasicRoofMaterial = 4  }, -- Gerberei (Leder-Addon)
+    LeatherWorks   = { BasicBuildingMaterial = 4, BasicRoofMaterial = 4  }, -- Lederei (Leder-Addon)
 }

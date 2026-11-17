@@ -21,7 +21,9 @@ rttr:SetAIExpandingBuildings{
     "Woodcutter", "Quarry", "Fishery", "Hunter", "GoldMine", "CoalMine", "IronMine",
     "LoamPit", "CopperMine", "PapyrusPlantation",
     -- Verarbeitung
-    "Sawmill", "Charburner", "Brewery", "Armory", "Mint", "Metalworks", "Copperworks", "BoneCarver", "LeatherWorks",
+    "Sawmill", "Charburner", "Brewery", "Armory", "Mint", "Metalworks", "Copperworks", "BoneCarver", "LeatherWorks", "PigFarm", "Bakery", "Ironsmelter",
+    -- Plantagen bzw. Erzeuger
+    "Farm" 
 }
 
 -- rttr:SetAIBasicEconomy{ { ... }, { ... } }
@@ -29,16 +31,21 @@ rttr:SetAIExpandingBuildings{
 --   expandierenden Aufträge kommen zuerst die Gebäude der ersten Stufe, dann die der zweiten, dann alle anderen.
 --   Benötigt kommt immer vor expandierend. Ein Auftrag, der für einen anderen gebaut wird (z. B. das Sägewerk für
 --   die Bretter einer Brauerei), rückt in seine eigene Stufe auf.
+--rttr:SetAIBasicEconomy{
+  --  { "Woodcutter", "Quarry", "Sawmill", "Forester" },
+    --{ "IronMine", "CopperMine", "CoalMine", "Charburner", "Metalworks", "Copperworks", "Ironsmelter", "Armory", "Brewery" },
+--}
+
 rttr:SetAIBasicEconomy{
-    { "Woodcutter", "Quarry", "Sawmill", "Forester" },
-    { "IronMine", "CopperMine", "CoalMine", "Charburner", "Metalworks", "Copperworks", "Ironsmelter", "Armory", "Brewery" },
+    { "Sawmill" },
+    { "CoalMine"},
 }
 
 -- rttr:SetAIStartStockNoSurplus{ ... }
 --   Waren, deren Startvorrat für die KI kein Überschuss ist. Liegt von ihnen mehr im Lager als die Schwelle, baut die
 --   KI trotzdem keine Verbraucher dafür, solange der Startvorrat nicht aufgebraucht ist. So expandiert sie am Anfang
 --   mit Holzfällern, Sägewerken und Steinbrüchen, statt den Vorrat nur zu verarbeiten.
-rttr:SetAIStartStockNoSurplus{ "Stones", "Wood", "Boards" }
+rttr:SetAIStartStockNoSurplus{ "Stones", "Boards"}
 
 -- rttr:SetAIBuildingLimit{ base = ..., perStartArea = ... }
 --   Höchstzahl der Gebäude je Typ (Holzfäller, Steinbruch, Sägewerk ...) für expandierende Aufträge: base +
@@ -46,7 +53,7 @@ rttr:SetAIStartStockNoSurplus{ "Stones", "Wood", "Boards" }
 --   Ein Startgebiet ist das Land eines Hauptquartiers (Radius 10, 331 Knoten), gezählt wird ganz (abgerundet), am
 --   Anfang 1. Beispiel mit base = 3, perStartArea = 1: am Start 4 Steinbrüche, bei doppelter Landgröße 5, bei
 --   dreifacher 6.
-rttr:SetAIBuildingLimit{ base = 2, perStartArea = 1 }
+rttr:SetAIBuildingLimit{ base = 1, perStartArea = 1 }
 
 -- rttr:SetAIStorageFull(Prozent)
 --   Ab dieser Belegung aller Lager zusammen (siehe storage.lua) gilt das Lager für die KI als voll: Sie baut dann nur

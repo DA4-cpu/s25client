@@ -171,7 +171,7 @@ rttr:AddMapZone{
 	name = "Asien",
 	title = "Asien",
 	color = 0xC04040,
-	packages = platzhalterPakete() -- PLATZHALTER
+	packages = platzhalterPakete() 
 }
 
 rttr:AddMapZone{
@@ -233,11 +233,11 @@ rttr:AddMapResource{
 	name = "Wald",
 	object = "trees",
 	amount = "forest",
-	terrain = { "land", "mountain" },
+	terrain = { "land" },
 	height = {0, 80},
-	cluster = 12, -- PLATZHALTER
-	density = 85, -- PLATZHALTER
-	-- In heißen, trockenen Gebieten weniger Wald. PLATZHALTER
+	cluster = 13, 
+	density = 85,
+	-- In heißen, trockenen Gebieten weniger Wald. 
 	weights = {
 		{ humidity = {80, 100}, factor = 1 }, 
 		{ humidity = {60, 80}, factor = 0.75}, 
@@ -252,28 +252,81 @@ rttr:AddMapResource{
 	object = "stones",
 	amount = "stonePiles",
 	terrain = { "land", "mountain" },
-	cluster = 1, 
-	density = 80, -- PLATZHALTER
-	-- Im feuchten, warmen Gebiet sind Steine selten, weil sie von der Vegetation verdeckt werden (Konzept).
+	cluster = 3, 
+	density = 80, 
+	-- Im feuchten Gebiet sind Steine selten, weil sie von der Vegetation verdeckt werden (Konzept).
 	weights = {
-		{ temperature = {60, 100}, humidity = {60, 100}, factor = 0.3 }
+		{ humidity = {80, 100}, factor = 0 }, 
+		{ humidity = {60, 80}, factor = 0.25}, 
+		{ humidity = {40, 60}, factor = 0.5 },                           
+		{ humidity = {20, 40}, factor = 0.75 },                           
+		{ humidity = {0, 20}, factor = 1 }                            
 	}
 }
 
 -- Lehm (Konzept): im feuchten, warmen Gebiet sehr häufig, an Flüssen und Seen auch. Abbau mit der Lehmgrube.
 rttr:AddMapResource{
-	name = "Lehm",
+	name = "LoamDeposit",
 	object = "LoamDeposit",
-	amount = 10,
+	amount = 7,
 	terrain = { "land" },
-	cluster = 6, -- PLATZHALTER
-	density = 60, -- PLATZHALTER
+	cluster = 6, 
+	density = 80, 
 	weights = {
-		{ humidity = {66, 100}, factor = 1 }, 
-		{ humidity = {33, 66}, factor = 0.5 },                           
-		{ humidity = {0, 33}, factor = 0.0 }                            
+		{ humidity = {80, 100}, factor = 1 }, 
+		{ humidity = {60, 80}, factor = 0.75}, 
+		{ humidity = {40, 60}, factor = 0.5 },                           
+		{ humidity = {20, 40}, factor = 0.25 },                           
+		{ humidity = {0, 20}, factor = 0 }                            
 	}
 }
+
+rttr:AddMapResource{
+	name = "LimeDeposit",
+	object = "LimeDeposit",
+	amount = 4,
+	terrain = { "land", "mountain" },
+	cluster = 3, 
+	density = 90, 
+	weights = {
+		{ humidity = {80, 100}, factor = 0 }, 
+		{ humidity = {60, 80}, factor = 0.25}, 
+		{ humidity = {40, 60}, factor = 0.5 },                           
+		{ humidity = {20, 40}, factor = 0.75 },                           
+		{ humidity = {0, 20}, factor = 1 }                            
+	}
+}
+
+rttr:AddMapResource{
+	name = "PeatDeposit",
+	object = "PeatDeposit",
+	amount = 5,
+	terrain = { "land" },
+	cluster = 8, 
+	density = 50,  
+	weights = {
+		{ humidity = {90, 100}, factor = 1 }, 
+		{ humidity = {0, 90}, factor = 0 },                           
+                          
+	}
+}
+
+rttr:AddMapResource{
+	name = "ObsidianDeposit",
+	object = "ObsidianDeposit",
+	amount = 2,
+	terrain = { "land", "mountain" },
+	cluster = 8, 
+	density = 90, 
+	weights = {
+		{ humidity = {80, 100}, factor = 0 }, 
+		{ humidity = {60, 80}, factor = 0.25}, 
+		{ humidity = {40, 60}, factor = 0.5 },                           
+		{ humidity = {20, 40}, factor = 0.75 },                           
+		{ humidity = {0, 20}, factor = 1 }                            
+	}
+}
+
 rttr:AddMapResource{
 	name = "Papyrusvorkommen",
 	object = "PapyrusDeposit",
@@ -281,22 +334,83 @@ rttr:AddMapResource{
 	terrain = { "shore_fresh" },
 	temperature = {50, 100},
 	zones = { "Afrika" },
-	cluster = 1, -- PLATZHALTER
-	density = 100, -- PLATZHALTER
+	cluster = 1, 
+	density = 100, 
 	weights = {
 		{ humidity = {67, 100}, factor = 1 }, 
 		{ humidity = {33, 67}, factor = 0.5 },                           
 		{ humidity = {0, 33}, factor = 0 }                            
 	}
 }
+
 rttr:AddMapResource{
-	name = "Kupfer",
-	object = "Copper", -- Erz aus civ/mapobjects.lua (rttr:AddOre), wird mit Kohle, Eisen, Gold und Granit verteilt
-	amount = 20, -- PLATZHALTER
-	terrain = { "mountain" },
-	cluster = 6, 
-	density = 60, 
+	name = "CopperDeposit",
+	object = "CopperDeposit",
+	amount = 3, 
+    terrain = { "land" },
+	cluster = 8, 
+	density = 50, 
+	weights = {
+		{ humidity = {80, 100}, factor = 0.2 }, 
+		{ humidity = {60, 80}, factor = 0.4}, 
+		{ humidity = {40, 60}, factor = 0.6 },                           
+		{ humidity = {20, 40}, factor = 0.8 },                           
+		{ humidity = {0, 20}, factor = 1 }                            
+	}
 }
+
+rttr:AddMapResource{
+	name = "TinDeposit",
+	object = "TinDeposit",
+	amount = 1, 
+    terrain = { "land" },
+	cluster = 8, 
+	density = 90, 
+	weights = {
+		{ humidity = {80, 100}, factor = 0.2 }, 
+		{ humidity = {60, 80}, factor = 0.4}, 
+		{ humidity = {40, 60}, factor = 0.6 },                           
+		{ humidity = {20, 40}, factor = 0.8 },                           
+		{ humidity = {0, 20}, factor = 1 }                            
+	}
+}
+
+rttr:AddMapResource{
+	name = "AsphaltLake",
+	object = "AsphaltLake",
+	amount = 0.5, 
+    terrain = { "land" },
+	cluster = 16, 
+	density = 100, 
+	weights = {
+		{ temperature = {80, 100}, factor = 1 }, 
+		{ temperature = {60, 80}, factor = 0.75}, 
+		{ temperature = {40, 60}, factor = 0.5 },                           
+		{ temperature = {20, 40}, factor = 0.25 },                           
+		{ temperature = {0, 20}, factor = 0 }                            
+	}
+}
+
+rttr:AddMapResource{
+	name = "ReedDeposit",
+	object = "ReedDeposit",
+	amount = 20, 
+    terrain = { "shore_fresh" },
+	cluster = 2, 
+	density = 70, 
+	weights = {
+		{ humidity = {80, 100}, factor = 1 }, 		{ humidity = {60, 80}, factor = 0.8}, 		{ humidity = {40, 60}, factor = 0.6 },                           
+		{ humidity = {20, 40}, factor = 0.4 },  	{ humidity = {0, 20}, factor = 0.2 },       
+		{ temperature = {80, 100}, factor = 0.8 },  { temperature = {60, 80}, factor = 1 }, { temperature = {40, 60}, factor = 0.8 },                          
+		{ temperature = {20, 40}, factor = 0.6 },  { temperature = {0, 20}, factor = 0.4 },                          
+	}
+}
+
+rttr:AddMapResource{	name = "Kupfer",	object = "Copper",	amount = 20, terrain = { "mountain" },	cluster = 8, 	density = 70, }
+
+rttr:AddMapResource{	name = "Lime",	object = "Lime", 	amount = 20, 	terrain = { "mountain" },	cluster = 1, 	density = 60, }
+
+rttr:AddMapResource{	name = "Tin",	object = "Tin", 	amount = 10, 	terrain = { "mountain" },	cluster = 8, 	density = 90, }
 
 rttr:AddMapResource{
 	name = "Deko",

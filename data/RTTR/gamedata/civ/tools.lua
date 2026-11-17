@@ -44,43 +44,76 @@ rttr:SetBuildingTools{...}: Werkzeuge der eingebauten Gebäude
 rttr:SetBuildingOutputRatio{...}: Waren pro Arbeitsschritt der eingebauten Gebäude ohne Werkzeug (Standard 1), 0 bis 8,
   z.B. rttr:SetBuildingOutputRatio{ Woodcutter = 1, Quarry = 1.5 }. Bedeutung wie outputRatio in workshops.lua
   (dort für die Werkstätten). Gilt auch ohne Werkzeugreform. Ein Holzfäller mit 2 bringt 2 Holz je Baum, ein Steinmetz
-  oder eine Mine nimmt je Ware ein Stück Stein bzw. eine Einheit Erz, ein Fischer je Fisch einen Fisch aus dem Wasser.
+  oder eine Mine nimmt je Ware ein Stück Stein bzw. eine Einheit Erz, ein Fischer je Fisch einen Fisch aus dem Wasser. Das braucht man nicht mehr
+  wenn die Gebäude alle in workshops.lua stehen
 
 rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nur noch n Prozent seiner Haltbarkeit
   hat. Es wartet im Gebäude, bis das alte kaputt ist.
 ]]
 
-rttr:AddToolMaterial{ name = "Iron", title = "Eisen" }
+rttr:AddToolMaterial{ name = "Iron", title = "Iron" }
 
-rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 100, speed = 50 } -- Zange
-rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 100, speed = 100 } -- Hammer
-rttr:AddTool{ ware = "Axe",        material = "Iron", durability = 100, speed = 100 } -- Axt
-rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 100, speed = 100 } -- Säge
-rttr:AddTool{ ware = "PickAxe",    material = "Iron", durability = 100, speed = 100 } -- Spitzhacke
-rttr:AddTool{ ware = "Shovel",     material = "Iron", durability = 100, speed = 100 } -- Schaufel
-rttr:AddTool{ ware = "Crucible",   material = "Iron", durability = 100, speed = 100 } -- Schmelztiegel
-rttr:AddTool{ ware = "RodAndLine", material = "Iron", durability = 100, speed = 100 } -- Angel
-rttr:AddTool{ ware = "Scythe",     material = "Iron", durability = 100, speed = 100 } -- Sense
-rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 100, speed = 100 } -- Beil
-rttr:AddTool{ ware = "Rollingpin", material = "Iron", durability = 100, speed = 100 } -- Nudelholz
-rttr:AddTool{ ware = "Bow",        material = "Iron", durability = 100, speed = 100 } -- Bogen
+rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Zange
+rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Hammer
+rttr:AddTool{ ware = "Axe",        material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Axt
+rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Säge
+rttr:AddTool{ ware = "PickAxe",    material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Spitzhacke
+rttr:AddTool{ ware = "Shovel",     material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Schaufel
+rttr:AddTool{ ware = "Crucible",   material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Schmelztiegel
+-- rttr:AddTool{ ware = "RodAndLine", material = "Iron", durability = 200, speed = 100 } -- Angel sollte nur als Holzwerkzeug in der Holzwrekstatt hergestellt werden
+rttr:AddTool{ ware = "Scythe",     material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Sense
+rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 200, speed = 100, outputRatio = 0.2 } -- Beil
+-- rttr:AddTool{ ware = "Rollingpin", material = "Iron", durability = 200, speed = 100 } -- Nudelholz sollte nur als Holzwerkzeug in der Holzwrekstatt hergestellt werden
+-- rttr:AddTool{ ware = "Bow",        material = "Iron", durability = 200, speed = 100 } -- Bogen sollte nur als Holzbogen in der Holzwrekstatt hergestellt werden
 
 rttr:AddToolMaterial{ name = "Copper", title = "Copper" }
 
-rttr:AddTool{ ware = "CopperTongs",      material = "Copper", durability = 50, speed = 50 } -- Zange
-rttr:AddTool{ ware = "CopperHammer",     material = "Copper", durability = 50, speed = 50 } -- Hammer
-rttr:AddTool{ ware = "CopperAxe",        material = "Copper", durability = 50, speed = 50 } -- Axt
-rttr:AddTool{ ware = "CopperSaw",        material = "Copper", durability = 50, speed = 50 } -- Säge
-rttr:AddTool{ ware = "CopperPickAxe",    material = "Copper", durability = 50, speed = 50 } -- Spitzhacke
+rttr:AddTool{ ware = "CopperTongs",      material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Zange
+rttr:AddTool{ ware = "CopperHammer",     material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Hammer
+rttr:AddTool{ ware = "CopperAxe",        material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Axt
+rttr:AddTool{ ware = "CopperSaw",        material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Säge
+rttr:AddTool{ ware = "CopperPickAxe",    material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Spitzhacke
+rttr:AddTool{ ware = "CopperShovel",     material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Schaufel
+rttr:AddTool{ ware = "CopperCrucible",   material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Schmelztiegel
+rttr:AddTool{ ware = "CopperScythe",     material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Sense
+rttr:AddTool{ ware = "CopperCleaver",    material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Beil
+
+rttr:AddToolMaterial{ name = "Bronze", title = "Bronze" }
+
+rttr:AddTool{ ware = "BronzeTongs",      material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Zange
+rttr:AddTool{ ware = "BronzeHammer",     material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Hammer
+rttr:AddTool{ ware = "BronzeAxe",        material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Axt
+rttr:AddTool{ ware = "BronzeSaw",        material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Säge
+rttr:AddTool{ ware = "BronzePickAxe",    material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Spitzhacke
+rttr:AddTool{ ware = "BronzeShovel",     material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Schaufel
+rttr:AddTool{ ware = "BronzeCrucible",   material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Schmelztiegel
+rttr:AddTool{ ware = "BronzeScythe",     material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Sense
+rttr:AddTool{ ware = "BronzeCleaver",    material = "Bronze", durability = 150, speed = 75, outputRatio = 0.1 } -- Beil
+
+rttr:AddToolMaterial{ name = "Obsidian", title = "Obsidian" }
+
+rttr:AddTool{ ware = "ObsidianAxe",        material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 } 
+rttr:AddTool{ ware = "ObsidianSaw",        material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 }
+rttr:AddTool{ ware = "ObsidianScythe",     material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 }
+rttr:AddTool{ ware = "ObsidianCleaver",    material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 } 
+
+rttr:AddToolMaterial{ name = "Wood", title = "Wood" }
+
+rttr:AddTool{ ware = "Bow",      material = "Wood", durability = 100, speed = 100 } 
+rttr:AddTool{ ware = "Rollingpin",     material = "Wood", durability = 100, speed = 100 } 
+rttr:AddTool{ ware = "RodAndLine",        material = "Wood", durability = 100, speed = 100 } 
+rttr:AddTool{ ware = "WoodenHammer",        material = "Wood", durability = 50, speed = 50 } 
+rttr:AddTool{ ware = "WoodenSpindle",        material = "Wood", durability = 100, speed = 100 } 
 
 rttr:SetToolReorder(10)
 
 -- Alles, was man braucht, um neue Werkzeuge herzustellen (Holz, Bretter, Stein, Bergbau, Eisenschmelze, Schlosserei),
--- arbeitet auch ohne Werkzeug langsam weiter. Sonst gäbe es nach dem Bruch des letzten Werkzeugs nie wieder welche.
+-- arbeitet auch ohne Werkzeug langsam weiter. Sonst gäbe es nach dem Bruch des letzten Werkzeugs nie wieder welche. Wenn 
+-- die ingame Gebäude alle in workshops.lua stehen, braucht man diese Tabelle nicht mehr
 rttr:SetBuildingTools{
     -- Holz und Stein
     Woodcutter     = { baseSpeed = 25, tools = { "Axe" } },       -- Holzfäller
-    Forester       = { baseSpeed = 0, tools = { "Shovel" } },     -- Förster
+    Forester       = { baseSpeed = 25, tools = { "Shovel" } },     -- Förster
     Sawmill        = { baseSpeed = 25, tools = { "Saw" } },        -- Sägewerk
     Quarry         = { baseSpeed = 25, tools = { "PickAxe" } },    -- Steinbruch
 
@@ -96,12 +129,12 @@ rttr:SetBuildingTools{
     GraniteMine    = { baseSpeed = 25, tools = { "PickAxe" } },    -- Granitmine
     CoalMine       = { baseSpeed = 25, tools = { "PickAxe" } },    -- Kohlemine
     IronMine       = { baseSpeed = 25, tools = { "PickAxe" } },    -- Eisenmine
-    GoldMine       = { baseSpeed = 25, tools = { "PickAxe" } },    -- Goldmine
-    Charburner     = { baseSpeed = 0, tools = { "Shovel" } },     -- Köhler
+    GoldMine       = { baseSpeed = 0, tools = { "PickAxe" } },    -- Goldmine
+    Charburner     = { baseSpeed = 25, tools = { "Shovel" } },     -- Köhler
     Ironsmelter    = { baseSpeed = 25, tools = { "Crucible" } },   -- Eisenschmelze
     Mint           = { baseSpeed = 0, tools = { "Crucible" } },   -- Münzprägerei
     Armory         = { baseSpeed = 0, tools = { "Hammer" } },     -- Waffenschmiede
-    Metalworks     = { baseSpeed = 50, tools = { "Tongs" } },     -- Schlosserei
+    Metalworks     = { baseSpeed = 25, tools = { "Tongs" } },     -- Schlosserei
     Shipyard       = { baseSpeed = 0, tools = { "Hammer" } },     -- Werft
 
     -- Leder und Tempel

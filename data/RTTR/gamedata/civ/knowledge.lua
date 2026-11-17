@@ -13,6 +13,8 @@ Gebäudenamen wie im Enum BuildingType (siehe techtree.lua), zusätzlich "Headqu
 Die WP-Kosten der Technologien stehen in techtree.lua unter "knowledge". Die Startwerte des Reglers "Wissen" stehen
 in distribution.lua.
 Änderungen gelten ab dem nächsten Spielstart, Neukompilieren ist nicht nötig.
+
+Wenn die ingame Gebäude alle in workshops.lua stehen, ist die Liste hier unnötig
 ]]
 
 rttr:SetBuildingKnowledge{
@@ -40,7 +42,6 @@ rttr:SetBuildingKnowledge{
     Forester       = { LWP = 1, IWP = 1 },          -- Förster
     Sawmill        = { IWP = 3 },                   -- Sägewerk
     Quarry         = { IWP = 2 },                   -- Steinbruch
-    LoamPit        = { IWP = 2 },                   -- Lehmgrube (Werkstatt aus workshops.lua) PLATZHALTER
     GraniteMine    = { IWP = 1 },                   -- Granitmine
     CoalMine       = { IWP = 1 },                   -- Kohlemine
     IronMine       = { IWP = 1 },                   -- Eisenmine

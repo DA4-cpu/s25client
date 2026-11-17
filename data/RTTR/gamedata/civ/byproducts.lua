@@ -22,3 +22,4 @@ Mehrere rttr:AddByproduct für dasselbe Gebäude sind erlaubt.
 -- (also pro Fleisch), beides erst nach der Knochen-Technologie.
 rttr:AddByproduct{ building = "Hunter", ware = "Bones", amount = 1, technology = "bone_carving" }
 rttr:AddByproduct{ building = "Slaughterhouse", ware = "Bones", amount = 1, technology = "bone_carving" }
+rttr:AddByproduct{ building = "Farm", ware = "Thatch", amount = 1, technology = "agriculture" }

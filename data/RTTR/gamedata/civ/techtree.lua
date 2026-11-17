@@ -64,10 +64,44 @@ rttr:AddTechnology{
     description = "Statt nur zu jagen und zu sammeln, säen die Menschen Getreide aus und ernten es. "
         .. "Die Grundlage für Brot, Bier und Viehzucht.",
     era = 0,
-    knowledge = { LWP = 5 },
+    knowledge = { LWP = 6 },
     time = 60,
     unlocks = { buildings = { "Farm" } },
     aiPriority = 90,
+}
+
+rttr:AddTechnology{
+    name = "TinCollector",
+    title = "TinCollector",
+    description = "Für was das wohl gut ist? ",
+    era = 0,
+    knowledge = { IWP = 6 },
+    time = 60,
+    unlocks = { buildings = { "TinCollector" } },
+    aiPriority = 80,
+}
+
+rttr:AddTechnology{
+    name = "PeatCollector",
+    title = "PeatCollector",
+    description = "Für was das wohl gut ist? ",
+    era = 0,
+    knowledge = { IWP = 6 },
+    time = 60,
+    unlocks = { buildings = { "PeatCollector" } },
+    aiPriority = 80,
+}
+
+rttr:AddTechnology{
+    name = "Well",
+    title = "Well", -- PLATZHALTER: Anzeigename
+    description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
+    era = 0,
+    knowledge = { LWP = 4 }, 
+    -- cost = { ... },
+    time = 60,
+    unlocks = { buildings = { "Well" } },
+    aiPriority = 80,
 }
 
 rttr:AddTechnology{
@@ -95,11 +129,35 @@ rttr:AddTechnology{
 }
 
 rttr:AddTechnology{
+    name = "Sawmill",
+    title = "Sawmill",
+    description = ".",
+    era = 0,
+    knowledge = { IWP = 6 },
+    time = 1,
+    unlocks = { buildings = { "Sawmill" } },
+    aiPriority = 60,
+}
+
+rttr:AddTechnology{
+    name = "charcoal",
+    title = "Köhlerei",
+    description = "Holz wird in Meilern langsam zu Holzkohle verschwelt.",
+    era = 0,
+    knowledge = { IWP = 6 },
+    -- cost = { Wood = 4 },
+    time = 120,
+    unlocks = { buildings = { "Charburner" } },
+    addon = "CHARBURNER",
+    aiPriority = 70,
+}
+
+rttr:AddTechnology{
     name = "stone_walls",
     title = "Steinmauern",
     description = "Steinmauern bieten Schutz vor Feinden und verbessern die Verteidigungsfähigkeit des Dorfes.",
     era = 0,
-    knowledge = { MWP = 9 },
+    knowledge = { MWP = 8 },
     time = 60,
     unlocks = { buildings = { "Guardhouse"} },
     aiPriority = 80,
@@ -110,12 +168,74 @@ rttr:AddTechnology{
     title = "Knochenschnitzerei", -- PLATZHALTER: Anzeigename
     description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
     era = 0,
-    knowledge = { LWP = 7, IWP = 7 }, -- PLATZHALTER: jede Technologie braucht WP-Kosten, Wert noch offen
-    -- PLATZHALTER: Voraussetzungen, Warenkosten und Dauer sind noch nicht festgelegt, z.B.
+    knowledge = { LWP = 7, IWP = 7 }, 
     requires = { "storage" },
     -- cost = { ... },
     time = 60,
     unlocks = { buildings = { "BoneCarver" } },
+    aiPriority = 80,
+}
+
+rttr:AddTechnology{
+    name = "PapyrusPlantation",
+    title = "PapyrusPlantation",
+    description = ". ",
+    era = 0,
+    requires = { "agriculture" },
+    knowledge = { LWP = 7 },
+    time = 60,
+    unlocks = { buildings = { "PapyrusPlantation" } },
+    aiPriority = 60,
+}
+
+rttr:AddTechnology{
+    name = "Brickworks",
+    title = "Brickworks",
+    description = ". ",
+    era = 0,
+    requires = { "charcoal" },
+    knowledge = { IWP = 6 },
+    time = 60,
+    unlocks = { buildings = { "Brickworks" } },
+    aiPriority = 70,
+}
+
+rttr:AddTechnology{
+    name = "BronzeAge",
+    title = "BronzeAge", 
+    description = ".", 
+    era = 0,
+    knowledge = { IWP = 8 }, 
+    requires = { "TinCollector" },
+    -- cost = { ... },
+    time = 120,
+    unlocks = { buildings = { "BronzeSmelter" } },
+    aiPriority = 80,
+}
+
+rttr:AddTechnology{
+    name = "BronzeArmory",
+    title = "BronzeArmory", 
+    description = ".", 
+    era = 0,
+    knowledge = { IWP = 4, MWP = 4 }, 
+    requires = { "BronzeAge" },
+    -- cost = { ... },
+    time = 120,
+    unlocks = { buildings = { "BronzeArmory" } },
+    aiPriority = 80,
+}
+
+rttr:AddTechnology{
+    name = "Bronzeworks",
+    title = "Bronzeworks", 
+    description = ".", 
+    era = 0,
+    knowledge = { IWP = 7 }, 
+    requires = { "BronzeAge" },
+    -- cost = { ... },
+    time = 120,
+    unlocks = { buildings = { "Bronzeworks" } },
     aiPriority = 80,
 }
 
@@ -125,15 +245,15 @@ rttr:AddTechnology{
 -------------------------------------------------------------------------------
 
 rttr:AddTechnology{
-    name = "mining",
-    title = "Bergbau",
+    name = "UndergroundMining",
+    title = "Underground Mining",
     description = "Stollen werden in die Berge getrieben, um Kohle, Eisenerz und Granit abzubauen. "
         .. "Bergleute brauchen Nahrung.",
     era = 1,
-    requires = { "agriculture", "storage" }, -- hier soll eigentlich milling oder animal_husbandry als Voraussetzung hin (mindestens 1 von den beiden muss erforscht sein), aber es gibt kein "or" bei der Abfrage glaube ich
+    requires = { "agriculture", "storage", "BronzeAge" }, -- hier soll eigentlich milling oder animal_husbandry als Voraussetzung hin (mindestens 1 von den beiden muss erforscht sein), aber es gibt kein "or" bei der Abfrage glaube ich
     knowledge = { IWP = 15 },
     time = 60,
-    unlocks = { buildings = { "CoalMine", "IronMine", "GraniteMine", "GoldMine" } },
+    unlocks = { buildings = { "CoalMine", "IronMine", "GraniteMine", "GoldMine", "CopperMine", "TinMine", "LimeMine" } }, -- Minen überarbeiten, dass es nur noch einen Minentypen gibt, der aber alles abbauen kann
     aiPriority = 90,
 }
 
@@ -142,7 +262,7 @@ rttr:AddTechnology{
     title = "Eisenverhüttung",
     description = "In der Eisenschmelze wird Erz mit Kohle zu Eisen geschmolzen.",
     era = 1,
-    requires = { "mining" },
+    requires = { "UndergroundMining" },
     knowledge = { IWP = 12+2 },
     cost = {},
     time = 120,
@@ -155,26 +275,12 @@ rttr:AddTechnology{
     description = "Ein Werkzeugmacher stellt Äxte, Sägen, Hämmer und andere Werkzeuge her, "
         .. "damit neue Berufe ausgebildet werden können.",
     era = 1,
-    requires = { "metallurgy" },
+    requires = { "metallurgy", "Bronzeworks", "Sawmill" },
     knowledge = { IWP = 12+2 },
     cost = {},
     time = 60,
     unlocks = { buildings = { "Metalworks" } },
     aiPriority = 90,
-}
-
-rttr:AddTechnology{
-    name = "charcoal",
-    title = "Köhlerei",
-    description = "Holz wird in Meilern langsam zu Holzkohle verschwelt - Kohle ganz ohne Bergwerk.",
-    era = 1,
-    requires = { "metallurgy" },
-    knowledge = { IWP = 12+2 },
-    cost = { Wood = 4 },
-    time = 120,
-    unlocks = { buildings = { "Charburner" } },
-    addon = "CHARBURNER",
-    aiPriority = 40,
 }
 
 rttr:AddTechnology{
@@ -194,7 +300,7 @@ rttr:AddTechnology{
     title = "Waffenschmiede",
     description = "Schmiede fertigen aus Eisen und Kohle Schwerter und Schilde für neue Soldaten.",
     era = 1,
-    requires = { "metallurgy"},
+    requires = { "metallurgy", "BronzeArmory"},
     knowledge = { IWP = 8+1, MWP = 8+1 },
     cost = {},
     time = 60,
@@ -207,7 +313,7 @@ rttr:AddTechnology{
     title = "Münzprägung",
     description = "Gold wird abgebaut und zu Münzen geprägt. Münzen spornen Soldaten zur Ausbildung an.",
     era = 1,
-    requires = { "mining" },
+    requires = { "UndergroundMining" },
     knowledge = { IWP = 15+2 },
     cost = { },
     time = 90,

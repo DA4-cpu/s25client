@@ -22,6 +22,8 @@ rttr:AddWorkshop{...}:
               Eigene Bilder für Gebäude und Arbeiter: Ordner data/RTTR/assets/civ/<name>/,
               siehe data/RTTR/assets/civ/LIESMICH.txt
   inputs      optional: bis zu 3 Eingänge, jeder eine Tag-Abfrage, z.B. { "Bones" } oder { { "Bretter", "Nadelholz" } }
+              Hier sollte es noch für jeden Eingang ein  InputRatio geben also zB. {{Tags = "Bones", inputRatio = 0.5 (oder 3)}} bei 0.5 
+              wird nur die Hälfte der jedweiligen Inputware gebraucht und bei 3 werden 3 Inputwaren benötigt 
   consume     optional: "each" (Standard): von jedem Eingang 1 Ware pro Produkt, jeder Eingang muss genau eine Ware
               treffen. "any": 1 Ware des Eingangs mit dem größten Vorrat (wie bei den Minen), höchstens 3 Waren insgesamt.
   output      Tag-Abfrage der hergestellten Ware. Mit outputChoice darf sie mehrere Waren treffen, z.B.
@@ -32,7 +34,7 @@ rttr:AddWorkshop{...}:
               zusammen mit inheritProperties.
   outputRatio optional (Standard 1): Waren pro Arbeitsschritt, 0 bis 8, auch Kommazahlen. 0.5 = eine Ware jeden 2.
               Schritt, 2 = zwei Waren je Schritt, 1.5 = abwechselnd 1 und 2. Der Rest einer Ware wird mitgezählt, bis
-              eine ganze erreicht ist. Die Eingänge werden in jedem Schritt verbraucht.
+              eine ganze erreicht ist. Die Eingänge werden in jedem Schritt verbraucht. 
               Die Werkzeuge in Gebrauch zählen ihr outputRatio aus tools.lua dazu (0.5 + Werkzeug 1 = 1.5), höchstens
               8 insgesamt. Ist die Summe 0, arbeitet die Werkstatt nicht.
               Mehrere Waren je Schritt: Mit outputChoice wird jede einzeln gewählt, Minen und Sammler nehmen je Ware
@@ -58,7 +60,7 @@ rttr:AddWorkshop{...}:
               zerstört, sind die Medien verloren. Ohne inputs, output und workTime.
   collect     optional: macht die Werkstatt zum Sammler wie den Steinbruch. Der Arbeiter geht zu Objekten auf der Karte
               (mapobjects.lua) im Umkreis radius, arbeitet dort workTime Sekunden und bringt output nach Hause:
-              collect = { object = "LoamDeposit", radius = 8 }. Ohne inputs.
+              collect = { object = "LoamDeposit", radius = 8 }. Ohne inputs. Man sollte auch mehrere objects zum Collecten angeben können  
               Arbeitsanimation je nach worker.look: "Planer" gräbt mit der Schaufel, "Woodcutter" hackt,
               "Farmer" mäht mit der Sense, sonst klopft er wie der Steinmetz.
               Noch wachsende Objekte (von einer Plantage gepflanzt) sammelt er erst, wenn sie ausgewachsen sind.
@@ -104,11 +106,14 @@ rttr:AddWorkshop{...}:
               eingebauten Gebäuden außer Holzfäller, Steinbruch, Fischer, Minen, Hafen und Katapult
               (ai/aijh/AIConstruction.cpp, BORDER_RESERVE_RADIUS und BUILDINGS_NEAR_BORDER).
 
+Man sollte hier auch custom Militärgebäude ergänzen können. und auch die im Spiel integrierten Gebäude anpassen können bzw. alle Gebäude sollten hier als
+lua Werkstatt stehen oder zumdindest von hier aus ansteuerbar sein
+
 Freischalten: In techtree.lua unter unlocks = { buildings = { "Name" } } eintragen. Wird eine Werkstatt von keiner
 Technologie freigeschaltet, ist sie von Anfang an baubar.
 
 WICHTIG für Spielstände: Neue Werkstätten immer hinten anfügen, bestehende nicht löschen, umbenennen oder umsortieren.
-Es sind höchstens 32 Werkstätten möglich.
+Es sind höchstens 32 Werkstätten möglich. 
 
 Beispiel (auskommentiert, nur zur Erklärung des Formats, braucht die Beispielwaren aus wares.lua):
 
@@ -129,13 +134,13 @@ rttr:AddWorkshop{
     name = "LoamProcessor",
     title = "Lehmverarbeiter",
     size = "medium",
-    cost = { Boards = 2, Stones = 2 },
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2  },
     look = "Woodcutter",
     worker = { title = "Lehmverarbeiter", tool = "none", look = "Miner" },
-    inputs = { "muddy", "Stones" },
-    consume = "any",
+    inputs = { "Loam" },
     output = "Clay",
-    workTime = 40,
+    outputRatio = 0.5,
+    workTime = 37,
 }
 
 -------------------------------------------------------------------------------
@@ -147,13 +152,14 @@ rttr:AddWorkshop{
     name = "BoneCarver",
     title = "Knochenschnitzer",
     size = "small",
-    cost = { Boards = 2 }, 
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 }, 
     look = "Hunter",      
-    worker = { title = "BoneCarver", tool = "Cleaver", look = "Butcher" }, -- look = PLATZHALTER
+    worker = { title = "BoneCarver", tool = "none", look = "Butcher" }, -- look = PLATZHALTER
     inputs = { "Bones" },
     output = "GeritzterKnochen",
     outputChoice = "knowledge",
-    workTime = 120,         
+    tools = { baseSpeed = 0, tools = { "Cleaver" } },
+    workTime = 50,         
 }
 -------------------------------------------------------------------------------
 -- Bibliothek (Schritt 4c). Entschieden: mittelgroß, fasst 20 Medien, Arbeiter "Bibliothekar" ohne Werkzeug, erst ab
@@ -164,7 +170,7 @@ rttr:AddWorkshop{
     name = "Library",
     title = "Bibliothek",
     size = "large",
-    cost = { Boards = 5, Stones = 5 }, 
+    cost = { BasicBuildingMaterial = 8, BasicRoofMaterial = 6, Stones = 6  }, 
     look = "Temple",                   -- PLATZHALTER: Grafik-Vorbild
     worker = { title = "Bibliothekar", tool = "none", look = "Helper" },
     library = { capacity = 20 },
@@ -179,14 +185,85 @@ rttr:AddWorkshop{
     name = "LoamPit",
     title = "Lehmgrube",
     size = "small",
-    cost = { Boards = 2 },           
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2  },           
     look = "Quarry",                
-    worker = { title = "Lehmstecher", tool = "Shovel", look = "Planer" },
-    collect = { object = "LoamDeposit", radius = 8 }, -- PLATZHALTER: Reichweite wie der Steinbruch
+    worker = { title = "Lehmstecher", tool = "none", look = "Planer" },
+    collect = { object = "LoamDeposit", radius = 9 }, 
     output = "Loam",
+    outputRatio = 0.75,
+    tools = { baseSpeed = 25, tools = { "Shovel" } },
     workTime = 7,                    
-    waitTime = 40,                   
+    waitTime = 27,                   
     aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:AddWorkshop{
+    name = "PeatCollector",
+    title = "PeatCollector",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },           
+    look = "Quarry",                
+    worker = { title = "Lehmstecher", tool = "none", look = "Planer" },
+    collect = { object = "PeatDeposit", radius = 9 }, 
+    output = "Coal",
+    outputRatio = 0.4,
+    tools = { baseSpeed = 25, tools = { "Shovel" } },
+    workTime = 7,                    
+    waitTime = 20,                   
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:AddWorkshop{
+    name = "TinCollector",
+    title = "TinCollector",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },           
+    look = "Quarry",                
+    worker = { title = "Miner", tool = "none", look = "Miner" },
+    collect = { object = "TinDeposit", radius = 9 }, 
+    output = "TinOre",
+    outputRatio = 0.6,
+    tools = { baseSpeed = 0, tools = { "PickAxe" } },
+    workTime = 7,                    
+    waitTime = 27,                   
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:AddWorkshop{
+    name = "CopperCollector",
+    title = "CopperCollector",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },           
+    look = "Quarry",                
+    worker = { title = "Miner", tool = "none", look = "Miner" },
+    collect = { object = "CopperDeposit", radius = 9 }, 
+    output = "CopperOre",
+    outputRatio = 0.5,
+    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    workTime = 7,                    
+    waitTime = 30,                   
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:AddWorkshop{
+    name = "ObsidianCollector",
+    title = "ObsidianCollector",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },           
+    look = "Quarry",                
+    worker = { title = "Miner", tool = "none", look = "Miner" },
+    collect = { object = "ObsidianDeposit", radius = 9 }, 
+    output = "Obsidian",
+    outputRatio = 0.3,
+    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    workTime = 7,                    
+    waitTime = 27,                   
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
 }
 
 -------------------------------------------------------------------------------
@@ -197,16 +274,60 @@ rttr:AddWorkshop{
     name = "CopperMine",
     title = "Kupfermine",
     size = "mine",
-    cost = { Boards = 4 },
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Rope = 1 },
     look = "IronMine",
-    worker = { title = "Kupferbergmann", tool = "PickAxe", look = "Miner" },
+    worker = { title = "Miner", tool = "none", look = "Miner" },
     inputs = { "Fish", "Meat", "Bread" },
     consume = "any",
     storage = 2,
     mine = { resource = "Copper" },
     output = "CopperOre",
+    outputRatio = 0.5,
+    tools = { baseSpeed = 25, tools = { "PickAxe" } },
     workTime = 28,
-    waitTime = 29,
+    waitTime = 15,
+    knowledge = { IWP = 1 },
+    aiNearBorder = true,
+}
+
+rttr:AddWorkshop{
+    name = "TinMine",
+    title = "TinMine",
+    size = "mine",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Rope = 1 },
+    look = "GraniteMine",
+    worker = { title = "Miner", tool = "none", look = "Miner" }, -- es sollte nicht für jedes Gebäude ein neuer Job erstellt werden, sondern auch vorhandene 
+    -- Jobs  wie zB. Miner übernommen werden können
+    inputs = { "Fish", "Meat", "Bread" }, -- hier soll eigentlich noch Wood hinzu und man sollte immer 1 Wood benötigen, aber nur eines der drei Nahrungen
+    consume = "any",
+    storage = 2,
+    mine = { resource = "Tin" },
+    output = "TinOre",
+    outputRatio = 0.7,
+    tools = { baseSpeed = 0, tools = { "PickAxe" } },
+    workTime = 28,
+    waitTime = 15,
+    knowledge = { IWP = 1 },
+    aiNearBorder = true,
+}
+
+rttr:AddWorkshop{
+    name = "LimeMine",
+    title = "LimeMine",
+    size = "mine",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Rope = 1 },
+    look = "GraniteMine",
+    worker = { title = "Miner", tool = "none", look = "Miner" }, -- es sollte nicht für jedes Gebäude ein neuer Job erstellt werden, sondern auch vorhandene 
+    -- Jobs  wie zB. Miner übernommen werden können
+    inputs = { "Fish", "Meat", "Bread" }, -- hier soll eigentlich noch Wood hinzu und man sollte immer 1 Wood benötigen, aber nur eines der drei Nahrungen
+    consume = "any",
+    storage = 2,
+    mine = { resource = "Lime" },
+    output = "Lime",
+    outputRatio = 0.8,
+    tools = { baseSpeed = 0, tools = { "PickAxe" } },
+    workTime = 28,
+    waitTime = 18,
     knowledge = { IWP = 1 },
     aiNearBorder = true,
 }
@@ -219,46 +340,220 @@ rttr:AddWorkshop{
 
 rttr:AddWorkshop{
     name = "PapyrusPlantation",
-    title = "Papyrusplantage",
+    title = "PapyrusPlantation",
     size = "small",
-    cost = { Boards = 2 },
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4 },
     look = "Farm",
-    worker = { title = "Papyrusbauer", tool = "Scythe", look = "Farmer" },
+    worker = { title = "Papyrusbauer", tool = "none", look = "Farmer" },
     inputs = { "Water" },
-    plant = { object = "PapyrusDeposit", radius = 6 },
+    plant = { object = "PapyrusDeposit", radius = 9 },
     output = "PapyrusPlant",
+    outputRatio = 0.5,
+    tools = { baseSpeed = 0, tools = { "Scythe" } },
     workTime = 6,
-    waitTime = 6,
+    waitTime = 51,
     knowledge = { LWP = 2 },
 }
 
+rttr:AddWorkshop{
+    name = "SpinningMill",
+    title = "SpinningMill",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 3 },
+    look = "Winery",
+    worker = { title = "Spinner", tool = "none", look = "Farmer" }, -- Hier kommt ein Error, wenn ich "Spindle" als Werkzeug angebe, obwohl es ein Tool mit dem 
+    -- "Spindle" Tag gibt: 
+    -- Map generator: could not load the map objects of the civilization mode: Invalid game data: Workshop 'SpinningMill': the tool of the worker must be a tool 
+    -- (e.g. "Hammer") or "none", not 'Spindle'. Eigentlich kann tool hier komplett raus, da es bereits eine eigene Kategorie "tools" gibt.
+    inputs = { "Thatch", "PapyrusPlant" }, --eigentlich soll hier nur "Fiber" hin, aber geht noch nicht, da es mehr als 3 Waren mit Fibre als Tag gibt
+    consume = "any",
+    output = "Rope",
+    outputRatio = 0.8,
+    workTime = 6,
+    waitTime = 30,
+    tools = { baseSpeed = 25, tools = { "Spindle" } },
+    knowledge = { LWP = 1, IWP = 2 },
+}
+
 -------------------------------------------------------------------------------
--- Kupferwerkstatt: stellt Kupferwerkzeuge her wie die Schlosserei die Eisenwerkzeuge. Welches, legen der
--- Werkzeug-Regler und die Werkzeugbestellungen fest (outputChoice = "tools").
+-- Werkzeughersteller
 -------------------------------------------------------------------------------
+
+rttr:AddWorkshop{
+    name = "WoodWorkshop",
+    title = "WoodWorkshop",
+    size = "small",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 3 },
+    look = "Sawmill",
+    worker = { title = "Metalworker", tool = "none", look = "Metalworker" },
+    inputs = { "Wood", "Rope" }, 
+    outputs = { "Rollingpin", "WoodenHammer", "RodAndLine", "Bow", "WoodenSpindle", "WoodenBucket"}, 
+    outputRatio = 0.6,
+    outputChoice = "WoodenTools",
+    tools = { baseSpeed = 25, tools = { "Saw" } },
+    workTime = 35,
+    knowledge = { IWP = 2 },
+}
+
+rttr:AddWorkshop{
+    name = "ObsidianWorkshop",
+    title = "ObsidianWorkshop",
+    size = "small",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4 },
+    look = "Metalworks",
+    worker = { title = "Metalworker", tool = "none", look = "Metalworker" },
+    inputs = { "Obsidian", "Wood" }, -- "adhesive" ergänzen wenn diese endlich collectable auf der Map sind
+    outputs = { "ObsidianAxe", "ObsidianSaw", "ObsidianScythe", "ObsidianCleaver", "ObsidianSword", "ObsidianSpear", "ObsidianArrow"}, 
+    outputChoice = "ObsidianTools",
+    outputRatio = 0.8,
+    tools = { baseSpeed = 25 },
+    workTime = 30,
+    knowledge = { IWP = 2 },
+}
 
 rttr:AddWorkshop{
     name = "Copperworks",
     title = "Copperworks",
     size = "medium",
-    cost = { Boards = 2 },
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 4, Stones = 4 },
     look = "Metalworks",
-    worker = { title = "Copperworker", tool = "Tongs", look = "Metalworker" },
+    worker = { title = "Metalworker", tool = "none", look = "Metalworker" },
     inputs = { "CopperOre", "Coal" },
     outputs = { "CopperTongs", "CopperHammer", "CopperAxe", "CopperSaw", "CopperPickAxe" },
+    outputRatio = 0.5,
     outputChoice = "tools",
-    workTime = 120,
+    tools = { baseSpeed = 25, tools = { "Tongs" } },
+    workTime = 30,
+    knowledge = { IWP = 2 },
 }
 
+rttr:AddWorkshop{
+    name = "AdobeProducer",
+    title = "AdobeProducer",
+    size = "small",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 2  },
+    look = "Skinner",
+    worker = { title = "AdobeProducer", tool = "none", look = "Metalworker" },
+    inputs = { "Loam", "Thatch" }, -- eigentlich "Fiber" anstatt "Thatch"
+    outputs = { "Adobe" },
+    workTime = 35,
+    knowledge = { IWP = 2 },
+}
+
+rttr:AddWorkshop{
+    name = "Brickworks",
+    title = "Brickworks",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 4 },
+    look = "LeatherWorks",
+    worker = { title = "Brickworker", tool = "none", look = "Metalworker" },
+    inputs = { "Loam", "Coal" },
+    outputs = { "LoamBrick" },
+    workTime = 50,
+    knowledge = { IWP = 3 },
+}
+--[[
+rttr:AddWorkshop{
+    name = "AsphaltDrawer",
+    title = "AsphaltDrawer",
+    size = "small",
+    cost = { Wood = 4 },
+    look = "Fishery",
+    worker = { title = "AsphaltDrawer", tool = "none", look = "AsphaltDrawer" },
+    inputs = { "Bucket" }, 
+    outputs = { "Asphalt" },
+    outputRatio = 1,
+    workTime = 120,
+    knowledge = { IWP = 1 },
+}
+
+rttr:AddWorkshop{
+    name = "BitumenProducer",
+    title = "BitumenProducer",
+    size = "medium",
+    cost = { Boards = 2, Stones = 4 },
+    look = "Leatherworks",
+    worker = { title = "BitumenProducer", tool = "none", look = "Metalworker" },
+    inputs = { "Asphalt", "Firewood" }, 
+    outputs = { "Bitumen" },
+    outputRatio = 0.5,
+    workTime = 120,
+    knowledge = { IWP = 3 },
+}]]
+
+rttr:AddWorkshop{
+    name = "FirewoodSplitter",
+    title = "FirewoodSplitter",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 4 },
+    look = "Woodcutter",
+    worker = { title = "Woodcutter", tool = "none", look = "Woodcutter" },
+    inputs = { "Wood" }, 
+    consume = "any",
+    outputs = { "Firewood" },
+    outputRatio = 2,
+    tools = { baseSpeed = 0, tools = { "Axe" } },
+    workTime = 40,
+    knowledge = { LWP = 1, IWP = 1 },
+}
+
+rttr:AddWorkshop{
+    name = "BronzeSmelter",
+    title = "Bronze Smelter",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 6, Stones = 4 },
+    look = "Ironsmelter",
+    worker = { title = "Iron founder", tool = "none", look = "Minter" },
+    inputs = { "CopperOre", "Coal", "TinOre" },
+    output = { "BronzeIngot" },
+    outputRatio = 0.5,
+    tools = { baseSpeed = 25, tools = { "Crucible" } },
+    workTime = 50,
+    knowledge = { IWP = 3 },
+}
+
+rttr:AddWorkshop{
+    name = "BronzeArmory",
+    title = "Bronze Armory",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 6, Stones = 5 },
+    look = "Armory",
+    worker = { title = "Armorer", tool = "none", look = "Armorer" },
+    inputs = { "BronzeIngot", "Coal"},
+    outputs = { "BronzeSword", "BronzeShield" }, 
+    outputChoice = "Equipment",
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Hammer" } },
+    workTime = 50,
+    knowledge = { IWP = 2, MWP = 2 },
+}
+
+rttr:AddWorkshop{
+    name = "Bronzeworks",
+    title = "Bronzeworks",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 6, Stones = 5 },
+    look = "Metalworks",
+    worker = { title = "Armorer", tool = "none", look = "Armorer" },
+    inputs = { "BronzeIngot", "Coal"},
+    outputs = { "BronzeTongs", "BronzeAxe", "BronzeSaw",  "BronzeHammer", "BronzePickAxe", "BronzeScythe", "BronzeShovel", "BronzeCrucible", "BronzeCleaver" }, 
+    outputChoice = "tools",
+    outputRatio = 0.8,
+    tools = { baseSpeed = 25, tools = { "Tongs" } },
+    workTime = 45,
+    knowledge = { IWP = 2, MWP = 2 },
+}
+--[[
 rttr:AddWorkshop{
     name = "Sawwmill",
     title = "Sawwmill",
     size = "medium",
     cost = { Boards = 2 },
     look = "Sawmill",
-    worker = { title = "Copperworker", tool = "none", look = "Metalworker" },
+    worker = { title = "Copperworker", tool = "Saw", look = "Metalworker" },
     inputs = { "Holzstamm"},
     consume = "any",
     output = { "Boards" },
+    tools = { baseSpeed = 0, tools = { "Scythe" } },
     workTime = 120,
-}
+}]]

@@ -84,17 +84,17 @@ struct MapSettings
     unsigned numPlayers = 8;
     MapExtent size = MapExtent::all(512);
     unsigned short ratioGold = 33;
-    unsigned short ratioIron = 33;
+    unsigned short ratioIron = 50;
     unsigned short ratioCoal = 100;
     unsigned short ratioGranite = 5;
     unsigned short rivers = 100;
     /// Forest in percent of the land ("Wald %", amount of resource rules with amount = "forest")
     unsigned short trees = 30;
     /// Stone piles in percent of the land ("Granit %" of the online generator, amount = "stonePiles")
-    unsigned short stonePiles = 10;
+    unsigned short stonePiles = 7;
     /// Seed for the random numbers. 0: choose one randomly. The same seed and settings give the same map
     uint32_t seed = 0;
-    LandMass landMass = LandMass::Normal;
+    LandMass landMass = LandMass::Continents;
     /// Water in percent of the map
     unsigned short water = 50;
     /// Mountains in percent of the land
@@ -105,7 +105,7 @@ struct MapSettings
     unsigned short unevenness = 100;
     /// Factor in percent for the amount of all resources of the resource rules (lua), 100 = as defined
     unsigned short resourceAmount = 100;
-    MountainDistance mountainDistance = MountainDistance::Close;
+    MountainDistance mountainDistance = MountainDistance::Normal;
     // Index 3 is the "world" landscape (data/RTTR/gamedata/world/world.lua), which is registered
     // after the original greenland(0)/wasteland(1)/winterworld(2) and combines all of their
     // terrains under one landscape for the climate system. This mirrors how the previous default
@@ -119,7 +119,7 @@ struct MapSettings
     /// Smaller values produce many small zones, larger values produce few large, near-uniform zones.
     /// Unlike the two presets above this is exposed as a fine-grained slider in the UI rather than a
     /// small fixed set of options.
-    unsigned short climateZoneSize = 50+32;
+    unsigned short climateZoneSize = 60+32;
 };
 
 } // namespace rttr::mapGenerator

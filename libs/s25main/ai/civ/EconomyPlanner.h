@@ -232,22 +232,22 @@ class EconomyPlanner
 public:
     /// Balance length: the statistic of the last this many minutes counts (also the time after which the productivity
     /// of a new building counts)
-    static constexpr unsigned BALANCE_MINUTES = 5;
+    static constexpr unsigned BALANCE_MINUTES = 7;
     /// The threshold of a surplus is this many times the consumption per minute ...
     static constexpr unsigned SURPLUS_FACTOR = 10;
     /// ... but at least this stock
     static constexpr unsigned MIN_STOCK = 8;
     /// High productivity (share of the time working). A building below it is examined: why does it not work?
-    static constexpr double HIGH_PRODUCTIVITY = 0.8;
+    static constexpr double HIGH_PRODUCTIVITY = 0.7;
     /// Harvesters clearing trees are placed where at least this many trees are in reach (independent of the stock)
     static constexpr unsigned CLEARING_MIN_TREES = 8;
     /// Harvesters of other deposits (stone piles, map objects of lua) are placed where at least this many deposits are
     /// in reach (independent of the stock)
     static constexpr unsigned MIN_DEPOSITS_IN_REACH = 1;
     /// A harvester for good gets a renewer (forester) when fewer than this many of its source (trees) are in its reach
-    static constexpr unsigned RENEW_BELOW = 11;
+    static constexpr unsigned RENEW_BELOW = 7;
     /// Tools of each kind the player keeps in stock beyond what is asked for (tool orders)
-    static constexpr unsigned TOOLS_IN_STOCK = 1;
+    static constexpr unsigned TOOLS_IN_STOCK = 2;
     /// A chain is stuck if nothing of its ware was made in this many minutes (and the warehouses do not have enough):
     /// then building sites may be cancelled for an order that solves it
     static constexpr unsigned STUCK_MINUTES = 9;

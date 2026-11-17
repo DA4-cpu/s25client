@@ -60,4 +60,32 @@ rttr:AddWorkshop{
 
 rttr:SetKnowledgeDistribution{ LWP = 5, IWP = 5, MWP = 5 }
 
-rttr:SetToolMaterialPriorities{ Iron = 8, Copper = 5 }
+rttr:SetToolMaterialPriorities{ Iron = 4, Obsidian = 3.5, Bronze = 3, Copper = 2, Wood = 1 }
+
+rttr:AddRegulator{    name = "Equipment",    title = "Equipment",
+    entries = {  { tags = "Sword", title = "Sword", value = 5 },
+        { tags = "Shield", title = "Shield", value = 5 },    },
+}
+
+rttr:AddRegulator{    name = "WoodenTools",    title = "WoodenTools", --nur ein temporärer Übergangsregler bis tools überarbeitet wurde und die Gesamtverteilung umgesetzt wurde
+    entries = {  { tags = "WoodenHammer", title = "WoodenHammer", value = 5 },
+        { tags = "WoodenSpindle", title = "WoodenSpindle", value = 8 },
+        { tags = "WoodenBucket", title = "WoodenBucket", value = 5 },
+        { tags = "Bow", title = "Bow", value = 5 },
+        { tags = "RodAndLine", title = "RodAndLine", value = 5 },
+        { tags = "Rollingpin", title = "Rollingpin", value = 5 },    },
+}
+
+rttr:AddRegulator{    name = "ObsidianTools",    title = "ObsidianTools", -- Platzhalter. Es sollte für alle Werkzeuge und Ausrüstung eine einzige gesammelte Bestellungliste 
+-- und Verteilungsliste geben. Und die Verteilung soll sich automatisch nach dem aktuellen Bedarf einstellen. Diese GesamtVerteilung steuert dann automatisch 
+-- alle Gebäude, die die Waren in der Liste herstellen. Die Gebäude stellen dann unter Berücksichtigung der Verteilung die Waren her, die sie herstellen 
+-- können. Die Liste der Waren erstelle ich manuell und schreibe nur grobe Tags wie "Axe" oder "Sword" rein. 
+    entries = {  { tags = "ObsidianAxe", title = "ObsidianAxe", value = 8 },
+        { tags = "ObsidianSaw", title = "ObsidianSaw", value = 5 },
+        { tags = "ObsidianScythe", title = "ObsidianScythe", value = 8 },
+        { tags = "ObsidianSword", title = "ObsidianSword", value = 1 },
+        { tags = "ObsidianSpear", title = "ObsidianSpear", value = 1 },
+        { tags = "ObsidianArrow", title = "ObsidianArrow", value = 1 },
+        { tags = "ObsidianCleaver", title = "ObsidianCleaver", value = 2 },  },
+}
+
