@@ -3249,33 +3249,6 @@ MapPoint AIPlayerJH::FindBestPositionWhere(const MapPoint& pt, const AIResource 
     return MapPoint::Invalid();
 }
 
-MapPoint AIPlayerJH::FindScoredPosition(const BuildingType type, const MapPoint& around, const unsigned radius,
-                                        const std::function<bool(MapPoint, double&)>& score, double& bestScore) const
-{
-    const unsigned borderReserve = AIConstruction::GetBorderReserve(type);
-    const BuildingQuality size = BUILDING_SIZE[type];
-    MapPoint bestPos = MapPoint::Invalid();
-    for(const MapPoint& curPt : gwb.GetPointsInRadiusWithCenter(around, radius))
-    {
-        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || aiMap[curPt].siteOrdered || !aii.IsOwnTerritory(curPt)
-           || !canUseBq(aii.GetBuildingQuality(curPt), size))
-            continue;
-        if(size != BuildingQuality::Mine && aii.isHarborPosClose(curPt, 2, true))
-            continue;
-        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
-            continue;
-        double value = 0;
-        if(!score(curPt, value))
-            continue;
-        if(!bestPos.isValid() || value > bestScore)
-        {
-            bestPos = curPt;
-            bestScore = value;
-        }
-    }
-    return bestPos;
-}
-
 MapPoint AIPlayerJH::FindHarvesterPositionBeside(const BuildingType type, const MapPoint& renewerPos,
                                                  const unsigned radius)
 {

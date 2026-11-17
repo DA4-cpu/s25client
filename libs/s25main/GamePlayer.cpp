@@ -1040,10 +1040,13 @@ Ware* GamePlayer::OrderWare(const std::vector<GoodType>& wares, noBaseBuilding& 
         return OrderWare(wares.front(), goal);
     if(nobBaseWarehouse* wh = FindWarehouse(goal, FW::HasAnyWare(wares), false, true))
     {
+        // The wares in the order of the entry. One that cannot be sent (e.g. emergency program) does not stop the others
         for(const GoodType ware : wares)
         {
-            if(wh->GetNumRealWares(ware) > 0)
-                return OrderWare(ware, goal);
+            if(wh->GetNumRealWares(ware) == 0)
+                continue;
+            if(Ware* result = OrderWare(ware, goal))
+                return result;
         }
     }
     // No warehouse: lost wares
@@ -2327,6 +2330,9 @@ void GamePlayer::TestForEmergencyProgramm()
     // ...and no woddcutter or sawmill
     isNewEmergency &=
       buildings.GetBuildings(BuildingType::Woodcutter).empty() || buildings.GetBuildings(BuildingType::Sawmill).empty();
+    // Civilization mode: no emergency program. The construction material is given by tags (wood, loam bricks, thatch
+    // ...), boards and stones are no measure for it, and a sawmill is not needed to build
+    isNewEmergency &= !civ::isEnabled(world);
 
     // Wenn nötig, Notfallprogramm auslösen
     if(isNewEmergency)

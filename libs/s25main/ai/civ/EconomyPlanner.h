@@ -264,23 +264,8 @@ public:
     /// The source and the fields around a building are counted again after this many GFs (they change slowly)
     static constexpr unsigned SOURCE_CHECK_GFS = 400;
 
-    // Choice of the place: every allowed place gets a score, the best one of the places searched wins
-    /// Radius around a warehouse or military building in which places are searched
+    /// Radius around a warehouse or military building in which places are searched (the places of the old AI)
     static constexpr unsigned SEARCH_RADIUS = 15;
-    /// Harvesters: per node of their source in reach (at most SCORE_SOURCE_MAX nodes count)
-    static constexpr double SCORE_SOURCE = 1.0;
-    static constexpr unsigned SCORE_SOURCE_MAX = 40;
-    /// Next to the building site of an input ordered for the building (falls to 0 at PARTNER_RADIUS)
-    static constexpr double SCORE_PREFERRED = 60.0;
-    /// Next to the nearest producer of an input or consumer of the product (falls to 0 at PARTNER_RADIUS)
-    static constexpr double SCORE_PARTNER = 30.0;
-    static constexpr unsigned PARTNER_RADIUS = 15;
-    /// Producers of construction material: next to the nearest warehouse (falls to 0 at PARTNER_RADIUS)
-    static constexpr double SCORE_WAREHOUSE = 20.0;
-    /// Producers of construction material and harvesters: per building of the same type within SAME_TYPE_RADIUS
-    /// (harvesters: twice their reach)
-    static constexpr double SCORE_SAME_TYPE = -15.0;
-    static constexpr unsigned SAME_TYPE_RADIUS = 8;
 
     EconomyPlanner(AIJH::AIPlayerJH& aijh, const CivAI& civAI);
 
@@ -624,9 +609,6 @@ private:
     /// must not take it)
     void KeepMaterial(const Order& order);
     MapPoint SearchPlace(Order& order, unsigned& searchBudget, bool& searchedAll);
-    /// The best place for the building of the order around the center by the score of the place (SCORE_...)
-    MapPoint FindScoredPlace(const Order& order, const Recipe* recipe, MapPoint center, MapPoint preferred,
-                             double& score) const;
     /// Expanding order which cannot be placed now: to the end of the list
     void MoveToEnd(Order& order, const std::string& reason, const RetryCondition& retry);
     void OrderTools();

@@ -530,11 +530,19 @@ void EconomyPlanner::UpdatePlanned()
     }
     // Orders of the list that will be built when the resources are there: their construction material, tools and
     // worker (their inputs count once they are placed, otherwise several orders waiting for the same input block each
-    // other), in the order of the list
+    // other), in the order of the list. Expanding orders only as many as builders are there (Nutzer, 2026-11-17): the
+    // wish list must not turn into a shortage of everything
+    unsigned expandingLeft = GetAvailableBuilders();
     for(const Order* order : GetList())
     {
         if(!IsPlanned(*order))
             continue;
+        if(order->kind == OrderKind::Expanding)
+        {
+            if(expandingLeft == 0)
+                continue;
+            --expandingLeft;
+        }
         AddPlanned(order->building, true, false, true, order->id);
         plannedOrderIds_.push_back(order->id);
     }
@@ -3709,122 +3717,12 @@ bool EconomyPlanner::IsFieldPlace(const MapPoint pt) const
     return false;
 }
 
-MapPoint EconomyPlanner::FindScoredPlace(const Order& order, const Recipe* recipe, const MapPoint center,
-                                         const MapPoint preferred, double& score) const
-{
-    const GameWorldBase& world = player_.GetGameWorld();
-    const BuildingRegister& buildings = player_.GetBuildingRegister();
-    const BuildingType bld = order.building;
-    const auto addPositions = [&](std::vector<MapPoint>& positions, const BuildingType type) {
-        for(const nobUsual* building : buildings.GetBuildings(type))
-            positions.push_back(building->GetPos());
-        for(const noBuildingSite* site : buildings.GetBuildingSites())
-        {
-            if(site->GetBuildingType() == type)
-                positions.push_back(site->GetPos());
-        }
-        for(const Order& other : orders_)
-        {
-            if(other.state == OrderState::Placed && other.building == type
-               && !helpers::contains(positions, other.placedAt))
-                positions.push_back(other.placedAt);
-        }
-    };
-    // Buildings of the same type, producers of its inputs and consumers of its products, warehouses, renewers
-    std::vector<MapPoint> sameType, partners, warehouses, renewers;
-    std::vector<BuildingType> partnerTypes;
-    bool makesMaterial = false;
-    unsigned renewerDistance = 0;
-    const EconomyGraph& graph = civAI_.GetGraph();
-    if(recipe)
-    {
-        for(const GoodType input : recipe->inputs)
-        {
-            for(const unsigned idx : graph.GetProducers(input))
-                partnerTypes.push_back(graph.GetRecipes()[idx].building);
-        }
-        for(const GoodType output : recipe->outputs)
-        {
-            makesMaterial |= isMaterial_[output];
-            for(const unsigned idx : consumers_[output])
-                partnerTypes.push_back(graph.GetRecipes()[idx].building);
-        }
-        helpers::makeUnique(partnerTypes);
-        for(const BuildingType type : partnerTypes)
-        {
-            if(type != bld)
-                addPositions(partners, type);
-        }
-        // A clearing harvester and a renewer of its source: their reaches must not overlap
-        if(order.clearing)
-        {
-            if(const Renewer* renewer = FindRenewer(recipe->source))
-            {
-                addPositions(renewers, renewer->building);
-                renewerDistance = recipe->reach + renewer->reach;
-            }
-        }
-    }
-    const bool harvester = recipe && recipe->reach > 0;
-    if(harvester || makesMaterial)
-        addPositions(sameType, bld);
-    if(makesMaterial)
-    {
-        for(const nobBaseWarehouse* warehouse : buildings.GetStorehouses())
-            warehouses.push_back(warehouse->GetPos());
-    }
-    const unsigned sameTypeRadius = harvester ? 2 * recipe->reach : SAME_TYPE_RADIUS;
-    const unsigned minSource = harvester ? GetMinSourceInReach(order, *recipe) : 0u;
-    const auto closeness = [&](const std::vector<MapPoint>& positions, const MapPoint pt) {
-        unsigned best = PARTNER_RADIUS;
-        for(const MapPoint pos : positions)
-            best = std::min(best, world.CalcDistance(pt, pos));
-        return 1. - static_cast<double>(best) / PARTNER_RADIUS;
-    };
-    return aijh_.FindScoredPosition(
-      bld, center, SEARCH_RADIUS,
-      [&](const MapPoint pt, double& value) {
-          if(IsFieldPlace(pt))
-              return false;
-          if(NeedsFields(bld) && CountFieldNodes(bld, pt, false) < MIN_FIELD_NODES)
-              return false;
-          for(const MapPoint pos : renewers)
-          {
-              if(world.CalcDistance(pt, pos) <= renewerDistance)
-                  return false;
-          }
-          value = 0;
-          if(harvester)
-          {
-              const unsigned amount = MapProfile::CountSourceNodes(world, pt, recipe->reach, recipe->source);
-              if(amount < minSource)
-                  return false;
-              value += SCORE_SOURCE * std::min(amount, SCORE_SOURCE_MAX);
-          }
-          for(const MapPoint pos : sameType)
-          {
-              if(world.CalcDistance(pt, pos) <= sameTypeRadius)
-                  value += SCORE_SAME_TYPE;
-          }
-          if(preferred.isValid())
-              value += SCORE_PREFERRED * closeness({preferred}, pt);
-          if(!partners.empty())
-              value += SCORE_PARTNER * closeness(partners, pt);
-          if(!warehouses.empty())
-              value += SCORE_WAREHOUSE * closeness(warehouses, pt);
-          // Among equal places the one nearest to the center
-          value -= 0.01 * world.CalcDistance(pt, center);
-          return true;
-      },
-      score);
-}
-
 MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool& searchedAll)
 {
     searchedAll = false;
     const Recipe* recipe = FindRecipe(order.building);
     const bool renewal = order.cause == OrderCause::Renewal;
-    // Where its building should stand close to (the site of an input ordered for it)
+    // Where its building should stand close to (the site of an input ordered for it): searched around first
     const MapPoint preferred = (renewal || order.besideRenewer) ? MapPoint::Invalid() : GetPreferredPoint(order);
     std::vector<MapPoint> centers;
     if(order.near.isValid())
@@ -3851,16 +3749,29 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
     }
     std::vector<MapPoint> clearing = player_.GetClearingWoodcutters();
     clearing.insert(clearing.end(), clearingPending_.begin(), clearingPending_.end());
-    // The place by what the building works on (not by the type of the building). By the score of the places:
-    // processing buildings and harvesters of trees, stone piles, map objects and ore. With the rules of the old AI:
-    // fish, animals, land, water, plants
-    const SourceKind source = recipe ? recipe->source.kind : SourceKind::None;
-    const bool scored =
-      !renewal && !order.besideRenewer && order.cause != OrderCause::Storage && recipe
-      && (source == SourceKind::None || source == SourceKind::Trees || source == SourceKind::StonePiles
-          || source == SourceKind::MapObject || source == SourceKind::Ore);
-    MapPoint best = MapPoint::Invalid();
-    double bestScore = 0;
+    const GameWorldBase& world = player_.GetGameWorld();
+    // Rules of the user on top of the places of the old AI: a clearing woodcutter and a forester never so close that
+    // their reaches overlap
+    const Renewer* treeRenewer = nullptr;
+    if(recipe && order.clearing)
+        treeRenewer = FindRenewer(recipe->source);
+    const auto nearRenewer = [&](const MapPoint pos) {
+        if(!treeRenewer)
+            return false;
+        const unsigned distance = recipe->reach + treeRenewer->reach;
+        const BuildingRegister& buildings = player_.GetBuildingRegister();
+        for(const nobUsual* building : buildings.GetBuildings(treeRenewer->building))
+        {
+            if(world.CalcDistance(pos, building->GetPos()) <= distance)
+                return true;
+        }
+        for(const noBuildingSite* site : buildings.GetBuildingSites())
+        {
+            if(site->GetBuildingType() == treeRenewer->building && world.CalcDistance(pos, site->GetPos()) <= distance)
+                return true;
+        }
+        return false;
+    };
     // The place near the site of its input first, then the other centers in turn
     const unsigned first = preferred.isValid() && !order.near.isValid() ? 1u : 0u;
     while(searchBudget > 0)
@@ -3868,8 +3779,8 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
         if(order.centersTried >= centers.size())
         {
             order.centersTried = 0;
-            searchedAll = !best.isValid();
-            return best;
+            searchedAll = true;
+            return MapPoint::Invalid();
         }
         const unsigned idx = order.centersTried < first ?
                                order.centersTried :
@@ -3878,49 +3789,29 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
         ++order.centersTried;
         --searchBudget;
         aijh_.UpdateNodesAround(center, SEARCH_RADIUS);
-        const unsigned borderReserve = AIJH::AIConstruction::GetBorderReserve(order.building);
-        if(scored)
-        {
-            // The best place of the centers searched in this step
-            double score = 0;
-            const MapPoint pos = FindScoredPlace(order, recipe, center, preferred, score);
-            if(pos.isValid() && (!best.isValid() || score > bestScore))
-            {
-                best = pos;
-                bestScore = score;
-            }
-            continue;
-        }
+        // The places of the old AI. A harvester beside the renewer planted for it, a renewer in reach of its harvester
+        // (rules of the user)
         MapPoint pos;
         if(order.besideRenewer)
         {
             const Renewer* renewer = recipe ? FindRenewer(recipe->source) : nullptr;
             pos = aijh_.FindHarvesterPositionBeside(order.building, center, renewer ? renewer->reach : 2u);
-        } else if(renewal)
-        {
-            // Near its harvester, or (a harvester without a place) near the warehouses and military buildings. Never
-            // where clearing woodcutters work (both reaches)
-            if(order.building == BuildingType::Forester)
-                pos = aijh_.FindForesterPosition(center, clearing, order.near.isValid() ? 0u : SEARCH_RADIUS);
-            else
-                pos = aijh_.FindPositionForBuildingAround(order.building, center);
-        } else if(order.cause == OrderCause::Storage || !recipe)
-        {
-            // Storage: also next to another warehouse (the old AI keeps its storehouses apart)
-            pos = aijh_.SimpleFindPosition(center, BUILDING_SIZE[order.building], SEARCH_RADIUS, borderReserve);
-        } else
+        } else if(renewal && order.building == BuildingType::Forester)
+            pos = aijh_.FindForesterPosition(center, clearing, order.near.isValid() ? 0u : SEARCH_RADIUS);
+        else
             pos = aijh_.FindPositionForBuildingAround(order.building, center);
-        // A harvester only where enough of its source is in reach (not beside its renewer: it plants it). No building
-        // on the fields of plantations
+        // A harvester only where enough of its source is in reach (not beside its renewer: it plants it)
         if(pos.isValid() && recipe && recipe->reach > 0 && !order.besideRenewer
-           && MapProfile::CountSourceNodes(player_.GetGameWorld(), pos, recipe->reach, recipe->source)
+           && MapProfile::CountSourceNodes(world, pos, recipe->reach, recipe->source)
                 < GetMinSourceInReach(order, *recipe))
             pos = MapPoint::Invalid();
+        // No building on the fields of plantations, farms and plantations only with enough nodes for fields
         if(pos.isValid() && IsFieldPlace(pos))
             pos = MapPoint::Invalid();
-        // Farms and plantations: only where there are enough nodes for fields
         if(pos.isValid() && NeedsFields(order.building) && !order.besideRenewer
            && CountFieldNodes(order.building, pos, false) < MIN_FIELD_NODES)
+            pos = MapPoint::Invalid();
+        if(pos.isValid() && nearRenewer(pos))
             pos = MapPoint::Invalid();
         if(pos.isValid())
         {
@@ -3928,9 +3819,7 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
             return pos;
         }
     }
-    if(best.isValid())
-        order.centersTried = 0;
-    return best;
+    return MapPoint::Invalid();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -4078,6 +3967,34 @@ std::string EconomyPlanner::GetReport() const
             first = false;
         }
         out << ";";
+    }
+    // Building sites: military (old AI) and economy, without road, waiting for material (none on the way, the
+    // warehouses have none of it) and the material they still need
+    {
+        unsigned numMilitary = 0, numEconomy = 0, noRoad = 0, waiting = 0, needMilitary = 0, needEconomy = 0;
+        for(const noBuildingSite* site : player_.GetBuildingRegister().GetBuildingSites())
+        {
+            const bool military = BuildingProperties::IsMilitary(site->GetBuildingType());
+            (military ? numMilitary : numEconomy)++;
+            if(!site->IsConnected())
+                ++noRoad;
+            const BuildingCosts& costs = BUILDING_COSTS[site->GetBuildingType()];
+            const auto& materials = site->GetMaterials();
+            unsigned need = 0;
+            bool onTheWay = false;
+            for(unsigned i = 0; i < costs.size() && i < materials.size(); ++i)
+            {
+                const unsigned have = materials[i].used + materials[i].delivered.size();
+                need += costs[i].amount > have ? costs[i].amount - have : 0u;
+                onTheWay |= !materials[i].ordered.empty();
+            }
+            (military ? needMilitary : needEconomy) += need;
+            if(need > 0 && !onTheWay && site->IsConnected())
+                ++waiting;
+        }
+        out << "\n  Baustellen: Militär " << numMilitary << " (braucht noch " << needMilitary << "), Wirtschaft "
+            << numEconomy << " (braucht noch " << needEconomy << "), ohne Straße " << noRoad
+            << ", ohne Material unterwegs " << waiting;
     }
     if(snapshot_.storageCapacity > 0)
     {

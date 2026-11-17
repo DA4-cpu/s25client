@@ -1297,7 +1297,8 @@ haben einen Wert für die nächste Bilanzlänge (7 Minuten):
 **Prognose = (Bestand − Angefragt) + voraussichtliche Herstellung − voraussichtlicher Verbrauch**
 
 - Angefragt = alles Verplante: offen angefragt, Baukosten, Werkzeuge und Arbeiter der Aufträge der Liste (benötigte und
-  expandierende, außer blockierten ohne Weg, ohne Bauplatz, nicht erforscht, über der Höchstzahl, bei vollem Lager),
+  expandierende, außer blockierten ohne Weg, ohne Bauplatz, nicht erforscht, über der Höchstzahl, bei vollem Lager;
+  expandierende nur so viele, wie Bauarbeiter da sind, in der Reihenfolge der Liste: Nutzer, 2026-11-17),
   Eingangsplätze, Werkzeuge und Arbeiter kommender Gebäude, der Werkzeugvorrat.
 - Herstellung = gemessen in der letzten Bilanzlänge + kommende Gebäude (Baustellen, bestellte Baustellen, Gebäude, die
   vor weniger als einer Bilanzlänge fertig wurden, auch expandierende) voll mit dem **gemessenen Wert je Gebäude** ihres
@@ -1416,21 +1417,24 @@ Reicht die Prognose seines Eingangs, folgt er sofort, möglichst nah an der Baus
 Erzeuger, bis die Prognose 0 erreicht. Weitere Eingänge desselben Auftrags kommen nah an den ersten. Solange ein Auftrag
 auf eine solche Baustelle wartet, plant die KI alle 20 GF (`FOLLOW_UP_GFS`), unabhängig vom Schwierigkeitsgrad.
 
-**Platzwahl** (Nutzer, 2026-11-15 nachmittags): nach dem, was das Gebäude bearbeitet. Jeder erlaubte Platz bekommt eine
-Bewertung, der beste der abgesuchten Plätze gewinnt (bis zu 8 Lager/Militärgebäude je Schritt, Radius 15). Gewichte in
-`EconomyPlanner.h` (Startwerte von Claude):
-- `SCORE_SOURCE` = 1 je Vorkommen in Reichweite (höchstens 40): größere Vorkommen bevorzugt.
-- `SCORE_PREFERRED` = 60: nah an der Baustelle eines Eingangs, der für den Auftrag platziert wurde.
-- `SCORE_PARTNER` = 30: nah am nächsten Erzeuger eines Eingangs oder Abnehmer des Produkts.
-- `SCORE_WAREHOUSE` = 20: Erzeuger von Baumaterial (Produkt steht in irgendwelchen Baukosten) nah am nächsten Lager.
-- `SCORE_SAME_TYPE` = −15 je Gebäude desselben Typs in der Nähe: bei Erzeugern von Baumaterial (Radius 8) und Abbauern
-  (doppelte Reichweite).
-- Die Nähe-Werte fallen bis `PARTNER_RADIUS` = 15 auf 0.
-- Nie bebaut: Felder und mögliche Feldplätze. Bei Plantagen aus Lua genau die Knoten, auf denen eine Pflanze steht oder
-  die Plantage pflanzen könnte (auch für die Fahne), bei Bauernhof und Köhler die Feldknoten der alten KI (Radius 3).
-- Mindestmenge in Reichweite: rodender Holzfäller 8 Bäume, dauerhafter Abbauer einer Quelle mit Erneuerer 11, sonst 1.
-- Mit Bewertung: verarbeitende Gebäude, Abbauer von Bäumen, Steinhaufen, Kartenobjekten aus Lua und Erz. Mit den Regeln
-  der alten KI (erster passender Platz): Fisch, Tiere, Ackerland, Wasser, Plantagen, Förster.
+**Platzwahl** (Nutzer, 2026-11-17; ersetzt die Bewertung der Plätze vom 15.11., die gelöscht ist): die Plätze der
+alten KI (`AIPlayerJH::FindPositionForBuildingAround`) für jedes Gebäude, auch Lager und verarbeitende Gebäude.
+- Suchzentren: die Baustelle eines für den Auftrag platzierten Eingangs (Eltern-Auftrag), dann die Lager, für Gebäude, die
+  auf der Karte arbeiten, auch die Militärgebäude; bis zu 8 Zentren je Schritt, Radius 15.
+- Darüber gelten die Regeln des Nutzers: Mindestmenge in Reichweite (rodender Holzfäller 8 Bäume, dauerhafter Abbauer
+  einer Quelle mit Erneuerer `RENEW_BELOW`, sonst 1), nie auf Feldern und möglichen Feldplätzen von Plantagen,
+  Bauernhof und Plantage mit mindestens 4 Feldknoten, rodender Holzfäller nicht im Bereich eines Försters.
+- Eigene Plätze des Planers nur für die Regeln des Nutzers: Förster in Reichweite seines Holzfällers (nicht bei rodenden),
+  Abbauer neben seinem Anbauer.
+- Sperren der alten KI, die damit wieder gelten (Herkunft: Original = Return to the Roots, sonst Commit des Nutzers):
+  Abstand zur Grenze außer Militär (11.11.); Holzfäller im Bereich eines Försters höchstens 2 je Förster, ohne Förster
+  Walddichte ≥ 8 % im Radius 7 und Abstand zu Förstern (30.07.); Förster: die ersten 4 ohne Wald und mit Pflanzfläche, ab
+  dem 5. kein Förster/Köhler im Radius 8 und Sägewerk und Lager im Radius 8 (28.–31.07.); Sägewerk ab dem 4. kein
+  Sägewerk im Radius 22 und ein Lager im Radius 15 (26./30.07.); Jäger: kein Jäger im Radius 14 um das Suchzentrum
+  (Original) und mindestens 9 Tiere (26.07., Original 2, 4, 8 … je Jäger); Steinbruch: Mindestwert der Steinkarte
+  steigt je Steinbruch (Original, höchstens 40 seit 11.11.); Fischer, Minen, Hafen, Werft, Katapult (Original); Lager:
+  kein anderes Lager im Radius 15 um das Zentrum (Original); Bauernhof Pflanzfläche ≥ 85, Köhler ≥ 86 und kein Förster
+  im Radius 8 (Original / 28.07.).
 
 **Anbauer und Abbauer** (Nutzer, 2026-11-15): Findet ein benötigter dauerhafter Abbauer keinen Platz mit genug Vorkommen
 in Reichweite, wird zuerst ein Anbauer für ihn beauftragt (Erneuerer der Quelle: Förster, Plantage aus Lua ohne Produkt;
@@ -1447,6 +1451,8 @@ Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge 
 - „Zuletzt abgerissen“: Abbauer, die die alte KI wegen „nichts mehr in Reichweite“ abreißt, mit Anlass, Vorkommen beim
   Platzieren und Zeit mit Arbeiter (auch als eigene Logzeile).
 - „Gehilfen“: die Prognose der Gehilfen wie bei den Soldaten.
+- „Baustellen“: Militär (alte KI) und Wirtschaft mit dem Material, das sie noch brauchen, ohne Straße, ohne Material
+  unterwegs.
 - „Probleme“: je Gebäudetyp die Zahl der Gebäude mit jedem Problem der Diagnose.
 - „offen: neu, im nächsten Schritt“: im Schritt entstanden (z. B. ein Kind-Auftrag). „offen: suche Bauplatz“: die Suche
   (8 Lager/Militärgebäude je Schritt) geht im nächsten Schritt weiter.
@@ -1517,7 +1523,19 @@ abgeschaltet (es gilt nur für den lokalen Spieler, den es dort nicht gibt).
   Aufträgen frei, die benötigten (jetzt mehr) kommen davor.
 - Rechenzeit (Release): im Mittel unter 1,5 ms je Schritt, Spitzen bis 26 ms; Liste höchstens 67 Einträge.
 
+**Notprogramm** (Nutzer, 2026-11-17): Im Zivilisationsmodus gibt es kein Notprogramm. Es lieferte Bretter und Steine nur an
+Holzfäller und Sägewerke, sobald Bretter oder Steine ≤ 10 waren und kein Sägewerk stand; mit den Baukosten nach Tags
+(Holz, Lehmziegel, Stroh) war es fast immer aktiv und hielt alle anderen Baustellen an. Außerdem versucht eine
+Baustelle mit „eins von“-Kosten jetzt die anderen Waren, wenn eine nicht geschickt werden kann
+(`GamePlayer::OrderWare`).
+
 **Offen:**
+- **Militär der alten KI verbraucht das Baumaterial** (Nutzer, 2026-11-17: vorerst so lassen, festhalten). Die alte KI
+  hat bis zu 20 Militärbaustellen gleichzeitig (`MAX_MILITARY_SITES`); der Planer hält das Material für das nächste
+  Militärgebäude vor den expandierenden Aufträgen frei. Testspiel (Neighbourhood, 8 KI, Spieldaten `cb4411e`, 1 h): je
+  Spieler 17–40 Militärgebäude gegen 2–30 Wirtschaftsgebäude. Sind alle Holzfäller und Steinbrüche erschöpft und
+  abgerissen, hält der Planer die letzten Baumaterialien für das Militär frei, und kein neuer Erzeuger bekommt sie (5
+  von 8 Spielern ohne Holzfäller nach 1 h). Lösung mit Schritt 3.
 - Militär im Planer (Schritt 3). Danach soll sich auch „weniger Militär nach 2 h“ klären.
 - Forschung (Schritt 4, nach dem Militär): wählt noch das Spiel für die KI (`civ::chooseResearchForAI`).
 - Mangel eines Zwischenprodukts, dessen Endprodukt im Überschuss liegt: bewusst keine Regel (Nutzer, 2026-11-15).

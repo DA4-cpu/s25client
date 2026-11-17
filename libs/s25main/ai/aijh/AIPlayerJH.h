@@ -311,12 +311,6 @@ public:
     /// Civilization mode: place for a harvester beside the renewer planted for it (the source in its reach does not
     /// count): the nearest place within `radius` of the renewer
     MapPoint FindHarvesterPositionBeside(BuildingType type, const MapPoint& renewerPos, unsigned radius);
-    /// Civilization mode: the place around the point with the best score. `score` returns false for a place that must
-    /// not be used and sets the score otherwise (higher is better). Checked before: reachable, own territory, building
-    /// quality for the type, no fields of farms and charburners, no site ordered there, not at a harbor place, not in
-    /// the border reserve of the type. Invalid if there is none. `bestScore` gets the score of the place
-    MapPoint FindScoredPosition(BuildingType type, const MapPoint& around, unsigned radius,
-                                const std::function<bool(MapPoint, double&)>& score, double& bestScore) const;
     /// The best place for the resource around the point (like FindBestPosition) that also fulfills `condition`. The
     /// places tried and not fitting are skipped (at most `maxTries`)
     template<class T_Condition>

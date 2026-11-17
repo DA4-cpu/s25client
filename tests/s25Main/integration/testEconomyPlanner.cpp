@@ -96,6 +96,9 @@ WorldDescription makeDesc(const std::vector<std::string>& expanding = {},
 }
 
 constexpr GoodType LOAM = GoodType::Custom0;
+/// Trees of a forest a woodcutter is placed at by the rules of the old AI (without a forester it needs a wood density
+/// of 8 % in radius 7)
+constexpr unsigned FOREST = 18;
 const GoodType CLAY = getCustomGood(1);
 const BuildingType PIT = getCustomBuilding(0);
 const BuildingType KILN = getCustomBuilding(1);
@@ -394,11 +397,11 @@ BOOST_FIXTURE_TEST_CASE(FullStorageAllowsOnlyNeededOrders, PlannerFixture)
     BOOST_TEST_INFO(pit.reason);
     BOOST_TEST(pit.reason.find("Lager voll (80 von 85)") == 0u);
     BOOST_TEST(!findSite(PIT).isValid());
+    // Its place is searched by the rules of the old AI (no other warehouse within 15 of the center): none in this
+    // small world
     const civai::Order& storehouse = getOrder(BuildingType::Storehouse);
     BOOST_TEST((storehouse.kind == civai::OrderKind::Needed));
     BOOST_TEST((storehouse.cause == civai::OrderCause::Storage));
-    BOOST_TEST_INFO(storehouse.reason);
-    BOOST_TEST((storehouse.state == civai::OrderState::Placed));
 }
 
 BOOST_FIXTURE_TEST_CASE(PlansWithAWarehouseFromLua, PlannerFixture)
@@ -521,7 +524,7 @@ BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterDespiteWoodInStock, PlannerFixture)
     startGame(makeDesc());
     hq().AddToInventory(GoodCounts::make(GoodType::Wood, 40), true);
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
-    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    placeTrees(Position(-5, 3), FOREST);
     startAI();
     step();
     const MapPoint pos = findSite(BuildingType::Woodcutter);
@@ -695,7 +698,7 @@ BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
     // (nothing built in yet) is cancelled for it
     startGame(makeDesc({}, {{"Wood", 5}}), 1);
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
-    placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
+    placeTrees(Position(-5, 3), FOREST);
     startAI();
     // The site of the barracks is placed after the old AI ran (it would decide about it itself)
     MapPoint sitePos = MapPoint::Invalid();
@@ -800,7 +803,7 @@ BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterIsPlacedAtTheForest, PlannerFixture)
 {
     startGame(makeDesc({"Woodcutter"}));
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
-    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    placeTrees(Position(-5, 3), FOREST);
     startAI();
     step();
     const MapPoint pos = findSite(BuildingType::Woodcutter);
@@ -1105,7 +1108,7 @@ BOOST_FIXTURE_TEST_CASE(ExpandingSiteIsNoSolution, PlannerFixture)
     // count as coming (an expanding order never solves a problem), a needed woodcutter is ordered
     startGame(makeDesc({}, {{"Wood", 200}}));
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 3), true);
-    placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES + 2u);
+    placeTrees(Position(-5, 3), FOREST);
     startAI();
     step();
     const MapPoint clearingPos = findSite(BuildingType::Woodcutter);
@@ -1211,7 +1214,7 @@ BOOST_FIXTURE_TEST_CASE(ToolForecastDecidesAlsoForSlowBuildings, PlannerFixture)
     // Wood is needed. The woodcutter works slowly without its axe, but it needs one: no axe and no maker (no iron in
     // the territory) -> the forecast of the axes does not allow it, it waits. With an axe in stock it is placed
     startGame(makeToolDesc({{"Wood", 5}}));
-    placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
+    placeTrees(Position(-5, 3), FOREST);
     startAI();
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
     step();
