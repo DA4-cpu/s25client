@@ -5,8 +5,11 @@
 #pragma once
 
 #include "helpers/EnumArray.h"
+#include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
 #include <cstdint>
+#include <map>
+#include <utility>
 #include <vector>
 
 class SerializedGameData;
@@ -70,6 +73,11 @@ struct EconomyMinute
     uint16_t soldiersCreated = 0;
     /// Soldiers who left a warehouse for a military building
     uint16_t soldiersUsed = 0;
+    /// Helpers recruited as workers of a job (part of helpersUsed; the others became soldiers or carriers)
+    uint16_t helpersForJobs = 0;
+    /// Per building type and ware: wares made by its workers (products and byproducts) and inputs taken for its work
+    /// steps. Only the pairs counted in the minute
+    std::map<std::pair<BuildingType, GoodType>, uint16_t> producedBy, usedBy;
 };
 
 /// Exact economy statistic of a player: every ware that enters or leaves his stock, counted at the moment it happens,
@@ -89,6 +97,9 @@ public:
     void AddHelpersUsed(unsigned count, unsigned gf);
     void AddSoldiersCreated(unsigned count, unsigned gf);
     void AddSoldiersUsed(unsigned count, unsigned gf);
+    void AddHelpersForJobs(unsigned count, unsigned gf);
+    void AddProducedBy(BuildingType bld, GoodType good, unsigned count, unsigned gf);
+    void AddUsedBy(BuildingType bld, GoodType good, unsigned count, unsigned gf);
 
     /// Made in the last n minutes (n = 1..HISTORY_MINUTES)
     unsigned GetProduced(GoodType good, unsigned minutes, unsigned gf) const;
@@ -106,6 +117,12 @@ public:
     unsigned GetHelpersUsed(unsigned minutes, unsigned gf) const;
     unsigned GetSoldiersCreated(unsigned minutes, unsigned gf) const;
     unsigned GetSoldiersUsed(unsigned minutes, unsigned gf) const;
+    /// Helpers recruited as workers of a job in the last n minutes (part of GetHelpersUsed)
+    unsigned GetHelpersForJobs(unsigned minutes, unsigned gf) const;
+    /// Made by the buildings of the type in the last n minutes (products and byproducts)
+    unsigned GetProducedBy(BuildingType bld, GoodType good, unsigned minutes, unsigned gf) const;
+    /// Taken as input by the buildings of the type in the last n minutes
+    unsigned GetUsedBy(BuildingType bld, GoodType good, unsigned minutes, unsigned gf) const;
 
     /// Game minutes covered by the last n minutes at the given GF (the current minute counts as the part passed)
     double GetCoveredMinutes(unsigned minutes, unsigned gf) const;

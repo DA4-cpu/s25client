@@ -129,7 +129,8 @@
 /// 26: Economy statistic of the players (wares gained and used per minute)
 /// 27: Clearing woodcutters of the AI of the civilization mode
 /// 28: Soldiers recruited and sent to military buildings per minute in the economy statistic
-static const unsigned currentGameDataVersion = 28;
+/// 29: Economy statistic per building type (made and used wares) and helpers recruited as workers
+static const unsigned currentGameDataVersion = 29;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

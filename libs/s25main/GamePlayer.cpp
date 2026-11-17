@@ -2038,6 +2038,11 @@ helpers::EnumArray<unsigned, Job> GamePlayer::GetNumJobsWanted() const
     return result;
 }
 
+bool GamePlayer::IsJobWanted(const noRoadNode& workplace) const
+{
+    return helpers::contains_if(jobs_wanted, [&](const JobNeeded& entry) { return entry.workplace == &workplace; });
+}
+
 bool GamePlayer::IsClearingWoodcutter(const MapPoint pt) const
 {
     return helpers::contains(clearingWoodcutters_, pt);
@@ -2059,6 +2064,23 @@ void GamePlayer::CountHelpersCreated(const unsigned count)
 void GamePlayer::CountHelpersUsed(const unsigned count)
 {
     economyStatistics_.AddHelpersUsed(count, world.GetEvMgr().GetCurrentGF());
+}
+
+void GamePlayer::CountHelperRecruited()
+{
+    const unsigned gf = world.GetEvMgr().GetCurrentGF();
+    economyStatistics_.AddHelpersUsed(1, gf);
+    economyStatistics_.AddHelpersForJobs(1, gf);
+}
+
+void GamePlayer::CountProducedBy(const BuildingType bld, const GoodType ware)
+{
+    economyStatistics_.AddProducedBy(bld, ConvertShields(ware), 1, world.GetEvMgr().GetCurrentGF());
+}
+
+void GamePlayer::CountUsedBy(const BuildingType bld, const GoodType ware)
+{
+    economyStatistics_.AddUsedBy(bld, ConvertShields(ware), 1, world.GetEvMgr().GetCurrentGF());
 }
 
 void GamePlayer::CountSoldiersCreated(const unsigned count)

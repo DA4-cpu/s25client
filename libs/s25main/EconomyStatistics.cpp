@@ -85,6 +85,24 @@ void EconomyStatistics::AddSoldiersUsed(const unsigned count, const unsigned gf)
     addSaturated(Current(gf).soldiersUsed, count);
 }
 
+void EconomyStatistics::AddHelpersForJobs(const unsigned count, const unsigned gf)
+{
+    addSaturated(Current(gf).helpersForJobs, count);
+}
+
+void EconomyStatistics::AddProducedBy(const BuildingType bld, const GoodType good, const unsigned count,
+                                      const unsigned gf)
+{
+    if(count > 0)
+        addSaturated(Current(gf).producedBy[{bld, good}], count);
+}
+
+void EconomyStatistics::AddUsedBy(const BuildingType bld, const GoodType good, const unsigned count, const unsigned gf)
+{
+    if(count > 0)
+        addSaturated(Current(gf).usedBy[{bld, good}], count);
+}
+
 const EconomyMinute* EconomyStatistics::GetMinute(const unsigned minutesAgo, const unsigned gf) const
 {
     const unsigned queryMinute = gf / GetGFsPerMinute();
@@ -175,8 +193,40 @@ unsigned EconomyStatistics::GetSoldiersUsed(const unsigned minutes, const unsign
     return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.soldiersUsed; });
 }
 
+unsigned EconomyStatistics::GetHelpersForJobs(const unsigned minutes, const unsigned gf) const
+{
+    return Sum(minutes, gf, [](const EconomyMinute& minute) { return minute.helpersForJobs; });
+}
+
+unsigned EconomyStatistics::GetProducedBy(const BuildingType bld, const GoodType good, const unsigned minutes,
+                                          const unsigned gf) const
+{
+    return Sum(minutes, gf, [&](const EconomyMinute& minute) {
+        const auto it = minute.producedBy.find({bld, good});
+        return it == minute.producedBy.end() ? 0u : static_cast<unsigned>(it->second);
+    });
+}
+
+unsigned EconomyStatistics::GetUsedBy(const BuildingType bld, const GoodType good, const unsigned minutes,
+                                      const unsigned gf) const
+{
+    return Sum(minutes, gf, [&](const EconomyMinute& minute) {
+        const auto it = minute.usedBy.find({bld, good});
+        return it == minute.usedBy.end() ? 0u : static_cast<unsigned>(it->second);
+    });
+}
+
 void EconomyStatistics::Serialize(SerializedGameData& sgd) const
 {
+    const auto pushByBuilding = [&sgd](const std::map<std::pair<BuildingType, GoodType>, uint16_t>& counts) {
+        sgd.PushVarSize(static_cast<unsigned>(counts.size()));
+        for(const auto& [key, value] : counts)
+        {
+            sgd.PushEnum<uint8_t>(key.first);
+            sgd.PushEnum<uint8_t>(key.second);
+            sgd.PushUnsignedShort(value);
+        }
+    };
     // Only the counts that are not 0: most wares are not used in a minute
     const auto pushEntries = [&sgd](const auto& gained, const auto& used, auto pushValue) {
         unsigned num = 0;
@@ -221,12 +271,24 @@ void EconomyStatistics::Serialize(SerializedGameData& sgd) const
         sgd.PushUnsignedShort(minute.helpersUsed);
         sgd.PushUnsignedShort(minute.soldiersCreated);
         sgd.PushUnsignedShort(minute.soldiersUsed);
+        sgd.PushUnsignedShort(minute.helpersForJobs);
+        pushByBuilding(minute.producedBy);
+        pushByBuilding(minute.usedBy);
     }
     pushEntries(totalGained_, totalUsed_, [&sgd](const uint32_t value) { sgd.PushUnsignedInt(value); });
 }
 
 void EconomyStatistics::Deserialize(SerializedGameData& sgd)
 {
+    const auto popByBuilding = [&sgd](std::map<std::pair<BuildingType, GoodType>, uint16_t>& counts) {
+        const unsigned num = sgd.PopVarSize();
+        for(unsigned i = 0; i < num; ++i)
+        {
+            const auto bld = sgd.Pop<BuildingType>();
+            const auto good = sgd.Pop<GoodType>();
+            counts[{bld, good}] = sgd.PopUnsignedShort();
+        }
+    };
     const auto popEntries = [&sgd](auto& gained, auto& used, auto popValue) {
         const unsigned num = sgd.PopVarSize();
         for(unsigned i = 0; i < num; ++i)
@@ -260,6 +322,12 @@ void EconomyStatistics::Deserialize(SerializedGameData& sgd)
         {
             minute.soldiersCreated = sgd.PopUnsignedShort();
             minute.soldiersUsed = sgd.PopUnsignedShort();
+        }
+        if(sgd.GetGameDataVersion() >= 29)
+        {
+            minute.helpersForJobs = sgd.PopUnsignedShort();
+            popByBuilding(minute.producedBy);
+            popByBuilding(minute.usedBy);
         }
     }
     popEntries(totalGained_, totalUsed_, [&sgd]() { return sgd.PopUnsignedInt(); });

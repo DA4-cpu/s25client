@@ -1193,8 +1193,11 @@ Statistik läuft in allen Spielen mit, nicht nur im Zivilisationsmodus.
   - `GetConsumptionPerMinute` teilt durch die tatsächlich vergangene Zeit, am Spielstart also weniger als n Minuten.
   - Im Spielstand stehen nur Werte ungleich 0.
 - **Gehilfen:** von Lagern erzeugt, und verbraucht (zu Arbeitern oder Soldaten geworden oder als Träger auf eine
-  Straße gegangen; Nutzer 2026-11-13: Träger zählen mit), je Minute. Freie Gehilfen und Arbeiter liefert die
-  Momentaufnahme.
+  Straße gegangen; Nutzer 2026-11-13: Träger zählen mit), je Minute. Davon zu Arbeitern geworden: `helpersForJobs`
+  (Spielstand 29).
+- **Je Gebäudetyp** (2026-11-17, Spielstand 29): was die Arbeiter eines Gebäudetyps an der Fahne abgelegt haben
+  (Produkte und Nebenprodukte) und was sie als Eingang genommen haben, je Minute (`GetProducedBy`, `GetUsedBy`).
+- Freie Gehilfen und Arbeiter liefert die Momentaufnahme.
 - **Expansionsliste:** `data/RTTR/gamedata/civ/ai.lua` mit `rttr:SetAIExpandingBuildings{ ... }` (Liste von
   Gebäudenamen, auch Werkstätten aus Lua), abfragbar mit `civ::TechTree::IsAIExpanding`.
 - **Momentaufnahme** (`takeEconomySnapshot`): offene Nachfrage (angefragt, aber noch nicht geschickt). Sie umfasst:
@@ -1216,18 +1219,31 @@ Statistik läuft in allen Spielen mit, nicht nur im Zivilisationsmodus.
 
 Code: `ai/civ/EconomyPlanner.*`, Tests `EconomyPlannerSuite`. Der Planer läuft im Zivilisationsmodus in jeder
 AIJH-KI. Diese Fassung ersetzt die vom 13./14.11.: Die Prüfung am 14.11. fand Fehler gegen das Konzept, die Regeln
-unten sind die Entscheidungen des Nutzers vom 14.11. abends.
+unten sind die Entscheidungen des Nutzers vom 14.11. abends. Überarbeitet am 17.11. nach der Prüfung vom 15.11. abends
+(Entscheidungen des Nutzers vom 15.11. nachts): Produktivitätsregel entfällt, jede Regel gilt für jeden Auftrag,
+Werkzeuge und Gehilfen über die Prognose.
+
+**Grundsatz (Nutzer, 2026-11-15):** Jeder Auftrag folgt allen Regeln und Sperren, egal wie er entstanden ist. Keine
+Regel wird übersprungen, außer eine Alternativregel ersetzt sie ausdrücklich (bisher nur eine: der Abbauer neben seinem
+Anbauer, dort zählt die Menge in Reichweite nicht). Jeder Eingang und jeder Ausgang jedes Gebäudes steht in der
+Prognose, auch bei Werkzeugherstellern.
 
 **Einstellungen:**
 - In `ai/civ/EconomyPlanner.h`:
-  - Bilanzlänge `BALANCE_MINUTES` = 5 (auch die Zeit, nach der die Produktivität eines neuen Gebäudes zählt).
+  - Bilanzlänge `BALANCE_MINUTES` = 7 (Wert des Nutzers; auch die Zeit, in der ein neues Gebäude als kommend zählt).
   - Schwelle: `SURPLUS_FACTOR` = 10 × Verbrauch/min, mindestens `MIN_STOCK` = 8.
-  - Hohe Produktivität `HIGH_PRODUCTIVITY` = 0,8.
   - Rodende Holzfäller ab `CLEARING_MIN_TREES` = 8 Bäumen, Sammler anderer Vorkommen (Steinhaufen, Kartenobjekte aus
     Lua) ab `MIN_DEPOSITS_IN_REACH` = 1 Vorkommen.
-  - Förster, wenn weniger als `RENEW_BELOW` = 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen.
-  - Werkzeugvorrat `TOOLS_IN_STOCK` = 1.
+  - Förster, wenn weniger als `RENEW_BELOW` = 7 Bäume in Reichweite eines dauerhaften Holzfällers stehen (Wert des
+    Nutzers).
+  - Werkzeugvorrat `TOOLS_IN_STOCK` = 2 je Werkzeugart (Wert des Nutzers).
+  - Höchstens `MAX_ORDERS_PER_TYPE` = 5 Aufträge je Gebäudetyp gleichzeitig (auch platzierte, bis das Gebäude fertig
+    ist; Nutzer, 2026-11-15).
+  - Bauernhöfe und Plantagen brauchen `MIN_FIELD_NODES` = 4 Feldknoten in Reichweite (Nutzer, 2026-11-15).
+  - Vorkommen und Felder um ein Gebäude werden alle `SOURCE_CHECK_GFS` = 400 GF neu gezählt.
   - Kette steckt fest nach `STUCK_MINUTES` = 9 Minuten ohne Herstellung (Wert des Nutzers, vorher 3).
+  - Die Produktivitätsregel (`HIGH_PRODUCTIVITY`) entfällt (Nutzer, 2026-11-15): Die Produktivität ist ein Symptom,
+    keine Diagnose.
 - In `data/RTTR/gamedata/civ/ai.lua`: Expansionsliste, Grundwirtschaft, Startvorräte ohne Überschuss, Höchstzahl je
   Gebäudetyp, Lager voll.
 
@@ -1237,16 +1253,22 @@ unten sind die Entscheidungen des Nutzers vom 14.11. abends.
   - Mangel einer Warengruppe (Prognose unter 0): Erzeuger, auch als Verbraucher eines Überschusses, wenn dessen
     Produkt im Mangel ist.
   - Eingang oder Baumaterial, das einem benötigten Auftrag fehlt (Kind-Auftrag, steht über ihm).
-  - Gebäude eines Typs stehen, weil ein Eingang fehlt („steht still“).
   - Werkzeughersteller: Werkzeuge fehlen laut Prognose, und die vorhandenen Hersteller schaffen sie nicht.
   - Soldaten fehlen: die Waren zum Rekrutieren.
-  - Gehilfen fehlen, Lager voll: ein Lager.
+  - Gehilfen fehlen laut Prognose, Lager voll: ein Lager.
+  - Der Anlass „steht still“ entfällt (Nutzer, 2026-11-15): Der Verbrauch wartender Gebäude steht in der Prognose, der
+    Mangel macht die Aufträge.
   - Wenige Bäume am dauerhaften Holzfäller: ein Förster.
 - **Expandierend:** Es gibt kein Problem. Nur Gebäude der Expansionsliste (eine Erlaubnis), für eine Ware im Zustand
   „normal“ oder als Verbraucher eines Überschusses mit normalem Produkt. Dazu unabhängig von der Liste die Sammler von
   Vorkommen (Holzfäller, Steinbruch, Sammler aus Lua), sobald genug Vorkommen im Gebiet sind.
-- Ein expandierender Auftrag löst nie ein Problem und hat keine Rechte: kein Vorrang, kein vorbehaltenes Material, keine
-  Kind-Aufträge, kein Abbruch von Baustellen. Fehlt ihm etwas, wandert er ans Ende.
+- Ein expandierender Auftrag löst nie ein Problem und hat keine Rechte: kein Vorrang, kein vorbehaltenes Material, kein
+  vorbehaltener Eingang, kein Abbruch von Baustellen. Fehlt ihm etwas, wandert er ans Ende.
+- **Expandierende Lösungsaufträge** (Nutzer, 2026-11-15): Ein expandierender Auftrag darf Aufträge für seine eigenen
+  Probleme anlegen (Eingang, Baumaterial, Gehilfen). Sie gelten selbst als expandierend (keine Rechte, Höchstzahl gilt)
+  und dürfen auch Gebäude außerhalb der Expansionsliste sein (z. B. ein Brunnen für eine expandierende Brauerei).
+  Baukosten, Werkzeuge und Arbeiter expandierender Aufträge stehen unter „angefragt“: Nur darüber entstehen aus ihnen
+  benötigte Aufträge (z. B. Brettermangel → benötigtes Sägewerk).
 - **Überschreiben:** Ein benötigter Auftrag ersetzt den gleichen expandierenden (gleiches Gebäude, gleiche Ware).
 - **Eine Lösung für mehrere** (Nutzer, 2026-11-15): Fehlt einem Auftrag eine Ware (Eingang, Baumaterial) und gibt es für
   sie schon einen benötigten Auftrag desselben Gebäudes (für einen anderen Auftrag, aus der Statistik oder schon
@@ -1269,54 +1291,94 @@ Lager zu einem Militärgebäude (Statistik `soldiersCreated/Used`, Spielstand 28
 Militärgebäude. Fehlen Soldaten, werden die Rekrutierungswaren (`SOLDIER_RECRUIT_WARES` aus den Spieldaten: Schwert,
 Schild, Bier) bestellt, soweit sie nicht reichen, und ein Lager für Gehilfen, wenn keine frei sind.
 
-**Prognose** (Nutzer, 2026-11-15 nachmittags; ersetzt „Bilanz negativ = Mangel“): Jede Ware, Gruppe und die Soldaten
-haben einen Wert für die nächste Bilanzlänge (5 Minuten):
+**Prognose** (Nutzer, 2026-11-15; ersetzt „Bilanz negativ = Mangel“): Jede Ware, Gruppe, die Soldaten und die Gehilfen
+haben einen Wert für die nächste Bilanzlänge (7 Minuten):
 
 **Prognose = (Bestand − Angefragt) + voraussichtliche Herstellung − voraussichtlicher Verbrauch**
 
-- Angefragt = alles Verplante: offen angefragt, Baukosten der benötigten Aufträge, Eingangsplätze und Werkzeuge kommender
-  Gebäude.
-- Herstellung = gemessen in der letzten Bilanzlänge + kommende Erzeuger (Baustellen, bestellte Baustellen, Gebäude in
-  der Anlaufzeit, auch expandierende) laut Arbeitszeit + stehende Erzeuger, deren Grund bearbeitet wird.
-- Verbrauch = gemessener Verbrauch als Eingang von Gebäuden + kommende Verbraucher + stehende Verbraucher, sobald sie
-  arbeiten. Was für Bau, Werkzeug, Soldaten, Forschung verbraucht wird, zählt hier nicht: Es wird vorher angefragt und
-  steht in „Angefragt“ (sonst doppelt).
-- Stehende Gebäude, die auf einen Eingang warten, zählen nur, wenn die Prognose dieses Eingangs (ohne die stehenden
-  Gebäude gerechnet) nicht negativ ist.
+- Angefragt = alles Verplante: offen angefragt, Baukosten, Werkzeuge und Arbeiter der Aufträge der Liste (benötigte und
+  expandierende, außer blockierten ohne Weg, ohne Bauplatz, nicht erforscht, über der Höchstzahl, bei vollem Lager),
+  Eingangsplätze, Werkzeuge und Arbeiter kommender Gebäude, der Werkzeugvorrat.
+- Herstellung = gemessen in der letzten Bilanzlänge + kommende Gebäude (Baustellen, bestellte Baustellen, Gebäude, die
+  vor weniger als einer Bilanzlänge fertig wurden, auch expandierende) voll mit dem **gemessenen Wert je Gebäude** ihres
+  Typs. Stehende Gebäude stellen nur her, was gemessen ist (kein Zuschlag für einen gelösten Grund).
+- Wert je Gebäude (Nutzer, 2026-11-15): was alle Gebäude des Typs in der Bilanzlänge hergestellt bzw. verbraucht haben
+  ÷ die Minuten, die sie in dieser Zeit fertig standen. Gebäude mit Problemen zählen mit (ein neues trifft
+  wahrscheinlich auf ähnliche Probleme). Hat noch keines gearbeitet, gilt die Arbeitszeit. Statistik je Gebäudetyp:
+  `EconomyStatistics::GetProducedBy/GetUsedBy` (Spielstand 29).
+- Verbrauch = gemessener Verbrauch als Eingang von Gebäuden + kommende Gebäude mit dem gemessenen Wert je Gebäude +
+  **jedes stehende Gebäude** (jedes Problem: Eingang, Werkzeug, Arbeiter, Fahne, Straße, Felder) mit dem, was es laut
+  Arbeitszeit verbrauchen würde (Nutzer, 2026-11-15: der Verbrauch zählt immer). Was für Bau, Werkzeug, Soldaten,
+  Forschung verbraucht wird, zählt hier nicht: Es wird vorher angefragt und steht in „Angefragt“ (sonst doppelt).
+- Werkzeughersteller arbeiten auf Bestellung: Herstellung = was sie von den bestellten und fehlenden Werkzeugen in der
+  Bilanzlänge schaffen (Hersteller, die arbeiten können, und kommende, mit den gemessenen Werkzeugen je Minute
+  Arbeitszeit) und darüber hinaus schaffen könnten; Verbrauch (Eisen, Kohle, Bretter …) = ein Arbeitsschritt je
+  hergestelltem Werkzeug. Die Nachfrage einer Art wird nach Kapazität auf die Hersteller verteilt, die ein passendes
+  Werkzeug machen (eine Forschung, die nur die Eisensäge nimmt, nur auf die Schlosserei).
+- Gehilfen: Bestand in den Lagern, angefragt = gesuchte Arbeiter + Arbeiter der Baustellen und Aufträge, deren Beruf
+  nicht frei im Lager steht, Herstellung = von den Lagern erzeugt, Verbrauch = zu Soldaten oder Trägern geworden
+  (Arbeiter stehen in „Angefragt“). Statistik `helpersForJobs` (Spielstand 29).
+- Weniger als eine Minute gemessen (Spielstart): Die Zahlen werden wie eine Minute hochgerechnet, nicht die ersten
+  Sekunden auf die ganze Bilanzlänge.
 - **Mangel:** Prognose unter 0. **Überschuss:** Prognose über der Schwelle (10 × Verbrauch/min, mindestens 8, ohne
   unverbrauchten Startvorrat). Sonst normal.
-- **Eingang reicht** für einen weiteren Verbraucher: Überschuss, oder die Prognose bleibt mit seinem Verbrauch laut
-  Arbeitszeit bei 0 oder darüber. Gilt auch für Werkzeughersteller (die frühere Sonderregel „Bestand deckt die
-  fehlenden Werkzeuge“ sperrte den Hersteller, je mehr Werkzeuge fehlten).
-- Wird in einem Schritt ein Gebäude platziert, zählt es sofort in der Prognose (die Aufträge darunter sehen es).
+- **Eingang reicht** für einen weiteren Verbraucher: Überschuss, oder die Prognose bleibt mit seinem Verbrauch (Wert je
+  Gebäude) bei 0 oder darüber. Gilt für jedes Gebäude, auch Werkzeughersteller.
+- Wird in einem Schritt ein Gebäude platziert, wird die ganze Prognose neu gerechnet (die Aufträge darunter sehen es).
 
-**Anzahl** (Bilanzregel, für jeden Anlass): Erzeuger = ⌈fehlende Menge pro Minute ÷ Ausstoß eines Erzeugers⌉, jeden
-Schritt neu (sinkt auch). Die Prognose enthält die kommenden und stehenden Erzeuger schon.
-- Fehlend: Mangel = −Prognose ÷ 5; Eingang eines Auftrags = sein Verbrauch laut Arbeitszeit − Prognose ÷ 5; Baumaterial
-  = −Prognose ÷ 5 (nur wenn die Prognose negativ ist: Gleicht die Wirtschaft das Fehlende in einer Bilanzlänge aus,
-  entsteht kein Auftrag); stehende Gebäude = ihr Verbrauch − Prognose ohne sie ÷ 5.
-- Ausstoß: gemessen bei den Erzeugern, die arbeiten (ohne stehende und erschöpfte), sonst laut Arbeitszeit.
-- Alle benötigten Aufträge für Gebäude, die die Ware machen, zählen mit, auch für ein anderes Produkt.
-- Diese Grenzen bleiben: Reichen die Eingänge eines Erzeugers nicht oder kann kein Arbeiter oder Werkzeug für ihn
-  kommen, wartet einer. Für einen anderen Auftrag höchstens einer je Ware. Nie mehr wartende benötigte Aufträge als
-  Bauarbeiter (über alle Anlässe gezählt; ein Auftrag je Bedarf kommt immer, er zeigt, was fehlt).
+**Anzahl** (Nutzer, 2026-11-15: mindestens ein Auftrag, so viele, bis die Prognose 0 oder positiv ist), für jeden
+Anlass: Erzeuger = ⌈fehlende Menge pro Minute ÷ Wert je Gebäude⌉, jeden Schritt neu (sinkt auch). Die Prognose enthält
+die kommenden und stehenden Gebäude schon.
+- Fehlend: Mangel = −Prognose ÷ 7; Eingang eines Auftrags = sein Verbrauch (Wert je Gebäude) − Prognose ÷ 7;
+  Baumaterial = −Prognose ÷ 7 (nur wenn die Prognose negativ ist).
+- Alle nicht platzierten Aufträge für Gebäude, die eine Ware der Gruppe machen, zählen mit, auch für ein anderes Produkt
+  (bei einem expandierenden Bedarf auch die expandierenden). Kleinere Gruppen werden zuerst bearbeitet; ihre Aufträge
+  zählen für die größeren Gruppen mit ihren Waren (sonst bestellen „Fisch/Brot/Fleisch“ und „Brot/Fleisch“ getrennt).
+- Die frühere Grenze „für einen anderen Auftrag höchstens einer je Ware“ entfällt: Auch für einen Eingang oder
+  Baumaterial kommen so viele, bis die Prognose 0 erreicht.
+- Grenzen: Reichen die Eingänge eines Erzeugers nicht oder lassen die Prognosen seiner Werkzeuge oder der Gehilfen keinen
+  weiteren zu, wartet einer; ein Gebäude des Typs, das auf einen Eingang, ein Werkzeug oder einen Arbeiter wartet, zählt
+  als dieser eine. Höchstens `MAX_ORDERS_PER_TYPE` je Gebäudetyp. Nie mehr wartende benötigte Aufträge als Bauarbeiter
+  (über alle Anlässe gezählt; ein Auftrag je Bedarf kommt immer, er zeigt, was fehlt).
 - Ein Auftrag ist erledigt, sobald sein Gebäude fertig ist. Nur ein Förster bleibt bis nach seiner Anlaufzeit.
 
-**Gebäude unter 80 % Produktivität:** jedes einzeln. Grund: kein Arbeiter (Gehilfen), kein Werkzeug, Eingang fehlt
-(Auftrag „steht still“ für den Eingang), Fahne voll, nichts mehr in Reichweite (erschöpft, zählt nicht). Ohne Grund
-(„unbekannt“) zählt es, wie es arbeitet: weitere Erzeuger dürfen kommen.
+**Diagnose jedes Gebäudes** (Nutzer, 2026-11-15; ersetzt „Gebäude unter 80 % Produktivität“): jedes Gebäude, jeder
+Schritt, unabhängig von seiner Produktivität. Das erste gefundene Problem:
+- gestoppt (vom Spieler, nicht untersucht),
+- keine Straße an der Fahne (nur gemeldet, Straßenbau kommt später),
+- kein Arbeiter (kein Lager kann einen schicken) / Arbeiter unterwegs,
+- kein Werkzeug: ein Werkzeugplatz ist leer, auch wenn das Gebäude ohne Werkzeug langsam arbeitet (`baseSpeed` > 0),
+- Eingang fehlt,
+- Fahne voll (nur gemeldet),
+- nichts mehr in Reichweite (erschöpft),
+- Felder fehlen: Bauernhof oder Plantage mit weniger als 4 Feldknoten in Reichweite,
+- Vorkommen weit entfernt: nichts in der nahen Hälfte der Reichweite (nur gemeldet),
+- schlechtes Werkzeug: ein Werkzeug ist schlechter als das beste seines Platzes.
 
-**Werkzeuge** (Nutzer, 2026-11-15 nachmittags: mit der Wirtschaft verknüpft, nicht nur nach Bestellungen):
+Reaktion: Eingang, Werkzeug, Arbeiter über die Prognose (der Verbrauch stehender Gebäude zählt, ihre Werkzeuge und
+Arbeiter sind angefragt). Schlechtes Werkzeug: Das bessere wird zusätzlich angefragt, wenn die Prognose seiner Art einen
+weiteren zulässt; das Gebäude nimmt es beim Bruch des alten aus dem Lager (Materialpriorität des Spiels). Felder fehlen:
+Ein neuer Bauernhof bzw. eine neue Plantage kommt nur an einen Platz mit mindestens 4 Feldknoten. Im Bericht steht je
+Gebäudetyp, wie viele Gebäude welches Problem haben.
+
+**Werkzeuge** (Nutzer, 2026-11-15: mit der Wirtschaft verknüpft; jedes Gebäude mit Werkzeugplatz, unabhängig von
+`baseSpeed`):
 - Werkzeuge sind Waren mit Prognose. Gruppen: alle Werkzeuge einer Art (Eisen- und Kupferaxt), eines Werkzeugplatzes,
   ein einzelnes Werkzeug (z. B. als Forschungskosten).
-- Angefragt zählt auch, was kommende Gebäude brauchen werden (Baustellen, bestellte Baustellen, benötigte Aufträge: das
-  Werkzeug für den Arbeiter, die Werkzeuge der Plätze), dazu der Vorrat `TOOLS_IN_STOCK` = 1 je Art. So entsteht der
-  Mangel, bevor das Gebäude fertig ist.
+- Angefragt zählt auch, was kommende Gebäude und alle Aufträge der Liste brauchen werden (die Werkzeuge der Plätze; das
+  Werkzeug zum Rekrutieren des Arbeiters nur, wo der Beruf noch eines braucht), dazu der Vorrat `TOOLS_IN_STOCK` je Art.
+  So entsteht der Mangel, bevor das Gebäude fertig ist.
+- **Regel für jeden Auftrag:** Die Prognose jedes Werkzeugs, das das Gebäude braucht, muss mit ihm (und allen
+  geplanten Werkzeugen der Baustellen und der Aufträge darüber) 0 oder mehr bleiben. Der Vorrat je Art ist für neue
+  Gebäude da und sperrt sie nicht. Ein Werkzeughersteller rechnet die Werkzeuge mit, die er selbst machen wird.
+  Sonst wartet der Auftrag („Werkzeug fehlt: Saw (Prognose …)“); der Werkzeugmangel bestellt die Werkzeuge und, wenn
+  die Hersteller es nicht schaffen, weitere Hersteller.
 - Bestellt wird das Fehlende je Art (Addon „Werkzeugbestellung“, sonst der Regler je Art, höchstens 10).
-- Werkzeughersteller nach der Bilanzregel: fehlende Werkzeuge aller Gruppen, die er macht, pro Minute, minus was seine
-  Hersteller noch schaffen (kommende, freie Zeit der arbeitenden, stehende mit bearbeitetem Grund) ÷ Arbeitsschritte
-  eines Herstellers.
-- Werkzeughersteller dürfen expandierend kommen (Expansionsliste), aber nicht, solange ein Hersteller freie Zeit hat.
+- Werkzeughersteller nach der Bilanzregel, je Herstellertyp: was er in der Bilanzlänge nicht schafft (Nachfrage −
+  Kapazität) ÷ 7 ÷ Werkzeuge je Minute eines Herstellers. Eine Art wird einmal gezählt (nicht je Gruppe, in der sie
+  vorkommt).
+- Werkzeughersteller dürfen expandierend kommen (Expansionsliste), aber nicht, solange ihre Kapazität die Nachfrage
+  übersteigt.
 
 **Sortierung der Liste:**
 1. Benötigte, die ihr eigenes Problem lösen, dann alle anderen benötigten, dann expandierende.
@@ -1344,15 +1406,15 @@ Ein Auftrag für einen anderen steht nie unter ihm.
 größer als Radius des rodenden Holzfällers + Radius des Försters, in beide Richtungen): Der Förster würde den Wald
 nachpflanzen, und der rodende Holzfäller würde nie abgerissen. Dauerhafte Holzfäller dürfen überall stehen, auch im
 Bereich rodender; ihr Förster darf dort nicht hin, sie stehen dann still, bis der rodende abgerissen ist (Absicht des
-Nutzers). Ein Förster ist benötigt, wenn weniger als 11 Bäume in Reichweite eines dauerhaften Holzfällers stehen. Einer
-je Holzfäller zur Zeit; es warten höchstens so viele Förster-Aufträge, wie Werkzeuge für sie im Lager sind (mindestens
-einer).
+Nutzers). Ein Förster ist benötigt, wenn weniger als 7 Bäume in Reichweite eines dauerhaften Holzfällers stehen. Einer
+je Holzfäller zur Zeit; lassen die Prognosen seiner Werkzeuge oder der Gehilfen keinen weiteren zu, wartet einer, sonst
+gilt die Grenze je Gebäudetyp.
 
-**Eltern-Auftrag folgt sofort** (Nutzer, 2026-11-15 nachmittags): Ist für jeden fehlenden Eingang eines Auftrags ein
-Erzeuger platziert (Baustelle steht), wird der Auftrag sofort gebaut, möglichst nah an einer dieser Baustellen; nicht
-erst, wenn der Erzeuger arbeitet. Weitere Eingänge desselben Auftrags kommen nah an den ersten. Gilt nicht für
-Baumaterial. Solange ein Auftrag auf eine solche Baustelle wartet, plant die KI alle 20 GF (`FOLLOW_UP_GFS`), unabhängig
-vom Schwierigkeitsgrad.
+**Eltern-Auftrag folgt sofort** (Nutzer, 2026-11-15; ohne eine Regel zu überspringen): Steht die Baustelle eines für
+ihn platzierten Eingangs-Erzeugers, zählt sie voll in der Prognose, und der Auftrag wird im selben Schritt neu geprüft.
+Reicht die Prognose seines Eingangs, folgt er sofort, möglichst nah an der Baustelle; reicht sie nicht, kommen weitere
+Erzeuger, bis die Prognose 0 erreicht. Weitere Eingänge desselben Auftrags kommen nah an den ersten. Solange ein Auftrag
+auf eine solche Baustelle wartet, plant die KI alle 20 GF (`FOLLOW_UP_GFS`), unabhängig vom Schwierigkeitsgrad.
 
 **Platzwahl** (Nutzer, 2026-11-15 nachmittags): nach dem, was das Gebäude bearbeitet. Jeder erlaubte Platz bekommt eine
 Bewertung, der beste der abgesuchten Plätze gewinnt (bis zu 8 Lager/Militärgebäude je Schritt, Radius 15). Gewichte in
@@ -1384,6 +1446,8 @@ Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge 
   Eigener Abschnitt „Werkzeugmangel“ je Werkzeuggruppe.
 - „Zuletzt abgerissen“: Abbauer, die die alte KI wegen „nichts mehr in Reichweite“ abreißt, mit Anlass, Vorkommen beim
   Platzieren und Zeit mit Arbeiter (auch als eigene Logzeile).
+- „Gehilfen“: die Prognose der Gehilfen wie bei den Soldaten.
+- „Probleme“: je Gebäudetyp die Zahl der Gebäude mit jedem Problem der Diagnose.
 - „offen: neu, im nächsten Schritt“: im Schritt entstanden (z. B. ein Kind-Auftrag). „offen: suche Bauplatz“: die Suche
   (8 Lager/Militärgebäude je Schritt) geht im nächsten Schritt weiter.
 - Ein „eins von“-Eingang nennt die ganze Gruppe („Eingang fehlt: Fish/Meat/Bread“).
@@ -1406,6 +1470,28 @@ Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge 
 
 - Land und Gebäude streuen stark (ein bis zwei Läufe, Krieg der alten KI).
 - Seltene Spitzen bis 45 ms (Platzsuche mit Bewertung über 8 Mittelpunkte).
+
+**Vergleich zur Fassung vom 17.11.** (7 Karten wie unten, je 2 KI, 3 Zufallswerte = 42 Spieler, 2 h; Spieldaten und
+Konstanten des Nutzers vom 15.11. in beiden Fassungen; vorher = `a4a1803`):
+
+| | vorher | neu |
+|---|---|---|
+| Land nach 1 h / 2 h | 156 674 / 179 005 | 154 353 / 175 398 |
+| Gebäude nach 1 h / 2 h | 4 143 / 6 532 | 4 149 / 5 533 |
+| Militärgebäude nach 2 h | 2 090 | 2 059 |
+| Spieler unter 1000 Land nach 2 h | 4 | 1 |
+| Forschung (Ø Technologien) | 15,4 | 15,7 |
+| Schlossereien nach 2 h (je Spieler) | 488 (11,6) | 115 (2,7) |
+| Eisenschmelzen / Kohleminen / Eisenminen nach 2 h | 335 / 387 / 240 | 142 / 191 / 118 |
+| Mühlen / Waffenschmieden nach 2 h | 335 / 82 | 123 / 43 |
+| Holzfäller / Förster / Sägewerke nach 2 h | 679 / 343 / 262 | 731 / 472 / 296 |
+| Bauernhöfe / Steinbrüche nach 2 h | 317 / 288 | 405 / 325 |
+
+- Neue Fassung, je Bericht (Spieler und Minute): Sägewerke ohne Säge 0,18, Holzfäller ohne Axt 0,52, Eisenschmelzen ohne
+  Tiegel 0,07; Bauernhöfe mit zu wenig Feldern 1,8.
+- Mit den Spieldaten vom 17.11. (`cb4411e`) läuft der Planer fehlerfrei; die Wirtschaft ist kleiner (längere
+  Arbeitszeiten). Beobachtet: Die Baustellen der Militärgebäude der alten KI belegen zeitweise fast das ganze Baumaterial
+  (51 von 52); expandierende Aufträge (rodende Holzfäller) kommen dann lange nicht dran. Klärt sich mit Schritt 3.
 
 **Prüfen auf der Karte eines Spiels:** `ai-battle --from-replay <datei.rpl> --ai aijh ...` nimmt Karte und Einstellungen
 (Addons, Ziel, Startwaren) aus einer Aufzeichnung und spielt sie mit KI-Spielern. Ein Replay lässt sich nicht genau

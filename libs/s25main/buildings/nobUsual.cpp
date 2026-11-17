@@ -589,6 +589,7 @@ void nobUsual::ConsumeWares()
             lastConsumedWare_ = workDesc.waresNeeded[wareIdxToUse];
         // Inventur entsprechend verringern
         owner.DecreaseInventoryWare(workDesc.waresNeeded[wareIdxToUse], 1, WareUse::Production);
+        owner.CountUsedBy(GetBuildingType(), workDesc.waresNeeded[wareIdxToUse]);
 
         // try to get ware from warehouses
         if(numWares[wareIdxToUse] < 2)

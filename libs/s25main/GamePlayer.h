@@ -200,6 +200,11 @@ public:
     /// Helpers created by a warehouse / who became a worker, soldier or carrier (economy statistic)
     void CountHelpersCreated(unsigned count);
     void CountHelpersUsed(unsigned count);
+    /// A helper became a worker of a job (counted as used too)
+    void CountHelperRecruited();
+    /// A worker of a building of the type put a ware at the flag / took an input for a work step (economy statistic)
+    void CountProducedBy(BuildingType bld, GoodType ware);
+    void CountUsedBy(BuildingType bld, GoodType ware);
     /// Soldiers recruited in a warehouse / sent from a warehouse to a military building (economy statistic)
     void CountSoldiersCreated(unsigned count);
     void CountSoldiersUsed(unsigned count);
@@ -219,6 +224,8 @@ public:
     const Inventory& GetInventory() const { return global_inventory; }
     /// Number of building sites and buildings waiting for a worker of each job
     helpers::EnumArray<unsigned, Job> GetNumJobsWanted() const;
+    /// No warehouse could send a worker for the workplace yet (it waits in the list of jobs wanted)
+    bool IsJobWanted(const noRoadNode& workplace) const;
 
     /// Setzt neue Militäreinstellungen
     void ChangeMilitarySettings(const MilitarySettings& military_settings);

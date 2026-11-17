@@ -244,7 +244,28 @@ BOOST_FIXTURE_TEST_CASE(StatisticIsSaved, EconomyFixture)
     BOOST_TEST(stats().GetTotalGained(GoodType::Wood, WareSource::Added) == 4u);
     BOOST_TEST(stats().GetProduced(GoodType::Boards, 10, savedGf) == producedBefore);
     BOOST_TEST(stats().GetBalance(GoodType::Wood, 10, savedGf) == balanceBefore);
+    // Per building type: what the sawmill made and used
+    BOOST_TEST(stats().GetProducedBy(BuildingType::Sawmill, GoodType::Boards, 10, savedGf) == producedBefore);
+    BOOST_TEST(stats().GetUsedBy(BuildingType::Sawmill, GoodType::Wood, 10, savedGf) == 4u);
     checkStockMatchesCounts(player());
+}
+
+BOOST_AUTO_TEST_CASE(CountsPerBuildingType)
+{
+    EconomyStatistics stats;
+    stats.AddProducedBy(BuildingType::Sawmill, GoodType::Boards, 2, 10);
+    stats.AddProducedBy(BuildingType::Sawmill, GoodType::Boards, 1, GFS_PER_MINUTE + 10);
+    stats.AddProducedBy(BuildingType::Woodcutter, GoodType::Wood, 3, GFS_PER_MINUTE + 10);
+    stats.AddUsedBy(BuildingType::Sawmill, GoodType::Wood, 3, GFS_PER_MINUTE + 20);
+    BOOST_TEST(stats.GetProducedBy(BuildingType::Sawmill, GoodType::Boards, 1, GFS_PER_MINUTE + 30) == 1u);
+    BOOST_TEST(stats.GetProducedBy(BuildingType::Sawmill, GoodType::Boards, 2, GFS_PER_MINUTE + 30) == 3u);
+    BOOST_TEST(stats.GetProducedBy(BuildingType::Woodcutter, GoodType::Wood, 2, GFS_PER_MINUTE + 30) == 3u);
+    BOOST_TEST(stats.GetProducedBy(BuildingType::Sawmill, GoodType::Wood, 2, GFS_PER_MINUTE + 30) == 0u);
+    BOOST_TEST(stats.GetUsedBy(BuildingType::Sawmill, GoodType::Wood, 2, GFS_PER_MINUTE + 30) == 3u);
+    stats.AddHelpersUsed(3, GFS_PER_MINUTE + 40);
+    stats.AddHelpersForJobs(2, GFS_PER_MINUTE + 40);
+    BOOST_TEST(stats.GetHelpersUsed(1, GFS_PER_MINUTE + 50) == 3u);
+    BOOST_TEST(stats.GetHelpersForJobs(1, GFS_PER_MINUTE + 50) == 2u);
 }
 
 BOOST_FIXTURE_TEST_CASE(SoldiersRecruitedAndSentAreCounted, EconomyFixture)

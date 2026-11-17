@@ -1294,7 +1294,7 @@ bool nobBaseWarehouse::TryRecruitJob(const Job job)
 
     inventory.Remove(Job::Helper);
     owner.DecreaseInventoryJob(Job::Helper, 1);
-    owner.CountHelpersUsed(1);
+    owner.CountHelperRecruited();
 
     inventory.Add(job);
     owner.IncreaseInventoryJob(job, 1);
