@@ -92,6 +92,9 @@ struct WareGroup
     bool demanded = false;
     /// All wares are tools: they are made on order (EconomyPlanner::OrderTools), not by the state of the group
     bool tools = false;
+    /// The union of two groups sharing wares (neither containing the other): both count the shared wares in their
+    /// stock, only the union sees what both ask for together. No consumer takes it: it decides about shortages only
+    bool combined = false;
     WareStatus status;
 };
 
@@ -110,8 +113,9 @@ enum class OrderCause : uint8_t
     Shortage,
     /// Needed: makes an input the order above (Order::parent) lacks
     Input,
-    /// Needed: makes construction material the order above lacks
-    Material,
+    /// Needed: no producer of a group of construction material works or comes (Order::group): one is needed
+    /// ("Grundausstattung", Nutzer 2026-11-17)
+    BasicSupply,
     /// Needed: a tool maker. Tools are ordered and there is none that makes them, or all of them are busy
     Tools,
     /// Needed: a ware the warehouses need to recruit the soldiers that are missing
@@ -192,8 +196,7 @@ struct Order
     unsigned group = 0;
     /// Renewal: the type of the harvester it renews for
     BuildingType forBuilding = BuildingType::Headquarters;
-    /// Order this one was created for (Input, Material, Tools, Helpers, Renewal for a harvester without a place). 0:
-    /// none
+    /// Order this one was created for (Input, Tools, Helpers, Renewal for a harvester without a place). 0: none
     unsigned parent = 0;
     /// Other orders this one is the solution for too (the same building for the same ware, e.g. one sawmill for the
     /// boards of a farm and of a well). It stands above them as well
@@ -345,9 +348,9 @@ private:
     struct Need
     {
         OrderCause cause = OrderCause::Shortage;
-        /// Input, Material, Helpers: the order it is for
+        /// Input, Helpers: the order it is for
         unsigned parent = 0;
-        /// Shortage, Tools: the group
+        /// Shortage, BasicSupply, Tools: the group
         unsigned group = 0;
         /// Wares per minute that are missing by the forecast (it counts the coming producers and consumers): as many
         /// producers as they need (the orders of other needs for the ware count)
@@ -426,6 +429,9 @@ private:
     unsigned GetGroupIdx(std::vector<GoodType> wares, bool demanded);
     /// Groups which contain all of the (sorted) wares (cached)
     const std::vector<unsigned>& GroupsContaining(const std::vector<GoodType>& wares);
+    /// Unions of the demanded groups sharing wares (neither containing the other), until there are no more (only when
+    /// groups were added)
+    void AddCombinedGroups();
     void UpdatePlanned();
     /// Construction costs, input spaces and/or tools and worker of one more building of the type, for the order
     /// (0: a building site). The status is computed again by RecomputeForecast
@@ -499,6 +505,14 @@ private:
     void AddDepositOrders();
     /// Harvesters for good with few of their source in reach get a renewer
     void AddRenewalOrders();
+    /// Groups of construction material of the buildings the player may build
+    std::vector<unsigned> GetMaterialGroups() const;
+    /// A producer of a ware of the group works or comes: a building not exhausted, a building site, a site ordered, a
+    /// needed order not blocked for want of a way, a place or research (not the orders for the basic supply of the
+    /// group)
+    bool HasBasicProducer(unsigned groupIdx);
+    /// Basic supply: every group of construction material has a producer that works or comes, otherwise one is needed
+    void AddBasicSupplyOrders();
     /// Warehouse for more helpers (the warehouses create them)
     void AddHelpersOrder(unsigned parent);
     /// Storage full: a needed warehouse (one at a time)
@@ -705,6 +719,8 @@ private:
     /// Groups containing all wares of an entry (GroupsContaining) and the number of groups when it was filled
     std::map<std::vector<GoodType>, std::vector<unsigned>> containing_;
     size_t containingGroups_ = 0;
+    /// Number of groups when the unions were added last (AddCombinedGroups)
+    size_t combinedGroups_ = 0;
     /// GetChain per ware in this step
     std::map<GoodType, std::vector<BuildingType>> chainCache_;
     /// Construction material in the warehouses not needed by building sites at the start of the step (for the reasons)

@@ -245,6 +245,42 @@ unsigned AIConstruction::GetMinSoldiersPerMilitarySite()
     return MIN_SOLDIERS_PER_MILITARY_SITE;
 }
 
+BuildingCosts getMaterialOrder(const BuildingType type)
+{
+    BuildingCosts result = BUILDING_COSTS[type];
+    const auto numOthers = [&](const unsigned entry, const GoodType good) {
+        unsigned num = 0;
+        for(unsigned i = 0; i < result.size(); ++i)
+        {
+            if(i != entry && helpers::contains(result[i].wares, good))
+                ++num;
+        }
+        return num;
+    };
+    for(unsigned i = 0; i < result.size(); ++i)
+    {
+        std::vector<std::pair<unsigned, GoodType>> wares;
+        for(const GoodType good : result[i].wares)
+            wares.emplace_back(numOthers(i, good), good);
+        std::stable_sort(wares.begin(), wares.end(),
+                         [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+        for(unsigned j = 0; j < wares.size(); ++j)
+            result[i].wares[j] = wares[j].second;
+    }
+    return result;
+}
+
+std::vector<unsigned> getEntryOrder(const BuildingCosts& costs)
+{
+    std::vector<unsigned> result(costs.size());
+    for(unsigned i = 0; i < result.size(); ++i)
+        result[i] = i;
+    std::stable_sort(result.begin(), result.end(), [&](const unsigned lhs, const unsigned rhs) {
+        return costs[lhs].wares.size() < costs[rhs].wares.size();
+    });
+    return result;
+}
+
 namespace {
     /// Take `amount` wares of the construction material from the free material, the first matching wares first. If
     /// there are not enough, the rest is taken from the first ware (negative) and false is returned
@@ -268,8 +304,9 @@ namespace {
     bool takeMaterial(ConstructionMaterial& free, const BuildingType type)
     {
         bool enough = true;
-        for(const CostEntry& entry : BUILDING_COSTS[type])
-            enough &= takeMaterial(free, entry, entry.amount);
+        const BuildingCosts costs = getMaterialOrder(type);
+        for(const unsigned i : getEntryOrder(costs))
+            enough &= takeMaterial(free, costs[i], costs[i].amount);
         return enough;
     }
 } // namespace
@@ -286,10 +323,12 @@ ConstructionMaterial AIConstruction::GetFreeConstructionMaterial() const
     // What existing building sites still need: costs minus used, lying at the site and on the way
     for(const noBuildingSite* site : aii.GetBuildingSites())
     {
-        const BuildingCosts& costs = BUILDING_COSTS[site->GetBuildingType()];
+        const BuildingCosts costs = getMaterialOrder(site->GetBuildingType());
         const auto& materials = site->GetMaterials();
-        for(unsigned i = 0; i < costs.size() && i < materials.size(); ++i)
+        for(const unsigned i : getEntryOrder(costs))
         {
+            if(i >= materials.size())
+                continue;
             const int have =
               materials[i].used + static_cast<int>(materials[i].delivered.size() + materials[i].ordered.size());
             if(costs[i].amount > have)

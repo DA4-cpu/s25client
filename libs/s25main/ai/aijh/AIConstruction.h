@@ -7,6 +7,7 @@
 #include "helpers/EnumArray.h"
 #include "helpers/OptionalEnum.h"
 #include "gameTypes/BuildingType.h"
+#include "gameTypes/BuildingTypes.h"
 #include "gameTypes/Direction.h"
 #include "gameTypes/GoodTypes.h"
 #include "gameTypes/MapCoordinates.h"
@@ -31,6 +32,13 @@ class ConnectJob;
 
 /// Free construction material per ware (may be negative if more is needed than available)
 using ConstructionMaterial = helpers::EnumArray<int, GoodType>;
+
+/// Construction costs of the building in the order they are taken from the free material: in each entry first the
+/// wares fewer other entries take (wood for walls and roof, adobe only for walls: adobe first). The entries keep their
+/// order (index i matches the materials of a building site)
+BuildingCosts getMaterialOrder(BuildingType type);
+/// Indices of the entries in the order they take their material: fewest wares (alternatives) first
+std::vector<unsigned> getEntryOrder(const BuildingCosts& costs);
 
 class AIConstruction
 {

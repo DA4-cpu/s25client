@@ -1252,7 +1252,16 @@ Prognose, auch bei Werkzeugherstellern.
   Jeder Auftrag nennt seinen Anlass (`OrderCause`, im Log nach „benötigt:“):
   - Mangel einer Warengruppe (Prognose unter 0): Erzeuger, auch als Verbraucher eines Überschusses, wenn dessen
     Produkt im Mangel ist.
-  - Eingang oder Baumaterial, das einem benötigten Auftrag fehlt (Kind-Auftrag, steht über ihm).
+  - Eingang, der einem benötigten Auftrag fehlt (Kind-Auftrag, steht über ihm). Für Baumaterial gibt es keine
+    Kind-Aufträge (Nutzer, 2026-11-17): Seine Erzeuger kommen nur über die Prognose (die Baukosten der Aufträge stehen
+    unter „angefragt“) und die Grundausstattung.
+  - **Grundausstattung** (Nutzer, 2026-11-17): Für jede Baumaterialgruppe (jeder Baukosten-Eintrag eines Gebäudes,
+    das der Spieler bauen darf) arbeitet oder kommt mindestens ein Erzeuger einer ihrer Waren: ein stehendes Gebäude
+    (jedes Problem außer „nichts mehr in Reichweite“), eine Baustelle, eine bestellte Baustelle oder ein benötigter
+    Auftrag, der nicht ohne Weg, Bauplatz oder Forschung blockiert ist. Fehlt er, ist einer benötigt (Anlass
+    „Grundausstattung“, die beste Ware der Gruppe). Kleinere Gruppen zuerst (ein Steinbruch für die Steine zählt auch
+    für Holz/Bretter/Steine/Adobe). Er steht wie Werkzeughersteller und Lager vor jedem Mangel und kommt auch, wenn die
+    Bauarbeiter schon verplant sind.
   - Werkzeughersteller: Werkzeuge fehlen laut Prognose, und die vorhandenen Hersteller schaffen sie nicht.
   - Soldaten fehlen: die Waren zum Rekrutieren.
   - Gehilfen fehlen laut Prognose, Lager voll: ein Lager.
@@ -1265,15 +1274,15 @@ Prognose, auch bei Werkzeugherstellern.
 - Ein expandierender Auftrag löst nie ein Problem und hat keine Rechte: kein Vorrang, kein vorbehaltenes Material, kein
   vorbehaltener Eingang, kein Abbruch von Baustellen. Fehlt ihm etwas, wandert er ans Ende.
 - **Expandierende Lösungsaufträge** (Nutzer, 2026-11-15): Ein expandierender Auftrag darf Aufträge für seine eigenen
-  Probleme anlegen (Eingang, Baumaterial, Gehilfen). Sie gelten selbst als expandierend (keine Rechte, Höchstzahl gilt)
-  und dürfen auch Gebäude außerhalb der Expansionsliste sein (z. B. ein Brunnen für eine expandierende Brauerei).
+  Probleme anlegen (Eingang, Gehilfen; Baumaterial nicht mehr, Nutzer 2026-11-17). Sie gelten selbst als expandierend
+  (keine Rechte, Höchstzahl gilt) und dürfen auch Gebäude außerhalb der Expansionsliste sein (z. B. ein Brunnen für eine
+  expandierende Brauerei).
   Baukosten, Werkzeuge und Arbeiter expandierender Aufträge stehen unter „angefragt“: Nur darüber entstehen aus ihnen
   benötigte Aufträge (z. B. Brettermangel → benötigtes Sägewerk).
 - **Überschreiben:** Ein benötigter Auftrag ersetzt den gleichen expandierenden (gleiches Gebäude, gleiche Ware).
-- **Eine Lösung für mehrere** (Nutzer, 2026-11-15): Fehlt einem Auftrag eine Ware (Eingang, Baumaterial) und gibt es für
-  sie schon einen benötigten Auftrag desselben Gebäudes (für einen anderen Auftrag, aus der Statistik oder schon
+- **Eine Lösung für mehrere** (Nutzer, 2026-11-15): Fehlt einem Auftrag ein Eingang und gibt es für ihn schon einen benötigten Auftrag desselben Gebäudes (für einen anderen Auftrag, aus der Statistik oder schon
   platziert), ist dieser die Lösung für beide; es kommt keiner dazu. Er steht über allen, für die er gilt (Log:
-  „Sawmill (benötigt: Baumaterial, für Boards für Farm, Well)“). Ersetzt die frühere Übernahme des Auftrags aus der
+  „Woodcutter (benötigt: Eingang, für Wood für Sawmill, Charburner)“). Ersetzt die frühere Übernahme des Auftrags aus der
   Statistik. Auch ein blockierter Auftrag ohne Weg gilt für alle Bedarfe derselben Ware mit demselben Gebäude.
 
 **Warengruppen („Bedarfsgruppen“, statt Sonderregeln für „eins von“):**
@@ -1282,6 +1291,18 @@ Prognose, auch bei Werkzeugherstellern.
   Die Gruppen kommen aus den Spieldaten und aus dem, was das Spiel anfragt; im Code ist keine Ware genannt.
 - Bestand, Herstellung, Verbrauch einer Gruppe sind die Summen ihrer Waren. Angefragt und geplant zählt ein Eintrag für jede
   Gruppe, die alle seine Waren enthält.
+- **Vereinigungen** (Fehler gefunden 2026-11-17): Teilen sich zwei Gruppen Waren, ohne dass eine die andere enthält
+  (Mauern Holz/Bretter/Steine/Adobe und Dach Holz/Bretter/Steine/Stroh), zählt jede den gemeinsamen Bestand voll; keine
+  sieht, was die andere anfragt. Beispiel: 5 Holz, ein Holzfäller kostet 4 Mauern und 2 Dach: Mauern frei 1, Dach frei
+  3, beide ohne Mangel, es fehlt aber 1. Deshalb ist die Vereinigung solcher Gruppen eine eigene Gruppe (auch
+  Vereinigungen von Vereinigungen): Sie zählt alle Einträge beider gegen den Bestand aller ihrer Waren und entscheidet
+  über Mangel (nicht über Überschuss, kein Abnehmer nimmt sie). Im Bericht steht eine Vereinigung nur, wenn keine
+  kleinere Gruppe in ihr denselben Mangel schon zeigt.
+- Die Materialprüfung vor dem Platzieren (`DescribeMissingMaterial`, alte KI `HasMaterialFor`) zieht die Einträge
+  nacheinander vom freien Material ab: zuerst die Einträge mit den wenigsten Waren, in jedem Eintrag zuerst die Waren,
+  die weniger andere Einträge nehmen (Adobe vor Holz für die Mauern). Vorher prüfte jeder Eintrag für sich: Mit 4 Holz
+  galten Mauern (4) und Dach (2) als vorhanden. Ein Auftrag löst sein Problem selbst, wenn seine Kette irgendeine Ware
+  eines fehlenden Eintrags macht (ein Steinbruch für fehlende Mauern), nicht nur die erste.
 - Über Aufträge entscheiden nur Gruppen, die ein Abnehmer genau so nimmt („demanded“). Die Ware einer Gruppe: die
   vorher gewählte, solange sie herstellbar ist, sonst die beste (bei Werkzeugen das bessere: Tempo und Ertrag, dann
   Haltbarkeit aus `tools.lua`).
@@ -1330,16 +1351,16 @@ haben einen Wert für die nächste Bilanzlänge (7 Minuten):
 **Anzahl** (Nutzer, 2026-11-15: mindestens ein Auftrag, so viele, bis die Prognose 0 oder positiv ist), für jeden
 Anlass: Erzeuger = ⌈fehlende Menge pro Minute ÷ Wert je Gebäude⌉, jeden Schritt neu (sinkt auch). Die Prognose enthält
 die kommenden und stehenden Gebäude schon.
-- Fehlend: Mangel = −Prognose ÷ 7; Eingang eines Auftrags = sein Verbrauch (Wert je Gebäude) − Prognose ÷ 7;
-  Baumaterial = −Prognose ÷ 7 (nur wenn die Prognose negativ ist).
+- Fehlend: Mangel = −Prognose ÷ 7; Eingang eines Auftrags = sein Verbrauch (Wert je Gebäude) − Prognose ÷ 7.
 - Alle nicht platzierten Aufträge für Gebäude, die eine Ware der Gruppe machen, zählen mit, auch für ein anderes Produkt
   (bei einem expandierenden Bedarf auch die expandierenden). Kleinere Gruppen werden zuerst bearbeitet; ihre Aufträge
   zählen für die größeren Gruppen mit ihren Waren (sonst bestellen „Fisch/Brot/Fleisch“ und „Brot/Fleisch“ getrennt).
-- Die frühere Grenze „für einen anderen Auftrag höchstens einer je Ware“ entfällt: Auch für einen Eingang oder
-  Baumaterial kommen so viele, bis die Prognose 0 erreicht.
+- Die frühere Grenze „für einen anderen Auftrag höchstens einer je Ware“ entfällt: Auch für einen Eingang kommen so
+  viele, bis die Prognose 0 erreicht.
 - Grenzen: Reichen die Eingänge eines Erzeugers nicht oder lassen die Prognosen seiner Werkzeuge oder der Gehilfen keinen
   weiteren zu, wartet einer; ein Gebäude des Typs, das auf einen Eingang, ein Werkzeug oder einen Arbeiter wartet, zählt
-  als dieser eine. Höchstens `MAX_ORDERS_PER_TYPE` je Gebäudetyp. Nie mehr wartende benötigte Aufträge als Bauarbeiter
+  als dieser eine. Höchstens `MAX_ORDERS_PER_TYPE` je Gebäudetyp (ein benötigter Auftrag ersetzt den gleichen
+  expandierenden, der zählt dafür nicht mit). Nie mehr wartende benötigte Aufträge als Bauarbeiter
   (über alle Anlässe gezählt; ein Auftrag je Bedarf kommt immer, er zeigt, was fehlt).
 - Ein Auftrag ist erledigt, sobald sein Gebäude fertig ist. Nur ein Förster bleibt bis nach seiner Anlaufzeit.
 
@@ -1392,8 +1413,8 @@ Ein Auftrag für einen anderen steht nie unter ihm.
 
 **Abarbeitung:**
 - Ein benötigter Auftrag, dem Baumaterial fehlt, behält das vorhandene in jedem Schritt (nicht nur im ersten). Er bearbeitet
-  seine unerfüllte Regel in jedem Schritt (Baumaterial, Bauarbeiter, Gehilfen): Ist seine Lösung weggefallen (z. B. kein
-  Platz für das Sägewerk), wird sie neu bestellt.
+  seine unerfüllte Regel in jedem Schritt (Bauarbeiter, Gehilfen): Ist seine Lösung weggefallen, wird sie neu bestellt.
+  Für fehlendes Baumaterial bestellt er nichts (Nutzer, 2026-11-17).
 - Löst er sein eigenes Problem, bekommt er das Material vor allen anderen; steckt die Kette 3 Minuten fest, werden
   Baustellen außerhalb der Kette ohne verbautes Material abgebrochen, nicht aber Baustellen benötigter Aufträge.
 - Vorbehaltene Eingänge, Kind-Aufträge nur wenn alle Eingänge herstellbar, Höchstzahl je Gebäudetyp nur für
@@ -1537,6 +1558,11 @@ Baustelle mit „eins von“-Kosten jetzt die anderen Waren, wenn eine nicht ges
   abgerissen, hält der Planer die letzten Baumaterialien für das Militär frei, und kein neuer Erzeuger bekommt sie (5
   von 8 Spielern ohne Holzfäller nach 1 h). Lösung mit Schritt 3.
 - Militär im Planer (Schritt 3). Danach soll sich auch „weniger Militär nach 2 h“ klären.
+- Testspiel nach Grundausstattung, Vereinigungen und ohne Baumaterial-Kinder (Neighbourhood, 8 KI, 1 h, gegen
+  `9efc3356`): Land 39 076 → 40 338, Gebäude 348 → 353, Spieler ohne Holzfäller nach 1 h 4 → 1. In beiden Läufen steht
+  bei keinem Spieler ein Förster: Förster kommen nur für dauerhafte Holzfäller, die nur bei Holzmangel benötigt werden;
+  mit den Baukosten nach Tags deckt meist ein Steinbruch die Gruppe, die Holzfäller sind rodend. Ein einziger
+  Steinbruch mit weit entfernten Vorkommen erfüllt die Grundausstattung aller drei Baumaterialgruppen.
 - Forschung (Schritt 4, nach dem Militär): wählt noch das Spiel für die KI (`civ::chooseResearchForAI`).
 - Mangel eines Zwischenprodukts, dessen Endprodukt im Überschuss liegt: bewusst keine Regel (Nutzer, 2026-11-15).
 - Umbau der Eingänge nach Tags (ein Eingang je Tag, mehr als 3, Mischen).
