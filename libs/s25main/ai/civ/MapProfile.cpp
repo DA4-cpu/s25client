@@ -130,6 +130,14 @@ unsigned MapProfile::GetRegionIdx(const MapPoint pt) const
     return (pt.y / REGION_SIZE) * numRegionsX_ + pt.x / REGION_SIZE;
 }
 
+MapPoint MapProfile::GetRegionCenter(const unsigned idx) const
+{
+    const unsigned x = std::min<unsigned>((idx % numRegionsX_) * REGION_SIZE + REGION_SIZE / 2, world_.GetWidth() - 1u);
+    const unsigned y =
+      std::min<unsigned>((idx / numRegionsX_) * REGION_SIZE + REGION_SIZE / 2, world_.GetHeight() - 1u);
+    return MapPoint(static_cast<MapCoord>(x), static_cast<MapCoord>(y));
+}
+
 ResourceProfile MapProfile::GetTotal() const
 {
     ResourceProfile result;

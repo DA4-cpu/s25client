@@ -252,6 +252,8 @@ public:
     unsigned SoldierAvailable(int rank = -1);
 
     bool HuntablesinRange(MapPoint pt, unsigned min);
+    /// At least `min` animals to hunt that a hunter at the point can reach (no rule about other hunters)
+    bool AnimalsInRange(MapPoint pt, unsigned min);
 
     bool ValidTreeinRange(MapPoint pt);
 
@@ -316,11 +318,19 @@ public:
     template<class T_Condition>
     MapPoint FindBestPositionWhere(const MapPoint& pt, AIResource res, BuildingQuality size, unsigned radius,
                                    unsigned borderReserve, const T_Condition& condition, unsigned maxTries = 8);
-    /// Civilization mode: place for a forester in reach of the woodcutter at the point, not where clearing woodcutters
-    /// work (both radii). radius > 0: within this radius of the point instead (a forester for a woodcutter which has no
-    /// place yet)
-    MapPoint FindForesterPosition(const MapPoint& woodcutterPos, const std::vector<MapPoint>& clearingWoodcutters,
-                                  unsigned radius = 0);
+    /// Civilization mode: place for a forester in reach of the woodcutter at the point, not within the distance of the
+    /// points to avoid (clearing woodcutters and charburners: their radius plus the radius of the forester). radius >
+    /// 0: within this radius of the point instead (a forester for a woodcutter which has no place yet)
+    MapPoint FindForesterPosition(const MapPoint& woodcutterPos,
+                                  const std::vector<std::pair<MapPoint, unsigned>>& avoid, unsigned radius = 0);
+    /// Civilization mode: the places for a building of the type within `radius` of the point, the nearest first.
+    /// Checked: reachable, own territory, building quality, no fields of farms and charburners, no site ordered there,
+    /// not at a harbor place, not in the border reserve of the type
+    std::vector<MapPoint> GetPlacesAround(BuildingType type, const MapPoint& around, unsigned radius);
+    /// Civilization mode: the rules of the old AI that stay for the place of a building (Nutzer, 2026-11-17): a
+    /// hunter reaches at least 9 animals, a quarry and a fishery reach their stones and fish, a storehouse is 15 away
+    /// from other warehouses, farm and charburner have space to plant
+    bool IsPlaceAllowed(BuildingType type, const MapPoint& pt);
 
 private:
     Subscription subBuilding, subExpedition, subResource, subRoad, subShip, subBQ;

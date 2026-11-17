@@ -379,15 +379,17 @@ unsigned AIConstruction::GetNumMilitarySitesInProgress() const
     return result;
 }
 
-bool AIConstruction::CanStartMilitarySite() const
+bool AIConstruction::HasSoldiersForMilitarySite() const
 {
-    const unsigned numSites = GetNumMilitarySitesInProgress();
-    if(numSites >= MAX_MILITARY_SITES)
-        return false;
     unsigned numSoldiers = 0;
     for(const nobBaseWarehouse* wh : aii.GetStorehouses())
         numSoldiers += wh->GetNumSoldiers();
-    return numSoldiers >= MIN_SOLDIERS_PER_MILITARY_SITE * (numSites + 1);
+    return numSoldiers >= MIN_SOLDIERS_PER_MILITARY_SITE * (GetNumMilitarySitesInProgress() + 1);
+}
+
+bool AIConstruction::CanStartMilitarySite() const
+{
+    return GetNumMilitarySitesInProgress() < MAX_MILITARY_SITES && HasSoldiersForMilitarySite();
 }
 
 bool AIConstruction::HasSiteAt(const MapPoint pt) const

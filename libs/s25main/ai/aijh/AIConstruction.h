@@ -126,6 +126,9 @@ public:
     void SetPlannerReservation(const ConstructionMaterial& material) { plannerReservation_ = material; }
     /// Number of military building sites, including the just ordered ones
     unsigned GetNumMilitarySitesInProgress() const;
+    /// Enough soldiers in the warehouses for another military building site (MIN_SOLDIERS_PER_MILITARY_SITE for each
+    /// military site including the new one), without the limit of sites
+    bool HasSoldiersForMilitarySite() const;
     /// True if another military building site may be started: less than MAX_MILITARY_SITES in progress and enough
     /// soldiers in the warehouses (MIN_SOLDIERS_PER_MILITARY_SITE for each military site including the new one)
     bool CanStartMilitarySite() const;

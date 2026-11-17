@@ -178,7 +178,7 @@ namespace {
         {
             case OrderCause::Shortage: return "Mangel";
             case OrderCause::Input: return "Eingang";
-            case OrderCause::BasicSupply: return "Grundausstattung";
+            case OrderCause::Territory: return "Gebiet";
             case OrderCause::Tools: return "Werkzeughersteller";
             case OrderCause::Soldiers: return "für Soldaten";
             case OrderCause::Helpers: return "für Gehilfen";
@@ -1307,6 +1307,15 @@ EconomyPlanner::WayCheck EconomyPlanner::CheckWay(const unsigned recipeIdx, cons
         result.reason = failed       ? buildingName(recipe.building) + ": kein Bauplatz" :
                         !sourceThere ? "nicht im Gebiet: " + civAI_.GetGraph().GetSourceName(recipe.source) :
                                        buildingName(recipe.building) + " nicht erforscht";
+        // The source is on the map, only outside the territory: a military building can get it
+        if(!failed && !sourceThere && player_.IsBuildingEnabled(recipe.building)
+           && civAI_.GetMap().GetTotal().GetAmount(recipe.source) > 0)
+        {
+            result.outside = true;
+            result.outsideBuilding = recipe.building;
+            result.outsideWare = good;
+            result.outsideSource = recipe.source;
+        }
         wayCache_[key] = result;
         return result;
     }
@@ -1326,6 +1335,13 @@ EconomyPlanner::WayCheck EconomyPlanner::CheckWay(const unsigned recipeIdx, cons
                 inputReason = "kein Weg zu " + wareName(input);
                 if(!ways.empty())
                     inputReason += " (" + ways.front().reason + ")";
+                if(!ways.empty() && ways.front().outside)
+                {
+                    result.outside = true;
+                    result.outsideBuilding = ways.front().outsideBuilding;
+                    result.outsideWare = ways.front().outsideWare;
+                    result.outsideSource = ways.front().outsideSource;
+                }
             }
             result.missingInputs.push_back(input);
             return {false, 0u};
@@ -1621,8 +1637,11 @@ const Order* EconomyPlanner::Find(const unsigned id) const
 
 Order* EconomyPlanner::AddOrder(Order order)
 {
-    order.kind = (order.cause == OrderCause::Expansion || order.cause == OrderCause::Deposits) ? OrderKind::Expanding :
-                                                                                                 OrderKind::Needed;
+    // Military buildings: needed or expanding like the order they are for (set by AddTerritoryOrder)
+    if(order.cause != OrderCause::Territory)
+        order.kind = (order.cause == OrderCause::Expansion || order.cause == OrderCause::Deposits) ?
+                       OrderKind::Expanding :
+                       OrderKind::Needed;
     // Orders made to solve a problem of an expanding order are expanding too
     if(order.parent != 0)
     {
@@ -1744,10 +1763,10 @@ double EconomyPlanner::GetUrgency(const Order& root) const
         case OrderCause::Helpers:
         case OrderCause::Storage:
         case OrderCause::Tools: return -1e12;
-        // Without construction material nothing is built: before every shortage too
-        case OrderCause::BasicSupply: return -1e12;
         // Orders for another one which is gone (it was placed meanwhile): as soon as possible
         case OrderCause::Input: return -1e11;
+        case OrderCause::Territory:
+            return root.kind == OrderKind::Expanding ? GetExpandingScore(root) : forecastOf(root.forWare);
         case OrderCause::Expansion:
         case OrderCause::Deposits: return GetExpandingScore(root);
     }
@@ -1857,7 +1876,13 @@ std::vector<const Order*> EconomyPlanner::GetList() const
 
 bool EconomyPlanner::IsChainBlocked(unsigned id) const
 {
-    for(const Order* order = Find(id); order; order = order->parent ? Find(order->parent) : nullptr)
+    // A military building for an order without a place is built because that one is blocked
+    const Order* first = Find(id);
+    if(first && first->cause == OrderCause::Territory)
+        return first->state == OrderState::Blocked
+               && (first->retry.kind == RetryCondition::Kind::Research
+                   || first->retry.kind == RetryCondition::Kind::NoPlace);
+    for(const Order* order = first; order; order = order->parent ? Find(order->parent) : nullptr)
     {
         if(order->state != OrderState::Blocked)
             continue;
@@ -2012,8 +2037,7 @@ bool EconomyPlanner::IsCauseValid(const Order& order)
             // This input does not suffice (any of: none of them suffices)
             return recipe->consumeEach ? !InputSuffices(order.forWare, *recipe) : !InputsSuffice(*recipe);
         }
-        case OrderCause::BasicSupply:
-            return helpers::contains(GetMaterialGroups(), order.group) && !HasBasicProducer(order.group);
+        case OrderCause::Territory: return IsTerritoryNeeded(order);
         case OrderCause::Tools:
             // Tools its building makes are still short
             return helpers::contains_if(groups_, [&](const WareGroup& group) {
@@ -2113,7 +2137,6 @@ void EconomyPlanner::CreateOrders()
     // The forecast of the helpers leaves none for one more building: a warehouse (it creates helpers)
     if(helpers_.forecast < 1)
         AddHelpersOrder(0);
-    AddBasicSupplyOrders();
     // Surpluses: an expanding consumer (a consumer whose product is short is chosen by the shortage). Not of a union of
     // groups: no consumer takes it
     for(unsigned i = 0; i < groups_.size(); ++i)
@@ -2131,6 +2154,7 @@ void EconomyPlanner::CreateOrders()
     AddDepositOrders();
     AddRenewalOrders();
     AddStorageOrder();
+    AddExpandingTerritoryOrder();
 }
 
 void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
@@ -2144,8 +2168,7 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
             return false;
         switch(need.cause)
         {
-            case OrderCause::Shortage:
-            case OrderCause::BasicSupply: return order.group == need.group;
+            case OrderCause::Shortage: return order.group == need.group;
             case OrderCause::Soldiers: return true;
             default: return order.parent == need.parent;
         }
@@ -2158,6 +2181,15 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
         std::string reason = "kein Weg zu " + wareName(good);
         if(!ways.empty())
             reason += " (" + ways.front().reason + ")";
+        // The source is only outside the territory: a military building toward it (needed for a needed need,
+        // expanding for an expanding one)
+        if(!ways.empty() && ways.front().outside)
+        {
+            const Order* forOrder = need.parent ? Find(need.parent) : nullptr;
+            const bool expanding = need.expanding || (forOrder && forOrder->kind == OrderKind::Expanding);
+            AddTerritoryOrder(TerritoryNeed::Source, expanding ? OrderKind::Expanding : OrderKind::Needed, 0,
+                              ways.front().outsideWare, ways.front().outsideBuilding, ways.front().outsideSource);
+        }
         Order* blocked = need.parent ? Find(need.parent) : nullptr;
         if(blocked)
         {
@@ -2229,8 +2261,6 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
             return;
         if(need.cause == OrderCause::Shortage)
             shortageNotes_[need.group] = wareName(good) + ": " + note;
-        else if(need.cause == OrderCause::BasicSupply)
-            shortageNotes_[need.group] = "Grundausstattung, " + wareName(good) + ": " + note;
         else if(need.cause == OrderCause::Soldiers)
             soldierNotes_[good] = note;
     };
@@ -2250,7 +2280,7 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
     };
     // The wares of the need: the group of a shortage (any of them will do), otherwise the ware
     std::vector<GoodType> wares{good};
-    if((need.cause == OrderCause::Shortage || need.cause == OrderCause::BasicSupply) && need.group < groups_.size())
+    if(need.cause == OrderCause::Shortage && need.group < groups_.size())
         wares = groups_[need.group].wares;
     // Orders of this need, and the other orders not placed whose building makes one of the wares (needed ones; for an
     // expanding order also the expanding ones). They count with what they make: one solution for several needs
@@ -2288,9 +2318,6 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
         wanted = perProducer > 0 ? static_cast<unsigned>(std::ceil(remaining / perProducer - 1e-9)) : 1u;
     if(need.perMinute > 0 && wanted == 0 && own.empty() && others.empty())
         wanted = 1;
-    // Basic supply: one producer (the others for the group are present, they are no order of this need)
-    if(need.cause == OrderCause::BasicSupply)
-        wanted = 1;
     coveredBy << "gedeckt: fehlen " << need.perMinute << "/min, andere Aufträge " << others.size() << " (je "
               << perProducer << "/min)";
     // An order for another one whose need the others cover: they are its solution too and stand above it
@@ -2315,11 +2342,8 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
           return o.kind == OrderKind::Needed && o.state != OrderState::Placed && !IsChainBlocked(o.id);
       }));
     const unsigned builders = GetAvailableBuilders();
-    unsigned room =
+    const unsigned room =
       std::max(builders > numWaiting ? builders - numWaiting : 0u, (own.empty() && others.empty()) ? 1u : 0u);
-    // Basic supply: its one order comes always (without construction material nothing is built)
-    if(need.cause == OrderCause::BasicSupply)
-        room = std::max(room, 1u);
     wanted = std::min(wanted, static_cast<unsigned>(own.size()) + room);
     // Not more than MAX_ORDERS_PER_TYPE of the building type at the same time (the own ones of the type included). A
     // needed order replaces the same expanding one (AddOrder): those do not count
@@ -2692,99 +2716,6 @@ void EconomyPlanner::AddStorageOrder()
     AddOrder(std::move(order));
 }
 
-std::vector<unsigned> EconomyPlanner::GetMaterialGroups() const
-{
-    // The groups of the cost entries of every building the player may build, smaller groups first (a quarry for the
-    // stones is a producer of the walls of wood, boards or stones too)
-    std::vector<unsigned> result;
-    for(const auto bld : helpers::enumRange<BuildingType>())
-    {
-        if(!player_.IsBuildingEnabled(bld))
-            continue;
-        for(const CostEntry& entry : BUILDING_COSTS[bld])
-        {
-            const auto it = groupIndex_.find(sorted(entry.wares));
-            if(it != groupIndex_.end() && !helpers::contains(result, it->second))
-                result.push_back(it->second);
-        }
-    }
-    std::stable_sort(result.begin(), result.end(), [this](const unsigned lhs, const unsigned rhs) {
-        return groups_[lhs].wares.size() < groups_[rhs].wares.size();
-    });
-    return result;
-}
-
-bool EconomyPlanner::HasBasicProducer(const unsigned groupIdx)
-{
-    const std::vector<GoodType> wares = groups_[groupIdx].wares;
-    const auto makesAny = [&](const BuildingType bld) {
-        return std::any_of(wares.begin(), wares.end(), [&](const GoodType good) { return MakesWare(bld, good); });
-    };
-    const AIJH::AIConstruction& construction = aijh_.GetConstruction();
-    std::vector<BuildingType> checked;
-    for(const Recipe& recipe : civAI_.GetGraph().GetRecipes())
-    {
-        if(helpers::contains(checked, recipe.building) || !makesAny(recipe.building))
-            continue;
-        checked.push_back(recipe.building);
-        if(snapshot_.buildings[recipe.building].numSites + construction.GetNumPendingSites(recipe.building) > 0)
-            return true;
-        // A building with any problem but an exhausted source works once the problem is solved
-        for(const nobUsual* building : player_.GetBuildingRegister().GetBuildings(recipe.building))
-        {
-            std::vector<GoodType> missing;
-            const Diagnosis diagnosis = GetDiagnosis(*building, recipe, missing);
-            if(diagnosis != Diagnosis::Exhausted && diagnosis != Diagnosis::Stopped)
-                return true;
-        }
-    }
-    return std::any_of(orders_.begin(), orders_.end(), [&](const Order& order) {
-        return order.kind == OrderKind::Needed && order.state != OrderState::Placed
-               && !(order.cause == OrderCause::BasicSupply && order.group == groupIdx) && !IsChainBlocked(order.id)
-               && makesAny(order.building);
-    });
-}
-
-void EconomyPlanner::AddBasicSupplyOrders()
-{
-    // Basic supply (Nutzer, 2026-11-17): a producer of every group of construction material works or comes. Otherwise
-    // one is needed (the best ware of the group; the one chosen before as long as it can be made)
-    for(const unsigned idx : GetMaterialGroups())
-    {
-        if(HasBasicProducer(idx))
-            continue;
-        GoodType good = GoodType::Nothing;
-        const auto before = std::find_if(orders_.begin(), orders_.end(), [idx](const Order& order) {
-            return order.cause == OrderCause::BasicSupply && order.group == idx;
-        });
-        if(before != orders_.end())
-        {
-            const std::vector<WayCheck> ways = RankProducers(before->forWare, false, 0);
-            if(!ways.empty() && !ways.front().blocked)
-                good = before->forWare;
-        }
-        const std::vector<GoodType> wares = groups_[idx].wares;
-        if(good == GoodType::Nothing)
-            good = wares.size() == 1u ? wares.front() : ChooseWare(wares);
-        if(good == GoodType::Nothing)
-            good = wares.front(); // No way to any of them: the first one shows why
-        // An order of the group for another ware is replaced
-        std::vector<unsigned> replaced;
-        for(const Order& order : orders_)
-        {
-            if(order.cause == OrderCause::BasicSupply && order.group == idx && order.forWare != good
-               && order.state != OrderState::Placed && !HasPlacedChild(order.id))
-                replaced.push_back(order.id);
-        }
-        for(const unsigned id : replaced)
-            Remove(id);
-        Need need;
-        need.cause = OrderCause::BasicSupply;
-        need.group = idx;
-        ResolveShortage(good, need);
-    }
-}
-
 void EconomyPlanner::AddRenewalOrders()
 {
     // A harvester for good (not clearing) gets a renewer when fewer than RENEW_BELOW of its source are in its reach.
@@ -2853,46 +2784,11 @@ void EconomyPlanner::ProcessList()
     keptInputs_.clear();
     toolsClaimed_.assign(groups_.size(), 0u);
     helpersClaimed_ = 0;
-    militaryKept_ = BuildingType::Headquarters;
     std::vector<unsigned> ids;
     for(const Order* order : GetList())
         ids.push_back(order->id);
-    bool militaryDone = false;
     for(const unsigned id : ids)
-    {
-        const Order* order = Find(id);
-        // Military buildings are still placed by the old AI: before the first expanding order the material for its
-        // next military building is kept free
-        if(!militaryDone && order && order->kind == OrderKind::Expanding)
-        {
-            KeepMaterialForMilitary();
-            militaryDone = true;
-        }
         ProcessOrder(id, searchBudget);
-    }
-    if(!militaryDone)
-        KeepMaterialForMilitary();
-}
-
-void EconomyPlanner::KeepMaterialForMilitary()
-{
-    const AIJH::AIConstruction& construction = aijh_.GetConstruction();
-    if(!construction.CanStartMilitarySite())
-        return;
-    // The cheapest military building the player may build
-    unsigned bestCost = std::numeric_limits<unsigned>::max();
-    for(const BuildingType bld : BuildingProperties::militaryBldTypes)
-    {
-        if(player_.IsBuildingEnabled(bld) && getTotalCost(bld) < bestCost)
-        {
-            bestCost = getTotalCost(bld);
-            militaryKept_ = bld;
-        }
-    }
-    if(militaryKept_ == BuildingType::Headquarters)
-        return;
-    AIJH::ConstructionMaterial taken{};
-    takeMaterial(freeMaterial_, militaryKept_, taken);
 }
 
 void EconomyPlanner::MoveToEnd(Order& order, const std::string& reason, const RetryCondition& retry)
@@ -2915,7 +2811,7 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
         return;
     // Created for an order that cannot be built until the situation changes: of no use (e.g. the well for a brewery
     // without grain)
-    if(order->parent != 0 && IsChainBlocked(order->parent))
+    if(order->parent != 0 && order->cause != OrderCause::Territory && IsChainBlocked(order->parent))
     {
         Remove(id);
         return;
@@ -3117,6 +3013,10 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
                         noWay = "kein Weg zu " + wareName(input);
                         if(!ways.empty())
                             noWay += " (" + ways.front().reason + ")";
+                        if(!ways.empty() && ways.front().outside)
+                            AddTerritoryOrder(TerritoryNeed::Source, order->kind, 0, ways.front().outsideWare,
+                                              ways.front().outsideBuilding, ways.front().outsideSource);
+                        order = Find(id);
                         break;
                     }
                 }
@@ -3192,6 +3092,8 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     if(pos.isValid())
     {
         const bool clearing = order->clearing;
+        // A military building gets its type at the place
+        const BuildingType bld = order->building;
         if(!aijh_.PlaceBuilding(bld, pos))
             return;
         AIJH::ConstructionMaterial taken{};
@@ -3216,9 +3118,10 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
         order = Find(id);
         order->state = OrderState::Placed;
         RecomputeForecast();
-        if(!needed)
+        // Expanding orders are done with the building site. Military buildings stay until they are finished: one
+        // expanding at a time, at most MAX_ORDERS_PER_TYPE of a type with their sites
+        if(!needed && order->cause != OrderCause::Territory)
         {
-            // Expanding orders are done with the building site
             Remove(id);
             return;
         }
@@ -3240,9 +3143,20 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
         return;
     }
     const RetryCondition noPlace{RetryCondition::Kind::NoPlace, GetSituation()};
+    const Recipe* noPlaceRecipe = FindRecipe(bld);
+    const Source noPlaceSource = noPlaceRecipe && noPlaceRecipe->reach > 0 ? noPlaceRecipe->source : Source{};
+    if(order->cause == OrderCause::Territory)
+    {
+        order->state = OrderState::Blocked;
+        order->reason = "kein Bauplatz an der Grenze";
+        order->retry = noPlace;
+        return;
+    }
     if(!needed)
     {
         MoveToEnd(*order, "kein Bauplatz", noPlace);
+        // A military building for it (expanding like it)
+        AddTerritoryOrder(TerritoryNeed::Place, OrderKind::Expanding, id, order->forWare, bld, noPlaceSource);
         return;
     }
     // A harvester for good without a place with enough of its source in reach: a renewer is ordered for it, the
@@ -3271,10 +3185,11 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     // No place for this way: the next way to the ware is tried, this one again when the situation changed
     if(order->forWare != GoodType::Nothing && !order->clearing
        && (order->cause == OrderCause::Shortage || order->cause == OrderCause::Input
-           || order->cause == OrderCause::BasicSupply || order->cause == OrderCause::Soldiers
-           || order->cause == OrderCause::Tools))
+           || order->cause == OrderCause::Soldiers || order->cause == OrderCause::Tools))
     {
         failedWays_.push_back({order->forWare, bld, GetSituation()});
+        // A military building for the way (needed like the order; it is for the way, the order goes)
+        AddTerritoryOrder(TerritoryNeed::Place, order->kind, 0, order->forWare, bld, noPlaceSource);
         Remove(id);
         return;
     }
@@ -3282,6 +3197,7 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     order->reason = "kein Bauplatz";
     order->retry = noPlace;
     RemoveUnplacedChildren(id);
+    AddTerritoryOrder(TerritoryNeed::Place, OrderKind::Needed, id, order->forWare, bld, noPlaceSource);
 }
 
 std::string EconomyPlanner::CheckRules(const Order& order, RetryCondition& retry) const
@@ -3314,6 +3230,13 @@ std::string EconomyPlanner::CheckRules(const Order& order, RetryCondition& retry
     {
         retry = {RetryCondition::Kind::Builder, GetSituation()};
         return "kein Bauarbeiter";
+    }
+    // Military building: a soldier free in the warehouses for every military building site and this one (rule of
+    // the old AI, without its limit of building sites)
+    if(BuildingProperties::IsMilitary(bld) && !aijh_.GetConstruction().HasSoldiersForMilitarySite())
+    {
+        retry = {RetryCondition::Kind::Soldiers, GetSituation()};
+        return "keine Soldaten frei";
     }
     // The forecast of its tools and of the helpers allows it (the building sites and the orders above it count)
     const std::string toolsAndHelpers = CheckToolsAndHelpers(&order, bld, true);
@@ -3546,6 +3469,7 @@ void EconomyPlanner::SolveRule(const unsigned id, const RetryCondition& retry)
         case RetryCondition::Kind::Tool:
         case RetryCondition::Kind::Research:
         case RetryCondition::Kind::NoWay:
+        case RetryCondition::Kind::Soldiers:
         case RetryCondition::Kind::NoPlace:
             // Tools: ordered (OrderTools), their makers come with ResolveTools. Research or territory needed
             break;
@@ -3766,6 +3690,7 @@ bool EconomyPlanner::IsRetryMet(const RetryCondition& retry, const Order& order)
         case RetryCondition::Kind::Tool: return CheckToolsAndHelpers(&order, bld, true).empty();
         case RetryCondition::Kind::Research: return situation.researched != retry.situation.researched;
         case RetryCondition::Kind::NoWay: return false; // Checked every step anyway
+        case RetryCondition::Kind::Soldiers: return aijh_.GetConstruction().HasSoldiersForMilitarySite();
         case RetryCondition::Kind::NoPlace:
             // More land, or buildings removed (their places are free)
             return situation.land != retry.situation.land || situation.buildings < retry.situation.buildings;
@@ -3846,63 +3771,82 @@ bool EconomyPlanner::IsFieldPlace(const MapPoint pt) const
 MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool& searchedAll)
 {
     searchedAll = false;
+    if(order.cause == OrderCause::Territory)
+    {
+        if(searchBudget == 0)
+            return MapPoint::Invalid();
+        --searchBudget;
+        return SearchMilitaryPlace(order, searchedAll);
+    }
     const Recipe* recipe = FindRecipe(order.building);
     const bool renewal = order.cause == OrderCause::Renewal;
-    // Where its building should stand close to (the site of an input ordered for it): searched around first
-    const MapPoint preferred = (renewal || order.besideRenewer) ? MapPoint::Invalid() : GetPreferredPoint(order);
-    std::vector<MapPoint> centers;
+    const bool warehouse = BuildingProperties::IsWareHouse(order.building);
+    const bool harvester = recipe && recipe->reach > 0 && recipe->source.kind != SourceKind::None;
+    const bool material = recipe
+                          && std::any_of(recipe->outputs.begin(), recipe->outputs.end(),
+                                         [this](const GoodType good) { return isMaterial_[good]; });
+    // Anchors (Nutzer, 2026-11-17: the rules of the placement of 15.11., implemented better). First, in this order:
+    // the point given (renewer at its harvester, harvester beside its renewer), the site of an input placed for it,
+    // for a processing building the partners (producers of its inputs, users of its product). Then in turn: the
+    // warehouses (construction material producers near the warehouses), for harvesters and warehouses also the
+    // military buildings (their sources and the land may be anywhere in the territory)
+    std::vector<MapPoint> anchors;
+    std::vector<MapPoint> partners;
     if(order.near.isValid())
-        centers.push_back(order.near);
+        anchors.push_back(order.near);
     else
     {
+        const MapPoint preferred = (renewal || order.besideRenewer) ? MapPoint::Invalid() : GetPreferredPoint(order);
         if(preferred.isValid())
-            centers.push_back(preferred);
-        // Processing near the warehouses, buildings working on the map (and warehouses) also near the military
-        // buildings (like the old AI)
-        for(const nobBaseWarehouse* warehouse : player_.GetBuildingRegister().GetStorehouses())
-            centers.push_back(warehouse->GetPos());
-        const bool worksOnMap = !recipe || recipe->source.kind != SourceKind::None;
-        if(worksOnMap)
+            anchors.push_back(preferred);
+        if(recipe && !harvester && !warehouse)
         {
-            for(const nobMilitary* military : player_.GetBuildingRegister().GetMilitaryBuildings())
-                centers.push_back(military->GetPos());
+            partners = GetPartners(*recipe, 30);
+            if(!material)
+            {
+                for(unsigned i = 0; i < partners.size() && i < 3u; ++i)
+                    anchors.push_back(partners[i]);
+            }
         }
     }
-    if(centers.empty())
+    const unsigned first = static_cast<unsigned>(anchors.size());
+    if(!order.near.isValid())
+    {
+        for(const nobBaseWarehouse* building : player_.GetBuildingRegister().GetStorehouses())
+            anchors.push_back(building->GetPos());
+        if(harvester || warehouse)
+        {
+            for(const nobMilitary* military : player_.GetBuildingRegister().GetMilitaryBuildings())
+                anchors.push_back(military->GetPos());
+        }
+    }
+    if(anchors.empty())
     {
         searchedAll = true;
         return MapPoint::Invalid();
     }
-    std::vector<MapPoint> clearing = player_.GetClearingWoodcutters();
-    clearing.insert(clearing.end(), clearingPending_.begin(), clearingPending_.end());
-    const GameWorldBase& world = player_.GetGameWorld();
-    // Rules of the user on top of the places of the old AI: a clearing woodcutter and a forester never so close that
-    // their reaches overlap
-    const Renewer* treeRenewer = nullptr;
-    if(recipe && order.clearing)
-        treeRenewer = FindRenewer(recipe->source);
-    const auto nearRenewer = [&](const MapPoint pos) {
-        if(!treeRenewer)
-            return false;
-        const unsigned distance = recipe->reach + treeRenewer->reach;
+    const unsigned radius = warehouse ? STOREHOUSE_SEARCH_RADIUS : SEARCH_RADIUS;
+    std::vector<std::pair<MapPoint, unsigned>> avoid;
+    if(renewal && order.building == BuildingType::Forester)
+    {
+        // A forester never where its reach overlaps that of a clearing woodcutter or a charburner (Nutzer)
+        const unsigned foresterReach = nofFarmhand::GetWorkRadius(Job::Forester);
+        std::vector<MapPoint> clearing = player_.GetClearingWoodcutters();
+        clearing.insert(clearing.end(), clearingPending_.begin(), clearingPending_.end());
+        for(const MapPoint pos : clearing)
+            avoid.emplace_back(pos, nofFarmhand::GetWorkRadius(Job::Woodcutter) + foresterReach);
         const BuildingRegister& buildings = player_.GetBuildingRegister();
-        for(const nobUsual* building : buildings.GetBuildings(treeRenewer->building))
-        {
-            if(world.CalcDistance(pos, building->GetPos()) <= distance)
-                return true;
-        }
+        for(const nobUsual* charburner : buildings.GetBuildings(BuildingType::Charburner))
+            avoid.emplace_back(charburner->GetPos(), nofFarmhand::GetWorkRadius(Job::CharBurner) + foresterReach);
         for(const noBuildingSite* site : buildings.GetBuildingSites())
         {
-            if(site->GetBuildingType() == treeRenewer->building && world.CalcDistance(pos, site->GetPos()) <= distance)
-                return true;
+            if(site->GetBuildingType() == BuildingType::Charburner)
+                avoid.emplace_back(site->GetPos(), nofFarmhand::GetWorkRadius(Job::CharBurner) + foresterReach);
         }
-        return false;
-    };
-    // The place near the site of its input first, then the other centers in turn
-    const unsigned first = preferred.isValid() && !order.near.isValid() ? 1u : 0u;
+    }
     while(searchBudget > 0)
     {
-        if(order.centersTried >= centers.size())
+        if(order.centersTried >= anchors.size())
         {
             order.centersTried = 0;
             searchedAll = true;
@@ -3910,39 +3854,475 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
         }
         const unsigned idx = order.centersTried < first ?
                                order.centersTried :
-                               first + (order.nextCenter++) % static_cast<unsigned>(centers.size() - first);
-        const MapPoint center = centers[idx];
+                               first + (order.nextCenter++) % static_cast<unsigned>(anchors.size() - first);
+        const MapPoint anchor = anchors[idx];
         ++order.centersTried;
         --searchBudget;
-        aijh_.UpdateNodesAround(center, SEARCH_RADIUS);
-        // The places of the old AI. A harvester beside the renewer planted for it, a renewer in reach of its harvester
-        // (rules of the user)
+        aijh_.UpdateNodesAround(anchor, radius);
         MapPoint pos;
         if(order.besideRenewer)
         {
+            // Beside the renewer planted for it (the source in its reach does not count)
             const Renewer* renewer = recipe ? FindRenewer(recipe->source) : nullptr;
-            pos = aijh_.FindHarvesterPositionBeside(order.building, center, renewer ? renewer->reach : 2u);
+            pos = aijh_.FindHarvesterPositionBeside(order.building, anchor, renewer ? renewer->reach : 2u);
+            if(pos.isValid() && !IsPlaceValid(order, recipe, pos))
+                pos = MapPoint::Invalid();
         } else if(renewal && order.building == BuildingType::Forester)
-            pos = aijh_.FindForesterPosition(center, clearing, order.near.isValid() ? 0u : SEARCH_RADIUS);
-        else
-            pos = aijh_.FindPositionForBuildingAround(order.building, center);
-        // A harvester only where enough of its source is in reach (not beside its renewer: it plants it)
-        if(pos.isValid() && recipe && recipe->reach > 0 && !order.besideRenewer
-           && MapProfile::CountSourceNodes(world, pos, recipe->reach, recipe->source)
-                < GetMinSourceInReach(order, *recipe))
-            pos = MapPoint::Invalid();
-        // No building on the fields of plantations, farms and plantations only with enough nodes for fields
-        if(pos.isValid() && IsFieldPlace(pos))
-            pos = MapPoint::Invalid();
-        if(pos.isValid() && NeedsFields(order.building) && !order.besideRenewer
-           && CountFieldNodes(order.building, pos, false) < MIN_FIELD_NODES)
-            pos = MapPoint::Invalid();
-        if(pos.isValid() && nearRenewer(pos))
-            pos = MapPoint::Invalid();
+        {
+            // In reach of its woodcutter
+            pos = aijh_.FindForesterPosition(anchor, avoid, order.near.isValid() ? 0u : SEARCH_RADIUS);
+            if(pos.isValid() && IsFieldPlace(pos))
+                pos = MapPoint::Invalid();
+        } else
+            pos = FindPlaceNear(order, recipe, anchor, radius, partners);
         if(pos.isValid())
         {
             order.centersTried = 0;
             return pos;
+        }
+    }
+    return MapPoint::Invalid();
+}
+
+std::vector<MapPoint> EconomyPlanner::GetPartners(const Recipe& recipe, const unsigned max) const
+{
+    // Producers of an input, users of the product (buildings and sites)
+    std::vector<BuildingType> types;
+    for(const Recipe& other : civAI_.GetGraph().GetRecipes())
+    {
+        if(other.building == recipe.building || helpers::contains(types, other.building))
+            continue;
+        const bool makesInput = std::any_of(other.outputs.begin(), other.outputs.end(), [&](const GoodType good) {
+            return helpers::contains(recipe.inputs, good);
+        });
+        const bool usesProduct = std::any_of(other.inputs.begin(), other.inputs.end(), [&](const GoodType good) {
+            return helpers::contains(recipe.outputs, good);
+        });
+        if(makesInput || usesProduct)
+            types.push_back(other.building);
+    }
+    const GameWorldBase& world = player_.GetGameWorld();
+    const BuildingRegister& buildings = player_.GetBuildingRegister();
+    std::vector<std::pair<unsigned, MapPoint>> found;
+    const auto add = [&](const MapPoint pos) {
+        unsigned distance = std::numeric_limits<unsigned>::max();
+        for(const nobBaseWarehouse* warehouse : buildings.GetStorehouses())
+            distance = std::min(distance, world.CalcDistance(pos, warehouse->GetPos()));
+        found.emplace_back(distance, pos);
+    };
+    for(const BuildingType bld : types)
+    {
+        if(!BuildingProperties::IsUsual(bld))
+            continue;
+        for(const nobUsual* building : buildings.GetBuildings(bld))
+            add(building->GetPos());
+    }
+    for(const noBuildingSite* site : buildings.GetBuildingSites())
+    {
+        if(helpers::contains(types, site->GetBuildingType()))
+            add(site->GetPos());
+    }
+    std::stable_sort(found.begin(), found.end(),
+                     [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+    std::vector<MapPoint> result;
+    for(unsigned i = 0; i < found.size() && i < max; ++i)
+        result.push_back(found[i].second);
+    return result;
+}
+
+bool EconomyPlanner::IsPlaceValid(const Order& order, const Recipe* recipe, const MapPoint pt)
+{
+    const GameWorldBase& world = player_.GetGameWorld();
+    const BuildingType bld = order.building;
+    const BuildingRegister& buildings = player_.GetBuildingRegister();
+    // Never on the fields of plantations
+    if(IsFieldPlace(pt))
+        return false;
+    // The reach of a clearing woodcutter never overlaps that of a forester, the reach of a charburner never that of a
+    // forester (Nutzer, both ways)
+    const auto nearForester = [&](const unsigned distance) {
+        for(const nobUsual* building : buildings.GetBuildings(BuildingType::Forester))
+        {
+            if(world.CalcDistance(pt, building->GetPos()) <= distance)
+                return true;
+        }
+        for(const noBuildingSite* site : buildings.GetBuildingSites())
+        {
+            if(site->GetBuildingType() == BuildingType::Forester && world.CalcDistance(pt, site->GetPos()) <= distance)
+                return true;
+        }
+        return false;
+    };
+    const unsigned foresterReach = nofFarmhand::GetWorkRadius(Job::Forester);
+    if(order.clearing && recipe && FindRenewer(recipe->source) && nearForester(recipe->reach + foresterReach))
+        return false;
+    if(bld == BuildingType::Charburner && nearForester(nofFarmhand::GetWorkRadius(Job::CharBurner) + foresterReach))
+        return false;
+    // Enough of its source in reach (not beside its renewer: it plants it)
+    if(recipe && recipe->reach > 0 && !order.besideRenewer
+       && MapProfile::CountSourceNodes(world, pt, recipe->reach, recipe->source) < GetMinSourceInReach(order, *recipe))
+        return false;
+    // Farms and plantations with enough nodes for fields
+    if(NeedsFields(bld) && !order.besideRenewer && CountFieldNodes(bld, pt, false) < MIN_FIELD_NODES)
+        return false;
+    // The rules of the old AI that stay (hunter, quarry, fishery, storehouse, farm, charburner)
+    return aijh_.IsPlaceAllowed(bld, pt);
+}
+
+MapPoint EconomyPlanner::FindPlaceNear(const Order& order, const Recipe* recipe, const MapPoint anchor,
+                                       const unsigned radius, const std::vector<MapPoint>& partners)
+{
+    const GameWorldBase& world = player_.GetGameWorld();
+    const BuildingType bld = order.building;
+    const bool harvester = recipe && recipe->reach > 0 && recipe->source.kind != SourceKind::None;
+    const BuildingRegister& buildings = player_.GetBuildingRegister();
+    // Buildings of the same type nearby: harvesters within twice their reach (they share the source), others within 8
+    const unsigned sameTypeRadius = harvester ? 2 * recipe->reach : 8u;
+    std::vector<MapPoint> sameType;
+    if(BuildingProperties::IsUsual(bld))
+    {
+        for(const nobUsual* building : buildings.GetBuildings(bld))
+            sameType.push_back(building->GetPos());
+    } else
+    {
+        for(const nobBaseWarehouse* building : buildings.GetStorehouses())
+            sameType.push_back(building->GetPos());
+    }
+    for(const noBuildingSite* site : buildings.GetBuildingSites())
+    {
+        if(site->GetBuildingType() == bld)
+            sameType.push_back(site->GetPos());
+    }
+    // The nearest place meeting all rules, and those up to PLACE_BAND further compete by the preferences of the user
+    // (15.11.): more of the source (up to 40), fewer buildings of the same type nearby, nearer to the partners. Equal:
+    // the nearest to the anchor
+    MapPoint best = MapPoint::Invalid();
+    double bestScore = 0;
+    unsigned bandEnd = std::numeric_limits<unsigned>::max();
+    for(const MapPoint pt : aijh_.GetPlacesAround(bld, anchor, radius))
+    {
+        const unsigned distance = world.CalcDistance(pt, anchor);
+        if(distance > bandEnd)
+            break;
+        if(!IsPlaceValid(order, recipe, pt))
+            continue;
+        if(bandEnd == std::numeric_limits<unsigned>::max())
+            bandEnd = distance + PLACE_BAND;
+        double score = 0;
+        if(harvester)
+            score += std::min(40u, MapProfile::CountSourceNodes(world, pt, recipe->reach, recipe->source));
+        for(const MapPoint other : sameType)
+        {
+            if(world.CalcDistance(pt, other) <= sameTypeRadius)
+                score -= 10;
+        }
+        if(!partners.empty())
+        {
+            unsigned nearest = std::numeric_limits<unsigned>::max();
+            for(const MapPoint partner : partners)
+                nearest = std::min(nearest, world.CalcDistance(pt, partner));
+            score -= 0.5 * nearest;
+        }
+        if(!best.isValid() || score > bestScore)
+        {
+            best = pt;
+            bestScore = score;
+        }
+    }
+    return best;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Military buildings (Schritt 3, Nutzer 2026-11-17): the planner decides when, where and which military buildings are
+// built. Troops, attacks, coins and demolition stay with the old AI
+
+void EconomyPlanner::AddTerritoryOrder(const TerritoryNeed need, const OrderKind kind, const unsigned parent,
+                                       const GoodType ware, const BuildingType bld, const Source& source)
+{
+    // One for each need: the same one is still asked for
+    for(Order& order : orders_)
+    {
+        if(order.cause == OrderCause::Territory && order.state != OrderState::Placed && order.territory == need
+           && order.parent == parent && order.forWare == ware && order.forBuilding == bld)
+        {
+            order.territoryStep = numSteps_;
+            return;
+        }
+    }
+    const auto type = aijh_.GetConstruction().GetSmallestAllowedMilBuilding();
+    if(!type)
+        return;
+    Order order;
+    order.building = *type;
+    order.cause = OrderCause::Territory;
+    order.kind = kind;
+    order.parent = parent;
+    order.forWare = ware;
+    order.forBuilding = bld;
+    order.territory = need;
+    order.territorySource = source;
+    order.territoryStep = numSteps_;
+    AddOrder(std::move(order));
+}
+
+void EconomyPlanner::AddExpandingTerritoryOrder()
+{
+    if(helpers::contains_if(orders_, [](const Order& order) {
+           return order.cause == OrderCause::Territory && order.territory == TerritoryNeed::Expansion
+                  && order.state != OrderState::Placed;
+       }))
+        return;
+    const auto type = aijh_.GetConstruction().GetSmallestAllowedMilBuilding();
+    if(!type)
+        return;
+    Order order;
+    order.building = *type;
+    order.cause = OrderCause::Territory;
+    order.kind = OrderKind::Expanding;
+    order.territory = TerritoryNeed::Expansion;
+    order.territoryStep = numSteps_;
+    // The ware the best region is for (expanding orders are sorted by its forecast)
+    GoodType ware = GoodType::Nothing;
+    if(ChooseTargetRegion(order, &ware) < 0)
+        return;
+    order.forWare = ware;
+    AddOrder(std::move(order));
+}
+
+bool EconomyPlanner::IsTerritoryNeeded(const Order& order) const
+{
+    switch(order.territory)
+    {
+        case TerritoryNeed::Place:
+            // For an order without a place: while it waits for one. For a way without a place: while it failed
+            if(order.parent != 0)
+            {
+                const Order* parent = Find(order.parent);
+                return parent && parent->state == OrderState::Blocked
+                       && parent->retry.kind == RetryCondition::Kind::NoPlace;
+            }
+            return helpers::contains_if(failedWays_, [&](const FailedWay& way) {
+                return way.ware == order.forWare && way.building == order.forBuilding;
+            });
+        case TerritoryNeed::Source:
+            // Asked for in the last step and the source is still not in the territory
+            return order.territoryStep + 1 >= numSteps_
+                   && civAI_.GetMap().GetTotalOwned().GetAmount(order.territorySource) == 0;
+        case TerritoryNeed::Expansion: return true;
+        case TerritoryNeed::None: break;
+    }
+    return false;
+}
+
+std::vector<EconomyPlanner::ScarceSource> EconomyPlanner::GetScarceSources() const
+{
+    // Low forecast = high scarcity (Nutzer): 0 from MIN_STOCK on, 1 at 0, more below
+    const auto scarcity = [this](const GoodType good) {
+        return std::max(0., static_cast<double>(MIN_STOCK) - GetWareStatus(good).forecast) / MIN_STOCK;
+    };
+    std::vector<ScarceSource> result;
+    for(const Recipe& recipe : civAI_.GetGraph().GetRecipes())
+    {
+        if(!managed_[recipe.building] || recipe.source.kind == SourceKind::None
+           || !player_.IsBuildingEnabled(recipe.building))
+            continue;
+        for(const GoodType good : recipe.outputs)
+        {
+            if(!hasUse_[good])
+                continue;
+            const double value = scarcity(good);
+            const auto it = std::find_if(result.begin(), result.end(), [&](const ScarceSource& entry) {
+                return sameSource(entry.source, recipe.source);
+            });
+            if(it == result.end())
+                result.push_back({recipe.source, good, value});
+            else if(value > it->scarcity)
+            {
+                it->scarcity = value;
+                it->ware = good;
+            }
+        }
+    }
+    return result;
+}
+
+int EconomyPlanner::ChooseTargetRegion(const Order& order, GoodType* ware) const
+{
+    std::vector<GoodType> wares;
+    const std::vector<unsigned> regions = RankTargetRegions(order, &wares);
+    if(regions.empty())
+        return -1;
+    if(ware)
+        *ware = wares.front();
+    return static_cast<int>(regions.front());
+}
+
+std::vector<unsigned> EconomyPlanner::RankTargetRegions(const Order& order, std::vector<GoodType>* wares) const
+{
+    const GameWorldBase& world = player_.GetGameWorld();
+    const MapProfile& map = civAI_.GetMap();
+    const BuildingRegister& buildings = player_.GetBuildingRegister();
+    // What the region is for: the source of the need (land to build on without one), or all sources by their scarcity
+    std::vector<ScarceSource> sources;
+    bool land = false;
+    if(order.territory == TerritoryNeed::Expansion)
+        sources = GetScarceSources();
+    else if(order.territorySource.kind != SourceKind::None)
+        sources.push_back({order.territorySource, order.forWare, 1.});
+    else
+        land = true;
+    // Own buildings the territory grows from
+    std::vector<MapPoint> own;
+    for(const nobMilitary* military : buildings.GetMilitaryBuildings())
+        own.push_back(military->GetPos());
+    for(const nobBaseWarehouse* warehouse : buildings.GetStorehouses())
+        own.push_back(warehouse->GetPos());
+    if(own.empty())
+        return {};
+    // Candidate regions: center near an own building, not owned by another player, something outside the territory
+    struct Candidate
+    {
+        unsigned idx, distance, danger, land;
+        std::vector<unsigned> amounts;
+    };
+    std::vector<Candidate> candidates;
+    std::vector<unsigned> maxAmount(sources.size(), 0u);
+    unsigned maxLand = 0;
+    const unsigned playerId = player_.GetPlayerId();
+    for(unsigned idx = 0; idx < map.GetNumRegions(); ++idx)
+    {
+        const MapPoint center = map.GetRegionCenter(idx);
+        const unsigned owner = world.GetNode(center).owner;
+        if(owner != 0 && owner != playerId + 1u)
+            continue;
+        unsigned distance = std::numeric_limits<unsigned>::max();
+        for(const MapPoint pos : own)
+            distance = std::min(distance, world.CalcDistance(center, pos));
+        if(distance > MAX_TERRITORY_DISTANCE)
+            continue;
+        const ResourceProfile& region = map.GetRegion(idx);
+        const ResourceProfile& owned = map.GetRegionOwned(idx);
+        Candidate candidate{idx, distance, 0u, region.land > owned.land ? region.land - owned.land : 0u, {}};
+        bool any = candidate.land > 0;
+        for(unsigned i = 0; i < sources.size(); ++i)
+        {
+            const unsigned all = region.GetAmount(sources[i].source);
+            const unsigned inside = owned.GetAmount(sources[i].source);
+            candidate.amounts.push_back(all > inside ? all - inside : 0u);
+            maxAmount[i] = std::max(maxAmount[i], candidate.amounts.back());
+            any |= candidate.amounts.back() > 0;
+        }
+        if(!land && order.territory != TerritoryNeed::Expansion
+           && std::all_of(candidate.amounts.begin(), candidate.amounts.end(), [](const unsigned a) { return a == 0; }))
+            continue;
+        if(!any)
+            continue;
+        // Danger: enemy military buildings near the region
+        for(const nobBaseMilitary* military : world.LookForMilitaryBuildings(center, 2))
+        {
+            if(military->GetPlayer() != playerId && !player_.IsAlly(military->GetPlayer())
+               && world.CalcDistance(center, military->GetPos()) <= MAX_TERRITORY_DISTANCE)
+                ++candidate.danger;
+        }
+        maxLand = std::max(maxLand, candidate.land);
+        candidates.push_back(std::move(candidate));
+    }
+    // Value = scarcity × amount (each normalized to the largest amount) − distance − danger. Land counts with 1 for a
+    // building without a place and a quarter for expanding (more land is always of some use)
+    std::vector<std::tuple<double, unsigned, GoodType>> ranked;
+    for(const Candidate& candidate : candidates)
+    {
+        double value = 0, strongest = 0;
+        GoodType strongestWare = GoodType::Nothing;
+        for(unsigned i = 0; i < sources.size(); ++i)
+        {
+            if(maxAmount[i] == 0)
+                continue;
+            const double part = sources[i].scarcity * candidate.amounts[i] / maxAmount[i];
+            value += part;
+            if(part > strongest)
+            {
+                strongest = part;
+                strongestWare = sources[i].ware;
+            }
+        }
+        if(maxLand > 0)
+            value += (land ? 1. : 0.25) * candidate.land / maxLand;
+        value -= 0.5 * candidate.distance / MAX_TERRITORY_DISTANCE;
+        value -= 1. * candidate.danger;
+        ranked.emplace_back(value, candidate.idx,
+                            order.territory == TerritoryNeed::Expansion ? strongestWare : order.forWare);
+    }
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [](const auto& lhs, const auto& rhs) { return std::get<0>(lhs) > std::get<0>(rhs); });
+    std::vector<unsigned> result;
+    for(const auto& [value, idx, ware] : ranked)
+    {
+        result.push_back(idx);
+        if(wares)
+            wares->push_back(ware);
+    }
+    return result;
+}
+
+MapPoint EconomyPlanner::SearchMilitaryPlace(Order& order, bool& searchedAll)
+{
+    // The best regions in turn (at most a few per step): reachable over land from the territory, a place for the type
+    // the old AI chooses there (or the smallest one) at the border nearest to the region
+    constexpr unsigned MAX_REGIONS_PER_SEARCH = 4;
+    searchedAll = true;
+    const GameWorldBase& world = player_.GetGameWorld();
+    const std::vector<unsigned> regions = RankTargetRegions(order, nullptr);
+    AIJH::AIConstruction& construction = aijh_.GetConstruction();
+    unsigned tried = 0;
+    for(const unsigned region : regions)
+    {
+        if(tried++ >= MAX_REGIONS_PER_SEARCH)
+            break;
+        const MapPoint target = civAI_.GetMap().GetRegionCenter(region);
+        // The own territory nearest to the region
+        MapPoint anchor = MapPoint::Invalid();
+        unsigned anchorDistance = std::numeric_limits<unsigned>::max();
+        for(const MapPoint pt : world.GetPointsInRadiusWithCenter(target, MAX_TERRITORY_DISTANCE + 2))
+        {
+            if(world.GetNode(pt).owner != player_.GetPlayerId() + 1u)
+                continue;
+            const unsigned distance = world.CalcDistance(pt, target);
+            if(distance < anchorDistance)
+            {
+                anchorDistance = distance;
+                anchor = pt;
+            }
+        }
+        if(!anchor.isValid())
+            continue;
+        // Reachable over land (not across water): a way to the region center or a node beside it
+        bool reachable = anchorDistance == 0;
+        for(const MapPoint pt : world.GetPointsInRadiusWithCenter(target, 1))
+        {
+            if(reachable)
+                break;
+            reachable = world.FindHumanPath(anchor, pt, 3 * MAX_TERRITORY_DISTANCE).has_value();
+        }
+        if(!reachable)
+            continue;
+        aijh_.UpdateNodesAround(anchor, SEARCH_RADIUS);
+        std::vector<BuildingType> types;
+        if(const auto chosen = construction.ChooseMilitaryBuilding(anchor))
+            types.push_back(*chosen);
+        if(!helpers::contains(types, order.building))
+            types.push_back(order.building);
+        for(const BuildingType type : types)
+        {
+            if(type != order.building && !HasMaterial(type))
+                continue;
+            const MapPoint pos = aijh_.FindPositionForBuildingAround(type, anchor);
+            if(pos.isValid())
+            {
+                order.building = type;
+                order.near = target;
+                return pos;
+            }
         }
     }
     return MapPoint::Invalid();
@@ -4161,8 +4541,17 @@ std::string EconomyPlanner::GetReport() const
         }
         if(order->cause == OrderCause::Renewal && !order->parent)
             out << " für " << buildingName(order->forBuilding);
-        if((order->cause == OrderCause::Shortage || order->cause == OrderCause::BasicSupply)
-           && groups_[order->group].wares.size() > 1u)
+        if(order->cause == OrderCause::Territory)
+        {
+            if(order->territory == TerritoryNeed::Place)
+                out << (order->parent ? "" : " für " + buildingName(order->forBuilding)) << ", kein Bauplatz";
+            else if(order->territory == TerritoryNeed::Source)
+                out << " für " << buildingName(order->forBuilding) << ", "
+                    << civAI_.GetGraph().GetSourceName(order->territorySource) << " nur außerhalb";
+            if(order->near.isValid())
+                out << ", Ziel " << pointName(order->near);
+        }
+        if(order->cause == OrderCause::Shortage && groups_[order->group].wares.size() > 1u)
             out << " (Gruppe " << wareNames(groups_[order->group].wares) << ")";
         if(order->clearing)
             out << ", rodend";
@@ -4180,9 +4569,6 @@ std::string EconomyPlanner::GetReport() const
             out << "\n    " << entry;
         out << "\n";
     }
-    if(militaryKept_ != BuildingType::Headquarters)
-        out << "    Material für " << buildingName(militaryKept_)
-            << " (Militär der alten KI) vor den expandierenden Aufträgen freigehalten\n";
     out << "  Zeit: " << static_cast<unsigned>(lastStepUs_) << " us (max " << static_cast<unsigned>(maxStepUs_)
         << " us)\n";
     return out.str();

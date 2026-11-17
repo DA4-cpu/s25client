@@ -15,6 +15,8 @@
 #include "addons/const_addons.h"
 #include "ai/random.h"
 #include "files.h"
+#include "mapGenerator/MapSettings.h"
+#include "mapGenerator/RandomMap.h"
 #include "random/Random.h"
 #include "gameTypes/MapInfo.h"
 #include "s25util/StringConversion.h"
@@ -89,6 +91,8 @@ int main(int argc, char** argv)
     desc.add_options()
         ("help,h", "Show help")
         ("map,m", po::value<std::string>(),"Map to load")
+        ("random-map", po::value<unsigned>(),"Generate a random map of this size (e.g. 512) for the AI players instead of --map")
+        ("map-seed", po::value<uint32_t>()->default_value(1),"Seed of the random map (--random-map)")
         ("from-replay", po::value(&from_replay),"Replay to take the map and the game settings (addons, objective, wares) from instead of --map")
         ("ai", po::value<std::vector<std::string>>()->required(),"AI player(s) to add (aijh | dummy)")
         ("objective", po::value<std::string>()->default_value("domination"),"domination(default) | conquer")
@@ -182,11 +186,24 @@ int main(int argc, char** argv)
                       << "), players there:" << std::endl;
             for(unsigned i = 0; i < replay.GetNumPlayers(); ++i)
                 bnw::cout << "  " << i << ": " << replay.GetPlayer(i).name << std::endl;
+        } else if(options.count("random-map"))
+        {
+            // A map of the map generator (climate, zones) with a HQ for every AI player
+            rttr::mapGenerator::MapSettings mapSettings;
+            mapSettings.numPlayers = static_cast<unsigned>(ais.size());
+            mapSettings.size = MapExtent::all(static_cast<MapCoord>(options["random-map"].as<unsigned>()));
+            mapSettings.seed = options["map-seed"].as<uint32_t>();
+            mapSettings.MakeValid();
+            mapPath = bfs::temp_directory_path()
+                      / ("ai-battle-random-" + std::to_string(mapSettings.seed) + "-"
+                         + std::to_string(options["random-map"].as<unsigned>()) + ".swd");
+            const uint32_t seed = rttr::mapGenerator::CreateRandomMap(mapPath, mapSettings);
+            bnw::cout << "Random map " << mapPath << " (seed " << seed << ")" << std::endl;
         } else if(options.count("map"))
             mapPath = RTTRCONFIG.ExpandPath(options["map"].as<std::string>());
         else
         {
-            bnw::cerr << "Error: --map or --from-replay is required" << std::endl;
+            bnw::cerr << "Error: --map, --random-map or --from-replay is required" << std::endl;
             return 1;
         }
 

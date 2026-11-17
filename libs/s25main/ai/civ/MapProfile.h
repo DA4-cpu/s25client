@@ -57,6 +57,8 @@ public:
     unsigned GetNumRegions() const { return static_cast<unsigned>(regions_.size()); }
     const ResourceProfile& GetRegion(unsigned idx) const { return regions_[idx]; }
     unsigned GetRegionIdx(MapPoint pt) const;
+    /// Node in the middle of the region (inside the map)
+    MapPoint GetRegionCenter(unsigned idx) const;
     /// Sum of all regions
     ResourceProfile GetTotal() const;
     /// Resources on the nodes owned by the player (counted while scanning, so as current as the regions)

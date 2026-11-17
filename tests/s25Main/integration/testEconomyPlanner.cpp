@@ -27,6 +27,7 @@
 #include "nodeObjs/noTree.h"
 #include "gameTypes/Inventory.h"
 #include "gameData/BuildingConsts.h"
+#include "gameData/BuildingProperties.h"
 #include "gameData/ToolConsts.h"
 #include "gameData/WorldDescription.h"
 #include <boost/test/unit_test.hpp>
@@ -199,23 +200,6 @@ struct PlannerFixture : public WorldWithGCExecution<1, 32, 32>
     const civai::Order& getOrder(BuildingType bld)
     {
         const int idx = findOrder(bld);
-        BOOST_TEST_REQUIRE(idx >= 0);
-        return *list()[idx];
-    }
-    /// Position of the first order of the building for the cause, -1 if not there
-    int findOrder(BuildingType bld, civai::OrderCause cause)
-    {
-        const std::vector<const civai::Order*> orders = list();
-        for(unsigned i = 0; i < orders.size(); i++)
-        {
-            if(orders[i]->building == bld && orders[i]->cause == cause)
-                return static_cast<int>(i);
-        }
-        return -1;
-    }
-    const civai::Order& getOrder(BuildingType bld, civai::OrderCause cause)
-    {
-        const int idx = findOrder(bld, cause);
         BOOST_TEST_REQUIRE(idx >= 0);
         return *list()[idx];
     }
@@ -421,6 +405,47 @@ BOOST_FIXTURE_TEST_CASE(FullStorageAllowsOnlyNeededOrders, PlannerFixture)
     BOOST_TEST((storehouse.cause == civai::OrderCause::Storage));
 }
 
+BOOST_FIXTURE_TEST_CASE(NoPlaceOrdersAMilitaryBuilding, PlannerFixture)
+{
+    // The storage is full, the storehouse finds no place (15 away from the HQ is outside the territory): a needed
+    // military building is ordered for it (Schritt 3). It is placed at the border once a soldier is free. Without a
+    // problem one expanding military building is in the list too
+    WorldDescription desc = makeDesc({"Pit"});
+    desc.warehouseCapacity = {{"Headquarters", 85}};
+    startGame(desc);
+    hq().AddToInventory(PeopleCounts::make(Job::Private, 5), true);
+    placeDeposits();
+    startAI();
+    step();
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    const civai::Order& storehouse = getOrder(BuildingType::Storehouse);
+    BOOST_TEST_REQUIRE((storehouse.state == civai::OrderState::Blocked));
+    BOOST_TEST(storehouse.reason.find("kein Bauplatz") == 0u);
+    const unsigned storehouseId = storehouse.id;
+    const auto isFor = [&](const civai::Order* order) {
+        return order->cause == civai::OrderCause::Territory && order->parent == storehouseId;
+    };
+    const std::vector<const civai::Order*> orders = list();
+    const auto military = std::find_if(orders.begin(), orders.end(), isFor);
+    BOOST_TEST_REQUIRE((military != orders.end()));
+    const civai::Order& militaryOrder = **military;
+    BOOST_TEST((militaryOrder.kind == civai::OrderKind::Needed));
+    BOOST_TEST((militaryOrder.territory == civai::TerritoryNeed::Place));
+    BOOST_TEST(BuildingProperties::IsMilitary(militaryOrder.building));
+    BOOST_TEST(helpers::contains_if(orders, [](const civai::Order* order) {
+        return order->cause == civai::OrderCause::Territory && order->territory == civai::TerritoryNeed::Expansion
+               && order->kind == civai::OrderKind::Expanding;
+    }));
+    step();
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    bool placed = false;
+    for(const noBuildingSite* site : world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites())
+        placed |= BuildingProperties::IsMilitary(site->GetBuildingType());
+    BOOST_TEST(placed);
+}
+
 BOOST_FIXTURE_TEST_CASE(PlansWithAWarehouseFromLua, PlannerFixture)
 {
     // A warehouse defined in lua (workshop 2) is no production building: the AI plans around it
@@ -525,11 +550,9 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderKeepsItsMaterial, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterNeedsEnoughTrees, PlannerFixture)
 {
-    // Clearing woodcutters come where at least CLEARING_MIN_TREES trees are. Wood in stock: the sawmill of the basic
-    // supply needs no woodcutter
+    // Clearing woodcutters come where at least CLEARING_MIN_TREES trees are
     startGame(makeDesc());
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
-    hq().AddToInventory(GoodCounts::make(GoodType::Wood, 40), true);
     placeTrees(Position(-5, 3), civai::EconomyPlanner::CLEARING_MIN_TREES - 1u);
     startAI();
     step();
@@ -820,10 +843,8 @@ BOOST_FIXTURE_TEST_CASE(ClearingMarkIsSaved, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterIsPlacedAtTheForest, PlannerFixture)
 {
-    // Wood in stock: the sawmill of the basic supply needs no woodcutter
     startGame(makeDesc({"Woodcutter"}));
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
-    hq().AddToInventory(GoodCounts::make(GoodType::Wood, 40), true);
     placeTrees(Position(-5, 3), FOREST);
     startAI();
     step();
@@ -1116,47 +1137,13 @@ BOOST_FIXTURE_TEST_CASE(NoOrdersForConstructionMaterial, PlannerFixture)
             if(order->building == BuildingType::Sawmill)
             {
                 ++numSawmills;
-                // The sawmill of the basic supply (no producer of boards) is the one for the shortage too
-                BOOST_TEST(
-                  (order->cause == civai::OrderCause::Shortage || order->cause == civai::OrderCause::BasicSupply));
+                BOOST_TEST((order->cause == civai::OrderCause::Shortage));
                 BOOST_TEST((order->kind == civai::OrderKind::Needed));
             }
         }
         BOOST_TEST(numSawmills == 1u);
         BOOST_TEST((ware(GoodType::Boards).state == civai::SupplyState::Shortage));
     }
-}
-
-BOOST_FIXTURE_TEST_CASE(BasicSupplyOfConstructionMaterial, PlannerFixture)
-{
-    // No producer of boards and stones: one of each is needed (Grundausstattung), even with boards and stones in
-    // stock. Without stone piles the quarry has no way and shows why. Once the sawmill is placed, no second one comes
-    startGame(makeDesc());
-    hq().AddToInventory(GoodCounts::make(GoodType::Wood, 40), true);
-    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 2), true);
-    placeDeposits();
-    startAI();
-    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
-    step();
-    BOOST_TEST_INFO(planner()->GetReport());
-    const civai::Order& sawmill = getOrder(BuildingType::Sawmill);
-    BOOST_TEST((sawmill.cause == civai::OrderCause::BasicSupply));
-    BOOST_TEST((sawmill.kind == civai::OrderKind::Needed));
-    const civai::Order& quarry = getOrder(BuildingType::Quarry);
-    BOOST_TEST((quarry.cause == civai::OrderCause::BasicSupply));
-    BOOST_TEST((quarry.state == civai::OrderState::Blocked));
-    BOOST_TEST(quarry.reason.find("kein Weg zu Stones") == 0u);
-    // Basic supply stands above every shortage (the clay of the research)
-    BOOST_TEST_REQUIRE(findOrder(KILN) >= 0);
-    BOOST_TEST(findOrder(BuildingType::Sawmill) < findOrder(KILN));
-    step();
-    BOOST_TEST_INFO(planner()->GetReport());
-    BOOST_TEST_REQUIRE(findSite(BuildingType::Sawmill).isValid());
-    step();
-    step();
-    BOOST_TEST(!helpers::contains_if(list(), [](const civai::Order* order) {
-        return order->building == BuildingType::Sawmill && order->state != civai::OrderState::Placed;
-    }));
 }
 
 BOOST_FIXTURE_TEST_CASE(GroupsSharingWaresCountTheStockOnce, PlannerFixture)
@@ -1205,11 +1192,9 @@ BOOST_FIXTURE_TEST_CASE(GroupsSharingWaresCountTheStockOnce, PlannerFixture)
 BOOST_FIXTURE_TEST_CASE(ExpandingSiteIsNoSolution, PlannerFixture)
 {
     // A clearing woodcutter is placed (expanding). Then the research needs lots of wood: the clearing site does not
-    // count as coming (an expanding order never solves a problem), a needed woodcutter is ordered. Wood in stock: the
-    // sawmill of the basic supply needs no woodcutter
+    // count as coming (an expanding order never solves a problem), a needed woodcutter is ordered
     startGame(makeDesc({}, {{"Wood", 200}}));
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 3), true);
-    hq().AddToInventory(GoodCounts::make(GoodType::Wood, 40), true);
     placeTrees(Position(-5, 3), FOREST);
     startAI();
     step();
@@ -1237,8 +1222,7 @@ BOOST_FIXTURE_TEST_CASE(HarvesterBesideItsRenewer, PlannerFixture)
     startAI();
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
     step();
-    // The woodcutter for the shortage (another one comes for the sawmill of the basic supply)
-    const civai::Order& woodcutter = getOrder(BuildingType::Woodcutter, civai::OrderCause::Shortage);
+    const civai::Order& woodcutter = getOrder(BuildingType::Woodcutter);
     const unsigned woodcutterId = woodcutter.id;
     BOOST_TEST((woodcutter.kind == civai::OrderKind::Needed));
     BOOST_TEST((woodcutter.state == civai::OrderState::Waiting));
@@ -1247,15 +1231,10 @@ BOOST_FIXTURE_TEST_CASE(HarvesterBesideItsRenewer, PlannerFixture)
     const civai::Order& forester = getOrder(BuildingType::Forester);
     BOOST_TEST((forester.cause == civai::OrderCause::Renewal));
     BOOST_TEST(forester.parent == woodcutterId);
-    BOOST_TEST(findOrder(BuildingType::Forester) < findOrder(BuildingType::Woodcutter, civai::OrderCause::Shortage));
-    // The forester is placed, then the woodcutter beside its site. The woodcutter for the sawmill of the basic supply
-    // makes the wood of the research too: the woodcutter of the shortage goes, the forester comes for the other one
-    MapPoint foresterPos = MapPoint::Invalid();
-    for(unsigned i = 0; i < 3 && !foresterPos.isValid(); i++)
-    {
-        step();
-        foresterPos = findSite(BuildingType::Forester);
-    }
+    BOOST_TEST(findOrder(BuildingType::Forester) < findOrder(BuildingType::Woodcutter));
+    // The forester is placed, then the woodcutter beside its site
+    step();
+    const MapPoint foresterPos = findSite(BuildingType::Forester);
     BOOST_TEST_REQUIRE(foresterPos.isValid());
     BOOST_TEST(!findSite(BuildingType::Woodcutter).isValid());
     step();

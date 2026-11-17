@@ -6,6 +6,7 @@
 
 #include "EconomySnapshot.h"
 #include "ai/aijh/AIConstruction.h"
+#include "ai/civ/EconomyGraph.h"
 #include "helpers/EnumArray.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
@@ -113,9 +114,6 @@ enum class OrderCause : uint8_t
     Shortage,
     /// Needed: makes an input the order above (Order::parent) lacks
     Input,
-    /// Needed: no producer of a group of construction material works or comes (Order::group): one is needed
-    /// ("Grundausstattung", Nutzer 2026-11-17)
-    BasicSupply,
     /// Needed: a tool maker. Tools are ordered and there is none that makes them, or all of them are busy
     Tools,
     /// Needed: a ware the warehouses need to recruit the soldiers that are missing
@@ -126,6 +124,10 @@ enum class OrderCause : uint8_t
     Storage,
     /// Needed: renews the source around a harvester for good (Order::near), e.g. a forester
     Renewal,
+    /// Needed or expanding (like the order it is for): a military building for more land (Schritt 3). For an order
+    /// without a place, for a source only outside the territory, or (expanding) for the region the scarcest wares come
+    /// from (Order::territory)
+    Territory,
     /// Expanding: makes a ware in normal state
     Expansion,
     /// Expanding: harvests deposits on the map (trees, stone piles, map objects of lua), independent of the stock
@@ -143,6 +145,18 @@ enum class OrderState : uint8_t
     /// Building site placed. Stays in the list until the building is finished (renewers: until they worked one
     /// balance length)
     Placed
+};
+
+/// What a military building (OrderCause::Territory) is for
+enum class TerritoryNeed : uint8_t
+{
+    None,
+    /// An order found no place (its building, ware and source in Order::forBuilding, forWare, territorySource)
+    Place,
+    /// A way to a ware is blocked because its source is only outside the territory
+    Source,
+    /// No problem: more land where the scarcest wares come from
+    Expansion
 };
 
 /// What changes when the territory grows or shrinks, a technology is researched or buildings are removed
@@ -172,6 +186,8 @@ struct RetryCondition
         Research,
         /// No way to a ware it needs: tried again every step (the ways are checked anyway)
         NoWay,
+        /// Military building: a soldier is free in the warehouses for it (one for every military building site)
+        Soldiers,
         /// No place: the territory changed or buildings were removed
         NoPlace
     };
@@ -227,6 +243,11 @@ struct Order
     unsigned startupEndGF = 0;
     /// Created (needed roots: sorted by urgency, expanding: by this number, blocked ones get a new one at the end)
     unsigned sequence = 0;
+    /// Territory: what the military building is for, the source to reach (kind None: land to build on) and the last
+    /// step a need asked for it (source outside)
+    TerritoryNeed territory = TerritoryNeed::None;
+    Source territorySource;
+    unsigned territoryStep = 0;
 };
 
 /// Plans the production buildings of the civilization mode with a priority list (see DESIGN.md, "Neufassung der
@@ -269,6 +290,12 @@ public:
 
     /// Radius around a warehouse or military building in which places are searched (the places of the old AI)
     static constexpr unsigned SEARCH_RADIUS = 15;
+    /// Storehouses: radius around warehouses and military buildings (they keep 15 away from other warehouses)
+    static constexpr unsigned STOREHOUSE_SEARCH_RADIUS = 25;
+    /// Places up to this much further than the nearest place meeting all rules compete by the preferences
+    static constexpr unsigned PLACE_BAND = 2;
+    /// Military buildings: regions whose center is at most this far from an own military building or warehouse
+    static constexpr unsigned MAX_TERRITORY_DISTANCE = 24;
 
     EconomyPlanner(AIJH::AIPlayerJH& aijh, const CivAI& civAI);
 
@@ -336,6 +363,12 @@ private:
         std::string reason;
         /// Blocked because of these inputs (no way to make them, not enough there)
         std::vector<GoodType> missingInputs;
+        /// Blocked because the source of a producer (this one or one of an input) is only outside the territory: that
+        /// producer, its ware and source
+        bool outside = false;
+        BuildingType outsideBuilding = BuildingType::Headquarters;
+        GoodType outsideWare = GoodType::Nothing;
+        Source outsideSource;
     };
     /// A way to a ware for which no place was found. Not tried again before the situation changed
     struct FailedWay
@@ -350,7 +383,7 @@ private:
         OrderCause cause = OrderCause::Shortage;
         /// Input, Helpers: the order it is for
         unsigned parent = 0;
-        /// Shortage, BasicSupply, Tools: the group
+        /// Shortage, Tools: the group
         unsigned group = 0;
         /// Wares per minute that are missing by the forecast (it counts the coming producers and consumers): as many
         /// producers as they need (the orders of other needs for the ware count)
@@ -505,14 +538,37 @@ private:
     void AddDepositOrders();
     /// Harvesters for good with few of their source in reach get a renewer
     void AddRenewalOrders();
-    /// Groups of construction material of the buildings the player may build
-    std::vector<unsigned> GetMaterialGroups() const;
-    /// A producer of a ware of the group works or comes: a building not exhausted, a building site, a site ordered, a
-    /// needed order not blocked for want of a way, a place or research (not the orders for the basic supply of the
-    /// group)
-    bool HasBasicProducer(unsigned groupIdx);
-    /// Basic supply: every group of construction material has a producer that works or comes, otherwise one is needed
-    void AddBasicSupplyOrders();
+    /// A military building for the need (Schritt 3). Needed or expanding like the order it is for; one per need
+    void AddTerritoryOrder(TerritoryNeed need, OrderKind kind, unsigned parent, GoodType ware, BuildingType bld,
+                           const Source& source);
+    /// No problem: one expanding military building at a time, for the region the scarcest wares come from
+    void AddExpandingTerritoryOrder();
+    /// The need of a military order still holds
+    bool IsTerritoryNeeded(const Order& order) const;
+    /// Wares with a source on the map, their source and how scarce they are (low forecast = high scarcity)
+    struct ScarceSource
+    {
+        Source source;
+        GoodType ware;
+        double scarcity;
+    };
+    std::vector<ScarceSource> GetScarceSources() const;
+    /// The region outside the territory for the military order: value = scarcity × amount (both normalized) − distance
+    /// − danger (enemy military buildings). -1: none. `ware`: the ware the value comes from most
+    int ChooseTargetRegion(const Order& order, GoodType* ware) const;
+    /// All candidate regions for the military order, the best first, and the ware each one is for
+    std::vector<unsigned> RankTargetRegions(const Order& order, std::vector<GoodType>* wares) const;
+    /// Place of a military building toward the target region (type by the rules of the old AI at that place)
+    MapPoint SearchMilitaryPlace(Order& order, bool& searchedAll);
+    /// Place near the anchor: the nearest place meeting all rules, among those up to PLACE_BAND further the best by the
+    /// preferences of the user (more of the source, fewer of the same type nearby, near the partners)
+    MapPoint FindPlaceNear(const Order& order, const Recipe* recipe, MapPoint anchor, unsigned radius,
+                           const std::vector<MapPoint>& partners);
+    /// All rules for the place of the building of the order
+    bool IsPlaceValid(const Order& order, const Recipe* recipe, MapPoint pt);
+    /// Buildings and sites making an input of the recipe or using its product, the most central first (nearest to a
+    /// warehouse), at most `max`
+    std::vector<MapPoint> GetPartners(const Recipe& recipe, unsigned max) const;
     /// Warehouse for more helpers (the warehouses create them)
     void AddHelpersOrder(unsigned parent);
     /// Storage full: a needed warehouse (one at a time)
@@ -610,9 +666,6 @@ private:
     // Working on the list
     /// Orders whose building is part of the chain making the construction material they lack
     void MarkSelfSolving();
-    /// Military buildings are placed by the old AI until the planner does it (step 3 of DESIGN.md): the material for
-    /// its next one (the cheapest military building) is kept free before the expanding orders
-    void KeepMaterialForMilitary();
     void ProcessList();
     void ProcessOrder(unsigned id, unsigned& searchBudget);
     /// Checks the rules. Returns the reason of the first rule not met (empty: all met) and sets the retry condition
@@ -729,8 +782,6 @@ private:
     bool cancelledThisStep_ = false;
     /// Depth of GetSortKey following the orders an order is also for (guard against loops)
     mutable unsigned sortKeyDepth_ = 0;
-    /// Military building whose material was kept free in this step (Headquarters: none)
-    BuildingType militaryKept_ = BuildingType::Headquarters;
     /// Inputs kept for an order higher in the list that cannot be built without them (ware -> order). Orders further
     /// down using one of them are not built in this step
     std::map<GoodType, unsigned> keptInputs_;

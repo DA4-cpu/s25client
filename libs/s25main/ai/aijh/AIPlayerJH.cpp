@@ -526,6 +526,9 @@ nobBaseWarehouse* AIPlayerJH::GetUpgradeBuildingWarehouse()
 
 void AIPlayerJH::AddMilitaryBuildJob(MapPoint pt)
 {
+    // Civilization mode: the economy planner decides about military buildings (Schritt 3)
+    if(economyPlanner_)
+        return;
     const auto milBld = construction->ChooseMilitaryBuilding(pt);
     if(milBld)
         AddBuildJob(*milBld, pt);
@@ -2585,6 +2588,11 @@ bool AIPlayerJH::HuntablesinRange(const MapPoint pt, unsigned min)
     // check first if no other hunter(or hunter buildingsite) is nearby
     if(aii.isBuildingNearby(BuildingType::Hunter, pt, 14))
         return false;
+    return AnimalsInRange(pt, min);
+}
+
+bool AIPlayerJH::AnimalsInRange(const MapPoint pt, unsigned min)
+{
     unsigned maxrange = 25;
     unsigned short fx, fy, lx, ly;
     const unsigned short SQUARE_SIZE = 19;
@@ -3273,22 +3281,65 @@ MapPoint AIPlayerJH::FindHarvesterPositionBeside(const BuildingType type, const 
 }
 
 MapPoint AIPlayerJH::FindForesterPosition(const MapPoint& woodcutterPos,
-                                          const std::vector<MapPoint>& clearingWoodcutters, const unsigned radius)
+                                          const std::vector<std::pair<MapPoint, unsigned>>& avoid,
+                                          const unsigned radius)
 {
     const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
-    const unsigned foresterRadius = nofFarmhand::GetWorkRadius(Job::Forester);
     // In reach of the woodcutter, the best place to plant there. Rules of the old AI: enough space to plant, not at
-    // the border. Not near clearing woodcutters
+    // the border. Not near clearing woodcutters and charburners
     return FindBestPositionWhere(
       woodcutterPos, AIResource::Plantspace, BUILDING_SIZE[BuildingType::Forester],
       radius > 0 ? radius : woodcutterRadius,
       AIConstruction::GetBorderReserve(BuildingType::Forester), [&](const MapPoint pos) {
           if(GetDensity(pos, AIResource::Plantspace, 7u) < 10u || GetDensity(pos, AIResource::Borderland, 1u) > 1u)
               return false;
-          return !helpers::contains_if(clearingWoodcutters, [&](const MapPoint clearingPos) {
-              return gwb.CalcDistance(pos, clearingPos) <= woodcutterRadius + foresterRadius;
+          return !helpers::contains_if(avoid, [&](const std::pair<MapPoint, unsigned>& other) {
+              return gwb.CalcDistance(pos, other.first) <= other.second;
           });
       });
+}
+
+std::vector<MapPoint> AIPlayerJH::GetPlacesAround(const BuildingType type, const MapPoint& around,
+                                                  const unsigned radius)
+{
+    const unsigned borderReserve = AIConstruction::GetBorderReserve(type);
+    const BuildingQuality size = BUILDING_SIZE[type];
+    if(type == BuildingType::Farm || type == BuildingType::Charburner)
+        resourceMaps[AIResource::Plantspace].updateAround(around, radius);
+    std::vector<std::pair<unsigned, MapPoint>> places;
+    for(const MapPoint& curPt : gwb.GetPointsInRadiusWithCenter(around, radius))
+    {
+        if(!aiMap[curPt].reachable || aiMap[curPt].farmed || aiMap[curPt].siteOrdered || !aii.IsOwnTerritory(curPt)
+           || !canUseBq(aii.GetBuildingQuality(curPt), size))
+            continue;
+        if(size != BuildingQuality::Mine && aii.isHarborPosClose(curPt, 2, true))
+            continue;
+        if(borderReserve > 0 && aii.IsNearLandBorder(curPt, borderReserve))
+            continue;
+        places.emplace_back(gwb.CalcDistance(curPt, around), curPt);
+    }
+    std::stable_sort(places.begin(), places.end(),
+                     [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+    std::vector<MapPoint> result;
+    result.reserve(places.size());
+    for(const auto& place : places)
+        result.push_back(place.second);
+    return result;
+}
+
+bool AIPlayerJH::IsPlaceAllowed(const BuildingType type, const MapPoint& pt)
+{
+    switch(type)
+    {
+        case BuildingType::Hunter: return AnimalsInRange(pt, 9);
+        case BuildingType::Quarry: return ValidStoneinRange(pt);
+        case BuildingType::Fishery: return ValidFishInRange(pt);
+        case BuildingType::Storehouse: return !construction->OtherStoreInRadius(pt, 15);
+        case BuildingType::Farm: return GetResMapValue(pt, AIResource::Plantspace) >= 85;
+        case BuildingType::Charburner:
+            return GetResMapValue(pt, AIResource::Plantspace) >= 86 && BQsurroundcheck(pt, 4, true, 20) > 0;
+        default: return true;
+    }
 }
 
 void AIPlayerJH::PlaceBuildingNextToPoint(const MapPoint whPos, const BuildingType bldToPlace,
