@@ -272,6 +272,13 @@ public:
     static constexpr unsigned MIN_DEPOSITS_IN_REACH = 1;
     /// A harvester for good gets a renewer (forester) when fewer than this many of its source (trees) are in its reach
     static constexpr unsigned RENEW_BELOW = 7;
+    /// A new harvester of a source on the map (trees, stone piles, map objects of lua, fish, ore) needs this many units
+    /// of it in its reach, each node shared with the other harvesters of the source reaching it (Nutzer, 2026-11-18,
+    /// for all sources). None of them reaching its nodes: 1 unit suffices
+    static constexpr unsigned UNITS_PER_HARVESTER = 8;
+    /// A clearing woodcutter with fewer than this many trees in its reach becomes one for good when a needed forester is
+    /// in the list: it gets that forester (Nutzer, 2026-11-18)
+    static constexpr unsigned CLEARING_UPGRADE_BELOW = 5;
     /// Tools of each kind the player keeps in stock beyond what is asked for (tool orders)
     static constexpr unsigned TOOLS_IN_STOCK = 2;
     /// A chain is stuck if nothing of its ware was made in this many minutes (and the warehouses do not have enough):
@@ -571,6 +578,12 @@ private:
                            const std::vector<MapPoint>& partners);
     /// All rules for the place of the building of the order
     bool IsPlaceValid(const Order& order, const Recipe* recipe, MapPoint pt);
+    /// Enough units of the source of the harvester in its reach at the place: only nodes its worker can walk to (path
+    /// of at most 20 like the worker), each node shared with the other harvesters of the source reaching it (buildings,
+    /// sites, sites ordered). At least UNITS_PER_HARVESTER, 1 if no other harvester reaches its nodes
+    bool HasUnitsForHarvester(const Recipe& recipe, MapPoint pt) const;
+    /// A clearing woodcutter with few trees left becomes one for good and gets a needed forester of the list
+    void UpgradeClearingWoodcutters();
     /// Buildings and sites making an input of the recipe or using its product, the most central first (nearest to a
     /// warehouse), at most `max`
     std::vector<MapPoint> GetPartners(const Recipe& recipe, unsigned max) const;
@@ -761,6 +774,8 @@ private:
     helpers::EnumArray<TypeMeasure, BuildingType> measures_{};
     /// Clearing woodcutters placed whose mark (game command, kept in the savegame) is not executed yet
     std::vector<MapPoint> clearingPending_;
+    /// Clearing woodcutters made woodcutters for good whose command is not executed yet
+    std::vector<MapPoint> unclearingPending_;
     /// Orders whose construction costs are counted as planned at the start of the step
     std::vector<unsigned> plannedOrderIds_;
     /// Planned entries this step (costs, tools), any number of wares each, and the order each one is for (0: a building

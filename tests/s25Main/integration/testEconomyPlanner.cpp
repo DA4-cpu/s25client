@@ -1483,4 +1483,83 @@ BOOST_FIXTURE_TEST_CASE(ExpandingOrderGetsExpandingSolutions, PlannerFixture)
     BOOST_TEST(pitForKiln);
 }
 
+BOOST_FIXTURE_TEST_CASE(HarvestersShareTheUnitsOfTheirSource, PlannerFixture)
+{
+    // 3 deposits of 2 wares each: 6 units. The first pit may come (no other one reaches them: 1 unit suffices). A
+    // second one would share them: 3 units each, fewer than UNITS_PER_HARVESTER (Nutzer, 2026-11-18). It gets no place
+    startGame(makeDesc(), 40);
+    placeDeposits();
+    startAI();
+    step();
+    BOOST_TEST_REQUIRE(findSite(PIT).isValid());
+    for(unsigned i = 0; i < 4; i++)
+        step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    unsigned numPits = 0;
+    for(const noBuildingSite* site : world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites())
+        numPits += site->GetBuildingType() == PIT ? 1u : 0u;
+    BOOST_TEST(numPits == 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE(NoHarvesterWhereItsWorkerCannotWalk, PlannerFixture)
+{
+    // One deposit, surrounded by stone piles: in reach, but its worker cannot walk to it (like nofFarmhand: a path of at
+    // most 20). No pit is placed for it
+    startGame(makeDesc(), 40);
+    const Position center(4, 4);
+    placeObject(center, [](MapPoint) { return new noDeposit(0, 1); });
+    for(const auto dir : helpers::EnumRange<Direction>{})
+    {
+        const MapPoint pt = world.GetNeighbour(world.MakeMapPoint(hqPos + center), dir);
+        world.DestroyNO(pt, false);
+        world.SetNO(pt, new noGranite(GraniteType::One, 5));
+        world.RecalcBQAroundPointBig(pt);
+    }
+    startAI();
+    for(unsigned i = 0; i < 3; i++)
+        step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(!findSite(PIT).isValid());
+}
+
+BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterWithFewTreesGetsTheForester, PlannerFixture)
+{
+    // A woodcutter for good without trees gets a forester ordered. A clearing woodcutter with fewer than
+    // CLEARING_UPGRADE_BELOW trees becomes one for good and gets that forester (Nutzer, 2026-11-18); the other one
+    // waits for the next forester
+    startGame(makeDesc());
+    hq().AddToInventory(GoodCounts::make(GoodType::Shovel, 3), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Axe, 3), true);
+    std::vector<MapPoint> places;
+    for(const Position offset : {Position(5, -3), Position(-5, 3), Position(6, 2), Position(-3, -4), Position(3, 5)})
+    {
+        const MapPoint pt = world.MakeMapPoint(hqPos + offset);
+        if(world.GetBQ(pt, curPlayer) >= BuildingQuality::Hut
+           && std::none_of(places.begin(), places.end(), [&](MapPoint other) { return world.CalcDistance(pt, other) < 4; }))
+            places.push_back(pt);
+    }
+    BOOST_TEST_REQUIRE(places.size() >= 2u);
+    const MapPoint forGood = places[0];
+    const MapPoint clearing = places[1];
+    BuildingFactory::CreateBuilding(world, BuildingType::Woodcutter, forGood, curPlayer, Nation::Romans);
+    BuildingFactory::CreateBuilding(world, BuildingType::Woodcutter, clearing, curPlayer, Nation::Romans);
+    this->SetClearingWoodcutter(clearing, true);
+    startAI();
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(!world.GetPlayer(curPlayer).IsClearingWoodcutter(clearing));
+    BOOST_TEST(!planner()->IsClearingWoodcutter(clearing));
+    const auto renewerOf = [&](const MapPoint pt) {
+        const std::vector<const civai::Order*> orders = list();
+        return std::count_if(orders.begin(), orders.end(), [&](const civai::Order* order) {
+            return order->cause == civai::OrderCause::Renewal && order->near == pt;
+        });
+    };
+    BOOST_TEST(renewerOf(clearing) == 1);
+    // The other one gets the next forester
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(renewerOf(forGood) == 1);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

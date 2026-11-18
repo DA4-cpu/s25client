@@ -1473,6 +1473,16 @@ Nutzers). Ein Förster ist benötigt, wenn weniger als 7 Bäume in Reichweite ei
 je Holzfäller zur Zeit; lassen die Prognosen seiner Werkzeuge oder der Gehilfen keinen weiteren zu, wartet einer, sonst
 gilt die Grenze je Gebäudetyp.
 
+**Rodender Holzfäller wird dauerhaft** (Nutzer, 2026-11-18): Hat ein fertiger rodender Holzfäller weniger als 5 Bäume
+in Reichweite (`CLEARING_UPGRADE_BELOW`) und steht in der Liste ein benötigter Förster für einen Holzfäller (Anlass
+„erneuert“, noch nicht platziert, nicht durch Forschung blockiert), wird dieser rodende Holzfäller dauerhaft (Befehl
+„rodend“ aus) und bekommt den Förster. Von mehreren rodenden bekommt ihn der nächste zum ursprünglichen Holzfäller des
+Försters; hat der Förster noch keinen Holzfäller mit Bauplatz, der nächste zu einem Lager, und der Auftrag dieses
+Holzfällers ohne Bauplatz entfällt. Der Förster steht danach neben dem umgewandelten Holzfäller (Anlass „für den
+Holzfäller (x,y) (rodend, jetzt dauerhaft)“), der ursprüngliche Holzfäller wartet auf den nächsten Förster. Logzeile
+„rodender Holzfäller (x,y) wird dauerhaft, bekommt den Förster …“. Bis der Befehl ausgeführt ist, zählt der Holzfäller
+schon als dauerhaft.
+
 **Eltern-Auftrag folgt sofort** (Nutzer, 2026-11-15; ohne eine Regel zu überspringen): Steht die Baustelle eines für
 ihn platzierten Eingangs-Erzeugers, zählt sie voll in der Prognose, und der Auftrag wird im selben Schritt neu geprüft.
 Reicht die Prognose seines Eingangs, folgt er sofort, möglichst nah an der Baustelle; reicht sie nicht, kommen weitere
@@ -1574,12 +1584,45 @@ zählen nicht; Zufallskarte 512 × 512, 4 KI, `--random_init 7`, Summe der 4 Spi
   keine Widersprüche.
 - Die Militärstärke wächst weiter nicht (keine Rekrutierung, Soldaten nie knapp): offene Frage an den Nutzer.
 
+**Vergleich Abbauer je Vorkommen und rodende Holzfäller** (2026-11-18; gleiche Karten und Einstellungen; vorher =
+`8acc348`):
+
+| Kartenzufall 5 / 9 | vorher | neu |
+|---|---|---|
+| Land nach 30 min | 5 903 / 5 233 | 6 152 / 5 362 |
+| Land nach 1 h | 7 380 / 5 401 | 10 424 / 8 455 |
+| Land nach 2 h | 12 885 / 11 030 | 25 534 / 21 618 |
+| Land nach 2 h 50 | 20 224 / 17 886 | 34 793 / 31 073 |
+| Gebäude nach 2 h 50 | 373 / 335 | 539 / 496 |
+| Abbauer, nach weniger als 3 min abgerissen | 27 / 11 | 0 / 2 |
+| Militärstärke | 208 (207 am Ende bei 5) | 208 durchgehend |
+
+- Rechenzeit je Schritt im Mittel 2,9 → 3,6 ms. Die Spitzen (bis etwa 190 ms) kommen aus der Platzsuche der alten KI
+  für den Jäger (`AnimalsInRange` mit Wegsuche je Tier, schon vorher so); sie zählt jetzt zuerst die Tiere und sucht
+  Wege nur, wenn genug da sind (gleiches Ergebnis).
+- `tools/checkEconomyLog.py`: keine Widersprüche.
+
 **Anbauer und Abbauer** (Nutzer, 2026-11-15): Findet ein benötigter dauerhafter Abbauer keinen Platz mit genug Vorkommen
 in Reichweite, wird zuerst ein Anbauer für ihn beauftragt (Erneuerer der Quelle: Förster, Plantage aus Lua ohne Produkt;
 Anlass „erneuert“, Kind des Abbauers, steht über ihm). Steht dessen Baustelle, kommt der Abbauer direkt daneben (nächster
 Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge in Reichweite nicht, alle anderen Regeln gelten
 (Material, Bauarbeiter, Grenze). Der Anbauer erneuert danach um diesen Abbauer
 (kein zweiter während seiner Anlaufzeit). Findet auch der Anbauer keinen Platz: kein Bauplatz für diesen Weg.
+
+**Höchstzahl Abbauer je Vorkommenmenge** (Nutzer, 2026-11-18; gilt für alle Ressourcen auf der Karte: Bäume,
+Steinhaufen, Kartenobjekte wie Kupfer, Zinn, Obsidian, Torf, Lehm, Erze und Fische): Jeder Abbauer bekommt höchstens
+8 Einheiten (`UNITS_PER_HARVESTER`, für alle Quellen gleich) der Vorkommen in seiner Reichweite. Ein Knoten, den k andere
+Abbauer derselben Quelle erreichen (stehende, Baustellen und im selben Schritt platzierte), zählt mit Menge / (k + 1).
+Ein Platz ist nur gültig, wenn die so geteilte Menge mindestens 8 erreicht; teilt kein anderer Abbauer die Knoten,
+genügt eine Einheit. Bäume, Steinhaufen und Kartenobjekte zählen nur, wenn der Arbeiter sie vom Platz aus zu Fuß
+erreicht (Weg höchstens 20 Schritte, wie beim Arbeiter). Mengen: Baum 1, Steinhaufen und Kartenobjekte Größe + 1, Erz
+und Fisch die Menge auf dem Knoten. Neben seinem Erneuerer (Anlass „neben (x,y)“) gilt die Regel nicht.
+
+Ursache der Abbauer, die nie arbeiteten (Replay des Nutzers vom 18.11.: 16 Sammler, meist CopperCollector, ohne
+einen Arbeitsgang nach etwa 5 min abgerissen): Bei den meisten hatten andere Sammler das Vorkommen während des Baus
+abgebaut (im Mittel 2,1 Sammler derselben Art in Reichweite), bei einem war das Vorkommen nicht erreichbar (von
+Granit umschlossen). Ein Spiel mit 8 KI auf der Karte und mit den Spieldaten des Nutzers (1 h 40) danach: kein Sammler
+ohne Arbeitsgang, im Mittel 1,5 Sammler derselben Art in Reichweite.
 
 **Bericht** (Log „ECONOMY“, jede Spielminute):
 - „Mangel ohne eigenen Auftrag“: warum ein Mangel keinen Auftrag hat, z. B. „gedeckt: fehlen 1,8/min,

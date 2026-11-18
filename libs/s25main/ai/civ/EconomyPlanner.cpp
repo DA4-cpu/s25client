@@ -28,6 +28,7 @@
 #include "world/GameWorld.h"
 #include "nodeObjs/noDeposit.h"
 #include "nodeObjs/noFlag.h"
+#include "nodeObjs/noGranite.h"
 #include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
 #include "gameData/GoodConsts.h"
@@ -180,6 +181,46 @@ namespace {
     bool sameSource(const Source& lhs, const Source& rhs)
     {
         return lhs.kind == rhs.kind && lhs.index == rhs.index;
+    }
+
+    /// Resources on the map a harvester takes (Nutzer, 2026-11-18: the limit per amount holds for all of them)
+    bool isMapResource(const Source& source)
+    {
+        return isDeposit(source) || source.kind == SourceKind::Ore || source.kind == SourceKind::Fish;
+    }
+
+    /// Units of the source at the node: a tree 1, a stone pile its stones, a map object of lua its wares, ore and fish
+    /// their amount in the ground
+    unsigned getSourceUnits(const GameWorldBase& world, const MapPoint pt, const Source& source)
+    {
+        switch(source.kind)
+        {
+            case SourceKind::Trees: return world.GetNO(pt)->GetType() == NodalObjectType::Tree ? 1u : 0u;
+            case SourceKind::StonePiles:
+            {
+                const auto* granite = world.GetSpecObj<noGranite>(pt);
+                return granite ? granite->GetSize() + 1u : 0u;
+            }
+            case SourceKind::MapObject:
+            {
+                const auto* deposit = world.GetSpecObj<noDeposit>(pt);
+                return deposit && deposit->GetObjectIdx() == source.index ? deposit->GetSize() + 1u : 0u;
+            }
+            case SourceKind::Ore:
+            {
+                const Resource resources = world.GetNode(pt).resources;
+                return resources.getType() == static_cast<ResourceType>(source.index) ? resources.getAmount() : 0u;
+            }
+            case SourceKind::Fish: return world.GetNode(pt).resources.has(ResourceType::Fish) ?
+                                            world.GetNode(pt).resources.getAmount() :
+                                            0u;
+            case SourceKind::None:
+            case SourceKind::Water:
+            case SourceKind::Animals:
+            case SourceKind::Land:
+            case SourceKind::Plantable: return 0;
+        }
+        return 0;
     }
 
     /// Wares per minute one producer of the recipe makes of the ware by the work times of the game data
@@ -1131,6 +1172,9 @@ void EconomyPlanner::UpdateWorkingBuildings()
     helpers::erase_if(clearingPending_, [&](const MapPoint pt) {
         return player_.IsClearingWoodcutter(pt) || (!isWoodcutter(pt) && !construction.IsSitePending(pt));
     });
+    // Made woodcutters for good: until the mark is removed in the game or the woodcutter is gone
+    helpers::erase_if(unclearingPending_,
+                      [&](const MapPoint pt) { return !player_.IsClearingWoodcutter(pt) || !isWoodcutter(pt); });
     // Sites placed by the planner: forgotten when the building or site is gone
     for(auto it = placements_.begin(); it != placements_.end();)
     {
@@ -1816,6 +1860,9 @@ bool EconomyPlanner::IsInChain(unsigned orderId, const GoodType good, const Buil
 
 bool EconomyPlanner::IsClearingWoodcutter(const MapPoint pt) const
 {
+    // Made one for good (command not executed yet): not clearing anymore
+    if(helpers::contains(unclearingPending_, pt))
+        return false;
     return player_.IsClearingWoodcutter(pt) || helpers::contains(clearingPending_, pt);
 }
 
@@ -2227,6 +2274,7 @@ void EconomyPlanner::CreateOrders()
     }
     AddDepositOrders();
     AddRenewalOrders();
+    UpgradeClearingWoodcutters();
     AddStorageOrder();
     AddExpandingTerritoryOrder();
 }
@@ -2838,6 +2886,77 @@ void EconomyPlanner::AddRenewalOrders()
                 AddOrder(std::move(order));
             }
         }
+    }
+}
+
+void EconomyPlanner::UpgradeClearingWoodcutters()
+{
+    // Nutzer, 2026-11-18: a clearing woodcutter with fewer than CLEARING_UPGRADE_BELOW trees in its reach becomes one for
+    // good when a needed forester is in the list, and gets that forester. The woodcutter the forester was for waits for
+    // the next one. A forester for a woodcutter without a place (it would be placed beside it): the upgraded woodcutter
+    // is that woodcutter, the order goes. Of several clearing woodcutters the nearest to the woodcutter the forester was
+    // for (without one: the nearest to a warehouse)
+    const Recipe* woodcutter = FindRecipe(BuildingType::Woodcutter);
+    const Renewer* renewer = woodcutter ? FindRenewer(woodcutter->source) : nullptr;
+    if(!woodcutter || woodcutter->reach == 0 || !renewer)
+        return;
+    const GameWorldBase& world = player_.GetGameWorld();
+    std::vector<MapPoint> candidates;
+    for(const nobUsual* building : player_.GetBuildingRegister().GetBuildings(BuildingType::Woodcutter))
+    {
+        const MapPoint pos = building->GetPos();
+        if(IsClearingWoodcutter(pos)
+           && MapProfile::CountSourceNodes(world, pos, woodcutter->reach, woodcutter->source) < CLEARING_UPGRADE_BELOW)
+            candidates.push_back(pos);
+    }
+    if(candidates.empty())
+        return;
+    // Needed foresters not placed yet (not those waiting for research: no forester can come)
+    std::vector<unsigned> foresters;
+    for(const Order& order : orders_)
+    {
+        if(order.cause == OrderCause::Renewal && order.building == renewer->building && order.kind == OrderKind::Needed
+           && order.forBuilding == BuildingType::Woodcutter && order.state != OrderState::Placed
+           && !(order.state == OrderState::Blocked && order.retry.kind == RetryCondition::Kind::Research))
+            foresters.push_back(order.id);
+    }
+    const auto distanceToWarehouse = [&](const MapPoint pt) {
+        unsigned result = std::numeric_limits<unsigned>::max();
+        for(const nobBaseWarehouse* warehouse : player_.GetBuildingRegister().GetStorehouses())
+            result = std::min(result, world.CalcDistance(pt, warehouse->GetPos()));
+        return result;
+    };
+    for(const unsigned id : foresters)
+    {
+        if(candidates.empty())
+            break;
+        Order* forester = Find(id);
+        if(!forester)
+            continue;
+        const MapPoint origin = forester->near;
+        const auto best = std::min_element(candidates.begin(), candidates.end(), [&](const MapPoint lhs, const MapPoint rhs) {
+            if(origin.isValid())
+                return world.CalcDistance(lhs, origin) < world.CalcDistance(rhs, origin);
+            return distanceToWarehouse(lhs) < distanceToWarehouse(rhs);
+        });
+        const MapPoint pos = *best;
+        candidates.erase(best);
+        aijh_.GetInterface().SetClearingWoodcutter(pos, false);
+        unclearingPending_.push_back(pos);
+        LOG.write("ECONOMY player %u: rodender Holzfäller %s wird dauerhaft, bekommt den Förster%s\n")
+          % player_.GetPlayerId() % pointName(pos)
+          % (origin.isValid() ? " für den Holzfäller " + pointName(origin) :
+                                std::string(" für einen Holzfäller ohne Bauplatz (Auftrag entfällt)"));
+        // The forester is for it now (renews around it). A woodcutter order without a place it was for: not needed
+        const unsigned harvesterId = forester->parent;
+        forester->near = pos;
+        forester->parent = 0;
+        forester->state = OrderState::Open;
+        forester->retry = RetryCondition{};
+        forester->reason = "für den Holzfäller " + pointName(pos) + " (rodend, jetzt dauerhaft)";
+        const Order* harvester = harvesterId ? Find(harvesterId) : nullptr;
+        if(harvester && harvester->building == BuildingType::Woodcutter && harvester->state != OrderState::Placed)
+            Remove(harvesterId);
     }
 }
 
@@ -3930,7 +4049,10 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
         std::vector<MapPoint> clearing = player_.GetClearingWoodcutters();
         clearing.insert(clearing.end(), clearingPending_.begin(), clearingPending_.end());
         for(const MapPoint pos : clearing)
-            avoid.emplace_back(pos, nofFarmhand::GetWorkRadius(Job::Woodcutter) + foresterReach);
+        {
+            if(IsClearingWoodcutter(pos))
+                avoid.emplace_back(pos, nofFarmhand::GetWorkRadius(Job::Woodcutter) + foresterReach);
+        }
         const BuildingRegister& buildings = player_.GetBuildingRegister();
         for(const nobUsual* charburner : buildings.GetBuildings(BuildingType::Charburner))
             avoid.emplace_back(charburner->GetPos(), nofFarmhand::GetWorkRadius(Job::CharBurner) + foresterReach);
@@ -4062,7 +4184,86 @@ bool EconomyPlanner::IsPlaceValid(const Order& order, const Recipe* recipe, cons
     if(NeedsFields(bld) && !order.besideRenewer && CountFieldNodes(bld, pt, false) < MIN_FIELD_NODES)
         return false;
     // The rules of the old AI that stay (hunter, quarry, fishery, storehouse, farm, charburner)
-    return aijh_.IsPlaceAllowed(bld, pt);
+    if(!aijh_.IsPlaceAllowed(bld, pt))
+        return false;
+    // Enough units of the source for one more harvester (Nutzer, 2026-11-18): the nodes its worker can walk to, shared
+    // with the other harvesters reaching them, at least UNITS_PER_HARVESTER, 1 if no other one reaches them. Not beside
+    // its renewer (it plants the source)
+    if(recipe && recipe->reach > 0 && !order.besideRenewer && isMapResource(recipe->source)
+       && !HasUnitsForHarvester(*recipe, pt))
+        return false;
+    return true;
+}
+
+bool EconomyPlanner::HasUnitsForHarvester(const Recipe& recipe, const MapPoint pt) const
+{
+    const GameWorldBase& world = player_.GetGameWorld();
+    const BuildingRegister& buildings = player_.GetBuildingRegister();
+    // The other harvesters of the source and their reach: buildings, building sites and sites ordered by the planner
+    std::vector<std::pair<MapPoint, unsigned>> others;
+    std::vector<BuildingType> types;
+    for(const Recipe& other : civAI_.GetGraph().GetRecipes())
+    {
+        if(other.reach == 0 || !sameSource(other.source, recipe.source) || helpers::contains(types, other.building))
+            continue;
+        types.push_back(other.building);
+        for(const nobUsual* building : buildings.GetBuildings(other.building))
+            others.emplace_back(building->GetPos(), other.reach);
+        for(const noBuildingSite* site : buildings.GetBuildingSites())
+        {
+            if(site->GetBuildingType() == other.building)
+                others.emplace_back(site->GetPos(), other.reach);
+        }
+        for(const auto& [pos, placement] : placements_)
+        {
+            if(placement.building == other.building && !world.GetSpecObj<noBaseBuilding>(pos))
+                others.emplace_back(pos, other.reach);
+        }
+    }
+    // The nodes with the source (nearest first) and their share: the units divided by the harvesters reaching them
+    std::vector<std::pair<MapPoint, double>> nodes;
+    double upperBound = 0;
+    bool shared = false;
+    world.CheckPointsInRadius(
+      pt, recipe.reach,
+      [&](const MapPoint curPt, unsigned) {
+          const unsigned amount = getSourceUnits(world, curPt, recipe.source);
+          if(amount == 0)
+              return false;
+          unsigned numOthers = 0;
+          for(const auto& [pos, reach] : others)
+          {
+              if(pos != pt && world.CalcDistance(pos, curPt) <= reach)
+                  ++numOthers;
+          }
+          shared |= numOthers > 0;
+          nodes.emplace_back(curPt, static_cast<double>(amount) / (numOthers + 1));
+          upperBound += nodes.back().second;
+          return false;
+      },
+      true);
+    // No other harvester reaches them: 1 unit suffices, otherwise UNITS_PER_HARVESTER
+    const double needed = shared ? UNITS_PER_HARVESTER : 1e-9;
+    if(upperBound < needed)
+        return false;
+    // Workers walk to trees, stone piles and map objects (at most 20 steps like nofFarmhand): only those count. Fish
+    // and ore: no path. Paths only as long as the result is open
+    if(!isDeposit(recipe.source))
+        return true;
+    double units = 0;
+    for(const auto& [curPt, share] : nodes)
+    {
+        upperBound -= share;
+        if(world.FindHumanPath(pt, curPt, 20))
+        {
+            units += share;
+            if(units >= needed)
+                return true;
+        }
+        if(units + upperBound < needed)
+            return false;
+    }
+    return false;
 }
 
 MapPoint EconomyPlanner::FindPlaceNear(const Order& order, const Recipe* recipe, const MapPoint anchor,

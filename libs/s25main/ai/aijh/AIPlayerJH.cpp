@@ -2613,29 +2613,30 @@ bool AIPlayerJH::AnimalsInRange(const MapPoint pt, unsigned min)
         ly = pt.y + SQUARE_SIZE;
     else
         ly = gwb.GetHeight() - 1;
-    // Durchgehen und nach Tieren suchen
+    // Durchgehen und nach Tieren suchen. First the animals that can be hunted, then the paths (expensive) only as long
+    // as the result is open: fewer animals than `min` need no path at all
+    std::vector<MapPoint> animals;
     for(MapPoint p2(0, fy); p2.y <= ly; ++p2.y)
     {
         for(p2.x = fx; p2.x <= lx; ++p2.x)
         {
-            // Search for animals
             for(const noBase& fig : gwb.GetFigures(p2))
             {
-                if(fig.GetType() == NodalObjectType::Animal)
-                {
-                    // Ist das Tier überhaupt zum Jagen geeignet?
-                    if(!static_cast<const noAnimal&>(fig).CanHunted())
-                        continue;
-                    // Und komme ich hin?
-                    if(gwb.FindHumanPath(pt, static_cast<const noAnimal&>(fig).GetPos(), maxrange))
-                    // Dann nehmen wir es
-                    {
-                        if(++huntablecount >= min)
-                            return true;
-                    }
-                }
+                // Ist das Tier überhaupt zum Jagen geeignet?
+                if(fig.GetType() == NodalObjectType::Animal && static_cast<const noAnimal&>(fig).CanHunted())
+                    animals.push_back(static_cast<const noAnimal&>(fig).GetPos());
             }
         }
+    }
+    if(animals.size() < min)
+        return false;
+    for(unsigned i = 0; i < animals.size(); ++i)
+    {
+        // Und komme ich hin? Dann nehmen wir es
+        if(gwb.FindHumanPath(pt, animals[i], maxrange) && ++huntablecount >= min)
+            return true;
+        if(huntablecount + (animals.size() - i - 1) < min)
+            return false;
     }
     return false;
 }
