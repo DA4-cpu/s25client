@@ -59,6 +59,8 @@ rttr:AddMapObject{    name = "TinDeposit",    title = "TinDeposit",    sizes = 1
 
 rttr:AddMapObject{    name = "CopperDeposit",    title = "CopperDeposit",    sizes = 16,           look = "Granite2",    tint = 0xffae00    }
 
+rttr:AddMapObject{    name = "IronDeposit",    title = "IronDeposit",    sizes = 6,           look = "Granite2",    tint = 0xfc0303 }
+
 rttr:AddMapObject{    name = "AsphaltLake",    title = "AsphaltLake",    sizes = 16,           look = "Granite2",    tint = 0x111111    }
 
 rttr:AddMapObject{ name = "ReedDeposit", title = "ReedDeposit", sizes = 3, look = "Granite1", tint = 0x1133ff, growTime = 300, plantSize = 3}

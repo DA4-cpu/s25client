@@ -106,6 +106,7 @@ rttr:AddWare{name = "CopperShovel", title = "Copper Shovel", kind = "Shovel", lo
 rttr:AddWare{name = "CopperCrucible", title = "Copper Crucible", kind = "Crucible", look = "Crucible", transport = "Crucible"}
 rttr:AddWare{name = "CopperScythe", title = "Copper Scythe", kind = "Scythe", look = "Scythe", transport = "Scythe"}
 rttr:AddWare{name = "CopperCleaver", title = "Copper Cleaver", kind = "Cleaver", look = "Cleaver", transport = "Cleaver"}
+rttr:AddWare{name = "CopperPlough", title = "Copper Plough", kind = "Plough", look = "Cleaver", transport = "Cleaver"}
 
 rttr:AddWare{name = "BronzeIngot", title = "Bronze Ingot", look = "Iron", transport = "Iron"}
 
@@ -123,6 +124,7 @@ rttr:AddWare{name = "BronzeShovel", title = "Bronze Shovel", kind = "Shovel", lo
 rttr:AddWare{name = "BronzeCrucible", title = "Bronze Crucible", kind = "Crucible", look = "Crucible", transport = "Crucible"}
 rttr:AddWare{name = "BronzeScythe", title = "Bronze Scythe", kind = "Scythe", look = "Scythe", transport = "Scythe"}
 rttr:AddWare{name = "BronzeCleaver", title = "Bronze Cleaver", kind = "Cleaver", look = "Cleaver", transport = "Cleaver"}
+rttr:AddWare{name = "BronzePlough", title = "Bronze Plough", kind = "Plough", look = "Cleaver", transport = "Cleaver"}
 
 rttr:AddWare{name = "Obsidian", title = "Obsidian", look = "Coal", transport = "Coal"}
 
@@ -135,11 +137,12 @@ rttr:AddWare{name = "ObsidianSaw", title = "Obsidian Saw",    kind = "Saw", look
 rttr:AddWare{name = "ObsidianScythe", title = "Obsidian Scythe", kind = "Scythe", look = "Scythe", transport = "Scythe"}
 rttr:AddWare{name = "ObsidianCleaver", title = "Obsidian Cleaver", kind = "Cleaver", look = "Cleaver", transport = "Cleaver"}
 
+rttr:AddWare{name = "IronPlough", title = "Iron Plough", kind = "Plough", look = "Cleaver", transport = "Cleaver"}
 
 --rttr:AddWare{ name = "Bow", title = "Bow", kind = "Bow", look = "Bow", transport = "Bow"} 
 --rttr:AddWare{ name = "Rollingpin", title = "Rollingpin", kind = "Rollingpin", look = "Rollingpin", transport = "Rollingpin" } 
 --rttr:AddWare{ name = "RodAndLine", title = "RodAndLine", kind = "RodAndLine", look = "RodAndLine", transport = "RodAndLine" } 
-rttr:AddWare{ name = "WoodenHammer", title = "WoodenHammer", kind = "Hammer", look = "Hammer", transport = "Hammer" } 
+-- rttr:AddWare{ name = "WoodenHammer", title = "WoodenHammer", kind = "Hammer", look = "Hammer", transport = "Hammer" } 
 rttr:AddWare{ name = "WoodenSpindle", title = "WoodenSpindle", kind = "Spindle", look = "Bow", transport = "Bow" } 
 rttr:AddWare{ name = "WoodenBucket", title = "WoodenBucket", kind = "Bucket", look = "Water", transport = "Water" } 
 
@@ -166,9 +169,9 @@ rttr:AddWare{ name = "Tar", title = "Tar", kind ="adhesive", look = "Coal", tran
 rttr:AddWare{ name = "Bitumen", title = "Bitumen", kind ="adhesive", look = "Coal", transport = "Coal"}
 
 rttr:AddWare{ name = "Asphalt", title = "Asphalt", look = "Water", transport = "Water"}
-]]
-rttr:AddWare{ name = "Firewood", title = "Firewood", look = "Wood", transport = "Wood"}
 
+rttr:AddWare{ name = "Firewood", title = "Firewood", look = "Wood", transport = "Wood"}
+]]
 -- Baumaterial
 rttr:AddWare{    name = "Adobe",    title = "Adobe",        kind = "BasicBuildingMaterial",     look = "Leather",    transport = "Stones"}
 

@@ -68,9 +68,9 @@ rttr:AddRegulator{    name = "Equipment",    title = "Equipment",
 }
 
 rttr:AddRegulator{    name = "WoodenTools",    title = "WoodenTools", --nur ein temporärer Übergangsregler bis tools überarbeitet wurde und die Gesamtverteilung umgesetzt wurde
-    entries = {  { tags = "WoodenHammer", title = "WoodenHammer", value = 5 },
+    entries = {  --{ tags = "WoodenHammer", title = "WoodenHammer", value = 5 },
         { tags = "WoodenSpindle", title = "WoodenSpindle", value = 8 },
-        { tags = "WoodenBucket", title = "WoodenBucket", value = 5 },
+        { tags = "WoodenBucket", title = "WoodenBucket", value = 1 },
         { tags = "Bow", title = "Bow", value = 5 },
         { tags = "RodAndLine", title = "RodAndLine", value = 5 },
         { tags = "Rollingpin", title = "Rollingpin", value = 5 },    },
@@ -83,7 +83,7 @@ rttr:AddRegulator{    name = "ObsidianTools",    title = "ObsidianTools", -- Pla
     entries = {  { tags = "ObsidianAxe", title = "ObsidianAxe", value = 8 },
         { tags = "ObsidianSaw", title = "ObsidianSaw", value = 5 },
         { tags = "ObsidianScythe", title = "ObsidianScythe", value = 8 },
-        { tags = "ObsidianSword", title = "ObsidianSword", value = 1 },
+        { tags = "ObsidianSword", title = "ObsidianSword", value = 5 },
         { tags = "ObsidianSpear", title = "ObsidianSpear", value = 1 },
         { tags = "ObsidianArrow", title = "ObsidianArrow", value = 1 },
         { tags = "ObsidianCleaver", title = "ObsidianCleaver", value = 2 },  },

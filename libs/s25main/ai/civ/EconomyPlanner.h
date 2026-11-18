@@ -260,7 +260,7 @@ class EconomyPlanner
 public:
     /// Balance length: the statistic of the last this many minutes counts (also the time after which the productivity
     /// of a new building counts)
-    static constexpr unsigned BALANCE_MINUTES = 7;
+    static constexpr unsigned BALANCE_MINUTES = 5;
     /// The threshold of a surplus is this many times the consumption per minute ...
     static constexpr unsigned SURPLUS_FACTOR = 10;
     /// ... but at least this stock
@@ -269,16 +269,16 @@ public:
     static constexpr unsigned CLEARING_MIN_TREES = 8;
     /// Harvesters of other deposits (stone piles, map objects of lua) are placed where at least this many deposits are
     /// in reach (independent of the stock)
-    static constexpr unsigned MIN_DEPOSITS_IN_REACH = 1;
+    static constexpr unsigned MIN_DEPOSITS_IN_REACH = 2;
     /// A harvester for good gets a renewer (forester) when fewer than this many of its source (trees) are in its reach
     static constexpr unsigned RENEW_BELOW = 7;
     /// A new harvester of a source on the map (trees, stone piles, map objects of lua, fish, ore) needs this many units
     /// of it in its reach, each node shared with the other harvesters of the source reaching it (Nutzer, 2026-11-18,
     /// for all sources). None of them reaching its nodes: 1 unit suffices
-    static constexpr unsigned UNITS_PER_HARVESTER = 8;
+    static constexpr unsigned UNITS_PER_HARVESTER = 16;
     /// A clearing woodcutter with fewer than this many trees in its reach becomes one for good when a needed forester is
     /// in the list: it gets that forester (Nutzer, 2026-11-18)
-    static constexpr unsigned CLEARING_UPGRADE_BELOW = 5;
+    static constexpr unsigned CLEARING_UPGRADE_BELOW = 7;
     /// Tools of each kind the player keeps in stock beyond what is asked for (tool orders)
     static constexpr unsigned TOOLS_IN_STOCK = 2;
     /// A chain is stuck if nothing of its ware was made in this many minutes (and the warehouses do not have enough):

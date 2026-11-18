@@ -64,7 +64,7 @@ rttr:AddTechnology{
     description = "Statt nur zu jagen und zu sammeln, säen die Menschen Getreide aus und ernten es. "
         .. "Die Grundlage für Brot, Bier und Viehzucht.",
     era = 0,
-    knowledge = { LWP = 6 },
+    knowledge = { LWP = 2 },
     time = 60,
     unlocks = { buildings = { "Farm" } },
     aiPriority = 90,
@@ -75,7 +75,7 @@ rttr:AddTechnology{
     title = "TinCollector",
     description = "Für was das wohl gut ist? ",
     era = 0,
-    knowledge = { IWP = 6 },
+    knowledge = { IWP = 5 },
     time = 60,
     unlocks = { buildings = { "TinCollector" } },
     aiPriority = 80,
@@ -86,7 +86,7 @@ rttr:AddTechnology{
     title = "PeatCollector",
     description = "Für was das wohl gut ist? ",
     era = 0,
-    knowledge = { IWP = 6 },
+    knowledge = { IWP = 5 },
     time = 60,
     unlocks = { buildings = { "PeatCollector" } },
     aiPriority = 80,
@@ -97,8 +97,9 @@ rttr:AddTechnology{
     title = "Well", -- PLATZHALTER: Anzeigename
     description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
     era = 0,
+    requires = { "agriculture" },  
     knowledge = { LWP = 4 }, 
-    -- cost = { ... },
+    cost = { Rope = 1 },
     time = 60,
     unlocks = { buildings = { "Well" } },
     aiPriority = 80,

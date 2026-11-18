@@ -21,7 +21,7 @@ const std::array<FullJobData, NUM_BUILTIN_JOBS> fullJobData = {{
   {{GoodType::Nothing, 385, 400, 5}, {false, 0}, gettext_noop("Helper")},
   {{GoodType::Axe, 148, 989, 5}, {false, 5}, gettext_noop("Woodchopper")},
   {{GoodType::RodAndLine, 729, 625, 5}, {false, 12}, gettext_noop("Fisher")},
-  {{GoodType::Shovel, 66, 804, 5}, {false, 8}, gettext_noop("Tree planter")},
+  {{GoodType::Shovel, 66, 704, 5}, {false, 8}, gettext_noop("Tree planter")},
   {{GoodType::Saw, 479, 600, 5}, {false, 6}, gettext_noop("Carpenter")},
   {{GoodType::PickAxe, 129, 925, 5}, {false, 7}, gettext_noop("Stonemason")},
   {{GoodType::Bow, 0, 900, 5}, {false, 20}, gettext_noop("Huntsman")},

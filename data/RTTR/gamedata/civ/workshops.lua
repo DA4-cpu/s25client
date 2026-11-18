@@ -191,7 +191,7 @@ rttr:AddWorkshop{
     collect = { object = "LoamDeposit", radius = 9 }, 
     output = "Loam",
     outputRatio = 0.75,
-    tools = { baseSpeed = 25, tools = { "Shovel" } },
+    tools = { baseSpeed = 25, tools = { "Shovel", "Bucket" } },
     workTime = 7,                    
     waitTime = 27,                   
     aiNearBorder = true,
@@ -208,7 +208,7 @@ rttr:AddWorkshop{
     collect = { object = "PeatDeposit", radius = 9 }, 
     output = "Coal",
     outputRatio = 0.4,
-    tools = { baseSpeed = 25, tools = { "Shovel" } },
+    tools = { baseSpeed = 25, tools = { "Shovel", "Bucket" } },
     workTime = 7,                    
     waitTime = 20,                   
     aiNearBorder = true,
@@ -225,7 +225,7 @@ rttr:AddWorkshop{
     collect = { object = "TinDeposit", radius = 9 }, 
     output = "TinOre",
     outputRatio = 0.6,
-    tools = { baseSpeed = 0, tools = { "PickAxe" } },
+    tools = { baseSpeed = 0, tools = { "PickAxe", "Bucket" } },
     workTime = 7,                    
     waitTime = 27,                   
     aiNearBorder = true,
@@ -242,9 +242,26 @@ rttr:AddWorkshop{
     collect = { object = "CopperDeposit", radius = 9 }, 
     output = "CopperOre",
     outputRatio = 0.5,
-    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
     workTime = 7,                    
     waitTime = 30,                   
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:AddWorkshop{
+    name = "IronCollector",
+    title = "IronCollector",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },           
+    look = "Quarry",                
+    worker = { title = "Miner", tool = "none", look = "Miner" },
+    collect = { object = "IronDeposit", radius = 9 }, 
+    output = "IronOre",
+    outputRatio = 0.7,
+    tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
+    workTime = 7,                    
+    waitTime = 32,                   
     aiNearBorder = true,
     knowledge = { IWP = 1 },
 }
@@ -259,7 +276,7 @@ rttr:AddWorkshop{
     collect = { object = "ObsidianDeposit", radius = 9 }, 
     output = "Obsidian",
     outputRatio = 0.3,
-    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
     workTime = 7,                    
     waitTime = 27,                   
     aiNearBorder = true,
@@ -387,7 +404,7 @@ rttr:AddWorkshop{
     look = "Sawmill",
     worker = { title = "Metalworker", tool = "none", look = "Metalworker" },
     inputs = { "Wood", "Rope" }, 
-    outputs = { "Rollingpin", "WoodenHammer", "RodAndLine", "Bow", "WoodenSpindle", "WoodenBucket"}, 
+    outputs = { "Rollingpin", "RodAndLine", "Bow", "WoodenSpindle", "WoodenBucket"}, -- WoodenHammer erst wenn Warengesamtzahl erhöht wurde
     outputRatio = 0.6,
     outputChoice = "WoodenTools",
     tools = { baseSpeed = 25, tools = { "Saw" } },
@@ -403,7 +420,7 @@ rttr:AddWorkshop{
     look = "Metalworks",
     worker = { title = "Metalworker", tool = "none", look = "Metalworker" },
     inputs = { "Obsidian", "Wood" }, -- "adhesive" ergänzen wenn diese endlich collectable auf der Map sind
-    outputs = { "ObsidianAxe", "ObsidianSaw", "ObsidianScythe", "ObsidianCleaver", "ObsidianSword", "ObsidianSpear", "ObsidianArrow"}, 
+    outputs = { "ObsidianAxe", "ObsidianSaw", "ObsidianScythe", "ObsidianCleaver", "ObsidianSword", "ObsidianSpear", "ObsidianArrow"}, -- eigentlich ObsidianSword auch für Rekrutierung nutzbar sein, aber das funktioniert noch nicht. 
     outputChoice = "ObsidianTools",
     outputRatio = 0.8,
     tools = { baseSpeed = 25 },
@@ -479,7 +496,7 @@ rttr:AddWorkshop{
     outputRatio = 0.5,
     workTime = 120,
     knowledge = { IWP = 3 },
-}]]
+}
 
 rttr:AddWorkshop{
     name = "FirewoodSplitter",
@@ -495,7 +512,7 @@ rttr:AddWorkshop{
     tools = { baseSpeed = 0, tools = { "Axe" } },
     workTime = 40,
     knowledge = { LWP = 1, IWP = 1 },
-}
+}]]
 
 rttr:AddWorkshop{
     name = "BronzeSmelter",
@@ -520,7 +537,7 @@ rttr:AddWorkshop{
     look = "Armory",
     worker = { title = "Armorer", tool = "none", look = "Armorer" },
     inputs = { "BronzeIngot", "Coal"},
-    outputs = { "BronzeSword", "BronzeShield" }, 
+    outputs = { "BronzeSword", "BronzeShield" }, --  BronzeSword und BronzeShield kann noch nicht Verwendet werden. 
     outputChoice = "Equipment",
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Hammer" } },

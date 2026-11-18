@@ -253,7 +253,7 @@ rttr:AddMapResource{
 	amount = "stonePiles",
 	terrain = { "land", "mountain" },
 	cluster = 3, 
-	density = 80, 
+	density = 90, 
 	-- Im feuchten Gebiet sind Steine selten, weil sie von der Vegetation verdeckt werden (Konzept).
 	weights = {
 		{ humidity = {80, 100}, factor = 0 }, 
@@ -270,7 +270,7 @@ rttr:AddMapResource{
 	object = "LoamDeposit",
 	amount = 7,
 	terrain = { "land" },
-	cluster = 6, 
+	cluster = 5, 
 	density = 80, 
 	weights = {
 		{ humidity = {80, 100}, factor = 1 }, 
@@ -286,7 +286,7 @@ rttr:AddMapResource{
 	object = "LimeDeposit",
 	amount = 4,
 	terrain = { "land", "mountain" },
-	cluster = 3, 
+	cluster = 2, 
 	density = 90, 
 	weights = {
 		{ humidity = {80, 100}, factor = 0 }, 
@@ -302,7 +302,7 @@ rttr:AddMapResource{
 	object = "PeatDeposit",
 	amount = 5,
 	terrain = { "land" },
-	cluster = 8, 
+	cluster = 7, 
 	density = 50,  
 	weights = {
 		{ humidity = {90, 100}, factor = 1 }, 
@@ -347,9 +347,25 @@ rttr:AddMapResource{
 	name = "CopperDeposit",
 	object = "CopperDeposit",
 	amount = 3, 
-    terrain = { "land" },
+    terrain = { "land", "mountain" },
 	cluster = 8, 
 	density = 50, 
+	weights = {
+		{ humidity = {80, 100}, factor = 0.2 }, 
+		{ humidity = {60, 80}, factor = 0.4}, 
+		{ humidity = {40, 60}, factor = 0.6 },                           
+		{ humidity = {20, 40}, factor = 0.8 },                           
+		{ humidity = {0, 20}, factor = 1 }                            
+	}
+}
+
+rttr:AddMapResource{
+	name = "IronDeposit",
+	object = "IronDeposit",
+	amount = 0.5, 
+    terrain = { "land", "mountain" },
+	cluster = 0, 
+	density = 70, 
 	weights = {
 		{ humidity = {80, 100}, factor = 0.2 }, 
 		{ humidity = {60, 80}, factor = 0.4}, 

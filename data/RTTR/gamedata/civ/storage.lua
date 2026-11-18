@@ -12,9 +12,9 @@
 --   die Grenze hinaus. Lager ohne Eintrag fassen beliebig viel.
 --   Eigene Lager aus workshops.lua (storage = { ... }) haben ihre Kapazität dort.
 rttr:SetWarehouseCapacity{
-    Headquarters   = 500, -- Hauptquartier
-    HarborBuilding = 300, -- Hafen
-    Storehouse     = 200, -- Lagerhaus
+    Headquarters   = 700, -- Hauptquartier
+    HarborBuilding = 500, -- Hafen
+    Storehouse     = 400, -- Lagerhaus
 }
 
 -- rttr:SetFlagWorkLimit(Anzahl)
