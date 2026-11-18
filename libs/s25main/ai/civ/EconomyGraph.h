@@ -14,6 +14,9 @@
 #include <vector>
 
 class GameWorldBase;
+namespace civ {
+class Content;
+}
 
 namespace civai {
 
@@ -69,7 +72,8 @@ struct Recipe
     /// Radius around the building in which its worker takes the source (trees, stone piles, fish, ore, map objects of
     /// lua). 0: the source cannot be counted around the building (animals, land, water, plants) or there is none
     unsigned reach = 0;
-    /// Tool slots without which the building does not work (tool reform, base speed 0): any ware of each slot
+    /// Tool reform, base speed 0: the building works with a tool of any of these slots (only the tools giving work
+    /// speed). Empty: it works without tools
     std::vector<std::vector<GoodType>> requiredTools;
     /// Not buildable at the start: one of these technologies unlocks it
     bool lockedAtStart = false;
@@ -102,6 +106,11 @@ public:
 
     /// Text for a source, e.g. "Bäume" or "Erz Copper"
     std::string GetSourceName(const Source& source) const;
+
+    /// Tool reform: the tool slots of a building type of which it needs one to work at all (base speed 0), each with
+    /// the tools of the slot giving work speed. Empty: it works without tools (base speed > 0, or no tool reform);
+    /// its tools are only a bonus then (Nutzer, 2026-11-18)
+    static std::vector<std::vector<GoodType>> GetWorkTools(const civ::Content& content, BuildingType bld);
 
 private:
     void AddBuiltinRecipes(const GameWorldBase& world);

@@ -433,6 +433,9 @@ void EconomyPlanner::RegisterGroups()
             if(!slot.wares.empty())
                 GetGroupIdx(slot.wares, true);
         }
+        // The tools of a slot giving work speed (CheckToolsAndHelpers)
+        for(const std::vector<GoodType>& wares : EconomyGraph::GetWorkTools(content, bld))
+            GetGroupIdx(wares, true);
     }
     helpers::EnumArray<std::vector<GoodType>, Tool> toolKinds;
     for(const auto good : helpers::enumRange<GoodType>())
@@ -538,26 +541,29 @@ void EconomyPlanner::AddPlanned(const BuildingType bld, const bool withCosts, co
         AddPlannedEntry(entry, orderId);
 }
 
+GoodType EconomyPlanner::GetRecruitTool(const BuildingType bld) const
+{
+    // The tool to recruit its worker, unless a worker waits in a warehouse
+    const civ::Content& content = civ::getActiveContent();
+    const auto job = getJob(bld);
+    if(!job || snapshot_.inWarehousesPeople[*job] > snapshot_.jobsWanted[*job] || content.IsRecruitedWithoutTool(*job))
+        return GoodType::Nothing;
+    if(isCustomJob(*job))
+    {
+        const civ::CustomWorker* worker = content.GetWorker(*job);
+        return worker ? worker->tool : GoodType::Nothing;
+    }
+    return JOB_CONSTS[*job].tool.value_or(GoodType::Nothing);
+}
+
 void EconomyPlanner::AddToolDemand(std::vector<OpenDemand>& demand, const BuildingType bld) const
 {
     if(!BuildingProperties::IsUsual(bld))
         return;
     const civ::Content& content = civ::getActiveContent();
-    // The tool to recruit its worker, unless a worker waits in a warehouse
-    const auto job = getJob(bld);
-    if(job && snapshot_.inWarehousesPeople[*job] <= snapshot_.jobsWanted[*job] && !content.IsRecruitedWithoutTool(*job))
-    {
-        GoodType tool = GoodType::Nothing;
-        if(isCustomJob(*job))
-        {
-            if(const civ::CustomWorker* worker = content.GetWorker(*job))
-                tool = worker->tool;
-        } else
-            tool = JOB_CONSTS[*job].tool.value_or(GoodType::Nothing);
-        if(tool != GoodType::Nothing)
-            demand.push_back({{tool}, 1, WareUse::Tool});
-    }
-    // Tool reform: one tool per slot
+    if(const GoodType tool = GetRecruitTool(bld); tool != GoodType::Nothing)
+        demand.push_back({{tool}, 1, WareUse::Tool});
+    // Tool reform: one tool per slot (also the slots of a building working without tools: it asks for them)
     for(const civ::BuildingTools::Slot& slot : content.GetBuildingTools(bld).slots)
     {
         if(!slot.wares.empty())
@@ -603,8 +609,9 @@ void EconomyPlanner::UpdatePlanned()
 void EconomyPlanner::FinishStatus(WareStatus& status) const
 {
     status.forecast = status.free + status.forecastProduction - status.forecastConsumption;
-    // The shares of the entries are no whole numbers: rounding errors are no shortage
-    if(std::abs(status.forecast) < 1e-6)
+    // The shares of the entries are no whole numbers, the production of a balance length neither: rounding errors are
+    // no shortage (e.g. -30 + 29.99999). Below what the report shows (num: 0.005) it is 0
+    if(std::abs(status.forecast) < 0.005)
         status.forecast = 0;
     const double threshold = std::max(static_cast<double>(MIN_STOCK), SURPLUS_FACTOR * status.consumptionPerMinute);
     if(status.forecast < 0)
@@ -776,7 +783,8 @@ void EconomyPlanner::ComputeToolFlows()
             std::vector<GoodType> missing;
             const Diagnosis diagnosis = GetDiagnosis(*building, recipe, missing);
             if(age < windowGFs || diagnosis == Diagnosis::Working || diagnosis == Diagnosis::BadTool
-               || diagnosis == Diagnosis::SourceFar || diagnosis == Diagnosis::FewFields)
+               || diagnosis == Diagnosis::MissingTool || diagnosis == Diagnosis::SourceFar
+               || diagnosis == Diagnosis::FewFields)
                 num += 1;
         }
         maker.capacity = num * ToolMakerCapacity(recipe.building) * length;
@@ -1576,13 +1584,11 @@ EconomyPlanner::Diagnosis EconomyPlanner::Diagnose(const nobUsual& building, con
         return Diagnosis::NoRoad;
     if(!building.HasWorker())
         return player_.IsJobWanted(building) ? Diagnosis::NoWorker : Diagnosis::WorkerComing;
-    // Tool reform: an empty slot, also when the building works slowly without the tool
+    // Tool reform: it does not work without tools (base speed 0) and has none giving work speed. An empty slot of a
+    // building that works without that tool (slowly) is no reason to wait (Nutzer, 2026-11-18): reported below
     const auto& slots = building.GetToolSlots();
-    for(const nobUsual::ToolSlot& slot : slots)
-    {
-        if(slot.tool == GoodType::Nothing)
-            return Diagnosis::NoTool;
-    }
+    if(!slots.empty() && building.GetWorkSpeed() == 0)
+        return Diagnosis::NoTool;
     const nofBuildingWorker* worker = building.GetWorker();
     if(worker && worker->GetState() == nofBuildingWorker::State::WaitingForWaresOrProductionStopped)
     {
@@ -1620,6 +1626,8 @@ EconomyPlanner::Diagnosis EconomyPlanner::Diagnose(const nobUsual& building, con
            && recipe.source.kind != SourceKind::Water && info.nearby == 0)
             return Diagnosis::SourceFar;
     }
+    if(helpers::contains_if(slots, [](const nobUsual::ToolSlot& slot) { return slot.tool == GoodType::Nothing; }))
+        return Diagnosis::MissingTool;
     // A tool in use worse than the best one of its slot
     const auto& slotDescs = civ::getActiveContent().GetBuildingTools(building.GetBuildingType()).slots;
     for(unsigned i = 0; i < slots.size() && i < slotDescs.size(); ++i)
@@ -3522,13 +3530,11 @@ std::string EconomyPlanner::CheckToolsAndHelpers(const Order* order, const Build
     // themselves, must leave what this one needs. Otherwise (one more building of the type): the forecast with all
     // planned ones
     const bool counted = order && helpers::contains(plannedOrderIds_, order->id);
-    std::vector<OpenDemand> demand;
-    AddToolDemand(demand, bld);
-    for(const OpenDemand& entry : demand)
-    {
-        const auto it = groupIndex_.find(sorted(entry.wares));
+    // What the forecast of the tools leaves for this building, text if it does not leave enough
+    const auto checkTools = [&](const std::vector<GoodType>& wares, const unsigned amount) {
+        const auto it = groupIndex_.find(sorted(wares));
         if(it == groupIndex_.end())
-            continue;
+            return std::string();
         const WareStatus& status = groups_[it->second].status;
         // The stock of TOOLS_IN_STOCK per kind is there to be used by new buildings: it makes the makers work ahead,
         // but it does not keep a building from taking the tools
@@ -3539,7 +3545,7 @@ std::string EconomyPlanner::CheckToolsAndHelpers(const Order* order, const Build
         {
             for(const GoodType good : recipe->outputs)
             {
-                if(helpers::contains(entry.wares, good))
+                if(helpers::contains(wares, good))
                     ownMaking = ToolMakerCapacity(bld) * BALANCE_MINUTES;
             }
         }
@@ -3547,18 +3553,46 @@ std::string EconomyPlanner::CheckToolsAndHelpers(const Order* order, const Build
         const unsigned claimed = withList && it->second < toolsClaimed_.size() ? toolsClaimed_[it->second] : 0u;
         const double available = status.forecast + reserve + ownMaking + byOrders - claimed;
         // Its own tools are in the forecast if it is planned (all planned ones) or added back (rules of the list)
-        const double own = (counted && !withList) ? 0. : static_cast<double>(entry.amount);
-        if(available - own < 0)
-        {
-            std::ostringstream out;
-            out << "Werkzeug fehlt: " << wareNames(groups_[it->second].wares) << " (Prognose "
-                << num(status.forecast) << ", Vorrat " << reserve;
-            if(withList)
-                out << ", für Aufträge " << num(byOrders) << ", davon darüber " << claimed;
-            out << ")";
-            return out.str();
-        }
+        const double own = (counted && !withList) ? 0. : static_cast<double>(amount);
+        if(available - own >= 0)
+            return std::string();
+        std::ostringstream out;
+        out << wareNames(groups_[it->second].wares) << " (Prognose " << num(status.forecast) << ", Vorrat " << reserve;
+        if(withList)
+            out << ", für Aufträge " << num(byOrders) << ", davon darüber " << claimed;
+        out << ")";
+        return out.str();
+    };
+    // The tool to recruit its worker (jobs recruited with a tool): without it there is no worker
+    if(const GoodType tool = GetRecruitTool(bld); tool != GoodType::Nothing)
+    {
+        const std::string missing = checkTools({tool}, 1);
+        if(!missing.empty())
+            return "Werkzeug fehlt: " + missing;
     }
+    // Tool reform: only a building that does not work without tools (base speed 0) waits, for a tool of any of its
+    // slots giving work speed. Its other tools, and all tools of a building working slowly without them, are a bonus:
+    // they are asked for (planned) and their makers come by the forecast, but the building does not wait for them
+    // (Nutzer, 2026-11-18)
+    const std::vector<std::vector<GoodType>> workTools = EconomyGraph::GetWorkTools(civ::getActiveContent(), bld);
+    if(!workTools.empty())
+    {
+        std::string missing;
+        for(const std::vector<GoodType>& wares : workTools)
+        {
+            const std::string slotMissing = checkTools(wares, 1);
+            if(slotMissing.empty())
+                return CheckHelpers(order, bld, withList, counted);
+            missing += (missing.empty() ? "" : " oder ") + slotMissing;
+        }
+        return "Werkzeug fehlt: " + missing;
+    }
+    return CheckHelpers(order, bld, withList, counted);
+}
+
+std::string EconomyPlanner::CheckHelpers(const Order* order, const BuildingType bld, const bool withList,
+                                         const bool counted) const
+{
     const bool needsHelper = counted ? helpers::contains(plannedHelpers_, order->id) : NeedsHelper(bld);
     if(needsHelper)
     {
@@ -4749,6 +4783,7 @@ std::string EconomyPlanner::GetReport() const
                                                "kein Arbeiter",
                                                "Arbeiter unterwegs",
                                                "kein Werkzeug",
+                                               "Werkzeugplatz leer",
                                                "Eingang fehlt",
                                                "Fahne voll",
                                                "nichts mehr in Reichweite",

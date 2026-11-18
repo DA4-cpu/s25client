@@ -110,9 +110,9 @@ BOOST_AUTO_TEST_CASE(CapacityOfTheGameData)
 {
     const civ::TechTree techTree = civ::loadDefaultTechTree();
     const civ::Content& content = techTree.GetContent();
-    BOOST_TEST(content.GetWarehouseCapacity(BuildingType::Headquarters) == 500u);
-    BOOST_TEST(content.GetWarehouseCapacity(BuildingType::HarborBuilding) == 300u);
-    BOOST_TEST(content.GetWarehouseCapacity(BuildingType::Storehouse) == 200u);
+    BOOST_TEST(content.GetWarehouseCapacity(BuildingType::Headquarters) == 700u);
+    BOOST_TEST(content.GetWarehouseCapacity(BuildingType::HarborBuilding) == 500u);
+    BOOST_TEST(content.GetWarehouseCapacity(BuildingType::Storehouse) == 400u);
     BOOST_TEST(content.GetFlagWorkLimit() == 7u);
     BOOST_TEST(techTree.GetAIStorageFullPercent() == 90u);
     // Without game data: no limits

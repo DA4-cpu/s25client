@@ -605,17 +605,21 @@ BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterDespiteWoodInStock, PlannerFixture)
     BOOST_TEST(world.GetPlayer(curPlayer).IsClearingWoodcutter(pos));
 }
 
-BOOST_FIXTURE_TEST_CASE(QuarryAtOneStonePile, PlannerFixture)
+BOOST_FIXTURE_TEST_CASE(QuarryAtFewStonePiles, PlannerFixture)
 {
+    // MIN_DEPOSITS_IN_REACH stone piles are enough for a quarry
     startGame(makeDesc());
     hq().AddToInventory(GoodCounts::make(GoodType::PickAxe, 2), true);
-    placeObject(Position(-4, 4), [](MapPoint) { return new noGranite(GraniteType::One, 5); });
+    for(unsigned i = 0; i < civai::EconomyPlanner::MIN_DEPOSITS_IN_REACH; ++i)
+        placeObject(Position(-4, 4 + 2 * static_cast<int>(i)),
+                    [](MapPoint) { return new noGranite(GraniteType::One, 5); });
     startAI();
     step();
     // Stones in stock (40) do not matter
     const MapPoint pos = findSite(BuildingType::Quarry);
     BOOST_TEST_REQUIRE(pos.isValid());
-    BOOST_TEST(civai::EconomyPlanner::CountStonePiles(world.GetPlayer(curPlayer), pos, 8) >= 1u);
+    BOOST_TEST(civai::EconomyPlanner::CountStonePiles(world.GetPlayer(curPlayer), pos, 8)
+               >= civai::EconomyPlanner::MIN_DEPOSITS_IN_REACH);
 }
 
 BOOST_FIXTURE_TEST_CASE(NoOrdersForInputsOfABuildingThatCannotWork, PlannerFixture)
@@ -1387,8 +1391,8 @@ BOOST_FIXTURE_TEST_CASE(ToolsOfWaitingOrdersAreAskedFor, PlannerFixture)
 }
 
 namespace {
-/// makeDesc with the tool reform: the woodcutter works slowly without its axe (baseSpeed 25)
-WorldDescription makeToolDesc(const decltype(TechnologyDesc::cost)& techCost)
+/// makeDesc with the tool reform: the woodcutter works slowly without its axe (baseSpeed 25) or not at all (0)
+WorldDescription makeToolDesc(const decltype(TechnologyDesc::cost)& techCost, const unsigned baseSpeed = 25)
 {
     WorldDescription desc = makeDesc({}, techCost);
     ToolMaterialDesc iron;
@@ -1403,18 +1407,37 @@ WorldDescription makeToolDesc(const decltype(TechnologyDesc::cost)& techCost)
     axe.speed = 100;
     desc.tools = {axe};
     BuildingToolsDesc woodcutter;
-    woodcutter.baseSpeed = 25;
+    woodcutter.baseSpeed = baseSpeed;
     woodcutter.tools = {{"Axe"}};
     desc.buildingTools = {{"Woodcutter", woodcutter}};
     return desc;
 }
 } // namespace
 
-BOOST_FIXTURE_TEST_CASE(ToolForecastDecidesAlsoForSlowBuildings, PlannerFixture)
+BOOST_FIXTURE_TEST_CASE(SlowBuildingDoesNotWaitForItsTool, PlannerFixture)
 {
-    // Wood is needed. The woodcutter works slowly without its axe, but it needs one: no axe and no maker (no iron in
-    // the territory) -> the forecast of the axes does not allow it, it waits. With an axe in stock it is placed
+    // Wood is needed. The woodcutter works slowly without its axe (base speed 25): it does not wait for it (Nutzer,
+    // 2026-11-18). The axe is still asked for: no axe and no maker (no iron in the territory) -> the tool maker is
+    // short and ordered
     startGame(makeToolDesc({{"Wood", 5}}));
+    placeTrees(Position(-5, 3), FOREST);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(findSite(BuildingType::Woodcutter).isValid());
+    const civai::WareGroup* axes = planner()->FindGroup({GoodType::Axe});
+    BOOST_TEST_REQUIRE(axes);
+    BOOST_TEST(axes->status.planned >= 1.);
+    BOOST_TEST(findOrder(BuildingType::Metalworks) >= 0);
+}
+
+BOOST_FIXTURE_TEST_CASE(ToolForecastDecidesForBuildingsNotWorkingWithout, PlannerFixture)
+{
+    // The woodcutter does not work without its axe (base speed 0): no axe and no maker -> the forecast of the axes does
+    // not allow it, it waits. With an axe in stock it is placed
+    startGame(makeToolDesc({{"Wood", 5}}, 0));
     placeTrees(Position(-5, 3), FOREST);
     startAI();
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
@@ -1424,12 +1447,36 @@ BOOST_FIXTURE_TEST_CASE(ToolForecastDecidesAlsoForSlowBuildings, PlannerFixture)
     BOOST_TEST((order.state == civai::OrderState::Blocked));
     BOOST_TEST_INFO(order.reason);
     BOOST_TEST(order.reason.find("Werkzeug fehlt: Axe") == 0u);
+    BOOST_TEST(civai::EconomyPlanner::WaitsForResources(order));
     BOOST_TEST(!findSite(BuildingType::Woodcutter).isValid());
     // The tool maker is short: it is ordered and shows why it cannot come
     BOOST_TEST(findOrder(BuildingType::Metalworks) >= 0);
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 1), true);
     step();
     BOOST_TEST(findSite(BuildingType::Woodcutter).isValid());
+}
+
+BOOST_FIXTURE_TEST_CASE(AToolOfAnySlotLetsItWork, PlannerFixture)
+{
+    // Base speed 0, slots for an axe and a saw: a saw in stock lets the woodcutter work, it does not wait for the axe.
+    // The axe is still asked for
+    WorldDescription desc = makeToolDesc({{"Wood", 5}}, 0);
+    ToolDesc saw = desc.tools.front();
+    saw.ware = "Saw";
+    desc.tools.push_back(saw);
+    desc.buildingTools["Woodcutter"].tools = {TagQuery{"Axe"}, TagQuery{"Saw"}};
+    startGame(desc);
+    placeTrees(Position(-5, 3), FOREST);
+    hq().AddToInventory(GoodCounts::make(GoodType::Saw, 1), true);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(findSite(BuildingType::Woodcutter).isValid());
+    const civai::WareGroup* axes = planner()->FindGroup({GoodType::Axe});
+    BOOST_TEST_REQUIRE(axes);
+    BOOST_TEST(axes->status.planned >= 1.);
 }
 
 BOOST_FIXTURE_TEST_CASE(WaitingConsumersCountInTheForecast, PlannerFixture)

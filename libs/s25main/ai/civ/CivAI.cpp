@@ -66,7 +66,9 @@ namespace {
                 if(!std::all_of(BUILDING_COSTS[recipe.building].begin(), BUILDING_COSTS[recipe.building].end(),
                                 [&](const CostEntry& entry) { return inStockOrReachable(entry.wares); }))
                     continue;
-                if(!std::all_of(recipe.requiredTools.begin(), recipe.requiredTools.end(), inStockOrReachable))
+                // Tool reform, base speed 0: a tool of any of its slots lets it work
+                if(!recipe.requiredTools.empty()
+                   && std::none_of(recipe.requiredTools.begin(), recipe.requiredTools.end(), inStockOrReachable))
                     continue;
                 const auto markReachable = [&](const std::vector<GoodType>& wares) {
                     for(const GoodType good : wares)

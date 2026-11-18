@@ -1236,10 +1236,11 @@ Prognose, auch bei Werkzeugherstellern.
 
 **Einstellungen:**
 - In `ai/civ/EconomyPlanner.h`:
-  - Bilanzlänge `BALANCE_MINUTES` = 7 (Wert des Nutzers; auch die Zeit, in der ein neues Gebäude als kommend zählt).
+  - Bilanzlänge `BALANCE_MINUTES` = 5 (Wert des Nutzers, 2026-11-18, vorher 7; auch die Zeit, in der ein neues Gebäude
+    als kommend zählt).
   - Schwelle: `SURPLUS_FACTOR` = 10 × Verbrauch/min, mindestens `MIN_STOCK` = 8.
   - Rodende Holzfäller ab `CLEARING_MIN_TREES` = 8 Bäumen, Sammler anderer Vorkommen (Steinhaufen, Kartenobjekte aus
-    Lua) ab `MIN_DEPOSITS_IN_REACH` = 1 Vorkommen.
+    Lua) ab `MIN_DEPOSITS_IN_REACH` = 2 Vorkommen (Wert des Nutzers, 2026-11-18, vorher 1).
   - Förster, wenn weniger als `RENEW_BELOW` = 7 Bäume in Reichweite eines dauerhaften Holzfällers stehen (Wert des
     Nutzers).
   - Werkzeugvorrat `TOOLS_IN_STOCK` = 2 je Werkzeugart (Wert des Nutzers).
@@ -1344,9 +1345,12 @@ Militärgebäude. Fehlen Soldaten, werden die Rekrutierungswaren (`SOLDIER_RECRU
 Schild, Bier) bestellt, soweit sie nicht reichen, und ein Lager für Gehilfen, wenn keine frei sind.
 
 **Prognose** (Nutzer, 2026-11-15; ersetzt „Bilanz negativ = Mangel“): Jede Ware, Gruppe, die Soldaten und die Gehilfen
-haben einen Wert für die nächste Bilanzlänge (7 Minuten):
+haben einen Wert für die nächste Bilanzlänge (`BALANCE_MINUTES`, 5 Minuten):
 
 **Prognose = (Bestand − Angefragt) + voraussichtliche Herstellung − voraussichtlicher Verbrauch**
+
+Beträge unter 0,005 gelten als 0 (2026-11-18): Rundungsfehler der Anteile und der Herstellung je Bilanzlänge
+(z. B. −30 + 29,99999) sind kein Mangel, der Bericht zeigte sie als „Mangel … Prognose 0“.
 
 - Angefragt = offen + geplant (Korrektur des Nutzers, 2026-11-17):
   - Offen: was das Spiel anfragt und kein Lager schicken konnte (Baukosten der Baustellen ohne verbaute, gelieferte und
@@ -1392,7 +1396,8 @@ haben einen Wert für die nächste Bilanzlänge (7 Minuten):
 **Anzahl** (Nutzer, 2026-11-15: mindestens ein Auftrag, so viele, bis die Prognose 0 oder positiv ist), für jeden
 Anlass: Erzeuger = ⌈fehlende Menge pro Minute ÷ Wert je Gebäude⌉, jeden Schritt neu (sinkt auch). Die Prognose enthält
 die kommenden und stehenden Gebäude schon.
-- Fehlend: Mangel = −Prognose ÷ 7; Eingang eines Auftrags = sein Verbrauch (Wert je Gebäude) − Prognose ÷ 7.
+- Fehlend: Mangel = −Prognose ÷ Bilanzlänge; Eingang eines Auftrags = sein Verbrauch (Wert je Gebäude) − Prognose ÷
+  Bilanzlänge.
 - Alle nicht platzierten und nicht blockierten Aufträge für Gebäude, die eine Ware der Gruppe machen, zählen mit, auch für ein anderes Produkt
   (bei einem expandierenden Bedarf auch die expandierenden). Kleinere Gruppen werden zuerst bearbeitet; ihre Aufträge
   zählen für die größeren Gruppen mit ihren Waren (sonst bestellen „Fisch/Brot/Fleisch“ und „Brot/Fleisch“ getrennt).
@@ -1410,12 +1415,16 @@ Schritt, unabhängig von seiner Produktivität. Das erste gefundene Problem:
 - gestoppt (vom Spieler, nicht untersucht),
 - keine Straße an der Fahne (nur gemeldet, Straßenbau kommt später),
 - kein Arbeiter (kein Lager kann einen schicken) / Arbeiter unterwegs,
-- kein Werkzeug: ein Werkzeugplatz ist leer, auch wenn das Gebäude ohne Werkzeug langsam arbeitet (`baseSpeed` > 0),
+- kein Werkzeug: das Gebäude arbeitet ohne Werkzeug nicht (`baseSpeed` = 0) und hat keines, das Tempo gibt (Tempo 0);
+  es wartet (Nutzer, 2026-11-18),
 - Eingang fehlt,
 - Fahne voll (nur gemeldet),
 - nichts mehr in Reichweite (erschöpft),
 - Felder fehlen: Bauernhof oder Plantage mit weniger als 4 Feldknoten in Reichweite,
 - Vorkommen weit entfernt: nichts in der nahen Hälfte der Reichweite (nur gemeldet),
+- Werkzeugplatz leer: ein Platz ist leer, das Gebäude arbeitet aber ohne dieses Werkzeug (langsam). Nur gemeldet, es
+  zählt als arbeitend (nicht als wartendes Gebäude seines Typs, als Werkzeughersteller mit Kapazität); der Platz bestellt
+  sein Werkzeug selbst (Nutzer, 2026-11-18),
 - schlechtes Werkzeug: ein Werkzeug ist schlechter als das beste seines Platzes.
 
 Reaktion: Eingang, Werkzeug, Arbeiter über die Prognose (der Verbrauch stehender Gebäude zählt, ihre Werkzeuge und
@@ -1431,14 +1440,22 @@ Gebäudetyp, wie viele Gebäude welches Problem haben.
 - Angefragt zählt auch, was kommende Gebäude und alle Aufträge der Liste brauchen werden (die Werkzeuge der Plätze; das
   Werkzeug zum Rekrutieren des Arbeiters nur, wo der Beruf noch eines braucht), dazu der Vorrat `TOOLS_IN_STOCK` je Art.
   So entsteht der Mangel, bevor das Gebäude fertig ist.
-- **Regel für jeden Auftrag:** Die Prognose jedes Werkzeugs, das das Gebäude braucht, muss mit ihm (und allen
-  geplanten Werkzeugen der Baustellen und der Aufträge darüber) 0 oder mehr bleiben. Der Vorrat je Art ist für neue
-  Gebäude da und sperrt sie nicht. Ein Werkzeughersteller rechnet die Werkzeuge mit, die er selbst machen wird.
+- **Regel für jeden Auftrag:** Die Prognose jedes Werkzeugs, das das Gebäude zum Arbeiten braucht, muss mit ihm (und
+  allen geplanten Werkzeugen der Baustellen und der Aufträge darüber) 0 oder mehr bleiben. Der Vorrat je Art ist für
+  neue Gebäude da und sperrt sie nicht. Ein Werkzeughersteller rechnet die Werkzeuge mit, die er selbst machen wird.
   Sonst wartet der Auftrag („Werkzeug fehlt: Saw (Prognose …)“); der Werkzeugmangel bestellt die Werkzeuge und, wenn
   die Hersteller es nicht schaffen, weitere Hersteller.
+- **Zum Arbeiten gebraucht** (Nutzer, 2026-11-18; Werkzeuge sind sonst nur ein Bonus): das Werkzeug zum Rekrutieren des
+  Arbeiters (wo der Beruf eines braucht); bei der Werkzeugreform nur, wenn das Gebäude ohne Werkzeug nicht arbeitet
+  (`baseSpeed` = 0), und dann ein Werkzeug irgendeines Platzes, das Tempo gibt (`speed` > 0; Tempo = `baseSpeed` +
+  `speed` der Werkzeuge). Bei mehreren Plätzen: „Werkzeug fehlt: PickAxe (…) oder WoodenBucket (…)“. Ein Gebäude mit
+  `baseSpeed` > 0 wartet nie auf Werkzeug. Die übrigen Werkzeuge (alle Plätze, auch die von Gebäuden mit
+  `baseSpeed` > 0) zählen weiter als geplant und angefragt, ihre Hersteller kommen über die Prognose
+  (`EconomyGraph::GetWorkTools`, `CheckToolsAndHelpers`). Dieselbe Regel gilt für „kann fertig arbeiten“ (höchstens ein
+  wartender Auftrag je Typ) und für die Erreichbarkeit der Waren (`CivAI`: ein Platz genügt, vorher alle).
 - Bestellt wird das Fehlende je Art (Addon „Werkzeugbestellung“, sonst der Regler je Art, höchstens 10).
 - Werkzeughersteller nach der Bilanzregel, je Herstellertyp: was er in der Bilanzlänge nicht schafft (Nachfrage −
-  Kapazität) ÷ 7 ÷ Werkzeuge je Minute eines Herstellers. Eine Art wird einmal gezählt (nicht je Gruppe, in der sie
+  Kapazität) ÷ Bilanzlänge ÷ Werkzeuge je Minute eines Herstellers. Eine Art wird einmal gezählt (nicht je Gruppe, in der sie
   vorkommt).
 - Werkzeughersteller dürfen expandierend kommen (Expansionsliste), aber nicht, solange ihre Kapazität die Nachfrage
   übersteigt.
@@ -1473,8 +1490,8 @@ Nutzers). Ein Förster ist benötigt, wenn weniger als 7 Bäume in Reichweite ei
 je Holzfäller zur Zeit; lassen die Prognosen seiner Werkzeuge oder der Gehilfen keinen weiteren zu, wartet einer, sonst
 gilt die Grenze je Gebäudetyp.
 
-**Rodender Holzfäller wird dauerhaft** (Nutzer, 2026-11-18): Hat ein fertiger rodender Holzfäller weniger als 5 Bäume
-in Reichweite (`CLEARING_UPGRADE_BELOW`) und steht in der Liste ein benötigter Förster für einen Holzfäller (Anlass
+**Rodender Holzfäller wird dauerhaft** (Nutzer, 2026-11-18): Hat ein fertiger rodender Holzfäller weniger als 7 Bäume
+in Reichweite (`CLEARING_UPGRADE_BELOW`, Wert des Nutzers, 2026-11-18, vorher 5) und steht in der Liste ein benötigter Förster für einen Holzfäller (Anlass
 „erneuert“, noch nicht platziert, nicht durch Forschung blockiert), wird dieser rodende Holzfäller dauerhaft (Befehl
 „rodend“ aus) und bekommt den Förster. Von mehreren rodenden bekommt ihn der nächste zum ursprünglichen Holzfäller des
 Försters; hat der Förster noch keinen Holzfäller mit Bauplatz, der nächste zu einem Lager, und der Auftrag dieses
@@ -1602,6 +1619,28 @@ zählen nicht; Zufallskarte 512 × 512, 4 KI, `--random_init 7`, Summe der 4 Spi
   Wege nur, wenn genug da sind (gleiches Ergebnis).
 - `tools/checkEconomyLog.py`: keine Widersprüche.
 
+**Vergleich Werkzeug nur als Bonus** (2026-11-18: ein Gebäude wartet nur auf Werkzeug, wenn es ohne nicht arbeitet;
+Zufallskarte 512 × 512, 4 KI, 3 h, Startwaren „viel“ (`--wares alot`), `--random_init 7`, Spieldaten und Konstanten des
+Nutzers vom 18.11.; vorher = `390ac0e`; neu mit der Rundung der Prognose):
+
+| Kartenzufall 5 / 9 | vorher | neu |
+|---|---|---|
+| Land nach 30 min | 9 473 / 9 001 | 6 700 / 7 314 |
+| Land nach 1 h | 15 479 / 16 922 | 13 371 / 12 695 |
+| Land nach 2 h | 41 340 / 44 870 | 25 588 / 23 830 |
+| Land nach 3 h | 56 051 / 63 302 | 43 049 / 55 365 |
+| Gebäude nach 3 h | 870 / 966 | 1 347 / 1 560 |
+| Militärstärke nach 3 h (Start 416) | 349 / 416 | 607 / 494 |
+| Militärstärke wächst ab | nie / nie | 1 h 30 / 1 h 50 |
+| Berichte „wartet: Werkzeug fehlt“ | 5 234 / 5 473 | 224 / 309 |
+| Rechenzeit je Schritt im Mittel | 7,1 / 8,7 ms | 6,4 / 6,5 ms |
+
+- Vorher warteten vor allem LoamPit und die Sammler (WoodenBucket), SpinningMill (WoodenSpindle), Förster und
+  Holzfäller, alle mit `baseSpeed` 25. Jetzt warten nur noch Gebäude mit `baseSpeed` 0
+  (Farm, Hunter, TinCollector, Goldmine, Slaughterhouse, Mint).
+- Bis 1 h im Mittel weniger Militärbaustellen (2,7 / 2,4 statt 3,1 / 3,4): Die Wirtschaftsaufträge, die nicht mehr
+  warten, stehen in der Liste über den Militäraufträgen und nehmen das Baumaterial. Daher bis 2 h weniger Land.
+
 **Anbauer und Abbauer** (Nutzer, 2026-11-15): Findet ein benötigter dauerhafter Abbauer keinen Platz mit genug Vorkommen
 in Reichweite, wird zuerst ein Anbauer für ihn beauftragt (Erneuerer der Quelle: Förster, Plantage aus Lua ohne Produkt;
 Anlass „erneuert“, Kind des Abbauers, steht über ihm). Steht dessen Baustelle, kommt der Abbauer direkt daneben (nächster
@@ -1611,9 +1650,9 @@ Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge 
 
 **Höchstzahl Abbauer je Vorkommenmenge** (Nutzer, 2026-11-18; gilt für alle Ressourcen auf der Karte: Bäume,
 Steinhaufen, Kartenobjekte wie Kupfer, Zinn, Obsidian, Torf, Lehm, Erze und Fische): Jeder Abbauer bekommt höchstens
-8 Einheiten (`UNITS_PER_HARVESTER`, für alle Quellen gleich) der Vorkommen in seiner Reichweite. Ein Knoten, den k andere
+16 Einheiten (`UNITS_PER_HARVESTER`, für alle Quellen gleich; Wert des Nutzers, vorher 8) der Vorkommen in seiner Reichweite. Ein Knoten, den k andere
 Abbauer derselben Quelle erreichen (stehende, Baustellen und im selben Schritt platzierte), zählt mit Menge / (k + 1).
-Ein Platz ist nur gültig, wenn die so geteilte Menge mindestens 8 erreicht; teilt kein anderer Abbauer die Knoten,
+Ein Platz ist nur gültig, wenn die so geteilte Menge mindestens 16 erreicht; teilt kein anderer Abbauer die Knoten,
 genügt eine Einheit. Bäume, Steinhaufen und Kartenobjekte zählen nur, wenn der Arbeiter sie vom Platz aus zu Fuß
 erreicht (Weg höchstens 20 Schritte, wie beim Arbeiter). Mengen: Baum 1, Steinhaufen und Kartenobjekte Größe + 1, Erz
 und Fisch die Menge auf dem Knoten. Neben seinem Erneuerer (Anlass „neben (x,y)“) gilt die Regel nicht.

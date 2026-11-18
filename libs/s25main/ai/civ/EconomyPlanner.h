@@ -424,8 +424,11 @@ private:
         NoWorker,
         /// No worker yet, one is on the way
         WorkerComing,
-        /// Tool reform: a tool slot is empty (also if the building works slowly without the tool)
+        /// Tool reform: it does not work without tools (base speed 0) and has none giving work speed: it waits
         NoTool,
+        /// Tool reform: a tool slot is empty, the building works without that tool (slowly; only reported, the slot
+        /// asks for the tool itself)
+        MissingTool,
         /// Waits for input wares
         NoInput,
         /// Its flag is full: the worker waits with the product (only reported)
@@ -542,6 +545,9 @@ private:
     /// Tools a building of the type will ask for: the tool to recruit its worker (only jobs recruited with a tool),
     /// the tools of its slots
     void AddToolDemand(std::vector<OpenDemand>& demand, BuildingType bld) const;
+    /// The tool to recruit the worker of a building of the type (none if a worker waits in a warehouse or the job is
+    /// recruited without tool)
+    GoodType GetRecruitTool(BuildingType bld) const;
     /// Tools asked for per kind (open and planned) and missing (asked for and TOOLS_IN_STOCK more, minus the stock
     /// and the tools ordered)
     void UpdateToolNeeds();
@@ -620,10 +626,10 @@ private:
     double ToolMakerCapacity(BuildingType bld) const;
     /// The building makes the ware (one of its products)
     bool MakesWare(BuildingType bld, GoodType good) const;
-    /// A building of the type can work once finished: the forecasts of the tools it needs and of the helpers allow one
-    /// more (all planned ones counted). `reason`: why not
+    /// A building of the type can work once finished: the forecasts of the tools it needs to work
+    /// (CheckToolsAndHelpers) and of the helpers allow one more (all planned ones counted). `reason`: why not
     bool CanWorkWhenBuilt(BuildingType bld, std::string* reason = nullptr) const;
-    /// Buildings of the type that wait (input, tool or worker missing) and are not working
+    /// Buildings of the type that wait (input or worker missing, no tool and not working without) and are not working
     unsigned CountWaitingBuildings(BuildingType bld);
     /// Buildings of the chain that makes the ware now: the best producer, the best producers of its inputs ... (and
     /// the renewer of a source it uses)
@@ -709,9 +715,13 @@ private:
     bool NeedsHelper(BuildingType bld) const;
     /// Tools of the kind of the ware in the warehouses (all materials)
     unsigned GetToolStock(GoodType tool) const;
-    /// The forecast of the tools the building needs and of the helpers allows it. withList: only the planned entries of
-    /// the building sites and of the orders above it in the list count (rules of the list); otherwise all planned ones
+    /// The forecast of the tools the building needs to work and of the helpers allows it. Tools it needs: the tool to
+    /// recruit its worker; tool reform: a tool of any of its slots if it does not work without tools (base speed 0),
+    /// none otherwise. withList: only the planned entries of the building sites and of the orders above it in the list
+    /// count (rules of the list); otherwise all planned ones
     std::string CheckToolsAndHelpers(const Order* order, BuildingType bld, bool withList) const;
+    /// The helper part of CheckToolsAndHelpers (counted: the order is planned)
+    std::string CheckHelpers(const Order* order, BuildingType bld, bool withList, bool counted) const;
     /// A needed order processed without being placed keeps its tools and helper for itself (orders below must not take
     /// them)
     void ClaimToolsAndHelpers(const Order& order);

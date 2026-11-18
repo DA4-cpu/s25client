@@ -171,13 +171,7 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
     helpers::erase_if(recipe.inputs, isNothing);
     if(recipe.outputs.empty() && recipe.byproducts.empty())
         return; // Makes no wares (forester, donkey breeder ...)
-    const civ::Content& content = world.GetTechTree().GetContent();
-    const civ::BuildingTools& tools = content.GetBuildingTools(recipe.building);
-    if(tools.baseSpeed == 0)
-    {
-        for(const civ::BuildingTools::Slot& slot : tools.slots)
-            recipe.requiredTools.push_back(slot.wares);
-    }
+    recipe.requiredTools = GetWorkTools(world.GetTechTree().GetContent(), recipe.building);
     recipe.lockedAtStart = world.GetTechTree().IsLockedAtStart(recipe.building);
     recipe.reach = getReach(recipe.source, job);
     const double gfsPerMinute = static_cast<double>(duration_to_gfs(std::chrono::minutes(1)));
@@ -215,6 +209,28 @@ void EconomyGraph::AddRenewers(const GameWorldBase& world)
         renewers_.push_back(
           {bld, {SourceKind::MapObject, static_cast<unsigned>(building.plantObject)}, building.plantRadius});
     }
+}
+
+std::vector<std::vector<GoodType>> EconomyGraph::GetWorkTools(const civ::Content& content, const BuildingType bld)
+{
+    std::vector<std::vector<GoodType>> result;
+    if(!content.HasToolReform())
+        return result;
+    const civ::BuildingTools& tools = content.GetBuildingTools(bld);
+    if(tools.baseSpeed > 0)
+        return result;
+    for(const civ::BuildingTools::Slot& slot : tools.slots)
+    {
+        std::vector<GoodType> wares;
+        for(const GoodType good : slot.wares)
+        {
+            if(const civ::ToolInfo* info = content.GetTool(good); info && info->speed > 0)
+                wares.push_back(good);
+        }
+        if(!wares.empty())
+            result.push_back(std::move(wares));
+    }
+    return result;
 }
 
 std::string EconomyGraph::GetSourceName(const Source& source) const
