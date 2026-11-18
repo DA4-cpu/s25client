@@ -1500,6 +1500,9 @@ Holzfäller (x,y) (rodend, jetzt dauerhaft)“), der ursprüngliche Holzfäller 
 „rodender Holzfäller (x,y) wird dauerhaft, bekommt den Förster …“. Bis der Befehl ausgeführt ist, zählt der Holzfäller
 schon als dauerhaft.
 
+- **Offen (Nutzer, 2026-11-18, noch nicht umgesetzt):** Ein rodender Holzfäller wird nur dauerhaft, wenn sich ein
+  Förster innerhalb seiner Reichweite platzieren lässt. Lässt sich keiner platzieren, bleibt er rodend.
+
 **Eltern-Auftrag folgt sofort** (Nutzer, 2026-11-15; ohne eine Regel zu überspringen): Steht die Baustelle eines für
 ihn platzierten Eingangs-Erzeugers, zählt sie voll in der Prognose, und der Auftrag wird im selben Schritt neu geprüft.
 Reicht die Prognose seines Eingangs, folgt er sofort, möglichst nah an der Baustelle; reicht sie nicht, kommen weitere
