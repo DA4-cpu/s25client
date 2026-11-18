@@ -1267,6 +1267,11 @@ BOOST_FIXTURE_TEST_CASE(EntriesAreSharedOutAmongTheirWares, PlannerFixture)
     // 20 clay: 16 left after both entries, 16 is the surplus of the clay (not 20)
     hq().AddToInventory(GoodCounts::make(CLAY, 17), true);
     step();
+    // The groups are found again: new groups may have been added in the step
+    walls = planner()->FindGroup({LOAM, CLAY});
+    roof = planner()->FindGroup({CLAY, STRAW});
+    BOOST_TEST_REQUIRE(walls);
+    BOOST_TEST_REQUIRE(roof);
     BOOST_TEST(ware(CLAY).forecast == 16.);
     BOOST_TEST(walls->status.forecast == 16.);
     BOOST_TEST(roof->status.forecast == 16.);

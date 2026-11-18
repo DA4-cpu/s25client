@@ -3289,8 +3289,10 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     order->state = OrderState::Blocked;
     order->reason = "kein Bauplatz";
     order->retry = noPlace;
+    // Removing the children moves the orders in the list: `order` is not valid anymore
+    const GoodType forWare = order->forWare;
     RemoveUnplacedChildren(id);
-    AddTerritoryOrder(TerritoryNeed::Place, OrderKind::Needed, id, order->forWare, bld, noPlaceSource);
+    AddTerritoryOrder(TerritoryNeed::Place, OrderKind::Needed, id, forWare, bld, noPlaceSource);
 }
 
 std::string EconomyPlanner::CheckRules(const Order& order, RetryCondition& retry) const

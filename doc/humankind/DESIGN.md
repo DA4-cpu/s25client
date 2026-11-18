@@ -142,6 +142,12 @@ rttr:AddTechnology{
 ai-battle --map RTTR/MAPS/NEW/GreenPlains.SWD --ai aijh --ai aijh --settings civ.ini --maxGF 144000
 ```
 
+Ein Replay ohne Grafik abspielen (z. B. um einen Absturz zu finden): `ai-battle --play-replay <datei.rpl>` führt die
+aufgezeichneten Befehle aller Spieler GF für GF aus und vergleicht die Prüfsummen (asynchron = andere Spieldaten als im
+aufgezeichneten Spiel, die Lua-Dateien müssen dieselben sein). `--replay-ais` lässt dabei die KI-Spieler mitlaufen (ihre
+Befehle werden nicht ausgeführt, die aufgezeichneten schon; die KI würfelt anders als im Spiel). Mit einem Build mit
+AddressSanitizer (`-fsanitize=address,undefined`) zeigt das Speicherfehler mit Aufrufliste.
+
 Stand 2026-10-18 (Karte GreenPlains, 2 Stunden Spielzeit): Ohne Wein/Leder/Köhlerei erforschen zwei AIJH alle bzw.
 fast alle der 16 verfügbaren Technologien; mit allen Addons erforschen drei AIJH 17–18 von 20.
 Am längsten hängen Technologien, die Zwischenprodukte kosten (Burgenbau: Münzen, Gerberei: Schinken).
@@ -1279,7 +1285,7 @@ Prognose, auch bei Werkzeugherstellern.
   der Grenze der Bauarbeiter, nicht bei „für Aufträge darüber“ der Werkzeuge und Gehilfen. Ob der Auftrag darüber
   blockiert ist, spielt keine Rolle (vorher zählte ein benötigter Auftrag nicht, wenn einer darüber blockiert war).
   Benötigte und expandierende gleich; die frühere Grenze „expandierende nur so viele, wie Bauarbeiter da sind“ entfällt.
-  - **Blockiert** (Lesart von Claude, dem Nutzer zur Entscheidung gestellt): kann nicht gebaut werden, bis sich die Lage
+  - **Blockiert** (Lesart von Claude, vom Nutzer bestätigt 2026-11-18): kann nicht gebaut werden, bis sich die Lage
     ändert: nicht erforscht, kein Weg, kein Bauplatz, Höchstzahl des Typs, Lager voll, Eingang fehlt oder ist für einen
     Auftrag darüber vorbehalten (expandierend).
   - **Wartet auf Ressourcen** (kein Block, im Bericht „wartet“): Baumaterial, Bauarbeiter, Werkzeug, Gehilfen, Soldaten.

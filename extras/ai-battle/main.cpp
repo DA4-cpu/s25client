@@ -6,6 +6,7 @@
 #include "HeadlessGame.h"
 #include "PlayerInfo.h"
 #include "QuickStartGame.h"
+#include "ReplayPlayer.h"
 #include "RTTR_Version.h"
 #include "Replay.h"
 #include "RttrConfig.h"
@@ -94,6 +95,8 @@ int main(int argc, char** argv)
         ("random-map", po::value<unsigned>(),"Generate a random map of this size (e.g. 512) for the AI players instead of --map")
         ("map-seed", po::value<uint32_t>()->default_value(1),"Seed of the random map (--random-map)")
         ("from-replay", po::value(&from_replay),"Replay to take the map and the game settings (addons, objective, wares) from instead of --map")
+        ("play-replay", po::value<std::string>(),"Play the recorded commands of a replay (no AI game, --ai not needed), e.g. to find a crash")
+        ("replay-ais", "With --play-replay: the AI players of the replay run as in the game (their commands are not used)")
         ("ai", po::value<std::vector<std::string>>()->required(),"AI player(s) to add (aijh | dummy)")
         ("objective", po::value<std::string>()->default_value("domination"),"domination(default) | conquer")
         ("wares", po::value<std::string>()->default_value("normal"),"Starting wares: vlow | low | normal (default) | alot")
@@ -139,6 +142,12 @@ int main(int argc, char** argv)
             return 0;
         }
 
+        if(options.count("play-replay"))
+        {
+            RTTRCONFIG.Init();
+            return playReplay(RTTRCONFIG.ExpandPath(options["play-replay"].as<std::string>()),
+                              options["maxGF"].as<unsigned>(), options.count("replay-ais") > 0);
+        }
         po::notify(options);
     } catch(const std::exception& e)
     {
