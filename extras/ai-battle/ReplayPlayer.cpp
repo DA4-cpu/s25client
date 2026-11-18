@@ -10,6 +10,7 @@
 #include "PlayerInfo.h"
 #include "Replay.h"
 #include "ai/AIPlayer.h"
+#include "addons/const_addons.h"
 #include "factories/AIFactory.h"
 #include "network/PlayerGameCommands.h"
 #include "random/Random.h"
@@ -65,7 +66,11 @@ int playReplay(const bfs::path& path, const unsigned maxGF, const bool runAIs)
         bnw::cout << "  player " << i << ": " << players.back().name
                   << (players.back().ps == PlayerState::AI ? " (AI)" : "") << std::endl;
     }
-    Game game(replay.ggs, std::make_unique<EventManager>(0), players);
+    // The addon "demolish buildings without resources" makes the game client of the local player send the command. There
+    // is no game client here, and the command is in the replay (replay of 18.11.: crash at GF 41952)
+    GlobalGameSettings ggs = replay.ggs;
+    ggs.setSelection(AddonId::DEMOLISH_BLD_WO_RES, 0);
+    Game game(ggs, std::make_unique<EventManager>(0), players);
     RANDOM.Init(replay.getSeed());
     GameWorld& world = game.world_;
     for(unsigned i = 0; i < world.GetNumPlayers(); ++i)
