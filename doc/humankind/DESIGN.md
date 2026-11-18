@@ -1510,12 +1510,16 @@ auf eine solche Baustelle wartet, plant die KI alle 20 GF (`FOLLOW_UP_GFS`), una
 Planer nicht mehr, nur die unten genannten Sperren bleiben). Gründe des Fehlschlags vom 15.11.: Der höchste Punktwert über
 bis zu 8 Suchzentren gewann, größere Vorkommen (bis 40 Punkte) schlugen die Nähe (30 bzw. 20); Förster kamen mit dem
 Code der alten KI an das Lager statt an den Holzfäller; Lager hatten keine Abstandsregel.
-- **Anker**, zuerst in dieser Reihenfolge: der vorgegebene Punkt (Förster an seinem Holzfäller, Abbauer neben seinem
-  Anbauer), die Baustelle eines für den Auftrag platzierten Eingangs, bei verarbeitenden Gebäuden die drei Partner, die
-  am nächsten an einem Lager stehen (Erzeuger eines Eingangs, Abnehmer des Produkts, Gebäude und Baustellen). Danach
-  reihum die Lager; bei Abbauern und Lagern auch die Militärgebäude (ihre Quelle und das Land können überall im Gebiet
-  sein). Baumaterial-Erzeuger (Produkt steht in Baukosten) ankern nicht an Partnern, sondern an den Lagern. Bis zu 8
-  Anker je Schritt (`SEARCHES_PER_STEP`), Radius 15 (`SEARCH_RADIUS`), Lager 25 (`STOREHOUSE_SEARCH_RADIUS`).
+- **Anker**, zuerst in dieser Reihenfolge, je im Radius 15 (`SEARCH_RADIUS`): der vorgegebene Punkt (Förster an
+  seinem Holzfäller, Abbauer neben seinem Anbauer), die Baustelle eines für den Auftrag platzierten Eingangs, bei
+  verarbeitenden Gebäuden die drei Partner, die am nächsten an einem Lager stehen (Erzeuger eines Eingangs, Abnehmer des
+  Produkts, Gebäude und Baustellen). Baumaterial-Erzeuger (Produkt steht in Baukosten) ankern nicht an Partnern.
+  Danach die Gebäude mit Gebiet (Hauptquartier, Häfen, Militärgebäude), jedes in seinem Militärradius: zusammen
+  decken sie das ganze Gebiet ab, für alle Gebäudetypen (Nutzer, 2026-11-18; vorher die Lager im Radius 15, Lager im
+  Radius 25, Militärgebäude nur für Abbauer und Lager; Testpartie des Nutzers vom 18.11.: 7 gültige Bauplätze für einen
+  Bauernhof lagen 21–28 vom nächsten Lager). Das nächste an einem Lager zuerst (kurze Wege; Claude, vorher reihum ab
+  wechselndem Anker: im Vergleich mehr Land und früher Militärstärke). Bis zu 8 Anker je Schritt
+  (`SEARCHES_PER_STEP`), die Suche geht im nächsten Schritt beim nächsten Anker weiter.
 - **Nähe geht vor:** Gesucht wird vom Anker nach außen. Der nächste Platz, der alle Regeln erfüllt, legt die Entfernung
   fest; nur Plätze bis `PLACE_BAND` = 2 weiter kommen in Frage. Unter ihnen entscheiden die Vorlieben des Nutzers:
   Vorkommen in Reichweite (Abbauer, bis 40), −10 je Gebäude gleichen Typs in der Nähe (Abbauer doppelte Reichweite,
@@ -1641,6 +1645,30 @@ Nutzers vom 18.11.; vorher = `390ac0e`; neu mit der Rundung der Prognose):
 - Bis 1 h im Mittel weniger Militärbaustellen (2,7 / 2,4 statt 3,1 / 3,4): Die Wirtschaftsaufträge, die nicht mehr
   warten, stehen in der Liste über den Militäraufträgen und nehmen das Baumaterial. Daher bis 2 h weniger Land.
 
+**Vergleich Platzsuche im ganzen Gebiet** (2026-11-18; Spieldaten und Konstanten des Nutzers vom 18.11. abends, u. a.
+`UNITS_PER_HARVESTER` 32; vorher = `30efd3d`):
+
+| Zufallskarte 512, 4 KI, `--wares alot`, Kartenzufall 5 / 9 | vorher | neu |
+|---|---|---|
+| Land nach 1 h | 14 467 / 15 503 | 12 532 / 12 561 |
+| Land nach 2 h | 32 778 / 39 564 | 28 904 / 35 666 |
+| Land nach 3 h | 63 062 / 63 811 | 54 425 / 59 570 |
+| Gebäude nach 3 h | 1 620 / 1 771 | 1 598 / 1 746 |
+| Militärstärke nach 3 h (Start 416) | 541 / 441 | 546 / 511 |
+| Militärstärke wächst ab | 2 h 10 / 2 h 40 | 1 h 10 / 2 h |
+
+| Karte der Testpartie des Nutzers, 8 KI, nach 1 h / 1 h 30 | vorher | neu |
+|---|---|---|
+| Land | 29 126 / 47 554 | 24 864 / 38 433 |
+| Bauernhöfe | 51 / 110 | 80 / 119 |
+| Köhler | 2 / 11 | 7 / 27 |
+| Schlossereien | 0 / 0 | 0 / 7 |
+
+- Reihum ab wechselndem Anker statt „nächstes am Lager zuerst“: Land nach 3 h 49 980 / 59 476, Militärstärke wächst
+  ab 2 h / 2 h 20.
+- Weniger Land: Die Wirtschaftsaufträge finden öfter einen Platz und nehmen das Baumaterial vor den Militäraufträgen.
+- Rechenzeit je Schritt im Mittel 7,0 / 7,3 → 6,2 / 7,1 ms.
+
 **Anbauer und Abbauer** (Nutzer, 2026-11-15): Findet ein benötigter dauerhafter Abbauer keinen Platz mit genug Vorkommen
 in Reichweite, wird zuerst ein Anbauer für ihn beauftragt (Erneuerer der Quelle: Förster, Plantage aus Lua ohne Produkt;
 Anlass „erneuert“, Kind des Abbauers, steht über ihm). Steht dessen Baustelle, kommt der Abbauer direkt daneben (nächster
@@ -1666,6 +1694,10 @@ ohne Arbeitsgang, im Mittel 1,5 Sammler derselben Art in Reichweite.
 **Bericht** (Log „ECONOMY“, jede Spielminute):
 - „Mangel ohne eigenen Auftrag“: warum ein Mangel keinen Auftrag hat, z. B. „gedeckt: fehlen 1,8/min,
   andere Aufträge 1 (je 1,3/min)“ oder „Woodcutter: kein Bauplatz, es kommt keiner dazu (4 stehen)“.
+- Am Auftrag: Eingänge ohne eigenen Auftrag und warum (Nutzer, 2026-11-18), z. B. „Charburner … wartet: Eingang fehlt:
+  Grain – ohne eigenen Auftrag: Grain: Farm: kein Bauplatz, es kommt keiner dazu (5 stehen)“. Ein Eingangsauftrag ohne
+  Bauplatz wird entfernt, sein Weg ist gesperrt, bis sich Gebiet oder Forschung ändern; der Grund stand vorher nur in
+  „Mangel ohne eigenen Auftrag“ (Mangel der Ware), nicht am wartenden Auftrag.
 - Jede Ware im Mangel und Überschuss mit ihrer Prognose: „Prognose −21 = frei −27 + Herstellung 15,0 − Verbrauch 8,9“.
   Zugeteilte Teile von Einträgen mehrerer Waren sind keine ganzen Zahlen (eine Nachkommastelle). Bei Gruppen „davon
   bekommt keine Ware X“: was den Einträgen genau dieser Gruppe fehlt.

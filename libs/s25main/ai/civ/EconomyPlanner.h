@@ -237,9 +237,9 @@ struct Order
     /// Inputs that are the reason it cannot be built (missing, no way). Orders below it in the list must not get a
     /// building that uses them (the wares are kept for this one)
     std::vector<GoodType> inputsMissing;
-    /// Next warehouse/military building to search a place around and how many were searched in this round (the search
-    /// is spread over several steps if the computing budget runs out)
-    unsigned nextCenter = 0, centersTried = 0;
+    /// How many anchors of the place search were searched in this round (the search is spread over several steps if the
+    /// computing budget runs out)
+    unsigned centersTried = 0;
     /// Where it was placed and when the start-up time ends (renewers)
     MapPoint placedAt = MapPoint::Invalid();
     unsigned startupEndGF = 0;
@@ -300,10 +300,9 @@ public:
     /// The source and the fields around a building are counted again after this many GFs (they change slowly)
     static constexpr unsigned SOURCE_CHECK_GFS = 400;
 
-    /// Radius around a warehouse or military building in which places are searched (the places of the old AI)
+    /// Radius around the anchors of a building (its renewer or harvester, an input placed for it, its partners) in
+    /// which places are searched. Then the buildings holding territory are searched, each in its military radius
     static constexpr unsigned SEARCH_RADIUS = 15;
-    /// Storehouses: radius around warehouses and military buildings (they keep 15 away from other warehouses)
-    static constexpr unsigned STOREHOUSE_SEARCH_RADIUS = 25;
     /// Places up to this much further than the nearest place meeting all rules compete by the preferences
     static constexpr unsigned PLACE_BAND = 2;
     /// Military buildings: regions whose center is at most this far from an own military building or warehouse
@@ -843,6 +842,8 @@ private:
     /// Shortages (by group) and soldier wares without an order in this step: why (for the report)
     std::map<unsigned, std::string> shortageNotes_;
     std::map<GoodType, std::string> soldierNotes_;
+    /// Inputs of an order (by order id) without an order in this step: why (for the report at the order)
+    std::map<unsigned, std::vector<std::string>> inputNotes_;
 
     /// Forecast per ware for the next balance length (ComputeFlows)
     helpers::EnumArray<double, GoodType> wareProduction_{}, wareConsumption_{};

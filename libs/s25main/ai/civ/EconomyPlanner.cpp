@@ -337,6 +337,7 @@ void EconomyPlanner::Step()
     diagnosisCache_.clear();
     followUp_ = false;
     shortageNotes_.clear();
+    inputNotes_.clear();
     soldierNotes_.clear();
     cancelledThisStep_ = false;
     // Ways without a place are tried again when the territory changed or something was researched
@@ -2388,7 +2389,14 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
     // Why a shortage (of the statistic) gets no order in this step, for the report
     const auto setNote = [&](const std::string& note) {
         if(need.parent != 0)
+        {
+            // An input of an order: shown at the order (Nutzer, 2026-11-18)
+            const std::string text = wareName(good) + ": " + note;
+            std::vector<std::string>& notes = inputNotes_[need.parent];
+            if(!helpers::contains(notes, text))
+                notes.push_back(text);
             return;
+        }
         if(need.cause == OrderCause::Shortage)
             shortageNotes_[need.group] = wareName(good) + ": " + note;
         else if(need.cause == OrderCause::Soldiers)
@@ -4034,47 +4042,58 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
     const bool material = recipe
                           && std::any_of(recipe->outputs.begin(), recipe->outputs.end(),
                                          [this](const GoodType good) { return isMaterial_[good]; });
-    // Anchors (Nutzer, 2026-11-17: the rules of the placement of 15.11., implemented better). First, in this order:
-    // the point given (renewer at its harvester, harvester beside its renewer), the site of an input placed for it,
-    // for a processing building the partners (producers of its inputs, users of its product). Then in turn: the
-    // warehouses (construction material producers near the warehouses), for harvesters and warehouses also the
-    // military buildings (their sources and the land may be anywhere in the territory)
-    std::vector<MapPoint> anchors;
+    // Anchors with their search radius (Nutzer, 2026-11-17: the rules of the placement of 15.11., implemented better).
+    // First, in this order: the point given (renewer at its harvester, harvester beside its renewer), the site of an
+    // input placed for it, for a processing building the partners (producers of its inputs, users of its product).
+    // Then in turn the buildings holding territory (headquarters, harbors, military buildings), each in its military
+    // radius: together they cover the whole territory (Nutzer, 2026-11-18; before: the warehouses in radius 15)
+    std::vector<std::pair<MapPoint, unsigned>> anchors;
     std::vector<MapPoint> partners;
     if(order.near.isValid())
-        anchors.push_back(order.near);
+        anchors.emplace_back(order.near, SEARCH_RADIUS);
     else
     {
         const MapPoint preferred = (renewal || order.besideRenewer) ? MapPoint::Invalid() : GetPreferredPoint(order);
         if(preferred.isValid())
-            anchors.push_back(preferred);
+            anchors.emplace_back(preferred, SEARCH_RADIUS);
         if(recipe && !harvester && !warehouse)
         {
             partners = GetPartners(*recipe, 30);
             if(!material)
             {
                 for(unsigned i = 0; i < partners.size() && i < 3u; ++i)
-                    anchors.push_back(partners[i]);
+                    anchors.emplace_back(partners[i], SEARCH_RADIUS);
             }
         }
     }
     const unsigned first = static_cast<unsigned>(anchors.size());
     if(!order.near.isValid())
     {
-        for(const nobBaseWarehouse* building : player_.GetBuildingRegister().GetStorehouses())
-            anchors.push_back(building->GetPos());
-        if(harvester || warehouse)
+        const BuildingRegister& buildings = player_.GetBuildingRegister();
+        for(const nobBaseWarehouse* building : buildings.GetStorehouses())
         {
-            for(const nobMilitary* military : player_.GetBuildingRegister().GetMilitaryBuildings())
-                anchors.push_back(military->GetPos());
+            if(building->GetMilitaryRadius() > 0)
+                anchors.emplace_back(building->GetPos(), building->GetMilitaryRadius());
         }
+        for(const nobMilitary* military : buildings.GetMilitaryBuildings())
+            anchors.emplace_back(military->GetPos(), military->GetMilitaryRadius());
+        // The nearest to a warehouse first: short ways for the wares, the whole territory if needed
+        const GameWorldBase& world = player_.GetGameWorld();
+        const auto toWarehouse = [&](const MapPoint pt) {
+            unsigned result = std::numeric_limits<unsigned>::max();
+            for(const nobBaseWarehouse* warehouse : buildings.GetStorehouses())
+                result = std::min(result, world.CalcDistance(pt, warehouse->GetPos()));
+            return result;
+        };
+        std::stable_sort(anchors.begin() + first, anchors.end(), [&](const auto& lhs, const auto& rhs) {
+            return toWarehouse(lhs.first) < toWarehouse(rhs.first);
+        });
     }
     if(anchors.empty())
     {
         searchedAll = true;
         return MapPoint::Invalid();
     }
-    const unsigned radius = warehouse ? STOREHOUSE_SEARCH_RADIUS : SEARCH_RADIUS;
     std::vector<std::pair<MapPoint, unsigned>> avoid;
     if(renewal && order.building == BuildingType::Forester)
     {
@@ -4104,10 +4123,8 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
             searchedAll = true;
             return MapPoint::Invalid();
         }
-        const unsigned idx = order.centersTried < first ?
-                               order.centersTried :
-                               first + (order.nextCenter++) % static_cast<unsigned>(anchors.size() - first);
-        const MapPoint anchor = anchors[idx];
+        const unsigned idx = order.centersTried;
+        const auto [anchor, radius] = anchors[idx];
         ++order.centersTried;
         --searchBudget;
         aijh_.UpdateNodesAround(anchor, radius);
@@ -4122,7 +4139,7 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
         } else if(renewal && order.building == BuildingType::Forester)
         {
             // In reach of its woodcutter
-            pos = aijh_.FindForesterPosition(anchor, avoid, order.near.isValid() ? 0u : SEARCH_RADIUS);
+            pos = aijh_.FindForesterPosition(anchor, avoid, order.near.isValid() ? 0u : radius);
             if(pos.isValid() && IsFieldPlace(pos))
                 pos = MapPoint::Invalid();
         } else
@@ -4886,6 +4903,14 @@ std::string EconomyPlanner::GetReport() const
         out << ") " << (WaitsForResources(*order) ? "wartet" : stateNames[static_cast<unsigned>(order->state)]);
         if(!order->reason.empty())
             out << ": " << order->reason;
+        // Its inputs without an order of their own and why (e.g. "Grain: Farm: kein Bauplatz")
+        const auto notes = inputNotes_.find(order->id);
+        if(order->state != OrderState::Placed && notes != inputNotes_.end())
+        {
+            out << " – ohne eigenen Auftrag: ";
+            for(unsigned i = 0; i < notes->second.size(); ++i)
+                out << (i ? "; " : "") << notes->second[i];
+        }
         out << "\n";
     }
     if(!tornDown_.empty())
