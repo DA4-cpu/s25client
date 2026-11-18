@@ -186,6 +186,23 @@ struct PlannerFixture : public WorldWithGCExecution<1, 32, 32>
     }
 
     std::vector<const civai::Order*> list() { return planner()->GetList(); }
+    /// The construction costs of a ware alone of the orders that are not placed and not blocked (waiting for
+    /// resources is no block): what the orders of the list plan of it (a blocked order counts for nothing)
+    double costsOfUnblockedOrders(GoodType good)
+    {
+        double result = 0;
+        for(const civai::Order* order : list())
+        {
+            if(!civai::EconomyPlanner::IsPlanned(*order))
+                continue;
+            for(const CostEntry& entry : BUILDING_COSTS[order->building])
+            {
+                if(entry.wares.size() == 1u && entry.wares.front() == good)
+                    result += entry.amount;
+            }
+        }
+        return result;
+    }
     /// Position of the order in the list, -1 if not there
     int findOrder(BuildingType bld)
     {
@@ -536,8 +553,20 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderKeepsItsMaterial, PlannerFixture)
     BOOST_TEST_INFO(pit.reason);
     // Exactly what is missing and why
     BOOST_TEST(pit.reason.find("Boards fehlt: 5 nötig, 3 frei (Lager 3") == 0u);
-    // No trees: no way to more boards, both reasons are shown
+    // It waits for material (no block): its costs are planned. No trees: no way to more boards, both reasons are shown
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(civai::EconomyPlanner::WaitsForResources(pit));
+    BOOST_TEST(ware(GoodType::Boards).planned == costsOfUnblockedOrders(GoodType::Boards));
+    BOOST_TEST(ware(GoodType::Boards).planned >= 5.);
     BOOST_TEST(pit.reason.find("kein Weg zu") != std::string::npos);
+    // The sawmill for the boards is blocked (no way to wood): it counts for nothing (Nutzer, 2026-11-17), its stones
+    // are not planned
+    const civai::Order& sawmill = getOrder(BuildingType::Sawmill);
+    BOOST_TEST((sawmill.state == civai::OrderState::Blocked));
+    BOOST_TEST((sawmill.retry.kind == civai::RetryCondition::Kind::NoWay));
+    BOOST_TEST(!civai::EconomyPlanner::IsPlanned(sawmill));
+    BOOST_TEST(ware(GoodType::Stones).plannedByOrders == costsOfUnblockedOrders(GoodType::Stones));
+    BOOST_TEST(ware(GoodType::Stones).plannedByOrders == 0.);
     // The 3 boards are kept for the pit: the old AI cannot use them for other buildings (e.g. military buildings)
     BOOST_TEST(!construction.HasMaterialFor(BuildingType::Woodcutter));
     BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().empty());
@@ -713,7 +742,7 @@ BOOST_FIXTURE_TEST_CASE(StartStockIsNoSurplus, PlannerFixture)
     BOOST_TEST(findOrder(KILN) == -1);
 }
 
-BOOST_FIXTURE_TEST_CASE(PlannedWaresOfSites, PlannerFixture)
+BOOST_FIXTURE_TEST_CASE(SitesPlanNoInputSpaces, PlannerFixture)
 {
     startGame(makeDesc({"Kiln"}));
     hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
@@ -721,15 +750,15 @@ BOOST_FIXTURE_TEST_CASE(PlannedWaresOfSites, PlannerFixture)
     step();
     BOOST_TEST_REQUIRE(findSite(KILN).isValid());
     step();
-    // The kiln sites will ask for their input spaces of loam: planned, not free anymore. Expanding orders have no
-    // start-up time: a second kiln comes while the loam is still in surplus
+    // The input spaces of the kiln sites are not planned (Nutzer, 2026-11-17): what the kilns will use counts as the
+    // consumption of coming buildings (no kiln worked yet: by the work time)
     unsigned numSites = 0;
     for(const noBuildingSite* site : world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites())
         numSites += site->GetBuildingType() == KILN ? 1u : 0u;
-    const unsigned spaces = BLD_WORK_DESC[KILN].numSpacesPerWare;
     BOOST_TEST(numSites >= 1u);
-    BOOST_TEST(ware(LOAM).planned == numSites * spaces);
-    BOOST_TEST(ware(LOAM).free == 20 - static_cast<int>(numSites * spaces));
+    BOOST_TEST(ware(LOAM).planned == 0.);
+    BOOST_TEST(ware(LOAM).free == 20.);
+    BOOST_TEST(ware(LOAM).forecastConsumption > 0.);
     BOOST_TEST(ware(LOAM).inTransit == 0u);
 }
 
@@ -786,8 +815,8 @@ BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
 BOOST_FIXTURE_TEST_CASE(ExpandingOrderNeverSolvesAProblem, PlannerFixture)
 {
     // Without a need for wood: the clearing woodcutter is expanding. It lacks boards (1 of 2), but it solves no
-    // problem: no priority, it waits at the end of the list. Its costs are requested: the boards are short, a needed
-    // sawmill comes (it has wood)
+    // problem: no priority, it waits at the end of the list. It waits for material (no block): its costs are
+    // requested, the boards are short
     startGame(makeDesc(), 1);
     hq().AddToInventory(GoodCounts::make(GoodType::Axe, 2), true);
     hq().AddToInventory(GoodCounts::make(GoodType::Wood, 40), true);
@@ -807,6 +836,9 @@ BOOST_FIXTURE_TEST_CASE(ExpandingOrderNeverSolvesAProblem, PlannerFixture)
     BOOST_TEST(!clearing->selfSolving);
     BOOST_TEST_INFO(clearing->reason);
     BOOST_TEST(clearing->reason.find("Boards fehlt") == 0u);
+    BOOST_TEST(civai::EconomyPlanner::WaitsForResources(*clearing));
+    BOOST_TEST(ware(GoodType::Boards).plannedByOrders == costsOfUnblockedOrders(GoodType::Boards));
+    BOOST_TEST(ware(GoodType::Boards).plannedByOrders >= 2.);
     // All needed orders stand above it
     bool expandingSeen = false;
     for(const civai::Order* other : list())
@@ -1107,8 +1139,8 @@ BOOST_FIXTURE_TEST_CASE(GroupsOfWaresAConsumerTakes, PlannerFixture)
 BOOST_FIXTURE_TEST_CASE(NoOrdersForConstructionMaterial, PlannerFixture)
 {
     // The pit (loam) and the mixer (mortar) lack boards, none are in stock. No orders are made for their construction
-    // material (Nutzer, 2026-11-17): their costs are planned, the boards are short, one needed sawmill is there for the
-    // shortage
+    // material (Nutzer, 2026-11-17): they wait for it, their costs are planned, the boards are short, one needed sawmill
+    // is there for the shortage
     WorldDescription desc = makeDesc({}, {{"Loam", 5}, {"Mortar", 5}});
     desc.wares.push_back(makeWare("Mortar"));
     WorkshopDesc mixer = makeWorkshop("Mixer");
@@ -1143,14 +1175,16 @@ BOOST_FIXTURE_TEST_CASE(NoOrdersForConstructionMaterial, PlannerFixture)
         }
         BOOST_TEST(numSawmills == 1u);
         BOOST_TEST((ware(GoodType::Boards).state == civai::SupplyState::Shortage));
+        BOOST_TEST(civai::EconomyPlanner::WaitsForResources(getOrder(PIT)));
+        BOOST_TEST_INFO(planner()->GetReport());
+        BOOST_TEST(ware(GoodType::Boards).plannedByOrders == costsOfUnblockedOrders(GoodType::Boards));
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(GroupsSharingWaresCountTheStockOnce, PlannerFixture)
+namespace {
+/// The hut costs 2 "walls" (loam or clay) and 2 "roof" (clay or straw), it makes hutwork. The research costs 5 hutwork
+WorldDescription makeHutDesc()
 {
-    // The hut costs 2 "walls" (loam or clay) and 2 "roof" (clay or straw). 3 clay are there: each group alone has
-    // enough (3 of 2), together they lack one. Their union is a group of its own: it is short, and the hut lacks
-    // material (the roof gets the clay the walls did not take)
     WorldDescription desc = makeDesc({}, {{"Hutwork", 5}});
     desc.wares[0].kind = "Wall";
     desc.wares[1].kind = "Wall";
@@ -1162,9 +1196,19 @@ BOOST_FIXTURE_TEST_CASE(GroupsSharingWaresCountTheStockOnce, PlannerFixture)
     hut.cost = {{{"Wall"}, 2}, {{"Roof"}, 2}};
     hut.output = {"Hutwork"};
     desc.workshops.push_back(hut);
-    const BuildingType HUT = getCustomBuilding(2);
-    const GoodType STRAW = getCustomGood(2);
-    startGame(desc);
+    return desc;
+}
+const BuildingType HUT = getCustomBuilding(2);
+const GoodType STRAW = getCustomGood(2);
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(GroupsSharingWaresCountTheStockOnce, PlannerFixture)
+{
+    // 3 clay are there: walls and roof alone would have enough (3 of 2), together they lack one. The material check
+    // takes the entries one after another: the hut lacks material. It waits for it, its costs are planned and shared
+    // out: the walls get 2 clay, the roof 1 and lacks one. There is no union of the two groups (Nutzer, 2026-11-17:
+    // only groups a consumer takes)
+    startGame(makeHutDesc());
     hq().AddToInventory(GoodCounts::make(CLAY, 3), true);
     startAI();
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
@@ -1173,20 +1217,60 @@ BOOST_FIXTURE_TEST_CASE(GroupsSharingWaresCountTheStockOnce, PlannerFixture)
     BOOST_TEST_INFO(planner()->GetReport());
     const civai::Order& order = getOrder(HUT);
     BOOST_TEST_REQUIRE((order.cause == civai::OrderCause::Shortage));
-    const civai::WareGroup* walls = planner()->FindGroup({LOAM, CLAY});
-    const civai::WareGroup* roof = planner()->FindGroup({CLAY, STRAW});
-    const civai::WareGroup* both = planner()->FindGroup({LOAM, CLAY, STRAW});
-    BOOST_TEST_REQUIRE(walls);
-    BOOST_TEST_REQUIRE(roof);
-    BOOST_TEST_REQUIRE(both);
-    BOOST_TEST(both->combined);
-    BOOST_TEST(!walls->combined);
-    BOOST_TEST(walls->status.free == 1);
-    BOOST_TEST(roof->status.free == 1);
-    BOOST_TEST(both->status.free == -1);
-    BOOST_TEST((both->status.state == civai::SupplyState::Shortage));
+    BOOST_TEST_REQUIRE(planner()->FindGroup({LOAM, CLAY}));
+    BOOST_TEST_REQUIRE(planner()->FindGroup({CLAY, STRAW}));
+    BOOST_TEST(!planner()->FindGroup({LOAM, CLAY, STRAW}));
     BOOST_TEST(!findSite(HUT).isValid());
     BOOST_TEST(order.reason.find("fehlt: 2 nötig, 1 frei") != std::string::npos);
+    BOOST_TEST(civai::EconomyPlanner::WaitsForResources(order));
+    BOOST_TEST(ware(CLAY).planned == 3.);
+    BOOST_TEST(ware(CLAY).forecast == 0.);
+    BOOST_TEST(planner()->FindGroup({LOAM, CLAY})->status.forecast == 0.);
+    BOOST_TEST(planner()->FindGroup({CLAY, STRAW})->status.forecast == -1.);
+}
+
+BOOST_FIXTURE_TEST_CASE(EntriesAreSharedOutAmongTheirWares, PlannerFixture)
+{
+    // A hut site without a road asks for all of its costs: 2 walls (loam or clay), 2 roof (clay or straw). Each entry
+    // takes its wares, the ones fewer other entries take first: the walls get 2 of the 3 clay, the roof the last one,
+    // it lacks one. The clay is given to the entries, not free for anyone else (no surplus)
+    startGame(makeHutDesc());
+    hq().AddToInventory(GoodCounts::make(CLAY, 3), true);
+    startAI();
+    bool sitePlaced = false;
+    for(const Position offset : {Position(5, -3), Position(6, 2), Position(3, 5), Position(-3, -4)})
+    {
+        const MapPoint pt = world.MakeMapPoint(hqPos + offset);
+        if(world.GetBQ(pt, curPlayer) >= BuildingQuality::Hut)
+        {
+            world.SetBuildingSite(HUT, pt, curPlayer);
+            sitePlaced = true;
+            break;
+        }
+    }
+    BOOST_TEST_REQUIRE(sitePlaced);
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    const civai::WareGroup* walls = planner()->FindGroup({LOAM, CLAY});
+    const civai::WareGroup* roof = planner()->FindGroup({CLAY, STRAW});
+    BOOST_TEST_REQUIRE(walls);
+    BOOST_TEST_REQUIRE(roof);
+    BOOST_TEST(!planner()->FindGroup({LOAM, CLAY, STRAW}));
+    BOOST_TEST(ware(CLAY).openDemand == 3.);
+    BOOST_TEST(ware(CLAY).forecast == 0.);
+    BOOST_TEST((ware(CLAY).state == civai::SupplyState::Normal));
+    BOOST_TEST(walls->status.forecast == 0.);
+    BOOST_TEST(roof->status.forecast == -1.);
+    BOOST_TEST(roof->status.missing == 1.);
+    BOOST_TEST((roof->status.state == civai::SupplyState::Shortage));
+    BOOST_TEST((walls->status.state == civai::SupplyState::Normal));
+    // 20 clay: 16 left after both entries, 16 is the surplus of the clay (not 20)
+    hq().AddToInventory(GoodCounts::make(CLAY, 17), true);
+    step();
+    BOOST_TEST(ware(CLAY).forecast == 16.);
+    BOOST_TEST(walls->status.forecast == 16.);
+    BOOST_TEST(roof->status.forecast == 16.);
+    BOOST_TEST(roof->status.missing == 0.);
 }
 
 BOOST_FIXTURE_TEST_CASE(ExpandingSiteIsNoSolution, PlannerFixture)
@@ -1232,8 +1316,8 @@ BOOST_FIXTURE_TEST_CASE(HarvesterBesideItsRenewer, PlannerFixture)
     BOOST_TEST((forester.cause == civai::OrderCause::Renewal));
     BOOST_TEST(forester.parent == woodcutterId);
     BOOST_TEST(findOrder(BuildingType::Forester) < findOrder(BuildingType::Woodcutter));
-    // The forester is placed, then the woodcutter beside its site
-    step();
+    // The forester is placed in the same step (orders made while the list is worked on are worked on in the same
+    // step), the woodcutter waits for its site. Then the woodcutter is placed beside the site
     const MapPoint foresterPos = findSite(BuildingType::Forester);
     BOOST_TEST_REQUIRE(foresterPos.isValid());
     BOOST_TEST(!findSite(BuildingType::Woodcutter).isValid());
@@ -1254,20 +1338,45 @@ BOOST_FIXTURE_TEST_CASE(HarvesterBesideItsRenewer, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(ToolsOfComingBuildingsAreAskedFor, PlannerFixture)
 {
-    // Wood is needed, a woodcutter is ordered. No axe is there to recruit its worker: the axe counts as asked for
-    // (planned) before the building is finished, with the one the player keeps in stock. It is ordered
+    // Wood is needed, a woodcutter is ordered. One axe is there: the woodcutter is placed. Its worker is recruited
+    // with an axe: the site asks for it (planned) before the building is finished, with the ones the player keeps in
+    // stock. They are ordered
+    ggs.setSelection(AddonId::TOOL_ORDERING, 1);
+    startGame(makeDesc({}, {{"Wood", 5}}));
+    hq().AddToInventory(GoodCounts::make(GoodType::Axe, 1), true);
+    placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST_REQUIRE(findSite(BuildingType::Woodcutter).isValid());
+    step();
+    const civai::WareGroup* axes = planner()->FindGroup({GoodType::Axe});
+    BOOST_TEST_REQUIRE(axes);
+    BOOST_TEST(axes->tools);
+    BOOST_TEST(axes->status.planned >= 1u + civai::EconomyPlanner::TOOLS_IN_STOCK);
+    BOOST_TEST((axes->status.state == civai::SupplyState::Shortage));
+    BOOST_TEST(world.GetPlayer(curPlayer).GetToolsOrdered(Tool::Axe) >= 2u);
+}
+
+BOOST_FIXTURE_TEST_CASE(ToolsOfWaitingOrdersAreAskedFor, PlannerFixture)
+{
+    // No axe: the woodcutter waits for its tool. Waiting for resources is no block: its axe is planned with the ones
+    // kept in stock. They are ordered
     ggs.setSelection(AddonId::TOOL_ORDERING, 1);
     startGame(makeDesc({}, {{"Wood", 5}}));
     placeTrees(Position(-5, 3), civai::EconomyPlanner::RENEW_BELOW + 1u);
     startAI();
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
     step();
-    BOOST_TEST_REQUIRE(findOrder(BuildingType::Woodcutter) >= 0);
     step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    const civai::Order& woodcutter = getOrder(BuildingType::Woodcutter);
+    BOOST_TEST(civai::EconomyPlanner::WaitsForResources(woodcutter));
     const civai::WareGroup* axes = planner()->FindGroup({GoodType::Axe});
     BOOST_TEST_REQUIRE(axes);
-    BOOST_TEST(axes->tools);
-    BOOST_TEST(axes->status.planned >= 1u + civai::EconomyPlanner::TOOLS_IN_STOCK);
+    BOOST_TEST(axes->status.planned == 1u + civai::EconomyPlanner::TOOLS_IN_STOCK);
+    BOOST_TEST(axes->status.plannedByOrders == 1.);
     BOOST_TEST((axes->status.state == civai::SupplyState::Shortage));
     BOOST_TEST(world.GetPlayer(curPlayer).GetToolsOrdered(Tool::Axe) >= 2u);
 }

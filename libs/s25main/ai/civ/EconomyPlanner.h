@@ -53,20 +53,25 @@ struct WareStatus
     int balance = 0;
     /// Consumed per minute in the last BALANCE_MINUTES minutes
     double consumptionPerMinute = 0;
-    /// Requested ("angefragt") in three parts:
-    /// open: asked for by the game but not sent yet (building sites, inputs, tool slots, coins, research, soldiers
+    /// Requested ("angefragt") in two parts, and what is on the way (only shown). An entry asking for any of several
+    /// wares (a construction cost by tags, "any of" inputs, a tool slot) is shared out among its wares
+    /// (ComputeStatuses): a ware counts the part given to it, a group the parts given to its wares and what is missing
+    /// for the entries of exactly its wares (`missing`).
+    /// open: asked for by the game but not sent yet (building sites, inputs of buildings, tool slots, coins, research
     /// ...),
-    unsigned openDemand = 0;
+    double openDemand = 0;
     /// in transit: on the way to the building that asked for it (left the stock already, only shown),
     unsigned inTransit = 0;
-    /// planned: construction costs of the needed orders of the list and of the building sites just ordered, input
-    /// spaces of building sites and of placed buildings (they will ask for these wares)
-    unsigned planned = 0;
+    /// planned: tools and worker of the building sites, construction costs, tools and worker of the building sites
+    /// just ordered (commands on their way) and of the orders of the list that are not blocked, the tools kept in stock
+    double planned = 0;
     /// Part of planned for the orders of the list not placed yet (their construction costs and tools, the worker of
     /// their building). The rules give these to the orders in the order of the list
-    unsigned plannedByOrders = 0;
+    double plannedByOrders = 0;
     /// Stock minus open minus planned: what is really free. Negative: more is requested than there is
-    int free = 0;
+    double free = 0;
+    /// Of open, planned and consumption: what the entries asking for exactly these wares get from none of them
+    double missing = 0;
     /// Start stock not used yet (only for the wares of rttr:SetAIStartStockNoSurplus, otherwise 0): no surplus
     unsigned startStockLeft = 0;
     SupplyState state = SupplyState::Normal;
@@ -93,9 +98,6 @@ struct WareGroup
     bool demanded = false;
     /// All wares are tools: they are made on order (EconomyPlanner::OrderTools), not by the state of the group
     bool tools = false;
-    /// The union of two groups sharing wares (neither containing the other): both count the shared wares in their
-    /// stock, only the union sees what both ask for together. No consumer takes it: it decides about shortages only
-    bool combined = false;
     WareStatus status;
 };
 
@@ -282,6 +284,9 @@ public:
     static constexpr unsigned FOLLOW_UP_GFS = 20;
     /// At most this many orders of one building type at the same time in the list (also those placed and not finished)
     static constexpr unsigned MAX_ORDERS_PER_TYPE = 5;
+    /// The list is worked on again for the orders made while working on it (producers of missing inputs ...), at most
+    /// this many times per step
+    static constexpr unsigned MAX_LIST_PASSES = 4;
     /// Farms and plantations: at least this many nodes for fields in their reach (fields there or free for new ones).
     /// Fewer at a building: diagnosis "Felder fehlen"; a new one is only placed where there are enough
     static constexpr unsigned MIN_FIELD_NODES = 4;
@@ -331,6 +336,13 @@ public:
     bool IsStorageFull() const;
     /// Text for the log: shortages, surpluses and the list with reasons
     std::string GetReport() const;
+    /// The order is not placed and not blocked: its construction costs, tools and worker are requested ("angefragt").
+    /// A blocked order counts in no calculation (Nutzer, 2026-11-17), needed and expanding ones alike. An order waiting
+    /// for resources is not blocked (WaitsForResources)
+    static bool IsPlanned(const Order& order);
+    /// Waits for construction material, a builder, a tool, helpers or soldiers (state Blocked with that retry
+    /// condition): it is built when they are there, it counts like a waiting order ("wartet" in the report)
+    static bool WaitsForResources(const Order& order);
     /// The old AI tears down a building of the player with nothing left in reach (for the report)
     void OnTornDown(MapPoint pt, BuildingType bld);
     /// Duration of the last step and the maximum (microseconds)
@@ -460,19 +472,12 @@ private:
     void RegisterGroups();
     /// Index of the group with exactly these wares (created if it does not exist)
     unsigned GetGroupIdx(std::vector<GoodType> wares, bool demanded);
-    /// Groups which contain all of the (sorted) wares (cached)
-    const std::vector<unsigned>& GroupsContaining(const std::vector<GoodType>& wares);
-    /// Unions of the demanded groups sharing wares (neither containing the other), until there are no more (only when
-    /// groups were added)
-    void AddCombinedGroups();
     void UpdatePlanned();
-    /// Construction costs, input spaces and/or tools and worker of one more building of the type, for the order
-    /// (0: a building site). The status is computed again by RecomputeForecast
-    void AddPlanned(BuildingType bld, bool withCosts, bool withInputs, bool withTools, unsigned orderId);
+    /// Construction costs and/or tools and worker of one more building of the type, for the order (0: a building
+    /// site). No input spaces: what a building will use counts as its consumption in the forecast. The status is
+    /// computed again by RecomputeForecast
+    void AddPlanned(BuildingType bld, bool withCosts, bool withTools, unsigned orderId);
     void AddPlannedEntry(const OpenDemand& entry, unsigned orderId);
-    /// The unplaced order will be built when the resources are there: its construction costs, tools and worker are
-    /// requested ("angefragt"). Needed and expanding orders, unless they cannot be built until the situation changes
-    bool IsPlanned(const Order& order) const;
     /// Forecast of all wares, tools, soldiers and helpers. At the start of the step and after every building placed
     void RecomputeForecast();
     void UpdateSoldierStatus();
@@ -758,8 +763,8 @@ private:
     std::vector<MapPoint> clearingPending_;
     /// Orders whose construction costs are counted as planned at the start of the step
     std::vector<unsigned> plannedOrderIds_;
-    /// Planned entries this step (costs, input spaces, tools), any number of wares each, and the order each one is for
-    /// (0: a building site)
+    /// Planned entries this step (costs, tools), any number of wares each, and the order each one is for (0: a building
+    /// site)
     std::vector<OpenDemand> planned_;
     std::vector<unsigned> plannedFor_;
     /// A helper requested for the worker of each building site and planned order (the order, 0: a building site), and
@@ -769,11 +774,6 @@ private:
     /// Tools (per group) and helpers kept by needed orders processed in this step without being placed
     std::vector<unsigned> toolsClaimed_;
     unsigned helpersClaimed_ = 0;
-    /// Groups containing all wares of an entry (GroupsContaining) and the number of groups when it was filled
-    std::map<std::vector<GoodType>, std::vector<unsigned>> containing_;
-    size_t containingGroups_ = 0;
-    /// Number of groups when the unions were added last (AddCombinedGroups)
-    size_t combinedGroups_ = 0;
     /// GetChain per ware in this step
     std::map<GoodType, std::vector<BuildingType>> chainCache_;
     /// Construction material in the warehouses not needed by building sites at the start of the step (for the reasons)

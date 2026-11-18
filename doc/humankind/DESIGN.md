@@ -1272,8 +1272,27 @@ Prognose, auch bei Werkzeugherstellern.
   Probleme anlegen (Eingang, Gehilfen; Baumaterial nicht mehr, Nutzer 2026-11-17). Sie gelten selbst als expandierend
   (keine Rechte, Höchstzahl gilt) und dürfen auch Gebäude außerhalb der Expansionsliste sein (z. B. ein Brunnen für eine
   expandierende Brauerei).
-  Baukosten, Werkzeuge und Arbeiter expandierender Aufträge stehen unter „angefragt“: Nur darüber entstehen aus ihnen
-  benötigte Aufträge (z. B. Brettermangel → benötigtes Sägewerk).
+  Baukosten, Werkzeuge und Arbeiter expandierender Aufträge stehen unter „angefragt“, solange sie nicht blockiert sind:
+  Nur darüber entstehen aus ihnen benötigte Aufträge (z. B. Brettermangel → benötigtes Sägewerk).
+- **Blockierte Aufträge zählen zu nichts** (Nutzer, 2026-11-17): Ein blockierter Auftrag existiert für keine Rechnung:
+  nicht in „geplant“ (Baukosten, Werkzeuge, Arbeiter, Gehilfen), nicht bei der Anzahl als anderer Auftrag, nicht bei
+  der Grenze der Bauarbeiter, nicht bei „für Aufträge darüber“ der Werkzeuge und Gehilfen. Ob der Auftrag darüber
+  blockiert ist, spielt keine Rolle (vorher zählte ein benötigter Auftrag nicht, wenn einer darüber blockiert war).
+  Benötigte und expandierende gleich; die frühere Grenze „expandierende nur so viele, wie Bauarbeiter da sind“ entfällt.
+  - **Blockiert** (Lesart von Claude, dem Nutzer zur Entscheidung gestellt): kann nicht gebaut werden, bis sich die Lage
+    ändert: nicht erforscht, kein Weg, kein Bauplatz, Höchstzahl des Typs, Lager voll, Eingang fehlt oder ist für einen
+    Auftrag darüber vorbehalten (expandierend).
+  - **Wartet auf Ressourcen** (kein Block, im Bericht „wartet“): Baumaterial, Bauarbeiter, Werkzeug, Gehilfen, Soldaten.
+    Er wird gebaut, sobald sie da sind, und zählt wie ein wartender Auftrag. Grund: Zählen auch diese nicht (wörtliche
+    Lesart), sieht die Prognose den Bedarf an Baumaterial nicht mehr, sobald alle Aufträge darauf warten; es kommt kein
+    benötigter Holzfäller oder Steinbruch mehr, und die Wirtschaft bleibt stehen (Messung 2026-11-18: Land 10 082 /
+    10 044 statt 13 116 / 17 560 vorher, Gebäude 126 / 93 statt 240 / 319, Zufallskarte 512, 4 KI, 2 h 50).
+  - Es gilt der Zustand vom vorigen Schritt; am Ende jedes Schritts wird die Prognose mit den neuen Zuständen neu
+    gerechnet (der Bericht passt zur Liste). Aufträge, die beim Abarbeiten entstehen (Erzeuger eines Eingangs), werden im
+    selben Schritt abgearbeitet (bis zu `MAX_LIST_PASSES` = 4 Durchgänge).
+  - Weiter gelten für blockierte Aufträge nur: Ein Auftrag zählt für seinen eigenen Bedarf (sonst käme jeden Schritt
+    derselbe dazu) und für die Höchstzahl je Gebäudetyp. Ein benötigter Auftrag, dem Baumaterial fehlt, behält das
+    vorhandene (Regel vom 15.11.; er wartet auf Ressourcen, ist also nicht blockiert).
 - **Überschreiben:** Ein benötigter Auftrag ersetzt den gleichen expandierenden (gleiches Gebäude, gleiche Ware).
 - **Eine Lösung für mehrere** (Nutzer, 2026-11-15): Fehlt einem Auftrag ein Eingang und gibt es für ihn schon einen benötigten Auftrag desselben Gebäudes (für einen anderen Auftrag, aus der Statistik oder schon
   platziert), ist dieser die Lösung für beide; es kommt keiner dazu. Er steht über allen, für die er gilt (Log:
@@ -1284,15 +1303,26 @@ Prognose, auch bei Werkzeugherstellern.
 - Eine Gruppe sind die Waren, die ein Abnehmer gleichwertig nimmt: die Eingänge „eins von“ (Nahrung der Minen), ein
   Baukosten-Eintrag nach Tags, die Werkzeuge eines Platzes und einer Art (Eisen- und Kupferaxt), dazu jede Ware allein.
   Die Gruppen kommen aus den Spieldaten und aus dem, was das Spiel anfragt; im Code ist keine Ware genannt.
-- Bestand, Herstellung, Verbrauch einer Gruppe sind die Summen ihrer Waren. Angefragt und geplant zählt ein Eintrag für jede
-  Gruppe, die alle seine Waren enthält.
-- **Vereinigungen** (Fehler gefunden 2026-11-17): Teilen sich zwei Gruppen Waren, ohne dass eine die andere enthält
-  (Mauern Holz/Bretter/Steine/Adobe und Dach Holz/Bretter/Steine/Stroh), zählt jede den gemeinsamen Bestand voll; keine
-  sieht, was die andere anfragt. Beispiel: 5 Holz, ein Holzfäller kostet 4 Mauern und 2 Dach: Mauern frei 1, Dach frei
-  3, beide ohne Mangel, es fehlt aber 1. Deshalb ist die Vereinigung solcher Gruppen eine eigene Gruppe (auch
-  Vereinigungen von Vereinigungen): Sie zählt alle Einträge beider gegen den Bestand aller ihrer Waren und entscheidet
-  über Mangel (nicht über Überschuss, kein Abnehmer nimmt sie). Im Bericht steht eine Vereinigung nur, wenn keine
-  kleinere Gruppe in ihr denselben Mangel schon zeigt.
+- **Zuteilung der Einträge** (Fehler gefunden vom Nutzer 2026-11-17, ersetzt die Vereinigungen vom selben Tag): Vorher
+  zählte ein Eintrag für jede Gruppe, die alle seine Waren enthält, nicht aber für die einzelnen Waren. Holz allein sah
+  das Bauen nicht und stand im Überschuss (Prognose 75), während die Baugruppe mit Holz im Mangel war; die Vereinigungen
+  (z. B. Wood/Boards/Stones/Thatch/Adobe/LoamBrick) waren Gruppen, die kein Abnehmer so nimmt. Jetzt:
+  - Jede Anfrage ist ein Eintrag: Waren (eine davon reicht) und Menge. Offen: was das Spiel gerade anfragt. Verbrauch:
+    was die Gebäude in der Bilanzlänge verbrauchen (eine Ware oder „eins von“). Geplant: was kommende Gebäude und die
+    Aufträge der Liste anfragen werden, der Werkzeugvorrat.
+  - Jede Ware hat ihren Bestand und ihre Herstellung in der Bilanzlänge. Die Einträge werden nacheinander auf ihre Waren
+    verteilt: zuerst die mit den wenigsten Waren (eine Ware allein kann von nirgends sonst kommen), bei gleicher Zahl
+    offen vor Verbrauch vor geplant, geplant in der Reihenfolge der Liste. In einem Eintrag zuerst die Waren, die
+    weniger andere Einträge nehmen (Adobe vor Holz für die Mauern), bei Gleichstand die, von der mehr übrig ist. Jede
+    Ware zählt nur einmal.
+  - Eine Ware: ihr Bestand, ihre Herstellung und was ihr zugeteilt wurde (von allen Einträgen); was ihren eigenen
+    Einträgen fehlt, macht ihre Prognose negativ.
+  - Eine Gruppe: Bestand und Herstellung ihrer Waren, was ihren Waren zugeteilt wurde (von allen Einträgen, auch
+    anderer Gruppen), und was den Einträgen genau dieser Gruppe von keiner Ware zugeteilt werden konnte (Bericht:
+    „davon bekommt keine Ware“). Ein Mangel einer kleineren Gruppe in ihr zählt nicht: Ihre anderen Waren hätten den
+    Einträgen dieser Gruppe geholfen.
+  - Folge: Eine Ware im Überschuss hat wirklich etwas übrig; eine Gruppe mit ihr kann dann nur im Mangel sein, wenn
+    deren Einträge die Ware nicht nehmen. Es gibt nur Gruppen, die ein Abnehmer so nimmt.
 - Die Materialprüfung vor dem Platzieren (`DescribeMissingMaterial`, alte KI `HasMaterialFor`) zieht die Einträge
   nacheinander vom freien Material ab: zuerst die Einträge mit den wenigsten Waren, in jedem Eintrag zuerst die Waren,
   die weniger andere Einträge nehmen (Adobe vor Holz für die Mauern). Vorher prüfte jeder Eintrag für sich: Mit 4 Holz
@@ -1312,20 +1342,30 @@ haben einen Wert für die nächste Bilanzlänge (7 Minuten):
 
 **Prognose = (Bestand − Angefragt) + voraussichtliche Herstellung − voraussichtlicher Verbrauch**
 
-- Angefragt = alles Verplante: offen angefragt, Baukosten, Werkzeuge und Arbeiter der Aufträge der Liste (benötigte und
-  expandierende, außer blockierten ohne Weg, ohne Bauplatz, nicht erforscht, über der Höchstzahl, bei vollem Lager;
-  expandierende nur so viele, wie Bauarbeiter da sind, in der Reihenfolge der Liste: Nutzer, 2026-11-17),
-  Eingangsplätze, Werkzeuge und Arbeiter kommender Gebäude, der Werkzeugvorrat.
-- Herstellung = gemessen in der letzten Bilanzlänge + kommende Gebäude (Baustellen, bestellte Baustellen, Gebäude, die
-  vor weniger als einer Bilanzlänge fertig wurden, auch expandierende) voll mit dem **gemessenen Wert je Gebäude** ihres
-  Typs. Stehende Gebäude stellen nur her, was gemessen ist (kein Zuschlag für einen gelösten Grund).
+- Angefragt = offen + geplant (Korrektur des Nutzers, 2026-11-17):
+  - Offen: was das Spiel anfragt und kein Lager schicken konnte (Baukosten der Baustellen ohne verbaute, gelieferte und
+    bestellte Waren, Eingänge stehender Gebäude, Werkzeugplätze, Münzen, Rüstung, Forschung, Expeditionen).
+  - Geplant: jede Baustelle ihre Werkzeuge und ihr Arbeiter; jeder abgeschickte Baubefehl, dessen Baustelle noch nicht
+    auf der Karte steht, volle Baukosten, Werkzeuge und Arbeiter; jeder Auftrag der Liste, der nicht platziert und
+    nicht blockiert ist, Baukosten, Werkzeuge und Arbeiter (benötigte und expandierende gleich); der Werkzeugvorrat.
+  - Keine Eingangsplätze (Nutzer, 2026-11-17): Was ein Gebäude verbrauchen wird, steht als Verbrauch des kommenden
+    Gebäudes in der Prognose (Wert je Gebäude, sonst Arbeitszeit). Vorher zählten die Eingangsplätze der Baustellen und
+    Baubefehle (ein Sägewerk 6 Holz) zusätzlich.
+- Herstellung = gemessen in der letzten Bilanzlänge (was die Arbeiter der Gebäude hergestellt und an die Fahne ihres
+  Gebäudes gelegt haben, auch von inzwischen abgerissenen Gebäuden; nicht, was Träger an Fahnen ablegen) + kommende
+  Gebäude (Baustellen, abgeschickte Baubefehle, deren Baustelle noch nicht auf der Karte steht, Gebäude, die vor weniger
+  als einer Bilanzlänge fertig wurden, anteilig; auch expandierende) voll mit dem **gemessenen Wert je Gebäude** ihres
+  Typs. Aufträge der Liste stellen nichts her. Stehende Gebäude stellen nur her, was gemessen ist (kein Zuschlag für
+  einen gelösten Grund).
 - Wert je Gebäude (Nutzer, 2026-11-15): was alle Gebäude des Typs in der Bilanzlänge hergestellt bzw. verbraucht haben
   ÷ die Minuten, die sie in dieser Zeit fertig standen. Gebäude mit Problemen zählen mit (ein neues trifft
   wahrscheinlich auf ähnliche Probleme). Hat noch keines gearbeitet, gilt die Arbeitszeit. Statistik je Gebäudetyp:
   `EconomyStatistics::GetProducedBy/GetUsedBy` (Spielstand 29).
 - Verbrauch = gemessener Verbrauch als Eingang von Gebäuden + kommende Gebäude mit dem gemessenen Wert je Gebäude +
-  **jedes stehende Gebäude** (jedes Problem: Eingang, Werkzeug, Arbeiter, Fahne, Straße, Felder) mit dem, was es laut
-  Arbeitszeit verbrauchen würde (Nutzer, 2026-11-15: der Verbrauch zählt immer). Was für Bau, Werkzeug, Soldaten,
+  **jedes stehende Gebäude mit einem Problem** (Eingang, Werkzeug, Arbeiter, Fahne, Straße, Felder, Vorkommen weit,
+  schlechtes Werkzeug) mit dem Teil, den es laut Arbeitszeit mehr verbrauchen würde (1 − Produktivität; Nutzer,
+  2026-11-15: der Verbrauch zählt immer). Gebäude ohne Problem (die Diagnose findet nichts) stehen mit ihrem gemessenen
+  Verbrauch drin; vom Spieler gestoppte und erschöpfte zählen nichts dazu. Was für Bau, Werkzeug, Soldaten,
   Forschung verbraucht wird, zählt hier nicht: Es wird vorher angefragt und steht in „Angefragt“ (sonst doppelt).
 - Werkzeughersteller arbeiten auf Bestellung: Herstellung = was sie von den bestellten und fehlenden Werkzeugen in der
   Bilanzlänge schaffen (Hersteller, die arbeiten können, und kommende, mit den gemessenen Werkzeugen je Minute
@@ -1347,7 +1387,7 @@ haben einen Wert für die nächste Bilanzlänge (7 Minuten):
 Anlass: Erzeuger = ⌈fehlende Menge pro Minute ÷ Wert je Gebäude⌉, jeden Schritt neu (sinkt auch). Die Prognose enthält
 die kommenden und stehenden Gebäude schon.
 - Fehlend: Mangel = −Prognose ÷ 7; Eingang eines Auftrags = sein Verbrauch (Wert je Gebäude) − Prognose ÷ 7.
-- Alle nicht platzierten Aufträge für Gebäude, die eine Ware der Gruppe machen, zählen mit, auch für ein anderes Produkt
+- Alle nicht platzierten und nicht blockierten Aufträge für Gebäude, die eine Ware der Gruppe machen, zählen mit, auch für ein anderes Produkt
   (bei einem expandierenden Bedarf auch die expandierenden). Kleinere Gruppen werden zuerst bearbeitet; ihre Aufträge
   zählen für die größeren Gruppen mit ihren Waren (sonst bestellen „Fisch/Brot/Fleisch“ und „Brot/Fleisch“ getrennt).
 - Die frühere Grenze „für einen anderen Auftrag höchstens einer je Ware“ entfällt: Auch für einen Eingang kommen so
@@ -1355,7 +1395,7 @@ die kommenden und stehenden Gebäude schon.
 - Grenzen: Reichen die Eingänge eines Erzeugers nicht oder lassen die Prognosen seiner Werkzeuge oder der Gehilfen keinen
   weiteren zu, wartet einer; ein Gebäude des Typs, das auf einen Eingang, ein Werkzeug oder einen Arbeiter wartet, zählt
   als dieser eine. Höchstens `MAX_ORDERS_PER_TYPE` je Gebäudetyp (ein benötigter Auftrag ersetzt den gleichen
-  expandierenden, der zählt dafür nicht mit). Nie mehr wartende benötigte Aufträge als Bauarbeiter
+  expandierenden, der zählt dafür nicht mit). Nie mehr wartende (nicht blockierte) benötigte Aufträge als Bauarbeiter
   (über alle Anlässe gezählt; ein Auftrag je Bedarf kommt immer, er zeigt, was fehlt).
 - Ein Auftrag ist erledigt, sobald sein Gebäude fertig ist. Nur ein Förster bleibt bis nach seiner Anlaufzeit.
 
@@ -1511,6 +1551,23 @@ lebt so lange vom Startvorrat oder kämpft schon), wichtig ist, ab wann die Mili
 - Die Militärstärke wächst in keiner Fassung: Die Soldaten aus dem Startvorrat reichen 3 h für alle Besatzungen, die
   Soldaten sind nie knapp, also wird nie rekrutiert.
 
+**Vergleich Korrektur der Rechnung** (2026-11-18: Zuteilung der Einträge, keine Eingangsplätze, blockierte Aufträge
+zählen nicht; Zufallskarte 512 × 512, 4 KI, `--random_init 7`, Summe der 4 Spieler; vorher = `27d993dd`):
+
+| Kartenzufall 5 / 9 | vorher | neu |
+|---|---|---|
+| Land nach 30 min | 4 637 / 4 891 | 5 903 / 5 233 |
+| Land nach 1 h | 5 825 / 4 891 | 7 380 / 5 401 |
+| Land nach 2 h | 9 629 / 9 140 | 12 885 / 11 030 |
+| Land nach 2 h 50 | 13 116 / 17 560 | 20 224 / 17 886 |
+| Gebäude nach 2 h 50 | 240 / 319 | 373 / 335 |
+| Militärstärke | 208 durchgehend | 208 durchgehend (207 am Ende bei 5) |
+
+- Wörtliche Lesart (auch auf Material wartende Aufträge zählen nicht): 10 082 / 10 044 Land, 126 / 93 Gebäude.
+- `tools/checkEconomyLog.py`: im Log des Nutzers vom 17.11. 178 Überschüsse in einer Mangelgruppe, in den neuen Läufen
+  keine Widersprüche.
+- Die Militärstärke wächst weiter nicht (keine Rekrutierung, Soldaten nie knapp): offene Frage an den Nutzer.
+
 **Anbauer und Abbauer** (Nutzer, 2026-11-15): Findet ein benötigter dauerhafter Abbauer keinen Platz mit genug Vorkommen
 in Reichweite, wird zuerst ein Anbauer für ihn beauftragt (Erneuerer der Quelle: Förster, Plantage aus Lua ohne Produkt;
 Anlass „erneuert“, Kind des Abbauers, steht über ihm). Steht dessen Baustelle, kommt der Abbauer direkt daneben (nächster
@@ -1522,6 +1579,10 @@ Platz in Reichweite des Anbauers, Log „neben (x,y)“). Dort zählt die Menge 
 - „Mangel ohne eigenen Auftrag“: warum ein Mangel keinen Auftrag hat, z. B. „gedeckt: fehlen 1,8/min,
   andere Aufträge 1 (je 1,3/min)“ oder „Woodcutter: kein Bauplatz, es kommt keiner dazu (4 stehen)“.
 - Jede Ware im Mangel und Überschuss mit ihrer Prognose: „Prognose −21 = frei −27 + Herstellung 15,0 − Verbrauch 8,9“.
+  Zugeteilte Teile von Einträgen mehrerer Waren sind keine ganzen Zahlen (eine Nachkommastelle). Bei Gruppen „davon
+  bekommt keine Ware X“: was den Einträgen genau dieser Gruppe fehlt.
+- Prüfung der Logs: `tools/checkEconomyLog.py <log>` sucht Widersprüche (Formel, frei, Überschuss einer Ware in einer
+  Mangelgruppe).
   Eigener Abschnitt „Werkzeugmangel“ je Werkzeuggruppe.
 - „Zuletzt abgerissen“: Abbauer, die die alte KI wegen „nichts mehr in Reichweite“ abreißt, mit Anlass, Vorkommen beim
   Platzieren und Zeit mit Arbeiter (auch als eigene Logzeile).

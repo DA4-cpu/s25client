@@ -58,31 +58,6 @@ void addDemand(EconomySnapshot& snapshot, std::vector<GoodType> wares, const uns
 }
 } // namespace
 
-void addInputSpaces(std::vector<OpenDemand>& demand, const BuildingType bld)
-{
-    const BldWorkDescription& workDesc = BLD_WORK_DESC[bld];
-    if(workDesc.waresNeeded.empty() || workDesc.numSpacesPerWare == 0)
-        return;
-    if(workDesc.useOneWareEach)
-    {
-        for(const GoodType good : workDesc.waresNeeded)
-        {
-            if(good != GoodType::Nothing)
-                demand.push_back({{good}, workDesc.numSpacesPerWare, WareUse::Production});
-        }
-    } else
-    {
-        std::vector<GoodType> anyOf;
-        for(const GoodType good : workDesc.waresNeeded)
-        {
-            if(good != GoodType::Nothing)
-                anyOf.push_back(good);
-        }
-        if(!anyOf.empty())
-            demand.push_back({std::move(anyOf), workDesc.numSpacesPerWare, WareUse::Production});
-    }
-}
-
 namespace {
 void addWaiting(BuildingTypeState& state, std::vector<GoodType> wares)
 {
@@ -208,8 +183,6 @@ EconomySnapshot takeEconomySnapshot(const GamePlayer& player)
             if(costs[i].amount > have)
                 addDemand(snapshot, costs[i].wares, costs[i].amount - have, WareUse::Construction);
         }
-        if(BuildingProperties::IsUsual(bld))
-            addInputSpaces(snapshot.siteInputs, bld);
     }
 
     for(const auto bld : helpers::enumRange<BuildingType>())

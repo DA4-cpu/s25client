@@ -69,9 +69,6 @@ struct EconomySnapshot
     unsigned storageCapacity = 0, storageLoad = 0;
     /// Wares on their way to the building that asked for them (not to a warehouse). They left the stock already
     helpers::EnumArray<unsigned, GoodType> inTransit{};
-    /// Input spaces of the building sites: the finished buildings will ask for these wares (any of `wares` for the
-    /// entries "any of", e.g. the food of a mine)
-    std::vector<OpenDemand> siteInputs;
 
     /// Sum of the open demand of all entries the ware can serve
     unsigned GetOpenDemand(GoodType good) const;
@@ -80,6 +77,3 @@ struct EconomySnapshot
 EconomySnapshot takeEconomySnapshot(const GamePlayer& player);
 /// Wares the military buildings ask for themselves (coins to promote soldiers, armor)
 std::vector<GoodType> getMilitaryWares();
-/// Input spaces of a building of the type: the wares it will ask for when it works (one entry "any of" for buildings
-/// using any of their inputs, e.g. the food of a mine)
-void addInputSpaces(std::vector<OpenDemand>& demand, BuildingType bld);

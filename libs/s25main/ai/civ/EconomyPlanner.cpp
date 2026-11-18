@@ -58,6 +58,28 @@ namespace {
         return good == GoodType::Nothing ? std::string("-") : WARE_NAMES[good];
     }
 
+    /// A number of wares for the report: whole numbers without decimals, shares of entries with one
+    std::string num(const double value)
+    {
+        const double rounded = std::round(value * 10.) / 10.;
+        std::ostringstream out;
+        // Less than 0.05 but not 0 (e.g. a shortage of 0.04): two decimals, it must not look like 0
+        if(rounded == 0 && std::abs(value) >= 0.005)
+        {
+            out.setf(std::ios::fixed);
+            out.precision(2);
+            out << value;
+        } else if(std::abs(rounded - std::round(rounded)) < 1e-9)
+            out << std::llround(rounded);
+        else
+        {
+            out.setf(std::ios::fixed);
+            out.precision(1);
+            out << rounded;
+        }
+        return out.str();
+    }
+
     std::string wareNames(const std::vector<GoodType>& wares)
     {
         std::string result;
@@ -146,12 +168,6 @@ namespace {
         std::sort(wares.begin(), wares.end());
         wares.erase(std::unique(wares.begin(), wares.end()), wares.end());
         return wares;
-    }
-
-    /// Every ware of `entry` is part of `group` (both sorted)
-    bool isSubset(const std::vector<GoodType>& entry, const std::vector<GoodType>& group)
-    {
-        return std::includes(group.begin(), group.end(), entry.begin(), entry.end());
     }
 
     /// Sources harvested from the surface of the map which are used up (trees, stone piles, map objects of lua)
@@ -299,6 +315,10 @@ void EconomyPlanner::Step()
     reservedMaterial_ = {};
     MarkSelfSolving();
     ProcessList();
+    // Orders blocked in this step count for nothing from now on, orders no longer blocked count: the forecast of the
+    // states the list has now (the report shows both)
+    UpdatePlanned();
+    RecomputeForecast();
     // Material needed orders wait for: no other building takes it (also not the military buildings of the old AI)
     aijh_.GetConstruction().SetPlannerReservation(reservedMaterial_);
     // The tools of the buildings placed in this step are ordered too
@@ -410,73 +430,38 @@ const WareGroup* EconomyPlanner::FindGroup(std::vector<GoodType> wares) const
     return it == groupIndex_.end() ? nullptr : &groups_[it->second];
 }
 
-const std::vector<unsigned>& EconomyPlanner::GroupsContaining(const std::vector<GoodType>& wares)
+bool EconomyPlanner::WaitsForResources(const Order& order)
 {
-    if(containingGroups_ != groups_.size())
+    // Built as soon as the resources are there: construction material, a builder, a tool, helpers, soldiers. The
+    // forecast must see what it asks for (otherwise nothing would make it)
+    if(order.state != OrderState::Blocked)
+        return false;
+    switch(order.retry.kind)
     {
-        containing_.clear();
-        containingGroups_ = groups_.size();
+        case RetryCondition::Kind::Material:
+        case RetryCondition::Kind::Builder:
+        case RetryCondition::Kind::Helpers:
+        case RetryCondition::Kind::Tool:
+        case RetryCondition::Kind::Soldiers: return true;
+        case RetryCondition::Kind::Now:
+        case RetryCondition::Kind::Limit:
+        case RetryCondition::Kind::Research:
+        case RetryCondition::Kind::NoWay:
+        case RetryCondition::Kind::NoPlace: return false;
     }
-    const auto it = containing_.find(wares);
-    if(it != containing_.end())
-        return it->second;
-    std::vector<unsigned> result;
-    if(!wares.empty())
-    {
-        // Only groups containing the first ware can contain all of them
-        for(const unsigned idx : groupsOf_[wares.front()])
-        {
-            if(isSubset(wares, groups_[idx].wares))
-                result.push_back(idx);
-        }
-    }
-    return containing_.emplace(wares, std::move(result)).first->second;
+    return false;
 }
 
-void EconomyPlanner::AddCombinedGroups()
+bool EconomyPlanner::IsPlanned(const Order& order)
 {
-    // Two groups sharing wares, neither containing the other (e.g. the construction material Wood/Boards/Stones/Adobe
-    // and the roof material Wood/Boards/Stones/Thatch): each one counts the shared wares in its stock, the stock of the
-    // shared wares counts twice. Their union counts what both ask for against the stock of all their wares (what a set
-    // of entries asks for must fit into the stock of the wares they take). Unions of unions too, until there are none
-    constexpr size_t MAX_GROUPS = 1024;
-    if(combinedGroups_ == groups_.size())
-        return;
-    for(size_t i = 1; i < groups_.size() && groups_.size() < MAX_GROUPS; ++i)
-    {
-        for(size_t j = 0; j < i && groups_.size() < MAX_GROUPS; ++j)
-        {
-            const WareGroup& lhs = groups_[i];
-            const WareGroup& rhs = groups_[j];
-            if(!lhs.demanded || !rhs.demanded || lhs.tools || rhs.tools || isSubset(lhs.wares, rhs.wares)
-               || isSubset(rhs.wares, lhs.wares))
-                continue;
-            if(std::find_first_of(lhs.wares.begin(), lhs.wares.end(), rhs.wares.begin(), rhs.wares.end())
-               == lhs.wares.end())
-                continue;
-            std::vector<GoodType> both;
-            std::set_union(lhs.wares.begin(), lhs.wares.end(), rhs.wares.begin(), rhs.wares.end(),
-                           std::back_inserter(both));
-            if(groupIndex_.count(both))
-                continue;
-            const unsigned idx = GetGroupIdx(std::move(both), true);
-            groups_[idx].combined = true;
-        }
-    }
-    combinedGroups_ = groups_.size();
-}
-
-bool EconomyPlanner::IsPlanned(const Order& order) const
-{
-    // Needed and expanding orders ask for their construction material, tools and worker before they are placed. Not
-    // those which cannot be built until the situation changes (no way, no place, not researched), and not expanding
-    // ones over the limit of their type or while the storage is full (they are not built then)
-    if(order.state == OrderState::Placed || IsChainBlocked(order.id))
+    // Needed and expanding orders ask for their construction material, tools and worker before they are placed. A
+    // blocked order exists for no calculation (Nutzer, 2026-11-17): it cannot be built until the situation changes
+    // (not researched, no way, no place, limit of its type, storage full, its input missing or kept for another
+    // order). An order waiting for resources (material, builder, tool, helpers, soldiers) counts: shown as "wartet".
+    // The state is the one of the last step (computed again at the end of a step)
+    if(order.state == OrderState::Placed)
         return false;
-    if(order.kind == OrderKind::Expanding
-       && (IsStorageFull() || (order.state == OrderState::Blocked && order.retry.kind == RetryCondition::Kind::Limit)))
-        return false;
-    return true;
+    return order.state != OrderState::Blocked || WaitsForResources(order);
 }
 
 void EconomyPlanner::AddPlannedEntry(const OpenDemand& entry, const unsigned orderId)
@@ -487,7 +472,7 @@ void EconomyPlanner::AddPlannedEntry(const OpenDemand& entry, const unsigned ord
     plannedFor_.push_back(orderId);
 }
 
-void EconomyPlanner::AddPlanned(const BuildingType bld, const bool withCosts, const bool withInputs, const bool withTools,
+void EconomyPlanner::AddPlanned(const BuildingType bld, const bool withCosts, const bool withTools,
                                 const unsigned orderId)
 {
     std::vector<OpenDemand> demand;
@@ -496,8 +481,6 @@ void EconomyPlanner::AddPlanned(const BuildingType bld, const bool withCosts, co
         for(const CostEntry& entry : BUILDING_COSTS[bld])
             demand.push_back({entry.wares, entry.amount, WareUse::Construction});
     }
-    if(withInputs && BuildingProperties::IsUsual(bld))
-        addInputSpaces(demand, bld);
     if(withTools && BuildingProperties::IsUsual(bld))
     {
         AddToolDemand(demand, bld);
@@ -548,37 +531,30 @@ void EconomyPlanner::UpdatePlanned()
     plannedOrderIds_.clear();
     plannedHelpers_.clear();
     workersPlanned_ = {};
-    // Input spaces of the building sites: the buildings will ask for them. And the tools and workers they will ask for
-    for(const OpenDemand& demand : snapshot_.siteInputs)
-        AddPlannedEntry(demand, 0);
+    // No input spaces (Nutzer, 2026-11-17): what a building will use counts as its consumption in the forecast (the
+    // coming buildings by the measured value per building of their type, otherwise by the work time).
+    // Building sites: the tools and the worker they will ask for. Their construction costs the game asks for (open)
     for(const auto bld : helpers::enumRange<BuildingType>())
     {
         for(unsigned i = snapshot_.buildings[bld].numSites; i > 0; --i)
-            AddPlanned(bld, false, false, true, 0);
+            AddPlanned(bld, false, true, 0);
     }
-    // Building sites ordered whose commands are on their way (also those of the old AI)
+    // Building sites ordered whose commands are on their way and not on the map yet (also those of the old AI): their
+    // construction costs, tools and worker
     const AIJH::AIConstruction& construction = aijh_.GetConstruction();
     for(const auto bld : helpers::enumRange<BuildingType>())
     {
         for(unsigned i = construction.GetNumPendingSites(bld); i > 0; --i)
-            AddPlanned(bld, true, true, true, 0);
+            AddPlanned(bld, true, true, 0);
     }
-    // Orders of the list that will be built when the resources are there: their construction material, tools and
-    // worker (their inputs count once they are placed, otherwise several orders waiting for the same input block each
-    // other), in the order of the list. Expanding orders only as many as builders are there (Nutzer, 2026-11-17): the
-    // wish list must not turn into a shortage of everything
-    unsigned expandingLeft = GetAvailableBuilders();
+    // Orders of the list not placed and not blocked, needed and expanding ones: their construction material, tools and
+    // worker, in the order of the list. Their inputs count once they are placed (as the consumption of a coming
+    // building)
     for(const Order* order : GetList())
     {
         if(!IsPlanned(*order))
             continue;
-        if(order->kind == OrderKind::Expanding)
-        {
-            if(expandingLeft == 0)
-                continue;
-            --expandingLeft;
-        }
-        AddPlanned(order->building, true, false, true, order->id);
+        AddPlanned(order->building, true, true, order->id);
         plannedOrderIds_.push_back(order->id);
     }
 }
@@ -586,6 +562,9 @@ void EconomyPlanner::UpdatePlanned()
 void EconomyPlanner::FinishStatus(WareStatus& status) const
 {
     status.forecast = status.free + status.forecastProduction - status.forecastConsumption;
+    // The shares of the entries are no whole numbers: rounding errors are no shortage
+    if(std::abs(status.forecast) < 1e-6)
+        status.forecast = 0;
     const double threshold = std::max(static_cast<double>(MIN_STOCK), SURPLUS_FACTOR * status.consumptionPerMinute);
     if(status.forecast < 0)
         status.state = SupplyState::Shortage;
@@ -613,7 +592,6 @@ void EconomyPlanner::RecomputeForecast()
                 GetGroupIdx(demand.wares, true);
         }
     }
-    AddCombinedGroups();
     ComputeFlows();
     UpdateToolNeeds();
     ComputeToolFlows();
@@ -887,10 +865,129 @@ void EconomyPlanner::ComputeStatuses()
             status.startStockLeft = added > used ? added - used : 0u;
         }
     }
-    std::vector<WareStatus> statuses(groups_.size());
+    // Every request is an entry: some wares (one of them will do) and an amount. Open: what the game asks for now.
+    // Consumption: what the buildings will use in the balance length (alone or "any of"). Planned: what the coming
+    // buildings and the orders of the list will ask for, and the tools kept in stock.
+    // The entries are shared out among the wares, so that no ware is counted twice (Nutzer, 2026-11-17: no unions of
+    // groups, a ware is not in surplus while an entry taking it lacks it). What a ware has: its stock and what will be
+    // made in the balance length. The entries with fewest wares first (a ware asked for alone can come from nowhere
+    // else); equal: open before consumption before planned, planned in the order of the list. In an entry the wares
+    // fewer other entries take first, equal: the one with more left. What none of its wares has left is missing for
+    // exactly the wares of the entry
+    enum class Part : uint8_t
+    {
+        Open,
+        Consumption,
+        Planned
+    };
+    struct Entry
+    {
+        std::vector<GoodType> wares;
+        double amount;
+        Part part;
+        bool byOrder;
+    };
+    std::vector<Entry> entries;
+    const auto addEntry = [&entries](std::vector<GoodType> wares, const double amount, const Part part,
+                                     const bool byOrder) {
+        helpers::erase(wares, GoodType::Nothing);
+        if(wares.empty() || amount <= 0)
+            return;
+        entries.push_back({sorted(std::move(wares)), amount, part, byOrder});
+    };
+    for(const OpenDemand& demand : snapshot_.openDemand)
+        addEntry(demand.wares, demand.amount, Part::Open, false);
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(good != GoodType::Nothing)
+            addEntry({good}, wareConsumption_[good], Part::Consumption, false);
+    }
+    for(const auto& [anyOf, amount] : groupConsumption_)
+        addEntry(anyOf, amount, Part::Consumption, false);
+    for(unsigned i = 0; i < planned_.size(); ++i)
+    {
+        const Order* order = plannedFor_[i] != 0 ? Find(plannedFor_[i]) : nullptr;
+        addEntry(planned_[i].wares, planned_[i].amount, Part::Planned, order && order->state != OrderState::Placed);
+    }
+    // The tools of a kind the player keeps in stock are asked for too (so they are made before they are missing)
+    for(const auto tool : helpers::enumRange<Tool>())
+    {
+        if(toolKindGroup_[tool] != NO_GROUP)
+            addEntry(groups_[toolKindGroup_[tool]].wares, TOOLS_IN_STOCK, Part::Planned, false);
+    }
+    std::stable_sort(entries.begin(), entries.end(), [](const Entry& lhs, const Entry& rhs) {
+        if(lhs.wares.size() != rhs.wares.size())
+            return lhs.wares.size() < rhs.wares.size();
+        return lhs.part < rhs.part;
+    });
+    // How many different entries (by their wares) take each ware
+    helpers::EnumArray<unsigned, GoodType> numTaking{};
+    {
+        std::vector<const std::vector<GoodType>*> seen;
+        for(const Entry& entry : entries)
+        {
+            if(helpers::contains_if(seen, [&](const std::vector<GoodType>* other) { return *other == entry.wares; }))
+                continue;
+            seen.push_back(&entry.wares);
+            for(const GoodType good : entry.wares)
+                ++numTaking[good];
+        }
+    }
+    struct Shares
+    {
+        double open = 0, consumption = 0, planned = 0, plannedByOrders = 0;
+        void Add(const Entry& entry, const double amount)
+        {
+            switch(entry.part)
+            {
+                case Part::Open: open += amount; break;
+                case Part::Consumption: consumption += amount; break;
+                case Part::Planned:
+                    planned += amount;
+                    if(entry.byOrder)
+                        plannedByOrders += amount;
+                    break;
+            }
+        }
+    };
+    helpers::EnumArray<double, GoodType> left{};
+    helpers::EnumArray<Shares, GoodType> given{};
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(good != GoodType::Nothing)
+            left[good] = wares[good].stock + wareProduction_[good];
+    }
+    std::map<std::vector<GoodType>, Shares> missing;
+    std::vector<GoodType> order;
+    for(const Entry& entry : entries)
+    {
+        order = entry.wares;
+        std::stable_sort(order.begin(), order.end(), [&](const GoodType lhs, const GoodType rhs) {
+            if(numTaking[lhs] != numTaking[rhs])
+                return numTaking[lhs] < numTaking[rhs];
+            return left[lhs] > left[rhs];
+        });
+        double need = entry.amount;
+        for(const GoodType good : order)
+        {
+            if(need <= 1e-9)
+                break;
+            const double taken = std::min(need, std::max(0., left[good]));
+            if(taken <= 0)
+                continue;
+            left[good] -= taken;
+            given[good].Add(entry, taken);
+            need -= taken;
+        }
+        if(need > 1e-9)
+            missing[entry.wares].Add(entry, need);
+    }
+    // A group: its wares with the shares given to them by all entries, and what is missing for the entries of exactly
+    // its wares. A ware alone is a group of one: what it was given and what its own entries lack
     for(unsigned idx = 0; idx < groups_.size(); ++idx)
     {
-        WareStatus& status = statuses[idx];
+        WareStatus status;
+        Shares shares;
         for(const GoodType good : groups_[idx].wares)
         {
             status.stock += wares[good].stock;
@@ -899,47 +996,26 @@ void EconomyPlanner::ComputeStatuses()
             status.inTransit += wares[good].inTransit;
             status.startStockLeft += wares[good].startStockLeft;
             status.forecastProduction += wareProduction_[good];
-            status.forecastConsumption += wareConsumption_[good];
+            shares.open += given[good].open;
+            shares.consumption += given[good].consumption;
+            shares.planned += given[good].planned;
+            shares.plannedByOrders += given[good].plannedByOrders;
         }
-    }
-    // Each entry counts for every group that can serve it completely (an entry "any of" more wares is a group of its
-    // own), once per group
-    for(const OpenDemand& demand : snapshot_.openDemand)
-    {
-        for(const unsigned idx : GroupsContaining(sorted(demand.wares)))
-            statuses[idx].openDemand += demand.amount;
-    }
-    std::vector<unsigned> unplacedOrders;
-    for(const Order& order : orders_)
-    {
-        if(order.state != OrderState::Placed)
-            unplacedOrders.push_back(order.id);
-    }
-    for(unsigned i = 0; i < planned_.size(); ++i)
-    {
-        const bool byOrder = plannedFor_[i] != 0 && helpers::contains(unplacedOrders, plannedFor_[i]);
-        for(const unsigned idx : GroupsContaining(planned_[i].wares))
+        const auto lacking = missing.find(groups_[idx].wares);
+        if(lacking != missing.end())
         {
-            statuses[idx].planned += planned_[i].amount;
-            if(byOrder)
-                statuses[idx].plannedByOrders += planned_[i].amount;
+            const Shares& lack = lacking->second;
+            shares.open += lack.open;
+            shares.consumption += lack.consumption;
+            shares.planned += lack.planned;
+            shares.plannedByOrders += lack.plannedByOrders;
+            status.missing = lack.open + lack.consumption + lack.planned;
         }
-    }
-    for(const auto& [anyOf, amount] : groupConsumption_)
-    {
-        for(const unsigned idx : GroupsContaining(anyOf))
-            statuses[idx].forecastConsumption += amount;
-    }
-    // The tools of a kind the player keeps in stock are asked for too (so they are made before they are missing)
-    for(const auto tool : helpers::enumRange<Tool>())
-    {
-        if(toolKindGroup_[tool] != NO_GROUP)
-            statuses[toolKindGroup_[tool]].planned += TOOLS_IN_STOCK;
-    }
-    for(unsigned idx = 0; idx < groups_.size(); ++idx)
-    {
-        WareStatus& status = statuses[idx];
-        status.free = static_cast<int>(status.stock) - static_cast<int>(status.openDemand + status.planned);
+        status.openDemand = shares.open;
+        status.planned = shares.planned;
+        status.plannedByOrders = shares.plannedByOrders;
+        status.forecastConsumption = shares.consumption;
+        status.free = static_cast<double>(status.stock) - status.openDemand - status.planned;
         FinishStatus(status);
         groups_[idx].status = status;
     }
@@ -961,7 +1037,7 @@ void EconomyPlanner::UpdateSoldierStatus()
     status.forecastProduction = created / coveredMinutes * BALANCE_MINUTES;
     status.forecastConsumption = used / coveredMinutes * BALANCE_MINUTES;
     status.openDemand = snapshot_.openSoldiers;
-    status.free = static_cast<int>(status.stock) - static_cast<int>(status.openDemand);
+    status.free = static_cast<double>(status.stock) - status.openDemand;
     FinishStatus(status);
     soldiers_ = status;
 }
@@ -995,7 +1071,7 @@ void EconomyPlanner::UpdateHelperStatus()
     status.consumptionPerMinute = usedOther / coveredMinutes;
     status.forecastProduction = created / coveredMinutes * BALANCE_MINUTES;
     status.forecastConsumption = usedOther / coveredMinutes * BALANCE_MINUTES;
-    status.free = static_cast<int>(status.stock) - static_cast<int>(status.openDemand + status.planned);
+    status.free = static_cast<double>(status.stock) - status.openDemand - status.planned;
     FinishStatus(status);
     helpers_ = status;
 }
@@ -2137,12 +2213,10 @@ void EconomyPlanner::CreateOrders()
     // The forecast of the helpers leaves none for one more building: a warehouse (it creates helpers)
     if(helpers_.forecast < 1)
         AddHelpersOrder(0);
-    // Surpluses: an expanding consumer (a consumer whose product is short is chosen by the shortage). Not of a union of
-    // groups: no consumer takes it
+    // Surpluses: an expanding consumer (a consumer whose product is short is chosen by the shortage)
     for(unsigned i = 0; i < groups_.size(); ++i)
     {
-        if(groups_[i].demanded && !groups_[i].tools && !groups_[i].combined
-           && groups_[i].status.state == SupplyState::Surplus)
+        if(groups_[i].demanded && !groups_[i].tools && groups_[i].status.state == SupplyState::Surplus)
             ResolveSurplus(i);
     }
     // 3. No problem: expanding orders with the buildings of ai.lua, harvesters of deposits
@@ -2283,7 +2357,9 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
     if(need.cause == OrderCause::Shortage && need.group < groups_.size())
         wares = groups_[need.group].wares;
     // Orders of this need, and the other orders not placed whose building makes one of the wares (needed ones; for an
-    // expanding order also the expanding ones). They count with what they make: one solution for several needs
+    // expanding order also the expanding ones). They count with what they make: one solution for several needs. A
+    // blocked order of another need counts for nothing (Nutzer, 2026-11-17). The own ones count also when blocked:
+    // they are the orders of this need (otherwise the same order would be added in every step)
     std::vector<const Order*> own;
     std::vector<std::pair<const Order*, GoodType>> others;
     for(const Order& order : orders_)
@@ -2295,6 +2371,8 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
             own.push_back(&order);
             continue;
         }
+        if(!IsPlanned(order))
+            continue;
         for(const GoodType ware : wares)
         {
             if(MakesWare(order.building, ware))
@@ -2335,11 +2413,11 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
         }
     }
     // Not more orders waiting than builders could build them (natural limit: more would only wait and plan their
-    // construction costs). Counted over all needs: the orders waiting to be built and the builders free for them. One
-    // order per need comes anyway (it shows what is missing)
+    // construction costs). Counted over all needs: the needed orders waiting to be built (not placed, not blocked) and
+    // the builders free for them. One order per need comes anyway (it shows what is missing)
     const unsigned numWaiting =
       static_cast<unsigned>(std::count_if(orders_.begin(), orders_.end(), [&](const Order& o) {
-          return o.kind == OrderKind::Needed && o.state != OrderState::Placed && !IsChainBlocked(o.id);
+          return o.kind == OrderKind::Needed && IsPlanned(o);
       }));
     const unsigned builders = GetAvailableBuilders();
     const unsigned room =
@@ -2784,11 +2862,25 @@ void EconomyPlanner::ProcessList()
     keptInputs_.clear();
     toolsClaimed_.assign(groups_.size(), 0u);
     helpersClaimed_ = 0;
-    std::vector<unsigned> ids;
-    for(const Order* order : GetList())
-        ids.push_back(order->id);
-    for(const unsigned id : ids)
-        ProcessOrder(id, searchBudget);
+    // The orders made while the list is worked on (e.g. the producer of a missing input) are worked on in the same
+    // step: every order has its state (blocked or not) when the forecast is computed again at the end of the step
+    std::vector<unsigned> done;
+    for(unsigned pass = 0; pass < MAX_LIST_PASSES; ++pass)
+    {
+        std::vector<unsigned> ids;
+        for(const Order* order : GetList())
+        {
+            if(!helpers::contains(done, order->id))
+                ids.push_back(order->id);
+        }
+        if(ids.empty())
+            break;
+        for(const unsigned id : ids)
+        {
+            ProcessOrder(id, searchBudget);
+            done.push_back(id);
+        }
+    }
 }
 
 void EconomyPlanner::MoveToEnd(Order& order, const std::string& reason, const RetryCondition& retry)
@@ -3106,10 +3198,11 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
                                   -1;
             placements_[pos] = Placement{currentGF_, bld, order->cause, order->kind, inReach};
         }
-        // Placed: its inputs are planned from now on (and its costs, tools and worker if it was not counted at the
-        // start of the step). What it will make and use is part of the forecast from now on (a site ordered)
+        // Placed: its costs, tools and worker are planned if it was not counted at the start of the step. What it will
+        // make and use is part of the forecast from now on (a site ordered)
         const bool counted = helpers::contains(plannedOrderIds_, id);
-        AddPlanned(bld, !counted, true, !counted, 0);
+        if(!counted)
+            AddPlanned(bld, true, true, 0);
         if(clearing && bld == BuildingType::Woodcutter)
         {
             aijh_.GetInterface().SetClearingWoodcutter(pos, true);
@@ -3329,7 +3422,7 @@ std::string EconomyPlanner::CheckToolsAndHelpers(const Order* order, const Build
                     ownMaking = ToolMakerCapacity(bld) * BALANCE_MINUTES;
             }
         }
-        const unsigned byOrders = withList ? status.plannedByOrders : 0u;
+        const double byOrders = withList ? status.plannedByOrders : 0.;
         const unsigned claimed = withList && it->second < toolsClaimed_.size() ? toolsClaimed_[it->second] : 0u;
         const double available = status.forecast + reserve + ownMaking + byOrders - claimed;
         // Its own tools are in the forecast if it is planned (all planned ones) or added back (rules of the list)
@@ -3338,9 +3431,9 @@ std::string EconomyPlanner::CheckToolsAndHelpers(const Order* order, const Build
         {
             std::ostringstream out;
             out << "Werkzeug fehlt: " << wareNames(groups_[it->second].wares) << " (Prognose "
-                << static_cast<int>(std::floor(status.forecast)) << ", Vorrat " << reserve;
+                << num(status.forecast) << ", Vorrat " << reserve;
             if(withList)
-                out << ", für Aufträge " << byOrders << ", davon darüber " << claimed;
+                out << ", für Aufträge " << num(byOrders) << ", davon darüber " << claimed;
             out << ")";
             return out.str();
         }
@@ -3355,9 +3448,9 @@ std::string EconomyPlanner::CheckToolsAndHelpers(const Order* order, const Build
         if(available - own < 0)
         {
             std::ostringstream out;
-            out << HELPERS_MISSING << " (Prognose " << static_cast<int>(std::floor(helpers_.forecast));
+            out << HELPERS_MISSING << " (Prognose " << num(helpers_.forecast);
             if(withList)
-                out << ", für Aufträge " << helpers_.plannedByOrders << ", davon darüber " << helpersClaimed_;
+                out << ", für Aufträge " << num(helpers_.plannedByOrders) << ", davon darüber " << helpersClaimed_;
             out << ")";
             return out.str();
         }
@@ -3523,7 +3616,8 @@ std::string EconomyPlanner::ExplainWare(const GoodType good, const unsigned dept
 {
     const WareStatus& status = GetWareStatus(good);
     std::ostringstream out;
-    out << wareName(good) << ": frei " << status.free << ", Prognose " << static_cast<int>(std::floor(status.forecast));
+    out << wareName(good) << ": frei " << num(status.free) << ", Prognose "
+        << num(status.forecast);
     const std::vector<WayCheck> ways = RankProducers(good, false, 0);
     if(ways.empty())
         return out.str() + ", kein Erzeuger";
@@ -4396,27 +4490,20 @@ std::string EconomyPlanner::GetReport() const
     std::ostringstream out;
     out.setf(std::ios::fixed);
     out.precision(1);
-    const auto writeStatus = [&out](const std::string& name, const WareStatus& status) {
-        out << " " << name << " (Prognose " << static_cast<int>(std::floor(status.forecast)) << " = frei "
-            << status.free << " + Herstellung " << status.forecastProduction << " - Verbrauch "
-            << status.forecastConsumption << "; Bestand " << status.stock << ", angefragt: offen " << status.openDemand
-            << ", geplant " << status.planned << "; unterwegs zum Abnehmer " << status.inTransit << ");";
+    const auto writeStatus = [&out](const std::string& name, const WareStatus& status, const bool group) {
+        out << " " << name << " (Prognose " << num(status.forecast) << " = frei "
+            << num(status.free) << " + Herstellung " << status.forecastProduction << " - Verbrauch "
+            << status.forecastConsumption << "; Bestand " << status.stock << ", angefragt: offen "
+            << num(status.openDemand) << ", geplant " << num(status.planned);
+        if(group && status.missing > 1e-9)
+            out << ", davon bekommt keine Ware " << num(status.missing);
+        out << "; unterwegs zum Abnehmer " << status.inTransit << ");";
     };
     out << "  Mangel:";
-    const auto isShort = [](const WareGroup& group) {
-        return group.demanded && !group.tools && group.status.state == SupplyState::Shortage;
-    };
     for(const WareGroup& group : groups_)
     {
-        if(!isShort(group))
-            continue;
-        // A union of groups whose shortage a smaller short group inside it shows already (not more missing): not shown
-        if(group.combined && helpers::contains_if(groups_, [&](const WareGroup& other) {
-               return &other != &group && isShort(other) && other.wares.size() < group.wares.size()
-                      && isSubset(other.wares, group.wares) && other.status.forecast <= group.status.forecast;
-           }))
-            continue;
-        writeStatus(wareNames(group.wares), group.status);
+        if(group.demanded && !group.tools && group.status.state == SupplyState::Shortage)
+            writeStatus(wareNames(group.wares), group.status, group.wares.size() > 1u);
     }
     if(!shortageNotes_.empty())
     {
@@ -4427,17 +4514,17 @@ std::string EconomyPlanner::GetReport() const
     out << "\n  Überschuss:";
     for(const WareGroup& group : groups_)
     {
-        if(group.demanded && !group.tools && !group.combined && group.status.state == SupplyState::Surplus)
-            out << " " << wareNames(group.wares) << " (Prognose " << static_cast<int>(std::floor(group.status.forecast))
+        if(group.demanded && !group.tools && group.status.state == SupplyState::Surplus)
+            out << " " << wareNames(group.wares) << " (Prognose " << num(group.status.forecast)
                 << ");";
     }
     out << "\n  Werkzeugmangel:";
     for(const WareGroup& group : groups_)
     {
         if(group.demanded && group.tools && group.status.state == SupplyState::Shortage)
-            out << " " << wareNames(group.wares) << " (Prognose " << static_cast<int>(std::floor(group.status.forecast))
-                << ", Bestand " << group.status.stock << ", offen " << group.status.openDemand << ", geplant "
-                << group.status.planned << ");";
+            out << " " << wareNames(group.wares) << " (Prognose " << num(group.status.forecast)
+                << ", Bestand " << group.status.stock << ", offen " << num(group.status.openDemand) << ", geplant "
+                << num(group.status.planned) << ");";
     }
     out << "\n  Werkzeuge (bestellt / fehlen noch):";
     for(const auto tool : helpers::enumRange<Tool>())
@@ -4447,11 +4534,11 @@ std::string EconomyPlanner::GetReport() const
             out << " " << wareName(TOOL_TO_GOOD[tool]) << " " << ordered << "/" << toolsMissing_[tool] << ";";
     }
     out << "\n  Soldaten:";
-    writeStatus(soldiers_.state == SupplyState::Shortage ? "Mangel" : "kein Mangel", soldiers_);
+    writeStatus(soldiers_.state == SupplyState::Shortage ? "Mangel" : "kein Mangel", soldiers_, false);
     for(const auto& [good, note] : soldierNotes_)
         out << " " << wareName(good) << " ohne Auftrag: " << note << ";";
     out << "\n  Gehilfen:";
-    writeStatus(helpers_.state == SupplyState::Shortage ? "Mangel" : "kein Mangel", helpers_);
+    writeStatus(helpers_.state == SupplyState::Shortage ? "Mangel" : "kein Mangel", helpers_, false);
     // Problems of the buildings (diagnosis of every building in this step), per type
     static const char* const problemNames[] = {"",
                                                "gestoppt",
@@ -4557,7 +4644,8 @@ std::string EconomyPlanner::GetReport() const
             out << ", rodend";
         if(order->besideRenewer)
             out << ", neben " << pointName(order->near);
-        out << ") " << stateNames[static_cast<unsigned>(order->state)];
+        // Waiting for resources: it counts in the forecast like an open or waiting order, it is not blocked
+        out << ") " << (WaitsForResources(*order) ? "wartet" : stateNames[static_cast<unsigned>(order->state)]);
         if(!order->reason.empty())
             out << ": " << order->reason;
         out << "\n";
