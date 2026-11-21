@@ -1409,6 +1409,12 @@ Beträge unter 0,005 gelten als 0 (2026-11-18): Rundungsfehler der Anteile und d
     (`RecomputeStatuses` mit denselben Messwerten). Test `ShortagesAreEvaluatedWithTheBuildingMaterialFactor`.
   - Sägewerk: eine richtige Lösung für einen Baumaterialmangel (Nutzer, 2026-11-21): Die Säge hat einen Ertragsbonus
     (`outputRatio` 0,4–0,7), aus 1 Holz werden 1,4–1,7 Bretter.
+  - Testspiele (Zufallskarte 512, 4 KI, 3 h, je ein Spiel; Land und Gebäude als Summe der 4 Spieler): Faktor 1 Seed 5
+    Land 39 654, Gebäude 1 381, Militärstärke wächst bei 1 Spieler ab 2:30; Seed 9 Land 39 749, Gebäude 1 232, 2
+    Spieler ab 2:50. Faktor 0,75: Seed 5 36 104 / 1 278, 2 Spieler ab 2:10 und 2:30; Seed 9 43 446 / 1 193, 1 Spieler
+    ab 2:00. Faktor 0,5: Seed 5 30 359 / 1 182, 1 Spieler ab 2:00; Seed 9 36 984 / 1 270, 2 Spieler ab 2:50 und 3:00.
+    Benötigte Holzfäller wegen Mangel (Minutenberichte) bei 1 → 0,5: 381 → 78 und 458 → 88; auf Baumaterial wartende
+    Aufträge +10 bis +13 %.
 - **Eingang reicht** für einen weiteren Verbraucher: Überschuss, oder die Prognose bleibt mit seinem Verbrauch (Wert je
   Gebäude) bei 0 oder darüber. Gilt für jedes Gebäude, auch Werkzeughersteller.
 - Wird in einem Schritt ein Gebäude platziert, wird die ganze Prognose neu gerechnet (die Aufträge darunter sehen es).
