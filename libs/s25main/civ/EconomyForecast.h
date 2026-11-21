@@ -142,6 +142,9 @@ struct TypeMeasure
     bool worked = false;
 };
 
+/// Construction costs are counted with a share in 1/CONSTRUCTION_SHARE_FULL (EconomyForecast::Extra::constructionShare)
+constexpr uint32_t CONSTRUCTION_SHARE_FULL = 10000;
+
 /// Computes forecast and number of wares of a player (DESIGN.md "Prognose", "Gesamtverteilung"). The same calculation
 /// for the distribution of all wares (rule of the game, every computer for every player) and for the economy planner
 /// of the AI (which adds its building sites ordered and the orders of its list)
@@ -155,6 +158,8 @@ public:
         Amount amount = 0;
         /// For an order of the list not placed yet
         bool byOrder = false;
+        /// Construction costs (counted with `Extra::constructionShare`)
+        bool construction = false;
     };
     struct Extra
     {
@@ -165,12 +170,18 @@ public:
         std::function<Diagnosis(const nobUsual&, const civai::Recipe&)> diagnose;
         /// Building types whose coming and standing buildings count. Empty: all
         std::function<bool(BuildingType)> counts;
+        /// Share of all construction costs (open and planned) counted, in 1/CONSTRUCTION_SHARE_FULL. The game counts
+        /// them fully; the AI evaluates its shortages with less (EconomyPlanner::BUILDING_MATERIAL_FACTOR)
+        uint32_t constructionShare = CONSTRUCTION_SHARE_FULL;
     };
 
     explicit EconomyForecast(const civai::EconomyGraph& graph);
 
     /// Compute everything for the player at `gf`
     void Compute(const GamePlayer& player, unsigned gf, const EconomySnapshot& snapshot, const Extra& extra);
+    /// Compute the statuses again with other planned entries or another share of the construction costs, with the
+    /// measured values, production and consumption of the last Compute (same player, same GF, same snapshot)
+    void RecomputeStatuses(const GamePlayer& player, const EconomySnapshot& snapshot, const Extra& extra);
 
     const civai::EconomyGraph& GetGraph() const { return graph_; }
     const ForecastStatus& GetWare(GoodType good) const { return wares_[good]; }

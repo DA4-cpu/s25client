@@ -1238,6 +1238,8 @@ Prognose, auch bei Werkzeugherstellern.
     Lua) ab `MIN_DEPOSITS_IN_REACH` = 2 Vorkommen (Wert des Nutzers, 2026-11-18, vorher 1).
   - Förster, wenn weniger als `RENEW_BELOW` = 7 Bäume in Reichweite eines dauerhaften Holzfällers stehen (Wert des
     Nutzers).
+  - Faktor Baumaterial `BUILDING_MATERIAL_FACTOR` = 0,5 (Startwert des Nutzers, 2026-11-21): Anteil aller Baukosten in
+    der Auswertung des Mangels (siehe „Prognose“).
   - Höchstens `MAX_ORDERS_PER_TYPE` = 5 Aufträge je Gebäudetyp gleichzeitig (auch platzierte, bis das Gebäude fertig
     ist; Nutzer, 2026-11-15).
   - Bauernhöfe und Plantagen brauchen `MIN_FIELD_NODES` = 4 Feldknoten in Reichweite (Nutzer, 2026-11-15).
@@ -1381,6 +1383,32 @@ Beträge unter 0,005 gelten als 0 (2026-11-18): Rundungsfehler der Anteile und d
   Sekunden auf die ganze Bilanzlänge.
 - **Mangel:** Prognose unter 0. **Überschuss:** Prognose über der Schwelle (10 × Verbrauch/min, mindestens 8, ohne
   unverbrauchten Startvorrat). Sonst normal.
+- **Auswertung des Mangels mit dem Faktor Baumaterial** (Nutzer, 2026-11-21, `BUILDING_MATERIAL_FACTOR` = 0,5): Ob eine
+  Warengruppe für benötigte Erzeuger im Mangel ist, wie viel pro Minute fehlt (Anzahl, auch Regel A) und ob ein
+  Mangel-Auftrag noch nötig ist, entscheidet die **bewertete Prognose**: dieselbe Rechnung, aber alle Baukosten (offen
+  bei den Baustellen und Expeditionen, geplant bei den Aufträgen und abgeschickten Baubefehlen, für alle Gebäude) zählen
+  mal Faktor (0 = gar nicht, 1 = voll, 0,5 = zur Hälfte).
+  - Grund: Ein Erzeuger von Baumaterial verbraucht erst Baumaterial, bevor er welches liefert. Voll gezählt vergrößern
+    seine Baukosten den Mangel, es kommen weitere Erzeuger, deren Kosten ihn wieder vergrößern (Spirale). Die Kette
+    bricht ab, wenn Faktor × Baukosten kleiner ist als das, was der Erzeuger in einer Bilanzlänge liefert (Holzfäller:
+    4–6 Baumaterial der Gruppe, gemessen 0,5–0,9 Holz/min, also 5–9 in 10 Minuten; Faktor 1 kippt bei langsamen
+    Holzfällern, 0,5 nicht). Da auch die offenen Baukosten mal Faktor zählen, verschlechtert keine Baustelle die
+    Auswertung (auch keine Förster-Baustelle).
+  - Der Faktor bestimmt auch, wie schnell der Rückstau wartender Aufträge abgebaut werden soll: Erzeuger kommen, bis
+    die Herstellung einer Bilanzlänge Faktor × Baukosten − Bestand deckt, bei 0,5 also für etwa 20 statt 10 Minuten.
+    Beispiel (Seed 9, Spieler 2, 30 min): Gruppe Holz/Bretter/Steine/Adobe Prognose −44,3 bei Bestand 8, geplant 99,9,
+    Herstellung 45,5; bewertet −44,3 + 0,5 × 99,9 = +5,7, kein Mangel.
+  - Nur dort. Die Prognose selbst zählt alles voll: Bericht (zusätzlich „bewertet …“), Reihenfolge der Liste, Regeln
+    der Liste (Eingänge, Werkzeuge, Gehilfen; die Baumaterialregel prüft das freie Material im Lager), Zustand normal
+    und Überschuss (expandierende Aufträge), Eingang eines Auftrags (sonst wartete er auf einen Eingang, für den kein
+    Erzeuger mehr kommt), Gesamtverteilung („die Baukosten sollen ganz normal weiter so funktionieren“, „soll keinen
+    Einfluss auf die Prioritätenliste haben“: Gälte der Faktor dort, hielte die KI mehr Gebäude für baubar, deren
+    Kosten den geplanten Wert wieder hochtreiben).
+  - Code: `EconomyForecast::Extra::constructionShare` (Anteil in 1/10 000), `WareStatus::evaluated`,
+    `evaluatedShortage`, `evaluatedMissingPerMinute`. Bewertete und volle Prognose aus einer Rechnung
+    (`RecomputeStatuses` mit denselben Messwerten). Test `ShortagesAreEvaluatedWithTheBuildingMaterialFactor`.
+  - Sägewerk: eine richtige Lösung für einen Baumaterialmangel (Nutzer, 2026-11-21): Die Säge hat einen Ertragsbonus
+    (`outputRatio` 0,4–0,7), aus 1 Holz werden 1,4–1,7 Bretter.
 - **Eingang reicht** für einen weiteren Verbraucher: Überschuss, oder die Prognose bleibt mit seinem Verbrauch (Wert je
   Gebäude) bei 0 oder darüber. Gilt für jedes Gebäude, auch Werkzeughersteller.
 - Wird in einem Schritt ein Gebäude platziert, wird die ganze Prognose neu gerechnet (die Aufträge darunter sehen es).

@@ -8,6 +8,7 @@
 - frei = Bestand - offen - geplant
 - Eine Ware oder Gruppe im Ueberschuss, waehrend eine Gruppe im Mangel ist, die sie enthaelt
 - Eine Ware oder Gruppe im Mangel mit einer Prognose von 0 oder mehr
+- Bewertet (Auswertung des Mangels, Baukosten x Faktor Baumaterial) unter der Prognose
 
 Aufruf: checkEconomyLog.py <log>
 """
@@ -18,7 +19,7 @@ from collections import Counter
 STATUS = re.compile(
     r" ([^;()]+?) \(Prognose (-?[\d.]+) = frei (-?[\d.]+) \+ Herstellung (-?[\d.]+) - Verbrauch (-?[\d.]+); "
     r"Bestand (\d+), angefragt: offen (-?[\d.]+), geplant (-?[\d.]+)(?:, davon bekommt keine Ware ([\d.]+))?; "
-    r"unterwegs zum Abnehmer (\d+)\);")
+    r"unterwegs zum Abnehmer (\d+)(?:; bewertet (-?[\d.]+))?\);")
 SURPLUS = re.compile(r" ([^;()]+?) \(Prognose (-?[\d.]+)\);")
 
 
@@ -49,7 +50,7 @@ def main():
         num += 1
         where = "Spieler %d, GF %d" % (rep["player"], rep["gf"])
         short_groups = []
-        for name, fc, free, prod, cons, stock, open_, planned, missing, transit in rep["short"]:
+        for name, fc, free, prod, cons, stock, open_, planned, missing, transit, evaluated in rep["short"]:
             # Alte Berichte: Prognose abgerundet (ganze Zahl), neue: eine Nachkommastelle wie die Teile
             tolerance = 0.25 if "." in fc else 1.05
             fc, free, prod, cons = float(fc), float(free), float(prod), float(cons)
@@ -64,6 +65,11 @@ def main():
                 examples.setdefault(key, "%s: %s" % (where, name))
             if fc >= 0:
                 key = "im Mangel mit Prognose >= 0"
+                problems[key] += 1
+                examples.setdefault(key, "%s: %s" % (where, name))
+            # Bewertet (Baukosten x Faktor Baumaterial, Faktor hoechstens 1): nie unter der Prognose
+            if evaluated is not None and float(evaluated) < fc - 0.15:
+                key = "bewertet unter der Prognose"
                 problems[key] += 1
                 examples.setdefault(key, "%s: %s" % (where, name))
             short_groups.append(set(name.split("/")))

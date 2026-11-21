@@ -614,7 +614,7 @@ void EconomyPlanner::SendPlannedDemand()
         sentPlanned_ = std::move(planned);
 }
 
-void EconomyPlanner::FinishStatus(WareStatus& status) const
+void EconomyPlanner::FinishStatus(WareStatus& status, const std::optional<double> evaluated) const
 {
     status.forecast = status.free + status.forecastProduction - status.forecastConsumption;
     // The shares of the entries are no whole numbers, the production of a balance length neither: rounding errors are
@@ -630,6 +630,12 @@ void EconomyPlanner::FinishStatus(WareStatus& status) const
         status.state = SupplyState::Normal;
     status.missingPerMinute =
       status.state == SupplyState::Shortage ? -status.forecast / static_cast<double>(BALANCE_MINUTES) : 0.;
+    status.evaluated = evaluated.value_or(status.forecast);
+    if(std::abs(status.evaluated) < 0.005)
+        status.evaluated = 0;
+    status.evaluatedShortage = status.evaluated < 0;
+    status.evaluatedMissingPerMinute =
+      status.evaluatedShortage ? -status.evaluated / static_cast<double>(BALANCE_MINUTES) : 0.;
 }
 
 void EconomyPlanner::RecomputeForecast()
@@ -686,17 +692,32 @@ void EconomyPlanner::ComputeForecast()
     {
         const Order* order = plannedFor_[i] != 0 ? Find(plannedFor_[i]) : nullptr;
         extra.planned.push_back({planned_[i].wares, static_cast<civ::Amount>(planned_[i].amount) * civ::AMOUNT_UNIT,
-                                 order && order->state != OrderState::Placed});
+                                 order && order->state != OrderState::Placed,
+                                 planned_[i].purpose == WareUse::Construction});
     }
     extra.diagnose = [this](const nobUsual& building, const Recipe& recipe) {
         std::vector<GoodType> missing;
         return GetDiagnosis(building, recipe, missing);
     };
     extra.counts = [this](const BuildingType bld) { return managed_[bld]; };
-    forecast_->Compute(player_, currentGF_, snapshot_, extra);
     const auto toDouble = [](const civ::Amount amount) { return static_cast<double>(amount) / civ::AMOUNT_UNIT; };
-    for(WareGroup& group : groups_)
+    // The evaluation of shortages: all construction costs (open and planned) x BUILDING_MATERIAL_FACTOR. Then the
+    // forecast with everything counted fully (the state of forecast_ afterwards)
+    static_assert(BUILDING_MATERIAL_FACTOR >= 0. && BUILDING_MATERIAL_FACTOR <= 1.);
+    const auto share = static_cast<uint32_t>(std::lround(BUILDING_MATERIAL_FACTOR * civ::CONSTRUCTION_SHARE_FULL));
+    extra.constructionShare = share;
+    forecast_->Compute(player_, currentGF_, snapshot_, extra);
+    std::vector<double> evaluated(groups_.size());
+    for(unsigned i = 0; i < groups_.size(); ++i)
+        evaluated[i] = toDouble(forecast_->GetGroup(groups_[i].wares).forecast);
+    if(share != civ::CONSTRUCTION_SHARE_FULL)
     {
+        extra.constructionShare = civ::CONSTRUCTION_SHARE_FULL;
+        forecast_->RecomputeStatuses(player_, snapshot_, extra);
+    }
+    for(unsigned i = 0; i < groups_.size(); ++i)
+    {
+        WareGroup& group = groups_[i];
         const civ::ForecastStatus core = forecast_->GetGroup(group.wares);
         WareStatus status;
         status.stock = core.stock;
@@ -712,7 +733,7 @@ void EconomyPlanner::ComputeForecast()
         status.startStockLeft = core.startStockLeft;
         status.forecastProduction = toDouble(core.production);
         status.forecastConsumption = toDouble(core.consumption);
-        FinishStatus(status);
+        FinishStatus(status, evaluated[i]);
         group.status = status;
     }
 }
@@ -852,7 +873,7 @@ bool EconomyPlanner::IsMultiProduct(const Recipe& recipe)
 }
 
 double EconomyPlanner::GetMultiProductUnmet(const Recipe& recipe, const std::vector<GoodType>& groupWares,
-                                            const double groupForecast)
+                                            const double groupForecast, const bool evaluated)
 {
     // Regel A (Nutzer, 2026-11-21): the capacity of a building with several products counts once over all of them.
     // What its buildings must make of each product in the balance length: what they make of it now, plus what is
@@ -870,7 +891,8 @@ double EconomyPlanner::GetMultiProductUnmet(const Recipe& recipe, const std::vec
     {
         const double made = stats.GetProducedBy(recipe.building, good, BALANCE_MINUTES, currentGF_) / measured * length
                             + coming * ProducedPerBuilding(recipe.building, good) * length;
-        double forecast = GetWareStatus(good).forecast;
+        const WareStatus& status = GetWareStatus(good);
+        double forecast = evaluated ? status.evaluated : status.forecast;
         if(helpers::contains(groupWares, good))
             forecast = std::min(forecast, groupForecast);
         needed += std::max(0., made - forecast);
@@ -1632,7 +1654,8 @@ bool EconomyPlanner::IsCauseValid(const Order& order)
 {
     switch(order.cause)
     {
-        case OrderCause::Shortage: return groups_[order.group].status.state == SupplyState::Shortage;
+        // The evaluation of shortages decides (BUILDING_MATERIAL_FACTOR), as for the orders it makes
+        case OrderCause::Shortage: return groups_[order.group].status.evaluatedShortage;
         case OrderCause::Input:
         {
             const Order* parent = Find(order.parent);
@@ -1698,7 +1721,8 @@ void EconomyPlanner::CreateOrders()
     for(unsigned i = 0; i < groups_.size(); ++i)
     {
         const WareGroup& group = groups_[i];
-        if(group.demanded && group.status.state == SupplyState::Shortage)
+        // The evaluation of shortages: construction costs x BUILDING_MATERIAL_FACTOR
+        if(group.demanded && group.status.evaluatedShortage)
             shortGroups.push_back(i);
     }
     std::stable_sort(shortGroups.begin(), shortGroups.end(), [this](const unsigned lhs, const unsigned rhs) {
@@ -1729,7 +1753,7 @@ void EconomyPlanner::CreateOrders()
         Need need;
         need.cause = OrderCause::Shortage;
         need.group = i;
-        need.perMinute = groups_[i].status.missingPerMinute;
+        need.perMinute = groups_[i].status.evaluatedMissingPerMinute;
         ResolveShortage(good, need);
     }
     ResolveSoldiers();
@@ -1921,9 +1945,9 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
     if(multiProduct)
     {
         const bool forGroup = need.cause == OrderCause::Shortage && need.group < groups_.size();
-        needPerMinute =
-          GetMultiProductUnmet(recipe, forGroup ? groups_[need.group].wares : std::vector<GoodType>{good},
-                               forGroup ? groups_[need.group].status.forecast : GetWareStatus(good).forecast);
+        needPerMinute = GetMultiProductUnmet(
+          recipe, forGroup ? groups_[need.group].wares : std::vector<GoodType>{good},
+          forGroup ? groups_[need.group].status.evaluated : GetWareStatus(good).forecast, forGroup);
     }
     double remaining = needPerMinute;
     for(const auto& [other, ware] : others)
@@ -2131,7 +2155,7 @@ void EconomyPlanner::AddExpandingOrder(const GoodType good)
     if(CountWaitingBuildings(bld) > 0)
         return;
     // Several products (Regel A): no more of them while its buildings can make what all its products need
-    if(IsMultiProduct(recipe) && GetMultiProductUnmet(recipe, {}, 0) <= 0)
+    if(IsMultiProduct(recipe) && GetMultiProductUnmet(recipe, {}, 0, false) <= 0)
         return;
     Order order;
     order.building = bld;
@@ -4075,7 +4099,11 @@ std::string EconomyPlanner::GetReport() const
             << num(status.openDemand) << ", geplant " << num(status.planned);
         if(group && status.missing > 1e-9)
             out << ", davon bekommt keine Ware " << num(status.missing);
-        out << "; unterwegs zum Abnehmer " << status.inTransit << ");";
+        out << "; unterwegs zum Abnehmer " << status.inTransit;
+        // The evaluation of shortages (construction costs x BUILDING_MATERIAL_FACTOR): it makes the orders
+        if(std::abs(status.evaluated - status.forecast) > 0.005)
+            out << "; bewertet " << num(status.evaluated);
+        out << ");";
     };
     out << "  Mangel:";
     for(const WareGroup& group : groups_)

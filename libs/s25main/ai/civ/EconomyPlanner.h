@@ -17,6 +17,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -90,6 +91,12 @@ struct WareStatus
     double forecast = 0;
     /// Shortage: wares per minute missing (the negative forecast over one balance length). 0 otherwise
     double missingPerMinute = 0;
+    /// Evaluation of shortages (EconomyPlanner::BUILDING_MATERIAL_FACTOR): the forecast with all construction costs
+    /// (open and planned) x the factor. Decides whether a group is short for the orders of producers (and whether
+    /// such an order is still needed) and how much is missing per minute
+    double evaluated = 0;
+    bool evaluatedShortage = false;
+    double evaluatedMissingPerMinute = 0;
 };
 
 /// Wares a consumer takes equally ("Bedarfsgruppe"): the wares of a construction cost entry, the food of a mine, all
@@ -279,6 +286,14 @@ public:
     /// in the list: it gets that forester (Nutzer, 2026-11-18)
     static constexpr unsigned CLEARING_UPGRADE_BELOW = 7;
     static constexpr unsigned TOOLS_IN_STOCK = civ::TOOLS_IN_STOCK;
+    /// Building material factor (Nutzer, 2026-11-21): in the evaluation of shortages all construction costs (open ones
+    /// of the building sites, planned ones of the orders and of the sites ordered) count with this share: 0 not at all,
+    /// 1 fully, 0.5 half. The evaluation decides whether a group is short for the orders of producers, how many come
+    /// and whether such an order is still needed. A producer of building material uses building material before it
+    /// makes some: counted fully, its costs make the shortage larger and more producers come (spiral). The forecast
+    /// itself (report, order of the list, rules of the list, expanding orders, distribution of all wares) counts them
+    /// fully
+    static constexpr double BUILDING_MATERIAL_FACTOR = 0.5;
     /// A chain is stuck if nothing of its ware was made in this many minutes (and the warehouses do not have enough):
     /// then building sites may be cancelled for an order that solves it
     static constexpr unsigned STUCK_MINUTES = 9;
@@ -437,8 +452,9 @@ private:
     /// Helpers like a ware: in the warehouses, requested by workers that are wanted and by coming buildings, created
     /// by the warehouses and used for soldiers and carriers
     void UpdateHelperStatus();
-    /// Forecast, state and missing amount from free, forecast production and consumption
-    void FinishStatus(WareStatus& status) const;
+    /// Forecast, state and missing amount from free, forecast production and consumption; the same of the evaluation of
+    /// shortages from `evaluated` (none: the forecast)
+    void FinishStatus(WareStatus& status, std::optional<double> evaluated = std::nullopt) const;
     /// Game minutes the measured counts of the last balance length cover (at least 1)
     double GetMeasuredMinutes() const;
     /// Forecast of every ware and group by the calculation of the game (civ::EconomyForecast) with the building sites
@@ -595,8 +611,10 @@ private:
     /// Several products chosen by the distribution of all wares
     static bool IsMultiProduct(const Recipe& recipe);
     /// Regel A: what the buildings of the type with several products cannot make of all their products together, per
-    /// minute. A group short of wares counts only for the type chosen for it (groupWares, groupForecast)
-    double GetMultiProductUnmet(const Recipe& recipe, const std::vector<GoodType>& groupWares, double groupForecast);
+    /// minute. A group short of wares counts only for the type chosen for it (groupWares, groupForecast). evaluated:
+    /// with the forecasts of the evaluation of shortages (orders for a shortage), otherwise with the forecasts
+    double GetMultiProductUnmet(const Recipe& recipe, const std::vector<GoodType>& groupWares, double groupForecast,
+                                bool evaluated);
     // The list
     Order* Find(unsigned id);
     const Order* Find(unsigned id) const;

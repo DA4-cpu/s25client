@@ -6,6 +6,7 @@
 #include "BuildingRegister.h"
 #include "EconomyStatistics.h"
 #include "GamePlayer.h"
+#include "RTTR_Assert.h"
 #include "Ware.h"
 #include "ai/civ/MapProfile.h"
 #include "buildings/nobUsual.h"
@@ -282,6 +283,12 @@ void EconomyForecast::Compute(const GamePlayer& player, const unsigned gf, const
     ComputeStatuses(player, snapshot, extra);
 }
 
+void EconomyForecast::RecomputeStatuses(const GamePlayer& player, const EconomySnapshot& snapshot, const Extra& extra)
+{
+    RTTR_Assert(player_ == &player);
+    ComputeStatuses(player, snapshot, extra);
+}
+
 void EconomyForecast::ComputeMeasures(const GamePlayer& player)
 {
     measures_ = {};
@@ -551,8 +558,16 @@ void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySna
             return;
         entries.push_back({std::move(wares), amount, part, byOrder});
     };
+    // Construction costs: with the share given (the AI evaluates its shortages with less, the game counts them fully)
+    const auto constructionPart = [&extra](const Amount amount) {
+        return amount * static_cast<Amount>(extra.constructionShare) / static_cast<Amount>(CONSTRUCTION_SHARE_FULL);
+    };
     for(const OpenDemand& demand : snapshot.openDemand)
-        addEntry(demand.wares, static_cast<Amount>(demand.amount) * AMOUNT_UNIT, Part::Open, false);
+    {
+        const Amount amount = static_cast<Amount>(demand.amount) * AMOUNT_UNIT;
+        addEntry(demand.wares, demand.purpose == WareUse::Construction ? constructionPart(amount) : amount, Part::Open,
+                 false);
+    }
     for(const auto good : helpers::enumRange<GoodType>())
     {
         if(good != GoodType::Nothing)
@@ -572,7 +587,8 @@ void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySna
         }
     }
     for(const PlannedEntry& entry : extra.planned)
-        addEntry(entry.wares, entry.amount, Part::Planned, entry.byOrder);
+        addEntry(entry.wares, entry.construction ? constructionPart(entry.amount) : entry.amount, Part::Planned,
+                 entry.byOrder);
     // The tools of a kind kept in stock are asked for too (so they are made before they are missing)
     helpers::EnumArray<std::vector<GoodType>, Tool> toolKinds;
     for(const auto good : helpers::enumRange<GoodType>())

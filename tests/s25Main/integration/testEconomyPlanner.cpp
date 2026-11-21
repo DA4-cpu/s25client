@@ -579,6 +579,37 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderKeepsItsMaterial, PlannerFixture)
     BOOST_TEST(findSite(PIT).isValid());
 }
 
+BOOST_FIXTURE_TEST_CASE(ShortagesAreEvaluatedWithTheBuildingMaterialFactor, PlannerFixture)
+{
+    // The pit costs 8 boards, 7 are in stock: it waits. Planned: 12 boards (the pit, the kiln waiting for it and a
+    // barracks waiting for soldiers). Forecast 7 - 12 = -5: shortage. The evaluation of shortages counts all
+    // construction costs x BUILDING_MATERIAL_FACTOR (0.5): 7 - 6 = 1, no shortage, no sawmill (Nutzer, 2026-11-21).
+    // The forecast itself stays (report, list, distribution of all wares)
+    WorldDescription desc = makeDesc();
+    desc.workshops[0].cost = {{{"Boards"}, 8}};
+    startGame(desc, 7);
+    placeDeposits();
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST_REQUIRE(civai::EconomyPlanner::WaitsForResources(getOrder(PIT)));
+    const civai::WareStatus& boards = ware(GoodType::Boards);
+    BOOST_TEST(boards.planned == costsOfUnblockedOrders(GoodType::Boards));
+    BOOST_TEST(boards.planned == 12.);
+    BOOST_TEST(std::abs(boards.forecast - (7. - boards.openDemand - boards.planned)) < 0.01);
+    constexpr double factor = civai::EconomyPlanner::BUILDING_MATERIAL_FACTOR;
+    BOOST_TEST(std::abs(boards.evaluated - (7. - factor * (boards.openDemand + boards.planned))) < 0.01);
+    BOOST_TEST((boards.state == civai::SupplyState::Shortage));
+    BOOST_TEST(!boards.evaluatedShortage);
+    BOOST_TEST(findOrder(BuildingType::Sawmill) == -1);
+    // The distribution of all wares counts the construction costs fully: its forecast is the one of the planner
+    civ::updateDistribution(world, curPlayer);
+    BOOST_TEST(world.GetPlayer(curPlayer).GetWareDistribution().GetNumber(GoodType::Boards)
+               == std::llround(boards.forecast * 100));
+}
+
 BOOST_FIXTURE_TEST_CASE(PlannedDemandGoesToTheGame, PlannerFixture)
 {
     // The pit waits for its boards: its construction costs are planned. The AI sends them to the game, the distribution
@@ -821,24 +852,32 @@ BOOST_FIXTURE_TEST_CASE(SelfSolvingWoodcutterGetsTheBoards, PlannerFixture)
     BOOST_TEST_REQUIRE(sitePos.isValid());
     BOOST_TEST_REQUIRE(findSite(BuildingType::Barracks).isValid());
     BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
-    // The woodcutter for the wood of the research can work and makes what the sawmill (boards) lacks: priority. One
-    // woodcutter does not make what the research and the sawmill need: the sawmill gets one more for its input
+    // The woodcutter for the wood of the research can work and makes what the boards lack (the sawmill has no wood):
+    // priority
     step();
-    const civai::Order& order = getOrder(BuildingType::Woodcutter);
-    BOOST_TEST((order.kind == civai::OrderKind::Needed));
-    BOOST_TEST((order.cause == civai::OrderCause::Shortage));
+    {
+        const civai::Order& order = getOrder(BuildingType::Woodcutter);
+        BOOST_TEST((order.kind == civai::OrderKind::Needed));
+        BOOST_TEST((order.cause == civai::OrderCause::Shortage));
+        BOOST_TEST(!order.clearing);
+        BOOST_TEST(order.selfSolving);
+        BOOST_TEST_INFO(order.reason);
+        BOOST_TEST(order.reason.find("Vorrang") == 0u);
+        BOOST_TEST(order.reason.find("abgebrochen: Barracks") != std::string::npos);
+        BOOST_TEST(!findSite(BuildingType::Barracks).isValid());
+    }
+    // The evaluation of shortages counts the construction costs with BUILDING_MATERIAL_FACTOR (0.5): at the start of
+    // the step the board in stock covered half of the 2 boards of the barracks, no shortage of boards. Now the boards
+    // of the woodcutter count: a sawmill, below the woodcutter. One woodcutter does not make what the research and the
+    // sawmill need: the sawmill gets one more for its input
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
     BOOST_TEST(findOrder(BuildingType::Woodcutter) < findOrder(BuildingType::Sawmill));
     const int sawmillId = static_cast<int>(getOrder(BuildingType::Sawmill).id);
     BOOST_TEST(helpers::contains_if(list(), [&](const civai::Order* other) {
         return other->building == BuildingType::Woodcutter && other->cause == civai::OrderCause::Input
                && static_cast<int>(other->parent) == sawmillId;
     }));
-    BOOST_TEST(!order.clearing);
-    BOOST_TEST(order.selfSolving);
-    BOOST_TEST_INFO(order.reason);
-    BOOST_TEST(order.reason.find("Vorrang") == 0u);
-    BOOST_TEST(order.reason.find("abgebrochen: Barracks") != std::string::npos);
-    BOOST_TEST(!findSite(BuildingType::Barracks).isValid());
     // The board is free again, one more comes: the woodcutter gets them before anybody else
     hq().AddToInventory(GoodCounts::make(GoodType::Boards, 1), true);
     step();
