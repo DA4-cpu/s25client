@@ -1901,7 +1901,11 @@ Spielstand 30), abgerissene Gebäude der Bilanzlänge (`GamePlayer::GetGoneBuild
   Bauplaner bei −80 steht: Die Aufträge der KI, die auf Material warten, sind keine Baustellen und fehlen in der
   Rechnung des Spiels. Vergleich über 3 h (Seed 5, `db898ba` gegen `607d399`): Land 2 382–3 861 statt 2 122–10 456,
   Gebäude 107–147 statt 72–256, Militärstärke wächst bei keinem Spieler (alt ab 2:00). Abhilfe: der geplante Bedarf
-  der KI (Regel 3) und dem Überschuss nach der Warenzahl (Regel 4), Vergleich siehe unten.
+  der KI (Regel 3) und dem Überschuss nach der Warenzahl (Regel 4). Danach (`01c4ca7` gegen `607d399`, 3 h, Karte 512,
+  4 KI): Seed 5 Land 8 460–11 401 statt 2 122–10 456, Gebäude 326–385 statt 72–256, Militärstärke wächst bei Spieler 3
+  ab 2:30 (alt Spieler 1 ab 1:50, Spieler 3 ab 2:30); Seed 9 Land 7 639–12 312 statt 7 574–14 182, Gebäude 267–332
+  statt 222–355, Militärstärke wächst bei Spieler 0 und 2 ab 2:50 (alt Spieler 3 ab 3:00). Etwa gleichauf mit dem alten
+  Stand.
 
 ## Lagerkapazität (Stand 2026-11-14)
 
