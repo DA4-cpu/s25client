@@ -99,7 +99,7 @@ rttr:AddTechnology{
     era = 0,
     requires = { "agriculture" },  
     knowledge = { LWP = 4 }, 
-    cost = { Rope = 1 },
+    --cost = { Rope = 1 },
     time = 60,
     unlocks = { buildings = { "Well" } },
     aiPriority = 80,

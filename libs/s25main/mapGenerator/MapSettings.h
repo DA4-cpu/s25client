@@ -94,7 +94,7 @@ struct MapSettings
     unsigned short stonePiles = 7;
     /// Seed for the random numbers. 0: choose one randomly. The same seed and settings give the same map
     uint32_t seed = 0;
-    LandMass landMass = LandMass::Continents;
+    LandMass landMass = LandMass::Normal;
     /// Water in percent of the map
     unsigned short water = 50;
     /// Mountains in percent of the land

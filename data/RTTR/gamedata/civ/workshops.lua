@@ -191,7 +191,7 @@ rttr:AddWorkshop{
     collect = { object = "LoamDeposit", radius = 9 }, 
     output = "Loam",
     outputRatio = 0.75,
-    tools = { baseSpeed = 25, tools = { "Shovel", "Bucket" } },
+    tools = { baseSpeed = 25, tools = { "Shovel" } },
     workTime = 7,                    
     waitTime = 27,                   
     aiNearBorder = true,

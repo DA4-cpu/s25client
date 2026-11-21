@@ -22,6 +22,9 @@ rttr:SetAIExpandingBuildings{
     "LoamPit", "CopperMine", "PapyrusPlantation",
     -- Verarbeitung
     "Sawmill", "Charburner", "Brewery", "Armory", "Mint", "Metalworks", "Copperworks", "BoneCarver", "LeatherWorks", "PigFarm", "Bakery", "Ironsmelter",
+    "AdobeProducer", "Brickworks", "SpinningMill",
+    -- Werkzeughersteller
+    "ObsidianWorkshop", "Bronzeworks", "WoodWorkshop",
     -- Plantagen bzw. Erzeuger
     "Farm" 
 }

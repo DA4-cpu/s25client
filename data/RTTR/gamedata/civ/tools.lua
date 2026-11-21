@@ -56,7 +56,7 @@ rttr:AddToolMaterial{ name = "Iron", title = "Iron" }
 rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Zange
 rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Hammer
 rttr:AddTool{ ware = "Axe",        material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Axt
-rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Säge
+rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 200, speed = 30, outputRatio = 0.7 } -- Säge
 rttr:AddTool{ ware = "PickAxe",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Spitzhacke
 rttr:AddTool{ ware = "Shovel",     material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schaufel
 rttr:AddTool{ ware = "Crucible",   material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schmelztiegel
@@ -72,7 +72,7 @@ rttr:AddToolMaterial{ name = "Copper", title = "Copper" }
 rttr:AddTool{ ware = "CopperTongs",      material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Zange
 rttr:AddTool{ ware = "CopperHammer",     material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Hammer
 rttr:AddTool{ ware = "CopperAxe",        material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Axt
-rttr:AddTool{ ware = "CopperSaw",        material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Säge
+rttr:AddTool{ ware = "CopperSaw",        material = "Copper", durability = 100, speed = 10, outputRatio = 0.4 } -- Säge
 rttr:AddTool{ ware = "CopperPickAxe",    material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Spitzhacke
 rttr:AddTool{ ware = "CopperShovel",     material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Schaufel
 rttr:AddTool{ ware = "CopperCrucible",   material = "Copper", durability = 100, speed = 50, outputRatio = 0 } -- Schmelztiegel
@@ -85,7 +85,7 @@ rttr:AddToolMaterial{ name = "Bronze", title = "Bronze" }
 rttr:AddTool{ ware = "BronzeTongs",      material = "Bronze", durability = 150, speed = 75, outputRatio = 0 } -- Zange
 rttr:AddTool{ ware = "BronzeHammer",     material = "Bronze", durability = 150, speed = 75, outputRatio = 0 } -- Hammer
 rttr:AddTool{ ware = "BronzeAxe",        material = "Bronze", durability = 150, speed = 75, outputRatio = 0 } -- Axt
-rttr:AddTool{ ware = "BronzeSaw",        material = "Bronze", durability = 150, speed = 75, outputRatio = 0 } -- Säge
+rttr:AddTool{ ware = "BronzeSaw",        material = "Bronze", durability = 150, speed = 20, outputRatio = 0.55 } -- Säge
 rttr:AddTool{ ware = "BronzePickAxe",    material = "Bronze", durability = 150, speed = 75, outputRatio = 0 } -- Spitzhacke
 rttr:AddTool{ ware = "BronzeShovel",     material = "Bronze", durability = 150, speed = 75, outputRatio = 0 } -- Schaufel
 rttr:AddTool{ ware = "BronzeCrucible",   material = "Bronze", durability = 150, speed = 75, outputRatio = 0 } -- Schmelztiegel
@@ -95,10 +95,10 @@ rttr:AddTool{ ware = "BronzePlough",    material = "Bronze", durability = 150, s
 
 rttr:AddToolMaterial{ name = "Obsidian", title = "Obsidian" }
 
-rttr:AddTool{ ware = "ObsidianAxe",        material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 } 
-rttr:AddTool{ ware = "ObsidianSaw",        material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 }
-rttr:AddTool{ ware = "ObsidianScythe",     material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 }
-rttr:AddTool{ ware = "ObsidianCleaver",    material = "Obsidian", durability = 50, speed = 100, outputRatio = 0.1 } 
+rttr:AddTool{ ware = "ObsidianAxe",        material = "Obsidian", durability = 50, speed = 100, outputRatio = 0 } 
+rttr:AddTool{ ware = "ObsidianSaw",        material = "Obsidian", durability = 50, speed = 30, outputRatio = 0.7 }
+rttr:AddTool{ ware = "ObsidianScythe",     material = "Obsidian", durability = 50, speed = 50, outputRatio = 0.5 }
+rttr:AddTool{ ware = "ObsidianCleaver",    material = "Obsidian", durability = 50, speed = 100, outputRatio = 0 } 
 
 rttr:AddToolMaterial{ name = "Wood", title = "Wood" }
 

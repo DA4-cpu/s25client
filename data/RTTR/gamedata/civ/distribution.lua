@@ -79,7 +79,9 @@ rttr:AddRegulator{    name = "WoodenTools",    title = "WoodenTools", --nur ein 
 rttr:AddRegulator{    name = "ObsidianTools",    title = "ObsidianTools", -- Platzhalter. Es sollte für alle Werkzeuge und Ausrüstung eine einzige gesammelte Bestellungliste 
 -- und Verteilungsliste geben. Und die Verteilung soll sich automatisch nach dem aktuellen Bedarf einstellen. Diese GesamtVerteilung steuert dann automatisch 
 -- alle Gebäude, die die Waren in der Liste herstellen. Die Gebäude stellen dann unter Berücksichtigung der Verteilung die Waren her, die sie herstellen 
--- können. Die Liste der Waren erstelle ich manuell und schreibe nur grobe Tags wie "Axe" oder "Sword" rein. 
+-- können. In dieser Liste sind alle die Verteilungen für alle Gebäudeoutputs festgehalten (auch von Monooutput Gebäuden) und deren Mengenverhältnis zueinander. 
+-- Damit soll das ständige Nachjustieren von Reglereinstellungen sollte nicht in so einem Spiel existieren. Alle Gebäude funktionieren automatisch, warum sollte
+-- man dann manche Gebäude manuell steuern können? Das passt nicht zum Spiel. 
     entries = {  { tags = "ObsidianAxe", title = "ObsidianAxe", value = 8 },
         { tags = "ObsidianSaw", title = "ObsidianSaw", value = 5 },
         { tags = "ObsidianScythe", title = "ObsidianScythe", value = 8 },
