@@ -69,10 +69,11 @@ enum class GCType : uint8_t
     SetWareDistribution,
     SetClearingWoodcutter,
     ChangeWareOrders,
+    SetPlannedDemand,
 };
 constexpr auto maxEnumValue(GCType)
 {
-    return GCType::ChangeWareOrders;
+    return GCType::SetPlannedDemand;
 }
 
 class GameCommand

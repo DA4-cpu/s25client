@@ -185,6 +185,11 @@ bool GameCommandFactory::ChangeWareOrders(const GoodType good, const int change)
     return AddGC(new gc::ChangeWareOrders(good, static_cast<int16_t>(change)));
 }
 
+bool GameCommandFactory::SetPlannedDemand(const std::vector<civ::PlannedDemand>& planned)
+{
+    return AddGC(new gc::SetPlannedDemand(planned));
+}
+
 bool GameCommandFactory::SetResearch(std::optional<unsigned> techIdx)
 {
     RTTR_Assert(!techIdx || *techIdx < gc::SetResearch::STOP_RESEARCH);

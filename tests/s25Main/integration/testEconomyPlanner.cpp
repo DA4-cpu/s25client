@@ -15,6 +15,7 @@
 #include "buildings/nobHQ.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
+#include "civ/WareDistribution.h"
 #include "factories/AIFactory.h"
 #include "factories/BuildingFactory.h"
 #include "figures/nofFarmhand.h"
@@ -32,6 +33,7 @@
 #include "gameData/WorldDescription.h"
 #include <boost/test/unit_test.hpp>
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 // Planner of the production buildings of the civilization mode: the priority list (DESIGN.md "Neufassung der
@@ -575,6 +577,35 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderKeepsItsMaterial, PlannerFixture)
     step();
     BOOST_TEST((getOrder(PIT).state == civai::OrderState::Placed));
     BOOST_TEST(findSite(PIT).isValid());
+}
+
+BOOST_FIXTURE_TEST_CASE(PlannedDemandGoesToTheGame, PlannerFixture)
+{
+    // The pit waits for its boards: its construction costs are planned. The AI sends them to the game, the distribution
+    // of all wares counts them fully: its forecast is the one of the planner (Nutzer, 2026-11-21)
+    WorldDescription desc = makeDesc();
+    desc.workshops[0].cost = {{{"Boards"}, 5}};
+    startGame(desc, 3);
+    placeDeposits();
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    step();
+    BOOST_TEST_REQUIRE(civai::EconomyPlanner::WaitsForResources(getOrder(PIT)));
+    civ::WareDistribution& distribution = world.GetPlayer(curPlayer).GetWareDistribution();
+    unsigned boards = 0;
+    for(const civ::PlannedDemand& demand : distribution.GetPlanned())
+    {
+        if(demand.wares == std::vector<GoodType>{GoodType::Boards})
+            boards += demand.amount;
+    }
+    BOOST_TEST(boards == ware(GoodType::Boards).plannedByOrders);
+    BOOST_TEST(boards >= 5u);
+    BOOST_TEST(distribution.UsesForecast());
+    civ::updateDistribution(world, curPlayer);
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(distribution.GetNumber(GoodType::Boards) == std::llround(ware(GoodType::Boards).forecast * 100));
+    BOOST_TEST(distribution.GetNumber(GoodType::Boards) < 0);
 }
 
 BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterNeedsEnoughTrees, PlannerFixture)

@@ -317,6 +317,23 @@ void ChangeWareOrders::Execute(GameWorld& world, uint8_t playerId)
         civ::wakeBuildingsFor(world, playerId, good);
 }
 
+void SetPlannedDemand::Execute(GameWorld& world, uint8_t playerId)
+{
+    if(!civ::isDistributionActive(world))
+        return;
+    // Counted from the next computation of the distribution (it is computed every DISTRIBUTION_INTERVAL GFs)
+    std::vector<civ::PlannedDemand> result;
+    result.reserve(planned.size());
+    for(civ::PlannedDemand demand : planned)
+    {
+        std::sort(demand.wares.begin(), demand.wares.end());
+        demand.wares.erase(std::unique(demand.wares.begin(), demand.wares.end()), demand.wares.end());
+        if(!demand.wares.empty() && demand.amount > 0)
+            result.push_back(std::move(demand));
+    }
+    world.GetPlayer(playerId).GetWareDistribution().SetPlanned(std::move(result));
+}
+
 void SetClearingWoodcutter::Execute(GameWorld& world, uint8_t playerId)
 {
     GamePlayer& player = world.GetPlayer(playerId);

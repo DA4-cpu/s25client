@@ -1792,7 +1792,7 @@ Baustelle mit „eins von“-Kosten jetzt die anderen Waren, wenn eine nicht ges
 
 Entscheidungen des Nutzers vom 18. bis 21.11.2026 (Chats „Werkzeug-Prüfung für Gebäude“ und „Gesamtverteilung“).
 Code: `civ/EconomyForecast.*` (Rechnung), `civ/WareDistribution.*` (Spielregel), `ingameWindows/iwWareDistribution.*`
-(Fenster), Befehle `gc::SetWareDistribution`, `gc::ChangeWareOrders`.
+(Fenster), Befehle `gc::SetWareDistribution`, `gc::ChangeWareOrders`, `gc::SetPlannedDemand`.
 
 ### Ziel
 
@@ -1819,9 +1819,16 @@ können? Das passt nicht zum Spiel.“
    „Werkzeuge“ (Materialvorrang) bleibt und spielt für die Gesamtverteilung keine Rolle.
 3. **Zahl je Ware**, je Spieler umschaltbar:
    - Prognose = (Lagerbestand + reserviert − offen − unterwegs zu Abnehmern − geplant) + Herstellung − Verbrauch, für
-     die Bilanzlänge. Dieselbe Rechnung wie im Bauplaner (Abschnitt „Prognose“), im Spiel ohne die Auftragsliste der
-     KI und ohne ihre abgeschickten Baubefehle (kein Spielzustand). Reserviert zählt nicht zusätzlich: Die Herstellung
-     der nächsten Bilanzlänge steckt schon in der Prognose.
+     die Bilanzlänge. Dieselbe Rechnung wie im Bauplaner (Abschnitt „Prognose“). Reserviert zählt nicht zusätzlich: Die
+     Herstellung der nächsten Bilanzlänge steckt schon in der Prognose.
+   - Geplant im Spiel: Werkzeuge der Baustellen und Werkzeugvorrat (rechnet das Spiel selbst) und bei einer KI ihr
+     geplanter Bedarf (Entscheidung des Nutzers, 2026-11-21): Baukosten und Werkzeuge der Aufträge ihrer Liste, die
+     nicht platziert und nicht blockiert sind, in der Reihenfolge der Liste, immer voll (ohne den Faktor für Baumaterial
+     des Bauplaners). Die KI schickt ihn nach jedem Planungsschritt als Befehl `gc::SetPlannedDemand`, wenn er sich
+     geändert hat (Spielzustand, `WareDistribution::GetPlanned`). Ihre abgeschickten Baubefehle schickt sie nicht mit:
+     Der Befehl geht mit ihnen ab, beim Ausführen stehen die Baustellen auf der Karte und ihre Baukosten sind offen.
+     Damit ist die Prognose der Gesamtverteilung die des Bauplaners (Test `PlannedDemandGoesToTheGame`). Ein Mensch hat
+     keinen geplanten Bedarf.
    - Warenzahl = Lagerbestand + reserviert − offen − unterwegs zu Abnehmern.
    - Reserviert = jede Ware, die das Spiel als unterwegs führt (`GamePlayer::GetWares`, Straßen und Fahnen), bis sie in
      ein Gebäude kommt. Unterwegs zu Abnehmern (`EconomySnapshot::inTransit`) wird abgezogen: Ihre Anfrage ist nicht
@@ -1834,8 +1841,11 @@ können? Das passt nicht zum Spiel.“
      Forschung will 1 Eisenaxt, 6 Plätze „Axe“ sind leer, Vorrat 2 Äxte geplant: Einzeln stehen alle drei Äxte bei 0,
      die Gruppe bei −5. Alle drei bekommen −5, also sehen Schlosserei, Kupferwerk und Obsidianwerkstatt die Axt als
      knappstes Produkt; sobald eine davon eine Axt herstellt, steigt die Gruppenzahl für alle drei.
-4. **Überschuss:** Zahl > max(8, 10 × Verbrauch pro Minute in der Bilanzlänge). Der Startvorrat zählt mit (anders
-   als im Bauplaner, Entscheidung des Nutzers).
+4. **Überschuss:** Warenzahl > max(8, 10 × Verbrauch pro Minute in der Bilanzlänge), in beiden Modi (Entscheidung
+   des Nutzers, 2026-11-21: Im Prognose-Modus hielte ein Gebäude sonst wegen seiner eigenen Herstellung an, z. B. Holz
+   Lager 3 + Herstellung 13 = Prognose 16 > 8). Die Werte kommen weiter aus der Zahl des eingestellten Modus. Für die
+   Warenzahl gilt dieselbe Gruppenregel wie in Regel 3. Der Startvorrat zählt mit (anders als im Bauplaner,
+   Entscheidung des Nutzers).
 5. **Wertung:** Darin steht jede Ware, die ein fertiges Gebäude des Spielers als Produkt herstellt (nicht nur als
    Nebenprodukt), die nicht unerwünscht und kein Wissensmedium ist. Wert = 1 000 000 × (höchste Zahl − Zahl) ÷ (höchste
    Zahl − niedrigste Zahl): Der größte Mangel bekommt den höchsten Wert, die höchste Zahl 0. Alle gleich: alle den
@@ -1881,7 +1891,7 @@ können? Das passt nicht zum Spiel.“
 
 `civ::EconomyForecast` ist die Rechnung des Bauplaners (Prognose, Zuteilung, Diagnose, Werte je Gebäude), verlegt ins
 Spiel und auf ganze Zahlen umgestellt. Der Bauplaner nutzt sie und gibt seine abgeschickten Baubefehle und seine
-Auftragsliste dazu (`Extra`). Gemessen wird mit dem Spielzustand: Fertigstellung und Arbeiter seit (`nobUsual`,
+Auftragsliste dazu (`Extra`); die Gesamtverteilung gibt den geplanten Bedarf der KI dazu (Regel 3). Gemessen wird mit dem Spielzustand: Fertigstellung und Arbeiter seit (`nobUsual`,
 Spielstand 30), abgerissene Gebäude der Bilanzlänge (`GamePlayer::GetGoneBuildings`).
 
 ### Offen
@@ -1889,7 +1899,9 @@ Spielstand 30), abgerissene Gebäude der Bilanzlänge (`GamePlayer::GetGoneBuild
 - Erstes Testspiel (Zufallskarte 512, 4 KI, „a lot“, 40 min): Land 1 432–1 646 statt 1 784–2 626, Gebäude 41–45 statt
   47–57. Holz: Lager 3, Herstellung 13 → Prognose 16 > 8 → Holzfäller angehalten, während die Gruppe Baumaterial im
   Bauplaner bei −80 steht: Die Aufträge der KI, die auf Material warten, sind keine Baustellen und fehlen in der
-  Rechnung des Spiels. Vorschlag an den Nutzer: Die KI schickt ihren geplanten Bedarf als Spielbefehl.
+  Rechnung des Spiels. Vergleich über 3 h (Seed 5, `db898ba` gegen `607d399`): Land 2 382–3 861 statt 2 122–10 456,
+  Gebäude 107–147 statt 72–256, Militärstärke wächst bei keinem Spieler (alt ab 2:00). Abhilfe: der geplante Bedarf
+  der KI (Regel 3) und dem Überschuss nach der Warenzahl (Regel 4), Vergleich siehe unten.
 
 ## Lagerkapazität (Stand 2026-11-14)
 

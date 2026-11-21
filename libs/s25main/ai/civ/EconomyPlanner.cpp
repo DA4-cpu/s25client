@@ -361,6 +361,7 @@ void EconomyPlanner::Step()
     // states the list has now (the report shows both)
     UpdatePlanned();
     RecomputeForecast();
+    SendPlannedDemand();
     // Material needed orders wait for: no other building takes it (also not the military buildings of the old AI)
     aijh_.GetConstruction().SetPlannerReservation(reservedMaterial_);
     ++numSteps_;
@@ -588,6 +589,29 @@ void EconomyPlanner::UpdatePlanned()
         AddPlanned(order->building, true, true, order->id);
         plannedOrderIds_.push_back(order->id);
     }
+}
+
+void EconomyPlanner::SendPlannedDemand()
+{
+    // "geplant" for the distribution of all wares, fully (Nutzer, 2026-11-21): the construction costs and tools of the
+    // orders of the list not placed, in the order of the list. The game counts the tools of the building sites and the
+    // tools in stock itself. Building sites ordered whose commands are on their way are on the map when this command is
+    // executed (it is sent with them): then the game asks for their construction costs
+    std::vector<civ::PlannedDemand> planned;
+    for(unsigned i = 0; i < planned_.size(); ++i)
+    {
+        const Order* order = plannedFor_[i] != 0 ? Find(plannedFor_[i]) : nullptr;
+        if(!order || order->state == OrderState::Placed)
+            continue;
+        civ::PlannedDemand demand;
+        demand.wares = planned_[i].wares;
+        helpers::erase(demand.wares, GoodType::Nothing);
+        demand.amount = static_cast<uint16_t>(std::min<unsigned>(planned_[i].amount, UINT16_MAX));
+        if(!demand.wares.empty() && demand.amount > 0)
+            planned.push_back(std::move(demand));
+    }
+    if(planned != sentPlanned_ && aijh_.GetInterface().SetPlannedDemand(planned))
+        sentPlanned_ = std::move(planned);
 }
 
 void EconomyPlanner::FinishStatus(WareStatus& status) const

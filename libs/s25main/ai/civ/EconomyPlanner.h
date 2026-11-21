@@ -8,6 +8,7 @@
 #include "ai/aijh/AIConstruction.h"
 #include "ai/civ/EconomyGraph.h"
 #include "civ/EconomyForecast.h"
+#include "civ/WareDistribution.h"
 #include "helpers/EnumArray.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
@@ -422,6 +423,8 @@ private:
     /// Index of the group with exactly these wares (created if it does not exist)
     unsigned GetGroupIdx(std::vector<GoodType> wares, bool demanded);
     void UpdatePlanned();
+    /// Send the planned demand of the orders of the list to the game (distribution of all wares) if it changed
+    void SendPlannedDemand();
     /// Construction costs and/or tools and worker of one more building of the type, for the order (0: a building
     /// site). No input spaces: what a building will use counts as its consumption in the forecast. The status is
     /// computed again by RecomputeForecast
@@ -696,6 +699,8 @@ private:
     /// site)
     std::vector<OpenDemand> planned_;
     std::vector<unsigned> plannedFor_;
+    /// Planned demand sent to the game last (SendPlannedDemand)
+    std::vector<civ::PlannedDemand> sentPlanned_;
     /// A helper requested for the worker of each building site and planned order (the order, 0: a building site), and
     /// the workers of each job that are free in the warehouses and planned for them
     std::vector<unsigned> plannedHelpers_;

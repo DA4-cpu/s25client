@@ -741,6 +741,49 @@ public:
     }
 };
 
+/// Civilization mode: the planned demand of the AI (its "geplant": construction costs and tools of the orders of its
+/// list not placed yet), counted in the distribution of all wares
+class SetPlannedDemand : public GameCommand
+{
+    GC_FRIEND_DECL;
+    const std::vector<civ::PlannedDemand> planned;
+
+protected:
+    SetPlannedDemand(std::vector<civ::PlannedDemand> planned)
+        : GameCommand(GCType::SetPlannedDemand), planned(std::move(planned))
+    {}
+    SetPlannedDemand(Serializer& ser) : GameCommand(GCType::SetPlannedDemand), planned(popPlanned(ser)) {}
+
+public:
+    void Execute(GameWorld& world, uint8_t playerId) override;
+    void Serialize(Serializer& ser) const override
+    {
+        GameCommand::Serialize(ser);
+        ser.PushUnsignedShort(static_cast<uint16_t>(planned.size()));
+        for(const civ::PlannedDemand& demand : planned)
+        {
+            ser.PushUnsignedChar(static_cast<uint8_t>(demand.wares.size()));
+            for(const GoodType good : demand.wares)
+                helpers::pushEnum<uint8_t>(ser, good);
+            ser.PushUnsignedShort(demand.amount);
+        }
+    }
+
+private:
+    static std::vector<civ::PlannedDemand> popPlanned(Serializer& ser)
+    {
+        std::vector<civ::PlannedDemand> result(ser.PopUnsignedShort());
+        for(civ::PlannedDemand& demand : result)
+        {
+            demand.wares.resize(ser.PopUnsignedChar());
+            for(GoodType& good : demand.wares)
+                good = helpers::popEnum<GoodType>(ser);
+            demand.amount = ser.PopUnsignedShort();
+        }
+        return result;
+    }
+};
+
 /// Civilization mode: Set the regulator "Wissen" (weight 0..10 for LWP, IWP, MWP)
 class SetKnowledgeDistribution : public GameCommand
 {

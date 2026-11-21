@@ -76,7 +76,11 @@ void WareDistribution::Update(const GameWorldBase& world, const unsigned playerI
     const DistributionData& data = world.GetDistributionData();
     EconomyForecast forecast(data.graph);
     const EconomySnapshot snapshot = takeEconomySnapshot(player);
-    forecast.Compute(player, gf, snapshot, {});
+    // What only the AI knows counts fully, as in its planner (Nutzer, 2026-11-21)
+    EconomyForecast::Extra extra;
+    for(const PlannedDemand& demand : planned_)
+        extra.planned.push_back({demand.wares, static_cast<Amount>(demand.amount) * AMOUNT_UNIT, true});
+    forecast.Compute(player, gf, snapshot, extra);
 
     // Made by a finished building of the player
     helpers::EnumArray<bool, GoodType> made{};
@@ -88,26 +92,34 @@ void WareDistribution::Update(const GameWorldBase& world, const unsigned playerI
             made[good] = true;
     }
     // The number of a ware: its own, or the lower one of a group with it a consumer asks for exactly (what none of the
-    // wares of the group has left is missing for each of them)
+    // wares of the group has left is missing for each of them). Values: the number of the mode set. Surplus: always the
+    // number of wares (in the forecast mode a building would stop for its own production, Nutzer 2026-11-21)
     const auto numberOf = [this](const ForecastStatus& status) {
         return usesForecast_ ? status.forecast : status.count;
     };
     helpers::EnumArray<Amount, GoodType> numbers{};
+    helpers::EnumArray<Amount, GoodType> counts{};
     for(const auto good : helpers::enumRange<GoodType>())
     {
-        if(good != GoodType::Nothing)
-            numbers[good] = numberOf(forecast.GetWare(good));
+        if(good == GoodType::Nothing)
+            continue;
+        const ForecastStatus& status = forecast.GetWare(good);
+        numbers[good] = numberOf(status);
+        counts[good] = status.count;
     }
     for(const std::vector<GoodType>& wares : forecast.GetEntrySets())
     {
         if(wares.size() < 2u)
             continue;
-        const Amount groupNumber = numberOf(forecast.GetGroup(wares));
+        const ForecastStatus group = forecast.GetGroup(wares);
         for(const GoodType good : wares)
-            numbers[good] = std::min(numbers[good], groupNumber);
+        {
+            numbers[good] = std::min(numbers[good], numberOf(group));
+            counts[good] = std::min(counts[good], group.count);
+        }
     }
-    // Surplus: the number is above SURPLUS_FACTOR x consumption per minute, at least MIN_STOCK (the start stock counts,
-    // Nutzer 2026-11-21)
+    // Surplus: the number of wares is above SURPLUS_FACTOR x consumption per minute, at least MIN_STOCK (the start
+    // stock counts, Nutzer 2026-11-21)
     std::vector<GoodType> valued;
     for(const auto good : helpers::enumRange<GoodType>())
     {
@@ -122,7 +134,7 @@ void WareDistribution::Update(const GameWorldBase& world, const unsigned playerI
         const WareSetting& setting = settings_[good];
         const Amount threshold = std::max<Amount>(static_cast<Amount>(MIN_STOCK) * AMOUNT_UNIT,
                                                   SURPLUS_FACTOR * forecast.GetWare(good).consumptionPerMinute);
-        const bool surplus = numbers[good] > threshold;
+        const bool surplus = counts[good] > threshold;
         unwanted_[good] = setting.autoPause ? surplus : setting.paused;
         if(!made[good])
             states_[good] = WareDistState::NoBuilding;
@@ -174,6 +186,14 @@ void WareDistribution::Serialize(SerializedGameData& sgd) const
         helpers::pushEnum<uint8_t>(sgd, states_[good]);
         sgd.PushBool(unwanted_[good]);
     }
+    sgd.PushUnsignedInt(static_cast<uint32_t>(planned_.size()));
+    for(const PlannedDemand& demand : planned_)
+    {
+        sgd.PushUnsignedChar(static_cast<uint8_t>(demand.wares.size()));
+        for(const GoodType good : demand.wares)
+            helpers::pushEnum<uint8_t>(sgd, good);
+        sgd.PushUnsignedShort(demand.amount);
+    }
 }
 
 void WareDistribution::Deserialize(SerializedGameData& sgd)
@@ -191,6 +211,14 @@ void WareDistribution::Deserialize(SerializedGameData& sgd)
         numbers_[good] = sgd.PopSignedInt();
         states_[good] = helpers::popEnum<WareDistState>(sgd);
         unwanted_[good] = sgd.PopBool();
+    }
+    planned_.resize(sgd.PopUnsignedInt());
+    for(PlannedDemand& demand : planned_)
+    {
+        demand.wares.resize(sgd.PopUnsignedChar());
+        for(GoodType& good : demand.wares)
+            good = helpers::popEnum<GoodType>(sgd);
+        demand.amount = sgd.PopUnsignedShort();
     }
 }
 

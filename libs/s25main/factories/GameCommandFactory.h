@@ -85,6 +85,8 @@ public:
     bool SetWareDistribution(bool usesForecast, const std::vector<std::pair<GoodType, civ::WareSetting>>& settings);
     /// Civilization mode: change the orders of a ware by `change`
     bool ChangeWareOrders(GoodType good, int change);
+    /// Civilization mode: the planned demand of the AI for the distribution of all wares
+    bool SetPlannedDemand(const std::vector<civ::PlannedDemand>& planned);
     /// AI: mark the woodcutter at the point as clearing the land (or as a woodcutter for good)
     bool SetClearingWoodcutter(MapPoint pt, bool clearing);
     /// Starts Preparation of an sea expedition in a habor

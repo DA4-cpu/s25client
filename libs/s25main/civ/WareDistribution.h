@@ -63,6 +63,18 @@ struct WareSetting
     }
 };
 
+/// Demand only the AI knows, its "geplant" (DESIGN.md, Gesamtverteilung): construction costs and tools of the orders of
+/// its list not placed yet, in the order of the list. The AI sends it (gc::SetPlannedDemand), it counts as planned in
+/// the forecast. Everything else of "geplant" the game computes itself (tools of the building sites, tools in stock)
+struct PlannedDemand
+{
+    /// Any of the wares (sorted)
+    std::vector<GoodType> wares;
+    uint16_t amount = 0;
+
+    bool operator==(const PlannedDemand& rhs) const { return wares == rhs.wares && amount == rhs.amount; }
+};
+
 /// Distribution of all wares of one player (part of the game state)
 class WareDistribution
 {
@@ -77,6 +89,9 @@ public:
     void ChangeOrders(GoodType good, int change);
     /// One ordered ware was started. Returns true if no order is left at all
     bool OrderProcessed(GoodType good);
+    /// Planned demand of the AI (empty for a human player)
+    const std::vector<PlannedDemand>& GetPlanned() const { return planned_; }
+    void SetPlanned(std::vector<PlannedDemand> planned) { planned_ = std::move(planned); }
 
     /// Computed: value 0..DISTRIBUTION_SCALE (0 for wares not valued), number (forecast or number of wares, in
     /// hundredths), state
@@ -100,6 +115,7 @@ private:
     helpers::EnumArray<Amount, GoodType> numbers_{};
     helpers::EnumArray<WareDistState, GoodType> states_{};
     helpers::EnumArray<bool, GoodType> unwanted_{};
+    std::vector<PlannedDemand> planned_;
 };
 
 /// Is the ware part of the distribution? All wares but the knowledge media (regulator "Wissen")

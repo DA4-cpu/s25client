@@ -311,14 +311,61 @@ BOOST_FIXTURE_TEST_CASE(SurplusStopsTheBuilding, OutputChoiceFixture)
     RTTR_EXEC_TILL(4000, countInHQ(BRICK) == 11u);
 }
 
+BOOST_FIXTURE_TEST_CASE(SurplusByTheNumberOfWares, OutputChoiceFixture)
+{
+    // Forecast mode: the values come from the forecast, the surplus from the number of wares (Nutzer, 2026-11-21). The
+    // new kiln counts with what it will make: 5 bricks and its production are more than 8, it still works
+    this->SetWareDistribution(true, {});
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 10), true);
+    hq().AddToInventory(GoodCounts::make(BRICK, 5), true);
+    const MapPoint pos = placeConnectedBuilding(KILN);
+    const nobUsual& kiln = *world.GetSpecObj<nobUsual>(pos);
+    RTTR_EXEC_TILL(2000, kiln.HasWorker());
+    civ::updateDistribution(world, 0);
+    BOOST_TEST(distribution().GetNumber(BRICK) > 8 * civ::AMOUNT_UNIT);
+    BOOST_TEST((distribution().GetState(BRICK) == civ::WareDistState::Valued));
+    BOOST_TEST(!kiln.IsProductionStopped());
+    // 9 bricks: surplus, the kiln stops
+    hq().AddToInventory(GoodCounts::make(BRICK, 4), true);
+    civ::updateDistribution(world, 0);
+    BOOST_TEST((distribution().GetState(BRICK) == civ::WareDistState::Surplus));
+    BOOST_TEST(kiln.IsProductionStopped());
+}
+
+BOOST_FIXTURE_TEST_CASE(PlannedDemandCountsInTheForecast, OutputChoiceFixture)
+{
+    // The planned demand of the AI ("geplant") counts in the forecast, not in the number of wares. Entries without an
+    // amount are dropped
+    hq().AddToInventory(GoodCounts::make(BRICK, 6), true);
+    std::vector<civ::PlannedDemand> planned(2);
+    planned[0].wares = {BRICK};
+    planned[0].amount = 4;
+    planned[1].wares = {POT};
+    planned[1].amount = 0;
+    this->SetPlannedDemand(planned);
+    BOOST_TEST_REQUIRE(distribution().GetPlanned().size() == 1u);
+    civ::updateDistribution(world, 0);
+    BOOST_TEST(distribution().GetNumber(BRICK) == 6 * civ::AMOUNT_UNIT);
+    this->SetWareDistribution(true, {});
+    BOOST_TEST(distribution().GetNumber(BRICK) == 2 * civ::AMOUNT_UNIT);
+    this->SetPlannedDemand({});
+    civ::updateDistribution(world, 0);
+    BOOST_TEST(distribution().GetNumber(BRICK) == 6 * civ::AMOUNT_UNIT);
+}
+
 BOOST_FIXTURE_TEST_CASE(NotWithoutCivMode, OutputChoiceFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 0);
     this->SetWareDistribution(true, {});
     this->ChangeWareOrders(JUG, 3);
+    std::vector<civ::PlannedDemand> planned(1);
+    planned[0].wares = {JUG};
+    planned[0].amount = 2;
+    this->SetPlannedDemand(planned);
     ggs.setSelection(AddonId::CIVILIZATION, 1);
     BOOST_TEST(!distribution().UsesForecast());
     BOOST_TEST(distribution().GetOrders(JUG) == 0u);
+    BOOST_TEST(distribution().GetPlanned().empty());
 }
 
 BOOST_FIXTURE_TEST_CASE(SerializeTheDistribution, OutputChoiceFixture)
@@ -326,6 +373,10 @@ BOOST_FIXTURE_TEST_CASE(SerializeTheDistribution, OutputChoiceFixture)
     setValue(POT, 700);
     setPaused(JUG, false, true);
     this->ChangeWareOrders(POT, 3);
+    std::vector<civ::PlannedDemand> planned(1);
+    planned[0].wares = {POT, JUG};
+    planned[0].amount = 7;
+    this->SetPlannedDemand(planned);
     hq().AddToInventory(GoodCounts::make(GoodType::Stones, 2), true);
     const MapPoint pos = placeConnectedBuilding(POTTERY);
     RTTR_EXEC_TILL(3000, world.GetSpecObj<nobUsual>(pos)->is_working);
@@ -345,6 +396,9 @@ BOOST_FIXTURE_TEST_CASE(SerializeTheDistribution, OutputChoiceFixture)
     BOOST_TEST(!distribution().GetSetting(JUG).autoPause);
     BOOST_TEST(distribution().GetSetting(JUG).paused);
     BOOST_TEST(distribution().GetOrders(POT) == 2u);
+    BOOST_TEST_REQUIRE(distribution().GetPlanned().size() == 1u);
+    BOOST_TEST((distribution().GetPlanned()[0].wares == std::vector<GoodType>{JUG, POT}));
+    BOOST_TEST(distribution().GetPlanned()[0].amount == 7u);
     // The pot being made comes out
     RTTR_EXEC_TILL(1000, countInHQ(POT) == 1u);
     const nobUsual& pottery = *world.GetSpecObj<nobUsual>(pos);
