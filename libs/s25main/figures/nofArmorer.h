@@ -26,6 +26,8 @@ protected:
     helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
     void HandleDerivedEvent(unsigned id) override;
 
+    /// Addon "half cost for military equipment": only without the distribution of all wares
+    bool HasHalfCost() const;
     bool AreWaresAvailable() const override;
 
 public:

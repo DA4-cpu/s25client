@@ -581,7 +581,7 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
             buildingsWanted[bld] = std::min(1u, potentialWorkers);
         }
 
-        else if(building.productChoice == civ::ProductChoice::Tools)
+        else if(building.productChoice == civ::ProductChoice::Distribution)
         {
             // consume = "any": any input will do
             unsigned numScarcest = building.workDesc.useOneWareEach ? std::numeric_limits<unsigned>::max() : 0u;

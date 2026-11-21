@@ -167,10 +167,8 @@ struct WorkshopDesc
     std::vector<TagQuery> outputs;
     /// True: the product gets the properties of the consumed input ware
     bool inheritProperties = false;
-    /// How the product is chosen if there are several (output matches several wares or outputs has several entries).
-    /// Empty: there must be exactly one product. "knowledge": by knowledge type of the products (regulator "Wissen"),
-    /// "tools": by tool type like the metalworks (tool regulator and tool orders), otherwise the name of a regulator
-    /// (rttr:AddRegulator)
+    /// "knowledge": the products (several) are chosen by their knowledge type (regulator "Wissen"). Empty: one product,
+    /// or several chosen by the distribution of all wares (Gesamtverteilung)
     std::string outputChoice;
     /// Library: Orders and stores up to this many knowledge media (all wares with knowledge points) and produces
     /// nothing. 0: normal workshop
@@ -206,29 +204,6 @@ struct WorkshopDesc
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);
-};
-
-/// Regulator in the distribution window (rttr:AddRegulator): Workshops with outputChoice = <name> choose their product
-/// weighted by the values of the entries
-struct RegulatorDesc
-{
-    struct Entry
-    {
-        /// Wares (products) belonging to this entry
-        TagQuery tags;
-        /// Displayed name
-        std::string title;
-        /// Default value 0..10
-        unsigned value = 5;
-    };
-    /// Unique identifier, used in workshops (outputChoice) and savegames
-    std::string name;
-    /// Displayed name (tooltip of the tab)
-    std::string title;
-    std::vector<Entry> entries;
-
-    RegulatorDesc() = default;
-    explicit RegulatorDesc(const kaguya::LuaTable& luaData);
 };
 
 /// Byproduct of a building as read from lua (rttr:AddByproduct):
@@ -273,6 +248,3 @@ constexpr unsigned MAX_COST_ENTRIES = 4;
 constexpr unsigned MAX_TOTAL_COST = 31;
 /// Maximum number of entries in outputs of a workshop
 constexpr unsigned MAX_WORKSHOP_OUTPUTS = 16;
-/// Maximum number of regulators (rttr:AddRegulator) and of entries per regulator
-constexpr unsigned MAX_REGULATORS = 8;
-constexpr unsigned MAX_REGULATOR_ENTRIES = 8;

@@ -73,7 +73,6 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("SetBuildingOutputRatio", &GameDataLoader::SetBuildingOutputRatio)
         .addFunction("SetBuildingCost", &GameDataLoader::SetBuildingCost)
         .addFunction("SetToolMaterialPriorities", &GameDataLoader::SetToolMaterialPriorities)
-        .addFunction("AddRegulator", &GameDataLoader::AddRegulator)
         .addFunction("SetMapClimate", &GameDataLoader::SetMapClimate)
         .addFunction("AddMapZone", &GameDataLoader::AddMapZone)
         .addFunction("AddMapResource", &GameDataLoader::AddMapResource));
@@ -291,19 +290,6 @@ void GameDataLoader::SetToolMaterialPriorities(const kaguya::LuaTable& data)
     }
     if(worldDesc_.toolMaterialPriorities.empty())
         throw GameDataError(context + ": no material given, e.g. { Iron = 8 }");
-}
-
-void GameDataLoader::AddRegulator(const kaguya::LuaTable& data)
-{
-    RegulatorDesc regulator(data);
-    for(const RegulatorDesc& other : worldDesc_.regulators)
-    {
-        if(other.name == regulator.name)
-            throw GameDataError("Regulator '" + regulator.name + "' is defined twice");
-    }
-    if(worldDesc_.regulators.size() >= MAX_REGULATORS)
-        throw GameDataError("At most " + std::to_string(MAX_REGULATORS) + " regulators are possible");
-    worldDesc_.regulators.push_back(std::move(regulator));
 }
 
 void GameDataLoader::SetMapClimate(const kaguya::LuaTable& data)

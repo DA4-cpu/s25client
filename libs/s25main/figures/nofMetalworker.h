@@ -30,6 +30,8 @@ protected:
     /// Returns a random tool according to the priorities
     helpers::OptionalEnum<GoodType> GetRandomTool();
 
+    /// Civilization mode: next tool by the distribution of all wares (orders first)
+    GoodType ChooseByDistribution();
     bool HasToolOrder() const;
 
     bool AreWaresAvailable() const override;

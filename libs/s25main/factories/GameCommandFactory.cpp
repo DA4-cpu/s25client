@@ -174,9 +174,15 @@ bool GameCommandFactory::SetClearingWoodcutter(const MapPoint pt, const bool cle
     return AddGC(new gc::SetClearingWoodcutter(pt, clearing));
 }
 
-bool GameCommandFactory::SetRegulatorValues(const unsigned regulator, const std::vector<uint8_t>& values)
+bool GameCommandFactory::SetWareDistribution(const bool usesForecast,
+                                             const std::vector<std::pair<GoodType, civ::WareSetting>>& settings)
 {
-    return AddGC(new gc::SetRegulatorValues(static_cast<uint8_t>(regulator), values));
+    return AddGC(new gc::SetWareDistribution(usesForecast, settings));
+}
+
+bool GameCommandFactory::ChangeWareOrders(const GoodType good, const int change)
+{
+    return AddGC(new gc::ChangeWareOrders(good, static_cast<int16_t>(change)));
 }
 
 bool GameCommandFactory::SetResearch(std::optional<unsigned> techIdx)

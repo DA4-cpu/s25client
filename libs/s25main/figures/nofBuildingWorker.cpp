@@ -14,6 +14,7 @@
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
 #include "civ/Research.h"
+#include "civ/WareDistribution.h"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/serializeEnums.h"
 #include "world/GameWorld.h"
@@ -289,8 +290,10 @@ void nofBuildingWorker::TryToWork()
 {
     // Tool reform (civilization mode): Without the tools the building may not work at all, with them the tools wear
     // out with every work step and set its speed
-    if(!workplace->IsProductionDisabled() && AreWaresAvailable() && workplace->BeginWorkStep())
+    if(!workplace->IsProductionStopped() && AreWaresAvailable() && workplace->BeginWorkStep())
     {
+        // Civilization mode: an order of its product is processed when the step starts (several products: when chosen)
+        civ::startedWorkStep(*world, *workplace);
         state = State::Waiting1;
         // Work outside the building keeps its duration (it fits to animations and objects like falling trees), so
         // the waiting time is changed for both

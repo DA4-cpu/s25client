@@ -7,6 +7,7 @@
 #include "EconomySnapshot.h"
 #include "ai/aijh/AIConstruction.h"
 #include "ai/civ/EconomyGraph.h"
+#include "civ/EconomyForecast.h"
 #include "helpers/EnumArray.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -62,6 +64,8 @@ struct WareStatus
     double openDemand = 0;
     /// in transit: on the way to the building that asked for it (left the stock already, only shown),
     unsigned inTransit = 0;
+    /// "reserviert": on the way (roads, flags) to a warehouse or without a goal: counts as free
+    double onTheWay = 0;
     /// planned: tools and worker of the building sites, construction costs, tools and worker of the building sites
     /// just ordered (commands on their way) and of the orders of the list that are not blocked, the tools kept in stock
     double planned = 0;
@@ -96,8 +100,6 @@ struct WareGroup
     std::vector<GoodType> wares;
     /// A consumer takes exactly these wares: only then the state of the group decides about needed orders
     bool demanded = false;
-    /// All wares are tools: they are made on order (EconomyPlanner::OrderTools), not by the state of the group
-    bool tools = false;
     WareStatus status;
 };
 
@@ -116,8 +118,6 @@ enum class OrderCause : uint8_t
     Shortage,
     /// Needed: makes an input the order above (Order::parent) lacks
     Input,
-    /// Needed: a tool maker. Tools are ordered and there is none that makes them, or all of them are busy
-    Tools,
     /// Needed: a ware the warehouses need to recruit the soldiers that are missing
     Soldiers,
     /// Needed: a warehouse which creates helpers (none free)
@@ -258,13 +258,11 @@ struct Order
 class EconomyPlanner
 {
 public:
-    /// Balance length: the statistic of the last this many minutes counts (also the time after which the productivity
-    /// of a new building counts)
-    static constexpr unsigned BALANCE_MINUTES = 10;
-    /// The threshold of a surplus is this many times the consumption per minute ...
-    static constexpr unsigned SURPLUS_FACTOR = 10;
-    /// ... but at least this stock
-    static constexpr unsigned MIN_STOCK = 8;
+    /// Balance length, threshold of a surplus (SURPLUS_FACTOR x consumption per minute, at least MIN_STOCK) and the
+    /// tools kept in stock: set in civ/EconomyForecast.h (the same calculation for the distribution of all wares)
+    static constexpr unsigned BALANCE_MINUTES = civ::BALANCE_MINUTES;
+    static constexpr unsigned SURPLUS_FACTOR = civ::SURPLUS_FACTOR;
+    static constexpr unsigned MIN_STOCK = civ::MIN_STOCK;
     /// Harvesters clearing trees are placed where at least this many trees are in reach (independent of the stock)
     static constexpr unsigned CLEARING_MIN_TREES = 8;
     /// Harvesters of other deposits (stone piles, map objects of lua) are placed where at least this many deposits are
@@ -279,8 +277,7 @@ public:
     /// A clearing woodcutter with fewer than this many trees in its reach becomes one for good when a needed forester is
     /// in the list: it gets that forester (Nutzer, 2026-11-18)
     static constexpr unsigned CLEARING_UPGRADE_BELOW = 7;
-    /// Tools of each kind the player keeps in stock beyond what is asked for (tool orders)
-    static constexpr unsigned TOOLS_IN_STOCK = 2;
+    static constexpr unsigned TOOLS_IN_STOCK = civ::TOOLS_IN_STOCK;
     /// A chain is stuck if nothing of its ware was made in this many minutes (and the warehouses do not have enough):
     /// then building sites may be cancelled for an order that solves it
     static constexpr unsigned STUCK_MINUTES = 9;
@@ -410,65 +407,8 @@ private:
         bool expanding = false;
     };
     /// What keeps an existing building from working, checked for every building in every step (the productivity is a
-    /// symptom only, it decides nothing). The first problem found, in this order
-    enum class Diagnosis : uint8_t
-    {
-        /// No problem found
-        Working,
-        /// Stopped by the player: not examined
-        Stopped,
-        /// Its flag has no road (only reported)
-        NoRoad,
-        /// No worker and no warehouse can send one (none there, no helper)
-        NoWorker,
-        /// No worker yet, one is on the way
-        WorkerComing,
-        /// Tool reform: it does not work without tools (base speed 0) and has none giving work speed: it waits
-        NoTool,
-        /// Tool reform: a tool slot is empty, the building works without that tool (slowly; only reported, the slot
-        /// asks for the tool itself)
-        MissingTool,
-        /// Waits for input wares
-        NoInput,
-        /// Its flag is full: the worker waits with the product (only reported)
-        FlagFull,
-        /// Nothing of its source left in its reach
-        Exhausted,
-        /// Farm, plantation: fewer than MIN_FIELD_NODES nodes for fields in its reach
-        FewFields,
-        /// Harvester: nothing of its source in the near half of its reach (only reported)
-        SourceFar,
-        /// Tool reform: a tool in use is worse than the best one of its slot (replaced by the better one when it
-        /// breaks, if it is in stock; only reported)
-        BadTool
-    };
-    /// Measured values of the buildings of a type in the last balance length (UpdateMeasures)
-    struct TypeMeasure
-    {
-        /// Minutes the buildings of the type existed (finished) in the last balance length, with any problem
-        double buildingMinutes = 0;
-        /// Of these: the minutes they worked (by their productivity)
-        double workingMinutes = 0;
-        /// A building of the type had its worker in the last balance length: the values are measured. Otherwise the
-        /// work time counts
-        bool worked = false;
-    };
-    /// Tools of one kind (all materials) in the current step
-    struct ToolKind
-    {
-        /// In the warehouses, requested (open, planned, TOOLS_IN_STOCK), ordered at the makers
-        unsigned stock = 0, requested = 0, ordered = 0;
-        /// The makers will be asked to make this many in the next balance length (ordered, or what is missing)
-        unsigned demand = 0;
-    };
-    /// What the makers of a tool maker type do in the next balance length
-    struct ToolMaker
-    {
-        /// Tools they can make (finished makers that can work, by their measured capacity, and coming ones)
-        double capacity = 0;
-        /// Tools they are asked for and those they cannot make
-        double demand = 0, unmet = 0;
-    };
+    /// symptom only, it decides nothing). The first problem found (civ::diagnose)
+    using Diagnosis = civ::Diagnosis;
     /// Counted around a building or a place (cached for SOURCE_CHECK_GFS)
     struct SourceInfo
     {
@@ -487,6 +427,7 @@ private:
     /// computed again by RecomputeForecast
     void AddPlanned(BuildingType bld, bool withCosts, bool withTools, unsigned orderId);
     void AddPlannedEntry(const OpenDemand& entry, unsigned orderId);
+    void AddPlannedWorker(BuildingType bld, unsigned orderId);
     /// Forecast of all wares, tools, soldiers and helpers. At the start of the step and after every building placed
     void RecomputeForecast();
     void UpdateSoldierStatus();
@@ -497,17 +438,9 @@ private:
     void FinishStatus(WareStatus& status) const;
     /// Game minutes the measured counts of the last balance length cover (at least 1)
     double GetMeasuredMinutes() const;
-    /// Forecast production and consumption of every ware (wareProduction_, wareConsumption_, groupConsumption_):
-    /// measured, coming buildings by the measured value per building of their type, buildings standing still (any
-    /// problem) with what they would use
-    void ComputeFlows();
-    /// Tool makers: what they make of the tools ordered and missing in the next balance length, and what they use for
-    /// it (toolKinds_, toolMakers_, flows of the tools and of their inputs)
-    void ComputeToolFlows();
-    /// Status of all groups from the snapshot, the planned entries and the flows
-    void ComputeStatuses();
-    /// Buildings seen finished and the minutes they existed and worked in the last balance length (measures_)
-    void UpdateMeasures();
+    /// Forecast of every ware and group by the calculation of the game (civ::EconomyForecast) with the building sites
+    /// ordered and the orders of the list
+    void ComputeForecast();
     /// Diagnose with the result kept for the step
     Diagnosis GetDiagnosis(const nobUsual& building, const Recipe& recipe, std::vector<GoodType>& missingInputs);
     /// The source and the fields around the point for a building of the type (cached for SOURCE_CHECK_GFS)
@@ -539,17 +472,12 @@ private:
     void ResolveSurplus(unsigned groupIdx);
     /// Soldiers are short: the wares the warehouses need to recruit them
     void ResolveSoldiers();
-    /// Tools short by the forecast: more makers for what the makers cannot make in the next balance length
-    void ResolveTools();
     /// Tools a building of the type will ask for: the tool to recruit its worker (only jobs recruited with a tool),
     /// the tools of its slots
     void AddToolDemand(std::vector<OpenDemand>& demand, BuildingType bld) const;
     /// The tool to recruit the worker of a building of the type (none if a worker waits in a warehouse or the job is
     /// recruited without tool)
     GoodType GetRecruitTool(BuildingType bld) const;
-    /// Tools asked for per kind (open and planned) and missing (asked for and TOOLS_IN_STOCK more, minus the stock
-    /// and the tools ordered)
-    void UpdateToolNeeds();
     void AddExpandingOrder(GoodType good);
     /// Harvesters of deposits: from the trees, stone piles and map objects in the territory, not from the stock
     void AddDepositOrders();
@@ -622,7 +550,7 @@ private:
     double ProducedPerBuilding(BuildingType bld, GoodType good) const;
     double UsedPerBuilding(BuildingType bld, GoodType good) const;
     /// Tool makers: tools one maker makes per minute while it works (measured, or by the work time)
-    double ToolMakerCapacity(BuildingType bld) const;
+    double OutputPerWorkingMinute(BuildingType bld) const;
     /// The building makes the ware (one of its products)
     bool MakesWare(BuildingType bld, GoodType good) const;
     /// A building of the type can work once finished: the forecasts of the tools it needs to work
@@ -661,7 +589,11 @@ private:
     static bool IsTool(GoodType good);
     /// All products of the recipe are tools: it works on order
     static bool IsToolMaker(const Recipe& recipe);
-
+    /// Several products chosen by the distribution of all wares
+    static bool IsMultiProduct(const Recipe& recipe);
+    /// Regel A: what the buildings of the type with several products cannot make of all their products together, per
+    /// minute. A group short of wares counts only for the type chosen for it (groupWares, groupForecast)
+    double GetMultiProductUnmet(const Recipe& recipe, const std::vector<GoodType>& groupWares, double groupForecast);
     // The list
     Order* Find(unsigned id);
     const Order* Find(unsigned id) const;
@@ -701,7 +633,6 @@ private:
     MapPoint SearchPlace(Order& order, unsigned& searchBudget, bool& searchedAll);
     /// Expanding order which cannot be placed now: to the end of the list
     void MoveToEnd(Order& order, const std::string& reason, const RetryCondition& retry);
-    void OrderTools();
 
     // Rules
     /// The construction material for the building is there (after what the orders above in the list took)
@@ -746,20 +677,6 @@ private:
     static constexpr unsigned NO_GROUP = std::numeric_limits<unsigned>::max();
     /// Group of all tools of a kind (iron and copper axes ...), NO_GROUP if there are none
     helpers::EnumArray<unsigned, Tool> toolKindGroup_{};
-    /// Tools missing of each kind in this step (UpdateToolNeeds): ordered at the end of the step
-    helpers::EnumArray<unsigned, Tool> toolsMissing_{};
-    /// Tools per kind and makers (ComputeToolFlows)
-    helpers::EnumArray<ToolKind, Tool> toolKinds_{};
-    /// What is asked for of tools: the kind, the tools that will do (a slot takes any of its tools, a research cost
-    /// only the one tool) and the amount (UpdateToolNeeds)
-    struct ToolEntry
-    {
-        Tool kind;
-        std::vector<GoodType> wares;
-        unsigned amount;
-    };
-    std::vector<ToolEntry> toolEntries_;
-    std::map<BuildingType, ToolMaker> toolMakers_;
     /// Groups containing the ware
     helpers::EnumArray<std::vector<unsigned>, GoodType> groupsOf_;
     WareStatus soldiers_, helpers_;
@@ -769,18 +686,6 @@ private:
     helpers::EnumArray<std::vector<unsigned>, GoodType> consumers_;
     /// The planner decides about these buildings. Military buildings, harbor, shipyard ... stay with the old AI
     helpers::EnumArray<bool, BuildingType> managed_{};
-    /// First GF a building (by its position) was seen with a worker
-    std::map<MapPoint, unsigned, MapPointLess> workingSince_;
-    /// First GF a building (by its position) was seen finished, and its type
-    std::map<MapPoint, std::pair<BuildingType, unsigned>, MapPointLess> finishedSince_;
-    /// Buildings gone in the last balance length: type, first and last GF seen (their minutes count in the measures)
-    struct GoneBuilding
-    {
-        BuildingType building;
-        unsigned since, until;
-    };
-    std::vector<GoneBuilding> gone_;
-    helpers::EnumArray<TypeMeasure, BuildingType> measures_{};
     /// Clearing woodcutters placed whose mark (game command, kept in the savegame) is not executed yet
     std::vector<MapPoint> clearingPending_;
     /// Clearing woodcutters made woodcutters for good whose command is not executed yet
@@ -845,10 +750,8 @@ private:
     /// Inputs of an order (by order id) without an order in this step: why (for the report at the order)
     std::map<unsigned, std::vector<std::string>> inputNotes_;
 
-    /// Forecast per ware for the next balance length (ComputeFlows)
-    helpers::EnumArray<double, GoodType> wareProduction_{}, wareConsumption_{};
-    /// Forecast consumption of "any of these wares" (sorted) by coming and standing consumers
-    std::vector<std::pair<std::vector<GoodType>, double>> groupConsumption_;
+    /// The calculation of the game (also for the distribution of all wares)
+    std::unique_ptr<civ::EconomyForecast> forecast_;
     std::map<MapPoint, std::pair<Diagnosis, std::vector<GoodType>>, MapPointLess> diagnosisCache_;
     mutable std::map<std::tuple<MapCoord, MapCoord, BuildingType>, SourceInfo> sourceCache_;
     /// The ware is construction material of any building

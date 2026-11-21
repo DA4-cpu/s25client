@@ -178,7 +178,7 @@ void nofSkinner::HandleStateWalkingHome()
 void nofSkinner::TryStartSkinning()
 {
     // Tool reform: No skinning without the tools of the building
-    if(workplace->IsProductionDisabled() || workplace->GetWorkSpeed() == 0)
+    if(workplace->IsProductionStopped() || workplace->GetWorkSpeed() == 0)
     {
         current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].wait1_length, 1);
         workplace->StartNotWorking();

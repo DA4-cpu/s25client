@@ -44,7 +44,8 @@ GameCommandPtr GameCommand::Deserialize(Deserializer& ser)
         case GCType::SetResearch: gc = new SetResearch(ser); break;
         case GCType::SetKnowledgeDistribution: gc = new SetKnowledgeDistribution(ser); break;
         case GCType::SetToolMaterialPriorities: gc = new SetToolMaterialPriorities(ser); break;
-        case GCType::SetRegulatorValues: gc = new SetRegulatorValues(ser); break;
+        case GCType::SetWareDistribution: gc = new SetWareDistribution(ser); break;
+        case GCType::ChangeWareOrders: gc = new ChangeWareOrders(ser); break;
         case GCType::SetClearingWoodcutter: gc = new SetClearingWoodcutter(ser); break;
         case GCType::SetProductionEnabled: gc = new SetProductionEnabled(ser); break;
         case GCType::SetInventorySetting: gc = new SetInventorySetting(ser); break;

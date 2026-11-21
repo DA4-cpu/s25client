@@ -26,30 +26,27 @@ rttr:AddWorkshop{...}:
               wird nur die Hälfte der jedweiligen Inputware gebraucht und bei 3 werden 3 Inputwaren benötigt 
   consume     optional: "each" (Standard): von jedem Eingang 1 Ware pro Produkt, jeder Eingang muss genau eine Ware
               treffen. "any": 1 Ware des Eingangs mit dem größten Vorrat (wie bei den Minen), höchstens 3 Waren insgesamt.
-  output      Tag-Abfrage der hergestellten Ware. Mit outputChoice darf sie mehrere Waren treffen, z.B.
+  output      Tag-Abfrage der hergestellten Ware. Sie darf mehrere Waren treffen (mehrere Produkte), z.B.
               output = "GeritzterKnochen" für alle geritzten Knochen.
   outputs     optional statt output: Liste der Produkte, jeder Eintrag eine Tag-Abfrage, die genau eine Ware trifft:
               outputs = { "CopperAxe", { "Hammer", "Copper" } } (ein Text = ein Tag, eine Liste = alle diese Tags).
-              Bei mehr als einem Eintrag ist outputChoice nötig. Nicht für Sammler, Plantagen und Minen und nicht
+              Mehrere Einträge: mehrere Produkte. Nicht für Sammler, Plantagen und Minen und nicht
               zusammen mit inheritProperties.
   outputRatio optional (Standard 1): Waren pro Arbeitsschritt, 0 bis 8, auch Kommazahlen. 0.5 = eine Ware jeden 2.
               Schritt, 2 = zwei Waren je Schritt, 1.5 = abwechselnd 1 und 2. Der Rest einer Ware wird mitgezählt, bis
               eine ganze erreicht ist. Die Eingänge werden in jedem Schritt verbraucht. 
               Die Werkzeuge in Gebrauch zählen ihr outputRatio aus tools.lua dazu (0.5 + Werkzeug 1 = 1.5), höchstens
               8 insgesamt. Ist die Summe 0, arbeitet die Werkstatt nicht.
-              Mehrere Waren je Schritt: Mit outputChoice wird jede einzeln gewählt, Minen und Sammler nehmen je Ware
+              Mehrere Waren je Schritt: Bei mehreren Produkten wird jede einzeln gewählt, Minen und Sammler nehmen je Ware
               eine Einheit ihres Erzes bzw. Objekts (ist nichts mehr da, gibt es weniger Waren), Nebenprodukte
               (byproducts.lua) gibt es je Ware. Der Arbeiter legt alle zusammen an die Fahne, mehr als 8 nacheinander.
               Eingebaute Gebäude: rttr:SetBuildingOutputRatio in tools.lua.
-  outputChoice optional: wie die Werkstatt ihr Produkt wählt, wenn es mehrere gibt:
-              "knowledge": nach dem Regler "Wissen" im Fenster "Verteilung" (z.B. geritzte Knochen für LWP, IWP und
-                MWP). Jedes Produkt braucht knowledge in wares.lua (genau eine Art).
-              "tools": wie die Schlosserei, nach dem Werkzeug-Regler und den Werkzeugbestellungen des Spielers. Jedes
-                Produkt muss ein Werkzeugtyp sein: der Bezeichner genau eines eingebauten Werkzeugs als Tag, z.B.
-                kind = "Axe" in wares.lua. Jeder Typ höchstens einmal. Bestellungen teilt sie sich mit der Schlosserei:
-                Wer ein bestelltes Werkzeug zuerst anfängt, erfüllt die Bestellung. Stehen alle ihre Werkzeuge auf 0,
-                gilt die Einstellung "Schlosserei bei 0" wie bei der Schlosserei.
-              sonst der Bezeichner eines eigenen Reglers aus distribution.lua (rttr:AddRegulator): nach dessen Werten.
+  outputChoice optional, nur "knowledge": Die Produkte (mehrere) werden nach dem Regler "Wissen" im Fenster
+              "Verteilung" gewählt (z.B. geritzte Knochen für LWP, IWP und MWP). Jedes Produkt braucht knowledge in
+              wares.lua (genau eine Art).
+              Ohne outputChoice: Hat die Werkstatt mehrere Produkte, steuert sie die Gesamtverteilung (Fenster
+              "Gesamtverteilung"): Bei jedem Arbeitsschritt wählt sie gewichtet nach den Werten ihrer Produkte, Bestelltes
+              zuerst.
   inheritProperties  optional (Standard false): Das Produkt hat dieselben Eigenschaften wie die verbrauchte Ware
               (z.B. Nadelholz -> Nadelholzbretter). Zu jeder möglichen Eingangsware muss es genau ein passendes Produkt
               geben.
@@ -406,7 +403,6 @@ rttr:AddWorkshop{
     inputs = { "Wood", "Rope" }, 
     outputs = { "Rollingpin", "RodAndLine", "Bow", "WoodenSpindle", "WoodenBucket"}, -- WoodenHammer erst wenn Warengesamtzahl erhöht wurde
     outputRatio = 0.6,
-    outputChoice = "WoodenTools",
     tools = { baseSpeed = 25, tools = { "Saw" } },
     workTime = 35,
     knowledge = { IWP = 2 },
@@ -421,7 +417,6 @@ rttr:AddWorkshop{
     worker = { title = "Metalworker", tool = "none", look = "Metalworker" },
     inputs = { "Obsidian", "Wood" }, -- "adhesive" ergänzen wenn diese endlich collectable auf der Map sind
     outputs = { "ObsidianAxe", "ObsidianSaw", "ObsidianScythe", "ObsidianCleaver", "ObsidianSword", "ObsidianSpear", "ObsidianArrow"}, -- eigentlich ObsidianSword auch für Rekrutierung nutzbar sein, aber das funktioniert noch nicht. 
-    outputChoice = "ObsidianTools",
     outputRatio = 0.8,
     tools = { baseSpeed = 25 },
     workTime = 30,
@@ -438,7 +433,6 @@ rttr:AddWorkshop{
     inputs = { "CopperOre", "Coal" },
     outputs = { "CopperTongs", "CopperHammer", "CopperAxe", "CopperSaw", "CopperPickAxe" },
     outputRatio = 0.5,
-    outputChoice = "tools",
     tools = { baseSpeed = 25, tools = { "Tongs" } },
     workTime = 30,
     knowledge = { IWP = 2 },
@@ -538,7 +532,6 @@ rttr:AddWorkshop{
     worker = { title = "Armorer", tool = "none", look = "Armorer" },
     inputs = { "BronzeIngot", "Coal"},
     outputs = { "BronzeSword", "BronzeShield" }, --  BronzeSword und BronzeShield kann noch nicht Verwendet werden. 
-    outputChoice = "Equipment",
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Hammer" } },
     workTime = 50,
@@ -554,7 +547,6 @@ rttr:AddWorkshop{
     worker = { title = "Armorer", tool = "none", look = "Armorer" },
     inputs = { "BronzeIngot", "Coal"},
     outputs = { "BronzeTongs", "BronzeAxe", "BronzeSaw",  "BronzeHammer", "BronzePickAxe", "BronzeScythe", "BronzeShovel", "BronzeCrucible", "BronzeCleaver" }, 
-    outputChoice = "tools",
     outputRatio = 0.8,
     tools = { baseSpeed = 25, tools = { "Tongs" } },
     workTime = 45,

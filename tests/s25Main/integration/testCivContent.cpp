@@ -361,10 +361,11 @@ BOOST_AUTO_TEST_CASE(InvalidDefinitions)
         expectError(desc);
     }
     {
-        // Ambiguous output without passing on properties
+        // Output matching several wares without passing on properties: several products (distribution of all wares)
         WorldDescription desc = makeInheritDesc();
         desc.workshops.front().inheritProperties = false;
-        expectError(desc);
+        const civ::Content content(desc);
+        BOOST_TEST((content.GetBuilding(BuildingType::Custom0)->productChoice == civ::ProductChoice::Distribution));
     }
     {
         // No product with matching properties
@@ -717,7 +718,7 @@ BOOST_AUTO_TEST_CASE(OutputChoiceByKnowledge)
         BOOST_CHECK_THROW(civ::Content{desc}, GameDataError);
     }
     {
-        // Without outputChoice the output must be unique
+        // Knowledge media need outputChoice = "knowledge" (they are not part of the distribution of all wares)
         WorldDescription desc = makeKnowledgeChoiceDesc();
         desc.workshops.front().outputChoice.clear();
         BOOST_CHECK_THROW(civ::Content{desc}, GameDataError);
@@ -774,13 +775,10 @@ rttr:AddByproduct{ building = "Slaughterhouse", ware = "Bones" }
         BOOST_TEST(!load(wares + invalid, desc));
     }
     {
-        // outputChoice: "knowledge", "tools" or a regulator
+        // outputChoice: only "knowledge"
         WorldDescription desc;
         std::string script = wares;
-        script.replace(script.find("outputChoice = \"knowledge\""), 26, "outputChoice = \"random\"");
-        BOOST_TEST_REQUIRE(load(script, desc));
-        BOOST_CHECK_THROW(civ::TechTree{desc}, GameDataError);
-        script.replace(script.find("outputChoice = \"random\""), 23, "outputChoice = \"no regulator\"");
+        script.replace(script.find("outputChoice = \"knowledge\""), 26, "outputChoice = \"tools\"");
         BOOST_TEST(!load(script, desc));
     }
 }

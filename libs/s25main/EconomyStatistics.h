@@ -126,6 +126,8 @@ public:
 
     /// Game minutes covered by the last n minutes at the given GF (the current minute counts as the part passed)
     double GetCoveredMinutes(unsigned minutes, unsigned gf) const;
+    /// The same in GFs (whole numbers for the rules of the game)
+    unsigned GetCoveredGFs(unsigned minutes, unsigned gf) const;
     /// Counts of a minute of the history: 0 = current minute, 1 = the one before ... Nullptr if it is not stored
     const EconomyMinute* GetMinute(unsigned minutesAgo, unsigned gf) const;
 

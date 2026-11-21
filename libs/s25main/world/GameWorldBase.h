@@ -52,6 +52,10 @@ constexpr Direction toDirection(const RoadDir roadDir) noexcept
 }
 
 /// Grundlegende Klasse, die die Gamewelt darstellt, enth�lt nur deren Daten
+namespace civ {
+struct DistributionData;
+}
+
 class GameWorldBase : public World
 {
     std::unique_ptr<RoadPathFinder> roadPathFinder;
@@ -78,6 +82,9 @@ protected:
 
 public:
     GameWorldBase(std::vector<GamePlayer> players, const GlobalGameSettings& gameSettings, EventManager& em);
+    /// Civilization mode: production graph of the game data and the products of the building types, for the
+    /// distribution of all wares (built once, the game data does not change during the game)
+    const civ::DistributionData& GetDistributionData() const;
     ~GameWorldBase() override;
 
     // Grundlegende Initialisierungen
@@ -251,4 +258,7 @@ private:
     template<typename T_IsHarborOk>
     HarborId GetHarborInDir(MapPoint pt, HarborId originHarborId, const ShipDirection& dir,
                             T_IsHarborOk isHarborOk) const;
+
+private:
+    mutable std::unique_ptr<civ::DistributionData> distributionData_;
 };

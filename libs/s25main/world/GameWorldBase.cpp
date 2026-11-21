@@ -15,6 +15,7 @@
 #include "buildings/nobMilitary.h"
 #include "civ/Climate.h"
 #include "civ/TechTree.h"
+#include "civ/WareDistribution.h"
 #include "figures/nofPassiveSoldier.h"
 #include "helpers/EnumRange.h"
 #include "helpers/IdRange.h"

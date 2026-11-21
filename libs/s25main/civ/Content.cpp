@@ -206,26 +206,6 @@ Content::Content(const WorldDescription& desc) : Content()
         ores_.push_back(ore);
     }
 
-    // Own regulators of the distribution window (used by workshops with outputChoice = <name>)
-    for(const RegulatorDesc& regulatorDesc : desc.regulators)
-    {
-        const std::string context = "Regulator '" + regulatorDesc.name + "'";
-        Regulator regulator;
-        regulator.name = regulatorDesc.name;
-        regulator.title = regulatorDesc.title;
-        for(const RegulatorDesc::Entry& entryDesc : regulatorDesc.entries)
-        {
-            if(FindWares(entryDesc.tags).empty())
-                throw GameDataError(context + ": entry " + joinTags(entryDesc.tags) + " matches no ware");
-            Regulator::Entry entry;
-            entry.tags = entryDesc.tags;
-            entry.title = entryDesc.title;
-            entry.defaultValue = static_cast<uint8_t>(entryDesc.value);
-            regulator.entries.push_back(std::move(entry));
-        }
-        regulators_.push_back(std::move(regulator));
-    }
-
     // Workshops
     if(desc.workshops.size() > NUM_CUSTOM_BUILDINGS)
         throw GameDataError("At most " + std::to_string(NUM_CUSTOM_BUILDINGS) + " workshops can be defined");
@@ -455,60 +435,25 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.productChoice = ProductChoice::Knowledge;
             bld.productChoices = outputMatches;
             bld.product = outputMatches.front();
-        } else if(wsDesc.outputChoice == "tools")
-        {
-            // One product per tool type, chosen like the metalworks does (tool regulator and tool orders)
-            for(const GoodType candidate : outputMatches)
-            {
-                const auto tool = GetToolTypeOf(candidate);
-                if(!tool)
-                {
-                    throw GameDataError(context + ": with outputChoice = \"tools\" every ware of the " + outputText
-                                        + " must be a tool type: '" + getIdentifierOf(candidate)
-                                        + "' needs the identifier of exactly one built-in tool as tag (e.g. kind = "
-                                          "\"Axe\")");
-                }
-                if(helpers::contains(bld.productChoiceTools, *tool))
-                {
-                    throw GameDataError(context
-                                        + ": with outputChoice = \"tools\" every tool type may only be made "
-                                          "once, but there are several of type '"
-                                        + getIdentifierOf(TOOL_TO_GOOD[*tool]) + "'");
-                }
-                bld.productChoiceTools.push_back(*tool);
-            }
-            bld.productChoice = ProductChoice::Tools;
-            bld.productChoices = outputMatches;
-            bld.product = outputMatches.front();
         } else if(!wsDesc.outputChoice.empty())
         {
-            // Own regulator: every product belongs to exactly one of its entries
-            const auto itRegulator = helpers::find_if(
-              regulators_, [&](const Regulator& regulator) { return regulator.name == wsDesc.outputChoice; });
-            if(itRegulator == regulators_.end())
-            {
-                throw GameDataError(context + ": outputChoice '" + wsDesc.outputChoice
-                                    + "' is neither \"knowledge\" nor \"tools\" nor a regulator (define it with "
-                                      "rttr:AddRegulator in distribution.lua)");
-            }
+            throw GameDataError(context + ": outputChoice '" + wsDesc.outputChoice
+                                + "' does not exist. Only \"knowledge\" is left: a workshop with several products is "
+                                  "steered by the distribution of all wares (Gesamtverteilung)");
+        } else if(hasOutput && outputMatches.size() > 1u)
+        {
+            if(bld.IsCollector() || bld.IsPlanter() || bld.IsMine())
+                throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
             for(const GoodType candidate : outputMatches)
             {
-                std::vector<unsigned> entries;
-                for(unsigned e = 0; e < itRegulator->entries.size(); ++e)
+                const KnowledgePoints knowledge = GetKnowledgeOf(candidate);
+                if(std::any_of(knowledge.begin(), knowledge.end(), [](const auto points) { return points != 0; }))
                 {
-                    if(Matches(candidate, itRegulator->entries[e].tags))
-                        entries.push_back(e);
+                    throw GameDataError(context + ": the product '" + getIdentifierOf(candidate)
+                                        + "' is a knowledge medium: several of them need outputChoice = \"knowledge\"");
                 }
-                if(entries.size() != 1u)
-                {
-                    throw GameDataError(context + ": the product '" + getIdentifierOf(candidate) + "' matches "
-                                        + std::to_string(entries.size()) + " entries of the regulator '"
-                                        + itRegulator->name + "' (expected exactly 1)");
-                }
-                bld.productChoiceEntries.push_back(entries.front());
             }
-            bld.productChoice = ProductChoice::Regulator;
-            bld.regulator = static_cast<unsigned>(itRegulator - regulators_.begin());
+            bld.productChoice = ProductChoice::Distribution;
             bld.productChoices = outputMatches;
             bld.product = outputMatches.front();
         } else if(hasOutput)

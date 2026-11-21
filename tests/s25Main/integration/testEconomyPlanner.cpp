@@ -900,32 +900,6 @@ BOOST_FIXTURE_TEST_CASE(CountsTrees, PlannerFixture)
     BOOST_TEST(civai::EconomyPlanner::CountTrees(world.GetPlayer(curPlayer), center, 2) == before + 4u);
 }
 
-BOOST_FIXTURE_TEST_CASE(OrdersOneToolOfEachKind, PlannerFixture)
-{
-    // The stock of each kind (TOOLS_IN_STOCK) is ordered beyond what is asked for (nothing here)
-    constexpr unsigned inStock = civai::EconomyPlanner::TOOLS_IN_STOCK;
-    ggs.setSelection(AddonId::TOOL_ORDERING, 1);
-    startGame(makeDesc());
-    hq().AddToInventory(GoodCounts::make(GoodType::Hammer, inStock + 1u), true);
-    startAI();
-    step();
-    const GamePlayer& player = world.GetPlayer(curPlayer);
-    for(const auto tool : helpers::enumRange<Tool>())
-    {
-        BOOST_TEST_INFO(static_cast<unsigned>(tool));
-        if(tool == Tool::Hammer)
-            BOOST_TEST(player.GetToolsOrdered(tool) == 0u);
-        else
-            BOOST_TEST(player.GetToolsOrdered(tool) == inStock);
-        // The regulator of the distribution stays at 0
-        BOOST_TEST(player.GetToolPriority(tool) == 0u);
-    }
-    // Ordered already: not again
-    step();
-    for(const auto tool : helpers::enumRange<Tool>())
-        BOOST_TEST(player.GetToolsOrdered(tool) <= inStock);
-}
-
 BOOST_FIXTURE_TEST_CASE(NeededOrderReplacesTheExpandingOne, PlannerFixture)
 {
     // The pit is ordered as harvester of the deposits (expanding) and then for the kiln (needed, clay is short): the
@@ -956,7 +930,8 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderReplacesTheExpandingOne, PlannerFixture)
 }
 
 namespace {
-/// The research asks for `amount` clay: amount / 5 per minute are missing (to be there within one balance length).
+/// The research asks for `amount` clay: amount / BALANCE_MINUTES per minute are missing (to be there within one balance
+/// length).
 /// `loam` in stock. Returns the number of kilns ordered for it
 unsigned numKilnsForClay(PlannerFixture& fixture, const unsigned amount, const unsigned loam)
 {
@@ -981,13 +956,13 @@ unsigned numKilnsForClay(PlannerFixture& fixture, const unsigned amount, const u
 BOOST_FIXTURE_TEST_CASE(OneProducerForASmallDeficit, PlannerFixture)
 {
     // 1 clay per minute: one kiln makes more than that by its work time (loam in surplus: its input suffices)
-    BOOST_TEST(numKilnsForClay(*this, 5, 100) == 1u);
+    BOOST_TEST(numKilnsForClay(*this, civai::EconomyPlanner::BALANCE_MINUTES, 100) == 1u);
 }
 
 BOOST_FIXTURE_TEST_CASE(ProducersByTheDeficit, PlannerFixture)
 {
     // 10 clay per minute: more than one kiln makes by its work time
-    BOOST_TEST(numKilnsForClay(*this, 50, 100) > 1u);
+    BOOST_TEST(numKilnsForClay(*this, 10 * civai::EconomyPlanner::BALANCE_MINUTES, 100) > 1u);
 }
 
 BOOST_FIXTURE_TEST_CASE(OrdersOfATypeAreLimited, PlannerFixture)
@@ -1091,9 +1066,10 @@ BOOST_FIXTURE_TEST_CASE(SoldiersAreAWare, PlannerFixture)
     BOOST_TEST(findOrder(BuildingType::Armory) == -1);
 }
 
-BOOST_FIXTURE_TEST_CASE(OneToolMakerWhenThereIsNone, PlannerFixture)
+BOOST_FIXTURE_TEST_CASE(ToolMakersByTheirCapacity, PlannerFixture)
 {
-    // Tools are ordered (one of each kind) and nobody makes them: one tool maker, not one per tool
+    // Tools are missing (the stock of each kind) and nobody makes them: tool makers by their capacity, counted once
+    // over all their products (Regel A), not one per tool
     ggs.setSelection(AddonId::TOOL_ORDERING, 1);
     startGame(makeDesc());
     startAI();
@@ -1105,10 +1081,11 @@ BOOST_FIXTURE_TEST_CASE(OneToolMakerWhenThereIsNone, PlannerFixture)
         if(order->building != BuildingType::Metalworks)
             continue;
         ++numMakers;
-        BOOST_TEST((order->cause == civai::OrderCause::Tools));
+        BOOST_TEST((order->cause == civai::OrderCause::Shortage));
         BOOST_TEST((order->kind == civai::OrderKind::Needed));
     }
-    BOOST_TEST(numMakers == 1u);
+    BOOST_TEST(numMakers >= 1u);
+    BOOST_TEST(numMakers <= civai::EconomyPlanner::MAX_ORDERS_PER_TYPE);
 }
 
 BOOST_FIXTURE_TEST_CASE(GroupsOfWaresAConsumerTakes, PlannerFixture)
@@ -1362,10 +1339,8 @@ BOOST_FIXTURE_TEST_CASE(ToolsOfComingBuildingsAreAskedFor, PlannerFixture)
     step();
     const civai::WareGroup* axes = planner()->FindGroup({GoodType::Axe});
     BOOST_TEST_REQUIRE(axes);
-    BOOST_TEST(axes->tools);
     BOOST_TEST(axes->status.planned >= 1u + civai::EconomyPlanner::TOOLS_IN_STOCK);
     BOOST_TEST((axes->status.state == civai::SupplyState::Shortage));
-    BOOST_TEST(world.GetPlayer(curPlayer).GetToolsOrdered(Tool::Axe) >= 2u);
 }
 
 BOOST_FIXTURE_TEST_CASE(ToolsOfWaitingOrdersAreAskedFor, PlannerFixture)
@@ -1387,7 +1362,6 @@ BOOST_FIXTURE_TEST_CASE(ToolsOfWaitingOrdersAreAskedFor, PlannerFixture)
     BOOST_TEST(axes->status.planned == 1u + civai::EconomyPlanner::TOOLS_IN_STOCK);
     BOOST_TEST(axes->status.plannedByOrders == 1.);
     BOOST_TEST((axes->status.state == civai::SupplyState::Shortage));
-    BOOST_TEST(world.GetPlayer(curPlayer).GetToolsOrdered(Tool::Axe) >= 2u);
 }
 
 namespace {

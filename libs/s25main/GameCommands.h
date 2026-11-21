@@ -5,6 +5,7 @@
 #pragma once
 
 #include "GameCommand.h"
+#include "civ/WareDistribution.h"
 #include "helpers/serializeContainers.h"
 #include "helpers/serializeEnums.h"
 #include "helpers/serializePoint.h"
@@ -662,19 +663,25 @@ public:
     }
 };
 
-/// Civilization mode: Set an own regulator (rttr:AddRegulator), value 0..10 per entry
-class SetRegulatorValues : public GameCommand
+/// Civilization mode: settings of the distribution of all wares (Gesamtverteilung): values from the forecast or the
+/// number of wares, and the settings of the wares given (value and stop automatic or by the player)
+class SetWareDistribution : public GameCommand
 {
     GC_FRIEND_DECL;
-    const uint8_t regulator;
-    const std::vector<uint8_t> values;
+
+public:
+    using Settings = std::vector<std::pair<GoodType, civ::WareSetting>>;
+
+private:
+    const bool usesForecast;
+    const Settings settings;
 
 protected:
-    SetRegulatorValues(uint8_t regulator, std::vector<uint8_t> values)
-        : GameCommand(GCType::SetRegulatorValues), regulator(regulator), values(std::move(values))
+    SetWareDistribution(bool usesForecast, Settings settings)
+        : GameCommand(GCType::SetWareDistribution), usesForecast(usesForecast), settings(std::move(settings))
     {}
-    SetRegulatorValues(Serializer& ser)
-        : GameCommand(GCType::SetRegulatorValues), regulator(ser.PopUnsignedChar()), values(popValues(ser))
+    SetWareDistribution(Serializer& ser)
+        : GameCommand(GCType::SetWareDistribution), usesForecast(ser.PopBool()), settings(popSettings(ser))
     {}
 
 public:
@@ -682,19 +689,55 @@ public:
     void Serialize(Serializer& ser) const override
     {
         GameCommand::Serialize(ser);
-        ser.PushUnsignedChar(regulator);
-        ser.PushUnsignedChar(static_cast<uint8_t>(values.size()));
-        for(const uint8_t value : values)
-            ser.PushUnsignedChar(value);
+        ser.PushBool(usesForecast);
+        ser.PushUnsignedShort(static_cast<uint16_t>(settings.size()));
+        for(const auto& [good, setting] : settings)
+        {
+            helpers::pushEnum<uint8_t>(ser, good);
+            ser.PushBool(setting.autoValue);
+            ser.PushUnsignedShort(setting.manualValue);
+            ser.PushBool(setting.autoPause);
+            ser.PushBool(setting.paused);
+        }
     }
 
 private:
-    static std::vector<uint8_t> popValues(Serializer& ser)
+    static Settings popSettings(Serializer& ser)
     {
-        std::vector<uint8_t> result(ser.PopUnsignedChar());
-        for(uint8_t& value : result)
-            value = ser.PopUnsignedChar();
+        Settings result(ser.PopUnsignedShort());
+        for(auto& [good, setting] : result)
+        {
+            good = helpers::popEnum<GoodType>(ser);
+            setting.autoValue = ser.PopBool();
+            setting.manualValue = ser.PopUnsignedShort();
+            setting.autoPause = ser.PopBool();
+            setting.paused = ser.PopBool();
+        }
         return result;
+    }
+};
+
+/// Civilization mode: change the orders of a ware (distribution of all wares)
+class ChangeWareOrders : public GameCommand
+{
+    GC_FRIEND_DECL;
+    const GoodType good;
+    const int16_t change;
+
+protected:
+    ChangeWareOrders(GoodType good, int16_t change) : GameCommand(GCType::ChangeWareOrders), good(good), change(change)
+    {}
+    ChangeWareOrders(Serializer& ser)
+        : GameCommand(GCType::ChangeWareOrders), good(helpers::popEnum<GoodType>(ser)), change(ser.PopSignedShort())
+    {}
+
+public:
+    void Execute(GameWorld& world, uint8_t playerId) override;
+    void Serialize(Serializer& ser) const override
+    {
+        GameCommand::Serialize(ser);
+        helpers::pushEnum<uint8_t>(ser, good);
+        ser.PushSignedShort(change);
     }
 };
 

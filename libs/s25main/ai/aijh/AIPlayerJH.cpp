@@ -2982,18 +2982,6 @@ void AIPlayerJH::AdjustSettings()
     const Inventory& inventory = aii.GetInventory();
     const bool civMode = civ::isEnabled(gwb);
     const civ::Content& content = civ::getActiveContent();
-    // Civilization mode: Workshops making tools (outputChoice = "tools") also use the tool regulator
-    bool hasToolWorkshop = false;
-    if(civMode)
-    {
-        for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
-        {
-            const BuildingType bld = getCustomBuilding(i);
-            if(content.GetBuilding(bld)->productChoice == civ::ProductChoice::Tools
-               && bldPlanner->GetNumBuildings(bld) > 0u)
-                hasToolWorkshop = true;
-        }
-    }
     // Tools in stock of the type of the given built-in tool. Civilization mode: all wares of that type (e.g. copper
     // axes, too)
     const auto toolStock = [&](const GoodType good) {
@@ -3008,9 +2996,8 @@ void AIPlayerJH::AdjustSettings()
         }
         return result;
     };
-    // update tool creation settings
-    // With the economy planner tools are only ordered (EconomyPlanner::OrderTools)
-    if((bldPlanner->GetNumBuildings(BuildingType::Metalworks) > 0u || hasToolWorkshop) && !economyPlanner_)
+    // update tool creation settings. Civilization mode: the distribution of all wares steers the tool makers
+    if(bldPlanner->GetNumBuildings(BuildingType::Metalworks) > 0u && !civMode)
     {
         ToolSettings toolsettings{};
         const auto calcToolPriority = [&](const Tool tool) {

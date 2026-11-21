@@ -18,6 +18,7 @@
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
+#include "civ/WareDistribution.h"
 #include "factories/AIFactory.h"
 #include "factories/BuildingFactory.h"
 #include "files.h"
@@ -39,8 +40,7 @@
 
 namespace bnw = boost::nowide;
 
-// Workshops with several products (outputs) chosen like the metalworks (outputChoice = "tools") or by an own regulator
-// (rttr:AddRegulator in distribution.lua)
+// Workshops with several products are steered by the distribution of all wares (Gesamtverteilung, DESIGN.md)
 BOOST_AUTO_TEST_SUITE(CivOutputChoiceSuite)
 
 namespace {
@@ -67,8 +67,7 @@ WareDesc makeWare(const std::string& name, const std::string& kind, const std::s
     return desc;
 }
 
-WorkshopDesc makeWorkshop(const std::string& name, const std::string& input, std::vector<TagQuery> outputs,
-                          const std::string& outputChoice)
+WorkshopDesc makeWorkshop(const std::string& name, const std::string& input, std::vector<TagQuery> outputs)
 {
     WorkshopDesc desc;
     desc.name = name;
@@ -81,13 +80,10 @@ WorkshopDesc makeWorkshop(const std::string& name, const std::string& input, std
     desc.worker.look = "Metalworker";
     desc.inputs = {{input}};
     desc.outputs = std::move(outputs);
-    desc.outputChoice = outputChoice;
     desc.workTime = 2;
     return desc;
 }
 
-/// Copper axes and saws (wares 0 and 1) made from coal by the copperworks (workshop 0, outputChoice = "tools"),
-/// jugs and pots (wares 2 and 3) made from stones by the pottery (workshop 1, regulator "Pottery": jugs 10, pots 0)
 WorldDescription makeDesc()
 {
     WorldDescription desc;
@@ -95,13 +91,10 @@ WorldDescription makeDesc()
     desc.wares.push_back(makeWare("CopperSaw", "Saw", "Saw"));
     desc.wares.push_back(makeWare("Jug", "Jug", "Water"));
     desc.wares.push_back(makeWare("Pot", "Pot", "Water"));
-    desc.workshops.push_back(makeWorkshop("Copperworks", "Coal", {{"CopperAxe"}, {"CopperSaw"}}, "tools"));
-    desc.workshops.push_back(makeWorkshop("Pottery", "Stones", {{"Jug"}, {"Pot"}}, "Pottery"));
-    RegulatorDesc regulator;
-    regulator.name = "Pottery";
-    regulator.title = "PotteryTitle";
-    regulator.entries = {{{"Jug"}, "Jugs", 10}, {{"Pot"}, "Pots", 0}};
-    desc.regulators.push_back(regulator);
+    desc.wares.push_back(makeWare("Brick", "Brick", "Stones"));
+    desc.workshops.push_back(makeWorkshop("Copperworks", "Coal", {{"CopperAxe"}, {"CopperSaw"}}));
+    desc.workshops.push_back(makeWorkshop("Pottery", "Stones", {{"Jug"}, {"Pot"}}));
+    desc.workshops.push_back(makeWorkshop("Kiln", "Stones", {{"Brick"}}));
     return desc;
 }
 
@@ -109,116 +102,76 @@ constexpr GoodType COPPER_AXE = GoodType::Custom0;
 const GoodType COPPER_SAW = getCustomGood(1);
 const GoodType JUG = getCustomGood(2);
 const GoodType POT = getCustomGood(3);
+const GoodType BRICK = getCustomGood(4);
 constexpr BuildingType COPPERWORKS = BuildingType::Custom0;
 const BuildingType POTTERY = getCustomBuilding(1);
+const BuildingType KILN = getCustomBuilding(2);
 
 struct OutputChoiceFixture : public WorldWithGCExecution1P
 {
     OutputChoiceFixture()
     {
         ggs.setSelection(AddonId::CIVILIZATION, 1);
-        ggs.setSelection(AddonId::TOOL_ORDERING, 1);
-        ggs.setSelection(AddonId::METALWORKSBEHAVIORONZERO, 1);
         world.SetTechTree(std::make_unique<civ::TechTree>(makeDesc()));
         civ::startGame(world);
-        // No tool is wanted
-        std::fill(toolSettings.begin(), toolSettings.end(), 0);
-        std::fill(noOrders.begin(), noOrders.end(), 0);
-        this->ChangeTools(toolSettings, noOrders.data());
+        // Values from the number of wares (stock + on the way - open): the forecast counts what a new building would
+        // make by its work time, the tests check the choice
+        this->SetWareDistribution(false, {});
     }
-
-    ToolSettings toolSettings;
-    helpers::EnumArray<int8_t, Tool> noOrders;
-
     nobBaseWarehouse& hq() { return *world.GetPlayer(0).GetHQ(); }
     unsigned countInHQ(GoodType good) { return hq().GetNumRealWares(good); }
-    civ::PlayerResearch& research() { return world.GetPlayer(0).GetResearch(); }
-    const civ::Content& content() { return world.GetTechTree().GetContent(); }
-
+    const civ::WareDistribution& distribution() { return world.GetPlayer(0).GetWareDistribution(); }
     /// Place a finished building connected to the HQ
-    MapPoint placeConnectedBuilding(BuildingType bld)
+    MapPoint placeConnectedBuilding(BuildingType bld, Position offset = Position(4, 2))
     {
-        const MapPoint pos = world.MakeMapPoint(hqPos + Position(4, 2));
+        const MapPoint pos = world.MakeMapPoint(hqPos + offset);
         BuildingFactory::CreateBuilding(world, bld, pos, 0, Nation::Romans);
         BOOST_TEST_REQUIRE(world.GetSpecObj<nobUsual>(pos));
         this->BuildRoadForBlds(pos, hqPos);
         return pos;
     }
-
-    void orderTools(Tool tool, int8_t amount)
+    /// Set the value of the ware by the player (0..1000)
+    void setValue(GoodType good, uint16_t value)
     {
-        helpers::EnumArray<int8_t, Tool> orders = noOrders;
-        orders[tool] = amount;
-        this->ChangeTools(toolSettings, orders.data());
+        civ::WareSetting setting = distribution().GetSetting(good);
+        setting.autoValue = false;
+        setting.manualValue = value;
+        this->SetWareDistribution(distribution().UsesForecast(), {{good, setting}});
+    }
+    void setPaused(GoodType good, bool autoPause, bool paused)
+    {
+        civ::WareSetting setting = distribution().GetSetting(good);
+        setting.autoPause = autoPause;
+        setting.paused = paused;
+        this->SetWareDistribution(distribution().UsesForecast(), {{good, setting}});
     }
 };
 } // namespace
 
-BOOST_AUTO_TEST_CASE(OutputsAndRegulatorsFromLua)
+BOOST_AUTO_TEST_CASE(SeveralProductsFromLua)
 {
-    // The regulator may be defined after the workshop (distribution.lua comes after workshops.lua)
     const std::string base = R"(
 rttr:AddWare{ name = "CopperAxe", kind = "Axe", look = "Axe", transport = "Axe" }
 rttr:AddWare{ name = "CopperSaw", kind = "Saw", properties = { "Copper" }, look = "Saw", transport = "Saw" }
-rttr:AddWare{ name = "Jug", kind = "Jug", look = "Water", transport = "Water" }
-rttr:AddWare{ name = "Pot", kind = "Pot", properties = { "Clay" }, look = "Water", transport = "Water" }
 rttr:AddWorkshop{ name = "Copperworks", size = "medium", cost = { Boards = 2 }, look = "Metalworks",
     worker = { tool = "Tongs", look = "Metalworker" }, inputs = { "IronOre", "Coal" },
-    outputs = { "CopperAxe", { "Saw", "Copper" }, "Bow" }, outputChoice = "tools", workTime = 120 }
-rttr:AddWorkshop{ name = "Pottery", size = "small", cost = { Boards = 2 }, look = "Bakery",
-    worker = { tool = "none", look = "Baker" }, inputs = { "Stones" }, outputs = { "Jug", "Pot" },
-    outputChoice = "Pottery", workTime = 40 }
+    outputs = { "CopperAxe", { "Saw", "Copper" }, "Bow" }, workTime = 120 }
 rttr:AddWorkshop{ name = "Single", size = "small", cost = { Boards = 2 }, look = "Bakery",
-    worker = { tool = "none", look = "Baker" }, inputs = { "Stones" }, outputs = { "Jug" }, workTime = 40 }
-rttr:AddRegulator{ name = "Pottery", title = "Töpferei", entries = {
-    { tags = "Jug", title = "Krüge", value = 8 },
-    { tags = { "Pot", "Clay" }, value = 3 },
-} }
+    worker = { tool = "none", look = "Baker" }, inputs = { "Stones" }, outputs = { "CopperAxe" }, workTime = 40 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));
-    BOOST_TEST_REQUIRE(desc.workshops.size() == 3u);
-    BOOST_TEST_REQUIRE(desc.workshops[0].outputs.size() == 3u);
-    BOOST_TEST(desc.workshops[0].output.empty());
+    BOOST_TEST_REQUIRE(desc.workshops.size() == 2u);
     BOOST_TEST((desc.workshops[0].outputs[1] == TagQuery{"Saw", "Copper"}));
-    BOOST_TEST(desc.workshops[0].outputChoice == "tools");
-    BOOST_TEST_REQUIRE(desc.regulators.size() == 1u);
-    BOOST_TEST(desc.regulators[0].title == "Töpferei");
+    BOOST_TEST(desc.workshops[0].outputChoice.empty());
 
     const civ::Content content(desc);
-    // Tool types: built-in tools and wares with the identifier of a built-in tool as tag
-    BOOST_TEST((content.GetToolTypeOf(GoodType::Saw) == Tool::Saw));
     BOOST_TEST((content.GetToolTypeOf(COPPER_AXE) == Tool::Axe));
-    BOOST_TEST((content.GetToolTypeOf(COPPER_SAW) == Tool::Saw));
-    BOOST_TEST(!content.GetToolTypeOf(JUG));
-    BOOST_TEST(!content.GetToolTypeOf(GoodType::Boards));
-
     const civ::CustomBuilding& copperworks = *content.GetBuilding(COPPERWORKS);
-    BOOST_TEST((copperworks.productChoice == civ::ProductChoice::Tools));
+    BOOST_TEST((copperworks.productChoice == civ::ProductChoice::Distribution));
     BOOST_TEST((copperworks.productChoices == std::vector<GoodType>{COPPER_AXE, COPPER_SAW, GoodType::Bow}));
-    BOOST_TEST((copperworks.productChoiceTools == std::vector<Tool>{Tool::Axe, Tool::Saw, Tool::Bow}));
-    const auto* producedWare = boost::variant2::get_if<GoodType>(&copperworks.workDesc.producedWare);
-    BOOST_TEST_REQUIRE(producedWare);
-    BOOST_TEST((*producedWare == COPPER_AXE));
-
-    BOOST_TEST_REQUIRE(content.GetRegulators().size() == 1u);
-    const civ::Regulator& regulator = content.GetRegulators()[0];
-    BOOST_TEST(regulator.name == "Pottery");
-    BOOST_TEST_REQUIRE(regulator.entries.size() == 2u);
-    BOOST_TEST(regulator.entries[0].title == "Krüge");
-    BOOST_TEST(regulator.entries[0].defaultValue == 8u);
-    // Without a title the first tag is shown
-    BOOST_TEST(regulator.entries[1].title == "Pot");
-    BOOST_TEST(regulator.entries[1].defaultValue == 3u);
-    const civ::CustomBuilding& pottery = *content.GetBuilding(POTTERY);
-    BOOST_TEST((pottery.productChoice == civ::ProductChoice::Regulator));
-    BOOST_TEST(pottery.regulator == 0u);
-    BOOST_TEST((pottery.productChoices == std::vector<GoodType>{JUG, POT}));
-    BOOST_TEST((pottery.productChoiceEntries == std::vector<unsigned>{0, 1}));
-    // A single entry needs no choice
-    const civ::CustomBuilding& single = *content.GetBuilding(getCustomBuilding(2));
+    const civ::CustomBuilding& single = *content.GetBuilding(getCustomBuilding(1));
     BOOST_TEST((single.productChoice == civ::ProductChoice::None));
-    BOOST_TEST((single.product == JUG));
 
     const auto replaced = [&base](const std::string& from, const std::string& to) {
         std::string result = base;
@@ -226,72 +179,25 @@ rttr:AddRegulator{ name = "Pottery", title = "Töpferei", entries = {
         BOOST_TEST_REQUIRE(pos != std::string::npos);
         return result.replace(pos, from.size(), to);
     };
-    // Invalid lua definitions
-    std::string nineEntries = "rttr:AddRegulator{ name = \"Many\", entries = {";
-    for(unsigned i = 0; i < 9; ++i)
-        nineEntries += " { tags = \"Jug\" },";
-    nineEntries += " } }";
+    // Only "knowledge" is left as outputChoice, own regulators are gone
     for(const std::string& invalid :
-        {replaced("outputs = { \"Jug\", \"Pot\" }", "output = \"Jug\", outputs = { \"Jug\", \"Pot\" }"),
-         replaced("outputs = { \"Jug\", \"Pot\" }", "outputs = { }"), replaced("outputChoice = \"Pottery\", ", ""),
-         replaced("value = 8", "value = 11"), replaced("name = \"Pottery\", title", "name = \"tools\", title"),
-         replaced("value = 8 }", "value = 8, typo = 1 }"), base + nineEntries,
-         base + "rttr:AddRegulator{ name = \"Pottery\", entries = { { tags = \"Jug\" } } }",
-         base + "rttr:AddRegulator{ name = \"Empty\", entries = { } }"})
+        {replaced("\"Bow\" }, workTime = 120", "\"Bow\" }, outputChoice = \"tools\", workTime = 120"),
+         replaced("\"Bow\" }, workTime = 120", "\"Bow\" }, outputChoice = \"Pottery\", workTime = 120"),
+         base + "rttr:AddRegulator{ name = \"Pottery\", entries = { { tags = \"Jug\" } } }"})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(invalid);
         BOOST_TEST(!loadLua(invalid, invalidDesc));
     }
-    // Invalid content
-    for(const std::string& invalid : {// An entry of outputs matches 2 wares (Saw and CopperSaw)
-                                      replaced("{ \"Saw\", \"Copper\" }", "\"Saw\""),
-                                      // No tool type
-                                      replaced("\"Bow\" }, outputChoice", "\"Jug\" }, outputChoice"),
-                                      // Tool type twice (CopperAxe and Axe)
-                                      replaced("\"Bow\" }, outputChoice", "\"Axe\" }, outputChoice"),
-                                      // Ware twice
-                                      replaced("\"Bow\" }, outputChoice", "\"CopperAxe\" }, outputChoice"),
-                                      // Unknown regulator
-                                      replaced("outputChoice = \"Pottery\"", "outputChoice = \"Potter\""),
-                                      // Pot matches no entry
-                                      replaced("{ \"Pot\", \"Clay\" }", "{ \"Pot\", \"Glass\" }"),
-                                      // Pot matches 2 entries
-                                      replaced("tags = \"Jug\"", "tags = \"Pot\""),
-                                      // Entry matches no ware
-                                      replaced("tags = \"Jug\"", "tags = \"Vase\"")})
-    {
-        WorldDescription invalidDesc;
-        BOOST_TEST_INFO(invalid);
-        BOOST_TEST_REQUIRE(loadLua(invalid, invalidDesc));
-        BOOST_CHECK_THROW(civ::Content{invalidDesc}, GameDataError);
-    }
+    // A ware twice
+    WorldDescription twice;
+    BOOST_TEST_REQUIRE(loadLua(replaced("\"Bow\" }, workTime", "\"CopperAxe\" }, workTime"), twice));
+    BOOST_CHECK_THROW(civ::Content{twice}, GameDataError);
 }
 
 BOOST_AUTO_TEST_CASE(ShippedDistributionLuaIsValid)
 {
-    // The example in distribution.lua works when uncommented, the shipped values work with the other civ files
     const auto civFolder = RTTRCONFIG.ExpandPath(s25::folders::gamedata) / "civ";
-    bnw::ifstream in(civFolder / "distribution.lua");
-    const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    const auto start = content.find("\nrttr:", content.find("Beispiel (auskommentiert"));
-    const auto end = content.find("]]", start);
-    BOOST_TEST_REQUIRE(start != std::string::npos);
-    BOOST_TEST_REQUIRE(end != std::string::npos);
-    rttr::test::TmpFolder tmp;
-    {
-        bnw::ofstream file(tmp / "default.lua");
-        file << content.substr(start, end - start);
-    }
-    WorldDescription desc;
-    {
-        GameDataLoader loader(desc, tmp);
-        BOOST_TEST_REQUIRE(loader.Load());
-    }
-    const civ::Content exampleContent(desc);
-    BOOST_TEST_REQUIRE(exampleContent.GetRegulators().size() == 1u);
-    BOOST_TEST((exampleContent.GetBuilding(BuildingType::Custom0)->productChoice == civ::ProductChoice::Regulator));
-
     WorldDescription shipped;
     {
         GameDataLoader loader(shipped, civFolder);
@@ -303,100 +209,127 @@ BOOST_AUTO_TEST_CASE(ShippedDistributionLuaIsValid)
     BOOST_TEST(shippedContent.GetToolMaterials()[0].defaultPriority == shipped.toolMaterialPriorities.at("Iron"));
     const auto copperworks = shippedContent.FindBuilding("Copperworks");
     BOOST_TEST_REQUIRE(copperworks.has_value());
-    BOOST_TEST((shippedContent.GetBuilding(*copperworks)->productChoice == civ::ProductChoice::Tools));
+    BOOST_TEST((shippedContent.GetBuilding(*copperworks)->productChoice == civ::ProductChoice::Distribution));
 }
 
-BOOST_FIXTURE_TEST_CASE(ToolWorkshopFollowsOrdersAndRegulator, OutputChoiceFixture)
+BOOST_FIXTURE_TEST_CASE(ValuesFromTheNumbers, OutputChoiceFixture)
 {
-    hq().AddToInventory(GoodCounts::make(GoodType::Coal, 10), true);
-    const MapPoint bldPos = placeConnectedBuilding(COPPERWORKS);
-    const nobUsual& bld = *world.GetSpecObj<nobUsual>(bldPos);
-    RTTR_EXEC_TILL(2000, bld.HasWorker());
-    RTTR_EXEC_TILL(3000, bld.GetNumWares(0) > 0u);
-    // No order and all priorities 0 (with METALWORKSBEHAVIORONZERO): nothing is made
-    RTTR_SKIP_GFS(500);
-    BOOST_TEST(!bld.is_working);
-    BOOST_TEST(countInHQ(COPPER_AXE) + countInHQ(COPPER_SAW) == 0u);
+    // Number of wares: the ware with the lowest number gets the highest value, the highest number 0
+    BOOST_TEST(!distribution().UsesForecast());
+    hq().AddToInventory(GoodCounts::make(JUG, 6), true);
+    hq().AddToInventory(GoodCounts::make(POT, 2), true);
+    placeConnectedBuilding(POTTERY);
+    civ::updateDistribution(world, 0);
+    BOOST_TEST((distribution().GetState(JUG) == civ::WareDistState::Valued));
+    BOOST_TEST((distribution().GetState(POT) == civ::WareDistState::Valued));
+    BOOST_TEST(distribution().GetNumber(JUG) == 6 * civ::AMOUNT_UNIT);
+    BOOST_TEST(distribution().GetNumber(POT) == 2 * civ::AMOUNT_UNIT);
+    BOOST_TEST(distribution().GetValue(POT) == civ::DISTRIBUTION_SCALE);
+    BOOST_TEST(distribution().GetValue(JUG) == 0u);
+    // No building makes it: not valued
+    BOOST_TEST((distribution().GetState(BRICK) == civ::WareDistState::NoBuilding));
+    // More than 8 (no consumption): surplus, not valued any more. Alone in the comparison: the highest value
+    hq().AddToInventory(GoodCounts::make(JUG, 3), true);
+    civ::updateDistribution(world, 0);
+    BOOST_TEST((distribution().GetState(JUG) == civ::WareDistState::Surplus));
+    BOOST_TEST(distribution().IsUnwanted(JUG));
+    BOOST_TEST(distribution().GetValue(POT) == civ::DISTRIBUTION_SCALE);
+}
 
-    // Ordered saws are made, the order is used up and the player gets the message
+BOOST_FIXTURE_TEST_CASE(BuildingChoosesByTheValues, OutputChoiceFixture)
+{
+    // Valued only once a finished building makes them
+    placeConnectedBuilding(POTTERY);
+    setValue(JUG, 1000);
+    setValue(POT, 0);
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 4), true);
+    // Highest value 100 %, lowest 0 %
+    RTTR_EXEC_TILL(8000, countInHQ(JUG) == 4u);
+    BOOST_TEST(countInHQ(POT) == 0u);
+    setValue(JUG, 200);
+    setValue(POT, 900);
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 3), true);
+    RTTR_EXEC_TILL(8000, countInHQ(POT) == 3u);
+    BOOST_TEST(countInHQ(JUG) == 4u);
+    // All equal: equally distributed
+    setValue(JUG, 500);
+    setValue(POT, 500);
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 12), true);
+    RTTR_EXEC_TILL(20000, countInHQ(JUG) + countInHQ(POT) == 4u + 3u + 12u);
+    BOOST_TEST(countInHQ(JUG) > 4u);
+    BOOST_TEST(countInHQ(POT) > 3u);
+}
+
+BOOST_FIXTURE_TEST_CASE(OrdersFirst, OutputChoiceFixture)
+{
+    placeConnectedBuilding(POTTERY);
+    setValue(JUG, 1000);
+    setValue(POT, 0);
     PostBox& postbox = world.GetPostMgr().AddPostBox(0);
     postbox.Clear();
-    orderTools(Tool::Saw, 2);
-    BOOST_TEST(world.GetPlayer(0).GetToolsOrdered(Tool::Saw) == 2u);
-    RTTR_EXEC_TILL(3000, countInHQ(COPPER_SAW) == 2u);
-    BOOST_TEST(world.GetPlayer(0).GetToolsOrdered(Tool::Saw) == 0u);
-    BOOST_TEST(countInHQ(COPPER_AXE) == 0u);
-    BOOST_TEST(countInHQ(GoodType::Saw) == 0u);
+    this->ChangeWareOrders(POT, 2);
+    BOOST_TEST(distribution().GetOrders(POT) == 2u);
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 4), true);
+    RTTR_EXEC_TILL(8000, countInHQ(POT) == 2u);
+    BOOST_TEST(distribution().GetOrders(POT) == 0u);
     BOOST_TEST_REQUIRE(postbox.GetNumMsgs() == 1u);
     BOOST_TEST((postbox.GetMsg(0)->GetCategory() == PostCategory::Economy));
-    RTTR_SKIP_GFS(500);
-    BOOST_TEST(countInHQ(COPPER_SAW) == 2u);
-
-    // Tools it can not make are not taken from the orders
-    orderTools(Tool::Bow, 1);
-    RTTR_SKIP_GFS(500);
-    BOOST_TEST(world.GetPlayer(0).GetToolsOrdered(Tool::Bow) == 1u);
-    BOOST_TEST(countInHQ(COPPER_AXE) + countInHQ(COPPER_SAW) == 2u);
-
-    // With a priority for axes it makes axes
-    toolSettings[Tool::Axe] = 10;
-    this->ChangeTools(toolSettings, noOrders.data());
-    RTTR_EXEC_TILL(3000, countInHQ(COPPER_AXE) >= 2u);
-    BOOST_TEST(countInHQ(COPPER_SAW) == 2u);
-    BOOST_TEST(world.GetPlayer(0).GetToolsOrdered(Tool::Bow) == 1u);
+    RTTR_EXEC_TILL(8000, countInHQ(JUG) == 2u);
+    BOOST_TEST(countInHQ(POT) == 2u);
+    // Orders below 0 are ignored
+    this->ChangeWareOrders(POT, -5);
+    BOOST_TEST(distribution().GetOrders(POT) == 0u);
 }
 
-BOOST_FIXTURE_TEST_CASE(RegulatorChoosesProduct, OutputChoiceFixture)
+BOOST_FIXTURE_TEST_CASE(SurplusStopsTheBuilding, OutputChoiceFixture)
 {
-    // Default from lua: jugs 10, pots 0
-    using Values = civ::PlayerResearch::RegulatorValues;
-    BOOST_TEST(research().GetRegulatorValues(content(), 0) == (Values{10, 0}), boost::test_tools::per_element());
-    BOOST_TEST(research().GetRegulatorValues(content(), 1).empty());
-
-    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 6), true);
-    const unsigned numStones = countInHQ(GoodType::Stones);
-    placeConnectedBuilding(POTTERY);
-    RTTR_EXEC_TILL(8000, countInHQ(JUG) == numStones);
-    BOOST_TEST(countInHQ(POT) == 0u);
-
-    // Invalid commands are ignored, values above 10 are limited
-    this->SetRegulatorValues(0, {1});
-    this->SetRegulatorValues(1, {1, 1});
-    BOOST_TEST(research().GetRegulatorValues(content(), 0) == (Values{10, 0}), boost::test_tools::per_element());
-    this->SetRegulatorValues(0, {0, 50});
-    BOOST_TEST(research().GetRegulatorValues(content(), 0) == (Values{0, 10}), boost::test_tools::per_element());
-
-    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 4), true);
-    RTTR_EXEC_TILL(8000, countInHQ(POT) == 4u);
-    BOOST_TEST(countInHQ(JUG) == numStones);
-
-    // All 0: equally distributed
-    this->SetRegulatorValues(0, {0, 0});
-    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 12), true);
-    RTTR_EXEC_TILL(20000, countInHQ(JUG) + countInHQ(POT) == numStones + 4u + 12u);
-    BOOST_TEST(countInHQ(JUG) > numStones);
-    BOOST_TEST(countInHQ(POT) > 4u);
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 10), true);
+    hq().AddToInventory(GoodCounts::make(BRICK, 9), true);
+    const MapPoint pos = placeConnectedBuilding(KILN);
+    const nobUsual& kiln = *world.GetSpecObj<nobUsual>(pos);
+    RTTR_EXEC_TILL(2000, kiln.HasWorker());
+    // 9 bricks, no consumption: surplus, the kiln stops and orders no stones
+    civ::updateDistribution(world, 0);
+    BOOST_TEST((distribution().GetState(BRICK) == civ::WareDistState::Surplus));
+    BOOST_TEST(kiln.IsProductionStopped());
+    BOOST_TEST(kiln.IsPausedByDistribution());
+    BOOST_TEST(!kiln.IsProductionDisabled());
+    RTTR_SKIP_GFS(1000);
+    BOOST_TEST(countInHQ(BRICK) == 9u);
+    // An order lets it work: it starts at once, the order is processed when the step starts
+    this->ChangeWareOrders(BRICK, 1);
+    BOOST_TEST(distribution().GetOrders(BRICK) == 0u);
+    RTTR_EXEC_TILL(4000, countInHQ(BRICK) == 10u);
+    BOOST_TEST(kiln.IsProductionStopped());
+    // Stopped by the player: no surplus needed, it stays stopped
+    setPaused(BRICK, false, true);
+    BOOST_TEST((distribution().GetState(BRICK) == civ::WareDistState::Paused));
+    BOOST_TEST(kiln.IsProductionStopped());
+    // By the player, running: it works again
+    setPaused(BRICK, false, false);
+    BOOST_TEST(!kiln.IsProductionStopped());
+    RTTR_EXEC_TILL(4000, countInHQ(BRICK) == 11u);
 }
 
-BOOST_FIXTURE_TEST_CASE(RegulatorIgnoredWithoutCivMode, OutputChoiceFixture)
+BOOST_FIXTURE_TEST_CASE(NotWithoutCivMode, OutputChoiceFixture)
 {
     ggs.setSelection(AddonId::CIVILIZATION, 0);
-    this->SetRegulatorValues(0, {1, 2});
+    this->SetWareDistribution(true, {});
+    this->ChangeWareOrders(JUG, 3);
     ggs.setSelection(AddonId::CIVILIZATION, 1);
-    using Values = civ::PlayerResearch::RegulatorValues;
-    BOOST_TEST(research().GetRegulatorValues(content(), 0) == (Values{10, 0}), boost::test_tools::per_element());
+    BOOST_TEST(!distribution().UsesForecast());
+    BOOST_TEST(distribution().GetOrders(JUG) == 0u);
 }
 
-BOOST_FIXTURE_TEST_CASE(SerializeRegulatorAndChosenTool, OutputChoiceFixture)
+BOOST_FIXTURE_TEST_CASE(SerializeTheDistribution, OutputChoiceFixture)
 {
-    this->SetRegulatorValues(0, {3, 7});
-    hq().AddToInventory(GoodCounts::make(GoodType::Coal, 2), true);
-    const MapPoint bldPos = placeConnectedBuilding(COPPERWORKS);
-    RTTR_EXEC_TILL(3000, world.GetSpecObj<nobUsual>(bldPos)->GetNumWares(0) > 0u);
-    // Save while the ordered saw is being made (the order is already taken)
-    orderTools(Tool::Saw, 1);
-    RTTR_EXEC_TILL(1000, world.GetSpecObj<nobUsual>(bldPos)->is_working);
-    BOOST_TEST_REQUIRE(world.GetPlayer(0).GetToolsOrdered(Tool::Saw) == 0u);
+    setValue(POT, 700);
+    setPaused(JUG, false, true);
+    this->ChangeWareOrders(POT, 3);
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 2), true);
+    const MapPoint pos = placeConnectedBuilding(POTTERY);
+    RTTR_EXEC_TILL(3000, world.GetSpecObj<nobUsual>(pos)->is_working);
+    BOOST_TEST_REQUIRE(distribution().GetOrders(POT) == 2u);
 
     SerializedGameData sgd;
     sgd.MakeSnapshot(*game);
@@ -406,14 +339,17 @@ BOOST_FIXTURE_TEST_CASE(SerializeRegulatorAndChosenTool, OutputChoiceFixture)
     sgd.ReadSnapshot(*game, lgs);
     civ::startGame(world);
 
-    using Values = civ::PlayerResearch::RegulatorValues;
-    BOOST_TEST(research().GetRegulatorValues(content(), 0) == (Values{3, 7}), boost::test_tools::per_element());
-    RTTR_EXEC_TILL(1000, countInHQ(COPPER_SAW) == 1u);
-    BOOST_TEST(countInHQ(COPPER_AXE) == 0u);
-    // Nothing more is made
-    RTTR_SKIP_GFS(500);
-    BOOST_TEST(countInHQ(COPPER_SAW) == 1u);
-    BOOST_TEST(countInHQ(GoodType::Coal) + world.GetSpecObj<nobUsual>(bldPos)->GetNumWares(0) == 1u);
+    BOOST_TEST(!distribution().UsesForecast());
+    BOOST_TEST(!distribution().GetSetting(POT).autoValue);
+    BOOST_TEST(distribution().GetSetting(POT).manualValue == 700u);
+    BOOST_TEST(!distribution().GetSetting(JUG).autoPause);
+    BOOST_TEST(distribution().GetSetting(JUG).paused);
+    BOOST_TEST(distribution().GetOrders(POT) == 2u);
+    // The pot being made comes out
+    RTTR_EXEC_TILL(1000, countInHQ(POT) == 1u);
+    const nobUsual& pottery = *world.GetSpecObj<nobUsual>(pos);
+    BOOST_TEST(pottery.GetFinishedGF() < em.GetCurrentGF());
+    BOOST_TEST(pottery.GetWorkerSinceGF() != nobUsual::NO_GF);
 }
 
 namespace {

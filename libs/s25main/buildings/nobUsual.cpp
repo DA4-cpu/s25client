@@ -13,6 +13,7 @@
 #include "civ/Content.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
+#include "civ/WareDistribution.h"
 #include "figures/nofBuildingWorker.h"
 #include "figures/nofPigbreeder.h"
 #include "helpers/containerUtils.h"
@@ -50,6 +51,7 @@ nobUsual::nobUsual(BuildingType type, MapPoint pos, unsigned char player, Nation
     // Tür aufmachen,bis Gebäude besetzt ist
     OpenDoor();
 
+    finishedGF_ = GetEvMgr().GetCurrentGF();
     GamePlayer& owner = world->GetPlayer(player);
     // New building gets half the average productivity from all buildings of the same type
     productivity = owner.GetBuildingRegister().CalcAverageProductivity(type) / 2u;
@@ -103,6 +105,11 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
     {
         stepOutputRatio_ = sgd.PopUnsignedShort();
         outputCredit_ = sgd.PopUnsignedShort();
+    }
+    if(sgd.GetGameDataVersion() >= 30)
+    {
+        finishedGF_ = sgd.PopUnsignedInt();
+        workerSinceGF_ = sgd.PopUnsignedInt();
     }
     // The lua files may have changed (and older savegames have no tools): Buildings start without the new tools
     const std::size_t numSlots = GetToolsDesc().slots.size();
@@ -166,6 +173,8 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
     sgd.PushUnsignedShort(stepSpeed_);
     sgd.PushUnsignedShort(stepOutputRatio_);
     sgd.PushUnsignedShort(outputCredit_);
+    sgd.PushUnsignedInt(finishedGF_);
+    sgd.PushUnsignedInt(workerSinceGF_);
 }
 
 nobUsual::~nobUsual() = default;
@@ -377,7 +386,7 @@ void nobUsual::HandleEvent(const unsigned id)
     } else
     {
         // Ware bestellen (falls noch Platz ist) und nicht an Betriebe, die stillgelegt wurden!
-        if(!disableProduction)
+        if(!IsProductionStopped())
         {
             const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
             RTTR_Assert(lastOrderedWare < workDesc.waresNeeded.size());
@@ -507,6 +516,7 @@ void nobUsual::GotWorker(Job /*job*/, noFigure& worker)
 
 void nobUsual::WorkerLost()
 {
+    workerSinceGF_ = NO_GF;
     // Check if worker is or was here (e.g. hunter could currently be outside)
     if(HasWorker())
     {
@@ -606,7 +616,7 @@ void nobUsual::ConsumeWares()
 unsigned nobUsual::CalcDistributionPoints(const GoodType type)
 {
     // No production -> nothing needed
-    if(disableProduction)
+    if(IsProductionStopped())
         return 0;
 
     if(IsLibrary())
@@ -801,7 +811,7 @@ bool nobUsual::NeedsToolOrder(const ToolSlot& slot) const
 
 void nobUsual::OrderTools()
 {
-    if(toolSlots_.empty() || disableProduction)
+    if(toolSlots_.empty() || IsProductionStopped())
         return;
     const civ::Content& content = civ::getActiveContent();
     const auto& slotDescs = GetToolsDesc().slots;
@@ -874,7 +884,7 @@ bool nobUsual::IsKnowledgeMedium(const GoodType good)
 
 void nobUsual::OrderLibraryMedium()
 {
-    if(disableProduction || GetNumLibraryMedia() + GetNumOrderedLibraryMedia() >= GetLibraryCapacity())
+    if(IsProductionStopped() || GetNumLibraryMedia() + GetNumOrderedLibraryMedia() >= GetLibraryCapacity())
         return;
     // Try the media in turn, starting after the last one ordered, until one is available in a warehouse
     const std::vector<GoodType>& media = civ::getActiveContent().GetKnowledgeMedia();
@@ -892,6 +902,17 @@ void nobUsual::OrderLibraryMedium()
 void nobUsual::WorkerArrived()
 {
     productivity_ev = GetEvMgr().AddEvent(this, numProductivityGFs, 1);
+    workerSinceGF_ = GetEvMgr().GetCurrentGF();
+}
+
+bool nobUsual::IsPausedByDistribution() const
+{
+    return civ::isPausedByDistribution(*world, *this);
+}
+
+bool nobUsual::IsProductionStopped() const
+{
+    return disableProduction || IsPausedByDistribution();
 }
 
 void nobUsual::SetProductionEnabled(const bool enabled)

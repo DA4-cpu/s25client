@@ -79,32 +79,15 @@ struct CustomOre
     unsigned tint = 0xFFFFFF;
 };
 
-/// How a workshop chooses its product if it has several (outputChoice)
+/// How a workshop chooses its product if it has several
 enum class ProductChoice : uint8_t
 {
     /// Exactly one product (or one per input with inheritProperties)
     None,
-    /// By knowledge type (regulator "Wissen")
+    /// By knowledge type (regulator "Wissen", outputChoice = "knowledge")
     Knowledge,
-    /// By tool type like the metalworks (tool regulator and tool orders of the player)
-    Tools,
-    /// By an own regulator (rttr:AddRegulator)
-    Regulator
-};
-
-/// Own regulator of the distribution window (rttr:AddRegulator)
-struct Regulator
-{
-    struct Entry
-    {
-        /// Wares belonging to this entry
-        TagQuery tags;
-        std::string title;
-        /// Default value 0..10
-        uint8_t defaultValue = 5;
-    };
-    std::string name, title;
-    std::vector<Entry> entries;
+    /// By the distribution of all wares (civ::WareDistribution): every workshop with several products
+    Distribution
 };
 
 /// Workshop defined in lua (rttr:AddWorkshop)
@@ -133,11 +116,6 @@ struct CustomBuilding
     std::vector<GoodType> productChoices;
     /// ProductChoice::Knowledge: Knowledge type of each entry of productChoices
     std::vector<KnowledgeType> productChoiceTypes;
-    /// ProductChoice::Tools: Tool type of each entry of productChoices
-    std::vector<Tool> productChoiceTools;
-    /// ProductChoice::Regulator: Index of the regulator (Content::GetRegulators) and the entry of each product
-    unsigned regulator = 0;
-    std::vector<unsigned> productChoiceEntries;
     /// Library: stores up to this many knowledge media and produces nothing. 0: normal workshop
     unsigned libraryCapacity = 0;
     /// Warehouse (warehouse = { ... } in lua): stores only these wares (and no people), has no worker. Empty: no
@@ -265,8 +243,6 @@ public:
     /// Construction costs of the building (in the order the builder uses them). Original costs unless set in lua
     const BuildingCosts& GetBuildingCost(BuildingType bld) const { return costs_[bld]; }
 
-    /// Own regulators of the distribution window (rttr:AddRegulator) in order of definition
-    const std::vector<Regulator>& GetRegulators() const { return regulators_; }
 
     /// Tool reform: True if tools are used in the buildings (tool materials are defined). Then workers of buildings
     /// are recruited without tools, the buildings order their tools, the tools wear out and set the work speed
@@ -321,7 +297,6 @@ private:
     helpers::EnumArray<std::vector<std::string>, GoodType> tags_, properties_;
     std::vector<GoodType> knowledgeMedia_;
     helpers::EnumArray<uint8_t, KnowledgeType> defaultKnowledgeDistribution_;
-    std::vector<Regulator> regulators_;
     std::vector<ToolMaterial> toolMaterials_;
     helpers::EnumArray<std::optional<ToolInfo>, GoodType> tools_;
     helpers::EnumArray<BuildingTools, BuildingType> buildingTools_;

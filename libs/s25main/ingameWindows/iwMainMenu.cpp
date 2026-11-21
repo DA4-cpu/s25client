@@ -9,6 +9,7 @@
 #include "WindowManager.h"
 #include "addons/const_addons.h"
 #include "civ/Research.h"
+#include "civ/WareDistribution.h"
 #include "controls/ctrlTextButton.h"
 #include "iwAIDebug.h"
 #include "iwBuildOrder.h"
@@ -26,6 +27,7 @@
 #include "iwStatistics.h"
 #include "iwTools.h"
 #include "iwTransport.h"
+#include "iwWareDistribution.h"
 #include "network/GameClient.h"
 #include "world/GameWorldBase.h"
 #include "world/GameWorldView.h"
@@ -135,9 +137,12 @@ void iwMainMenu::Msg_ButtonClick(const unsigned ctrl_id)
             WINDOWMANAGER.ToggleWindow(std::make_unique<iwTransport>(gwv.GetViewer(), gcFactory));
         }
         break;
-        case 2: // Werkzeugproduktion
+        case 2: // Werkzeugproduktion. Civilization mode: the distribution of all wares (like the tools, for all wares)
         {
-            WINDOWMANAGER.ToggleWindow(std::make_unique<iwTools>(gwv.GetViewer(), gcFactory));
+            if(civ::isDistributionActive(gwv.GetWorld()))
+                WINDOWMANAGER.ToggleWindow(std::make_unique<iwWareDistribution>(gwv.GetViewer(), gcFactory));
+            else
+                WINDOWMANAGER.ToggleWindow(std::make_unique<iwTools>(gwv.GetViewer(), gcFactory));
         }
         break;
         case 3: // Statistik

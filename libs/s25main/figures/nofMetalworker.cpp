@@ -11,6 +11,7 @@
 #include "SoundManager.h"
 #include "addons/const_addons.h"
 #include "buildings/nobUsual.h"
+#include "civ/WareDistribution.h"
 #include "helpers/containerUtils.h"
 #include "network/GameClient.h"
 #include "notifications/NotificationManager.h"
@@ -120,6 +121,9 @@ bool nofMetalworker::AreWaresAvailable() const
 {
     if(!nofWorkman::AreWaresAvailable())
         return false;
+    // Civilization mode: the distribution of all wares decides (it works unless it is stopped)
+    if(civ::isDistributionActive(*world))
+        return true;
     // If produce nothing on zero is disabled we will always produce something ->OK
     if(world->GetGGS().getSelection(AddonId::METALWORKSBEHAVIORONZERO) == 0)
         return true;
@@ -138,6 +142,11 @@ bool nofMetalworker::AreWaresAvailable() const
 
 bool nofMetalworker::StartWorking()
 {
+    if(civ::isDistributionActive(*world))
+    {
+        nextProducedTool = ChooseByDistribution();
+        return nofWorkman::StartWorking();
+    }
     nextProducedTool = GetOrderedTool();
     if(!nextProducedTool)
         nextProducedTool = GetRandomTool();
@@ -213,8 +222,16 @@ helpers::OptionalEnum<GoodType> nofMetalworker::ProduceWare()
 
 helpers::OptionalEnum<GoodType> nofMetalworker::ProduceExtraWare(GoodType /*firstWare*/)
 {
+    if(civ::isDistributionActive(*world))
+        return ChooseByDistribution();
     helpers::OptionalEnum<GoodType> tool = GetOrderedTool();
     if(!tool)
         tool = GetRandomTool();
     return tool;
+}
+
+GoodType nofMetalworker::ChooseByDistribution()
+{
+    const auto& products = civ::getBuildingProducts(*world, BuildingType::Metalworks).products;
+    return civ::chooseProduct(*world, player, products, GetObjId());
 }

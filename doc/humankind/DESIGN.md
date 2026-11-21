@@ -259,20 +259,13 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
 
 - Produkte: `output` (eine Tag-Abfrage, darf mit `outputChoice` mehrere Waren treffen) oder `outputs` (Liste, jeder
   Eintrag trifft genau eine Ware, höchstens 16; nicht für Sammler, Plantagen, Minen und nicht mit `inheritProperties`).
-  Mehr als ein Produkt braucht `outputChoice`. Aufgelöst in `civ::Content` (`CustomBuilding::productChoice`,
+  Aufgelöst in `civ::Content` (`CustomBuilding::productChoice`,
   `productChoices`).
 - `outputChoice = "knowledge"`: nach dem Regler „Wissen“; jedes Produkt braucht `knowledge` in `wares.lua` (genau eine
   Art).
-- `outputChoice = "tools"`: wie die Schlosserei (`nofCustomWorker::ChooseTool`). Jedes Produkt ist ein Werkzeugtyp
-  (`Content::GetToolTypeOf`: der Bezeichner genau eines eingebauten Werkzeugs als Tag), jeder Typ höchstens einmal.
-  Beim Arbeitsbeginn zuerst Bestellungen (`GamePlayer::ToolOrderProcessed`, Meldung „Completed the ordered amount of
-  tools.“ wenn keine mehr offen sind), dann gewichtet mit den Werkzeug-Prioritäten. Alle 0: Addon
-  „Schlosserei bei 0“ entscheidet (nichts oder irgendeins). Wartet sie, weckt sie ein neuer Auftrag oder eine neue
-  Einstellung (`ToolNote`).
-- `outputChoice = <Name>`: eigener Regler aus `distribution.lua` (`rttr:AddRegulator`, höchstens 8 Regler mit je
-  höchstens 8 Einträgen). Jedes Produkt trifft genau einen Eintrag (Tag-Abfrage `tags`). Gewichtete Zufallswahl wie
-  beim Regler „Wissen“, alle 0 = gleich verteilt. Werte je Spieler nach Reglername (`PlayerResearch::
-  Get/SetRegulatorValues`, Befehl `gc::SetRegulatorValues`), Reiter im Verteilungsfenster mit „Standard“-Knopf.
+- Mehr als ein Produkt ohne `outputChoice`: die Gesamtverteilung wählt (`ProductChoice::Distribution`, Abschnitt
+  „Gesamtverteilung“). `outputChoice = "tools"` und eigene Regler (`rttr:AddRegulator`) gibt es seit 2026-11-21 nicht
+  mehr.
 - Spielstand Version 23: Reglerwerte (nach Name; unbekannte Regler fallen weg, neue Einträge bekommen den Startwert)
   und das gewählte Werkzeug des Arbeiters.
 
@@ -336,7 +329,7 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   stoppen“ stoppt die Annahme. Das Gebäudefenster zeigt den Bestand. Wird sie zerstört, sind die Medien verloren.
 - KI: Lua-Werkstätten mit Eingängen baut sie, sobald Eingangswaren im Lager liegen (1 + 1 je 10 Waren, höchstens 3),
   Werkstätten ohne Eingang einmal, Bibliotheken, wenn mehr Medien in Lagern warten als die vorhandenen noch aufnehmen
-  (höchstens 5). Werkzeuge bestellt sie über die vorhandene Werkzeug-Logik.
+  (höchstens 5). Werkzeuge bestellt sie nicht: Die Gesamtverteilung steuert die Werkzeughersteller.
 - KI und Regler (Wunsch des Nutzers 2026-10-23): Alle 200 GF (10 Sekunden) stellt die KI den Regler nach den WP ein,
   die ihrer aktuellen Forschung noch fehlen: die am meisten fehlende Art 10, andere fehlende anteilig (mindestens 1),
   nicht benötigte 0. Forscht sie nichts oder fehlen keine WP: Startwerte aus `distribution.lua`. Einstellbar oben in
@@ -492,8 +485,8 @@ sonst gilt das alte System.
   (`nofBuildingWorker::TakeTools`). Abgenutztere gehen verloren. Ohne Arbeiter im Gebäude gehen alle verloren.
 - **Fenster:** Gebäudefenster zeigt links die Werkzeuge mit Haltbarkeitsbalken, „+1“ für Ersatz, „...“ für bestellt und
   rechts das Tempo. Verteilungsfenster hat den Reiter „Werkzeuge“.
-- **KI:** Stellt zuerst die Werkzeuge her, die ihren Gebäuden fehlen (`AdjustSettings`), und gibt der Schlosserei so
-  lange Eisen und Bretter vor der Waffenschmiede. Der Bauplaner zählt Spitzhacken im Lager als mögliche Bergleute und
+- **KI:** Im Zivilisationsmodus stellt sie keine Werkzeug-Regler ein und bestellt keine Werkzeuge (Gesamtverteilung,
+  2026-11-21). Sie gibt der Schlosserei Eisen und Bretter vor der Waffenschmiede (Verteilung der Eingänge). Der Bauplaner zählt Spitzhacken im Lager als mögliche Bergleute und
   Steinmetze. Seit 2026-11-12 zählt sie alle Werkzeuge eines Typs (auch Kupferäxte) und stellt die Werkzeug-Regler
   auch ein, wenn sie nur eine Werkstatt mit `outputChoice = "tools"` hat. Diese baut sie, sobald alle Eingänge im
   Lager sind: 1, dazu 1 je 20 Waren des knappsten Eingangs, höchstens 3. Mögliche Arbeiter einer Lua-Werkstatt unter
@@ -1235,15 +1228,16 @@ Anbauer, dort zählt die Menge in Reichweite nicht). Jeder Eingang und jeder Aus
 Prognose, auch bei Werkzeugherstellern.
 
 **Einstellungen:**
-- In `ai/civ/EconomyPlanner.h`:
-  - Bilanzlänge `BALANCE_MINUTES` = 5 (Wert des Nutzers, 2026-11-18, vorher 7; auch die Zeit, in der ein neues Gebäude
-    als kommend zählt).
+- In `civ/EconomyForecast.h` (seit 2026-11-21, dieselbe Rechnung für Bauplaner und Gesamtverteilung):
+  - Bilanzlänge `BALANCE_MINUTES` = 10 (Wert des Nutzers, 2026-11-21, vorher 5; auch die Zeit, in der ein neues
+    Gebäude als kommend zählt).
   - Schwelle: `SURPLUS_FACTOR` = 10 × Verbrauch/min, mindestens `MIN_STOCK` = 8.
+  - Werkzeugvorrat `TOOLS_IN_STOCK` = 2 je Werkzeugart.
+- In `ai/civ/EconomyPlanner.h`:
   - Rodende Holzfäller ab `CLEARING_MIN_TREES` = 8 Bäumen, Sammler anderer Vorkommen (Steinhaufen, Kartenobjekte aus
     Lua) ab `MIN_DEPOSITS_IN_REACH` = 2 Vorkommen (Wert des Nutzers, 2026-11-18, vorher 1).
   - Förster, wenn weniger als `RENEW_BELOW` = 7 Bäume in Reichweite eines dauerhaften Holzfällers stehen (Wert des
     Nutzers).
-  - Werkzeugvorrat `TOOLS_IN_STOCK` = 2 je Werkzeugart (Wert des Nutzers).
   - Höchstens `MAX_ORDERS_PER_TYPE` = 5 Aufträge je Gebäudetyp gleichzeitig (auch platzierte, bis das Gebäude fertig
     ist; Nutzer, 2026-11-15).
   - Bauernhöfe und Plantagen brauchen `MIN_FIELD_NODES` = 4 Feldknoten in Reichweite (Nutzer, 2026-11-15).
@@ -1264,7 +1258,6 @@ Prognose, auch bei Werkzeugherstellern.
     unter „angefragt“). Die „Grundausstattung“ (ein Erzeuger je Baumaterialgruppe) war kurz umgesetzt und ist wieder
     entfallen (Nutzer, 2026-11-17).
   - Militärgebäude (Anlass „Gebiet“, Schritt 3): siehe „Militär im Planer“.
-  - Werkzeughersteller: Werkzeuge fehlen laut Prognose, und die vorhandenen Hersteller schaffen sie nicht.
   - Soldaten fehlen: die Waren zum Rekrutieren.
   - Gehilfen fehlen laut Prognose, Lager voll: ein Lager.
   - Der Anlass „steht still“ entfällt (Nutzer, 2026-11-15): Der Verbrauch wartender Gebäude steht in der Prognose, der
@@ -1377,11 +1370,10 @@ Beträge unter 0,005 gelten als 0 (2026-11-18): Rundungsfehler der Anteile und d
   2026-11-15: der Verbrauch zählt immer). Gebäude ohne Problem (die Diagnose findet nichts) stehen mit ihrem gemessenen
   Verbrauch drin; vom Spieler gestoppte und erschöpfte zählen nichts dazu. Was für Bau, Werkzeug, Soldaten,
   Forschung verbraucht wird, zählt hier nicht: Es wird vorher angefragt und steht in „Angefragt“ (sonst doppelt).
-- Werkzeughersteller arbeiten auf Bestellung: Herstellung = was sie von den bestellten und fehlenden Werkzeugen in der
-  Bilanzlänge schaffen (Hersteller, die arbeiten können, und kommende, mit den gemessenen Werkzeugen je Minute
-  Arbeitszeit) und darüber hinaus schaffen könnten; Verbrauch (Eisen, Kohle, Bretter …) = ein Arbeitsschritt je
-  hergestelltem Werkzeug. Die Nachfrage einer Art wird nach Kapazität auf die Hersteller verteilt, die ein passendes
-  Werkzeug machen (eine Forschung, die nur die Eisensäge nimmt, nur auf die Schlosserei).
+- Werkzeughersteller werden gemessen wie alle Gebäude (seit 2026-11-21: Die Gesamtverteilung steuert sie, es gibt keine
+  Werkzeugbestellungen der KI mehr).
+- Reserviert (Nutzer, 2026-11-21): Waren unterwegs (Straßen, Fahnen) zu einem Lager oder ohne Ziel zählen zum Bestand.
+  Waren unterwegs zu einem Abnehmer zählen nicht, ihre Anfrage ist nicht mehr offen.
 - Gehilfen: Bestand in den Lagern, angefragt = gesuchte Arbeiter + Arbeiter der Baustellen und Aufträge, deren Beruf
   nicht frei im Lager steht, Herstellung = von den Lagern erzeugt, Verbrauch = zu Soldaten oder Trägern geworden
   (Arbeiter stehen in „Angefragt“). Statistik `helpersForJobs` (Spielstand 29).
@@ -1453,12 +1445,10 @@ Gebäudetyp, wie viele Gebäude welches Problem haben.
   `baseSpeed` > 0) zählen weiter als geplant und angefragt, ihre Hersteller kommen über die Prognose
   (`EconomyGraph::GetWorkTools`, `CheckToolsAndHelpers`). Dieselbe Regel gilt für „kann fertig arbeiten“ (höchstens ein
   wartender Auftrag je Typ) und für die Erreichbarkeit der Waren (`CivAI`: ein Platz genügt, vorher alle).
-- Bestellt wird das Fehlende je Art (Addon „Werkzeugbestellung“, sonst der Regler je Art, höchstens 10).
-- Werkzeughersteller nach der Bilanzregel, je Herstellertyp: was er in der Bilanzlänge nicht schafft (Nachfrage −
-  Kapazität) ÷ Bilanzlänge ÷ Werkzeuge je Minute eines Herstellers. Eine Art wird einmal gezählt (nicht je Gruppe, in der sie
-  vorkommt).
-- Werkzeughersteller dürfen expandierend kommen (Expansionsliste), aber nicht, solange ihre Kapazität die Nachfrage
-  übersteigt.
+- Werkzeuge werden nicht bestellt (seit 2026-11-21): Ein Werkzeugmangel ist ein Mangel wie jeder andere, seine
+  Hersteller kommen über „Anzahl“. Gebäude mit mehreren Produkten zählen nach Regel A (Abschnitt „Gesamtverteilung“).
+- Gebäude mit mehreren Produkten dürfen expandierend kommen (Expansionsliste), aber nicht, solange ihre Gebäude
+  schaffen, was alle ihre Produkte brauchen (Regel A ohne Mangel).
 
 **Sortierung der Liste:**
 1. Benötigte, die ihr eigenes Problem lösen, dann alle anderen benötigten, dann expandierende.
@@ -1797,6 +1787,109 @@ Baustelle mit „eins von“-Kosten jetzt die anderen Waren, wenn eine nicht ges
 - Forschung (Schritt 4, nach dem Militär): wählt noch das Spiel für die KI (`civ::chooseResearchForAI`).
 - Mangel eines Zwischenprodukts, dessen Endprodukt im Überschuss liegt: bewusst keine Regel (Nutzer, 2026-11-15).
 - Umbau der Eingänge nach Tags (ein Eingang je Tag, mehr als 3, Mischen).
+
+## Gesamtverteilung (Stand 2026-11-21)
+
+Entscheidungen des Nutzers vom 18. bis 21.11.2026 (Chats „Werkzeug-Prüfung für Gebäude“ und „Gesamtverteilung“).
+Code: `civ/EconomyForecast.*` (Rechnung), `civ/WareDistribution.*` (Spielregel), `ingameWindows/iwWareDistribution.*`
+(Fenster), Befehle `gc::SetWareDistribution`, `gc::ChangeWareOrders`.
+
+### Ziel
+
+Gebäude arbeiten von selbst, kein Spieler soll Regler nachjustieren. Vorbild ist das Werkzeugfenster von Siedler 2:
+Dort steht je Werkzeug ein Regler, jede Schlosserei wählt bei jedem Arbeitsschritt gewichtet nach den Reglern, und ein
+Regler steuert alle Schlossereien. Die Gesamtverteilung ist dasselbe für alle Waren, nur stellen sich die Regler selbst
+ein: „Die Gesamtverteilung ist der Dirigent, die Gebäude sind nur die Marionetten.“ Später wird sie die Grundlage für
+lokale Warenwerte (Märkte).
+
+Kommentar des Nutzers in `distribution.lua` (Stand vor der Umsetzung, wörtlich): „Es sollte für alle Werkzeuge und
+Ausrüstung eine einzige gesammelte Bestellungliste und Verteilungsliste geben. Und die Verteilung soll sich automatisch
+nach dem aktuellen Bedarf einstellen. Diese GesamtVerteilung steuert dann automatisch alle Gebäude, die die Waren in der
+Liste herstellen. Die Gebäude stellen dann unter Berücksichtigung der Verteilung die Waren her, die sie herstellen
+können. In dieser Liste sind alle die Verteilungen für alle Gebäudeoutputs festgehalten (auch von Monooutput Gebäuden)
+und deren Mengenverhältnis zueinander. Damit soll das ständige Nachjustieren von Reglereinstellungen sollte nicht in so
+einem Spiel existieren. Alle Gebäude funktionieren automatisch, warum sollte man dann manche Gebäude manuell steuern
+können? Das passt nicht zum Spiel.“
+
+### Regeln
+
+1. **Spielregel für alle Spieler** (Variante 1): Jeder Rechner rechnet für jeden Spieler, nur mit ganzen Zahlen
+   (Hundertstel einer Ware, `civ::Amount`), nur aus dem Spielzustand. Nur im Zivilisationsmodus.
+2. **Waren:** alle Waren außer den Wissensmedien (der Regler „Wissen“ bleibt ein eigener Regler). Der Regler
+   „Werkzeuge“ (Materialvorrang) bleibt und spielt für die Gesamtverteilung keine Rolle.
+3. **Zahl je Ware**, je Spieler umschaltbar:
+   - Prognose = (Lagerbestand + reserviert − offen − unterwegs zu Abnehmern − geplant) + Herstellung − Verbrauch, für
+     die Bilanzlänge. Dieselbe Rechnung wie im Bauplaner (Abschnitt „Prognose“), im Spiel ohne die Auftragsliste der
+     KI und ohne ihre abgeschickten Baubefehle (kein Spielzustand). Reserviert zählt nicht zusätzlich: Die Herstellung
+     der nächsten Bilanzlänge steckt schon in der Prognose.
+   - Warenzahl = Lagerbestand + reserviert − offen − unterwegs zu Abnehmern.
+   - Reserviert = jede Ware, die das Spiel als unterwegs führt (`GamePlayer::GetWares`, Straßen und Fahnen), bis sie in
+     ein Gebäude kommt. Unterwegs zu Abnehmern (`EconomySnapshot::inTransit`) wird abgezogen: Ihre Anfrage ist nicht
+     mehr offen, sonst zählte die Ware doppelt. Beispiel: 5 Bretter im Lager, eine Baustelle fragt 2 an, 3 sind auf dem
+     Weg ins Lager: vorher 5 + 3 − 2 − 0 = 6; das Lager schickt die 2 los: 3 + 5 − 0 − 2 = 6; alle angekommen: 6.
+   - Gruppen: Anfragen, die mehrere Waren nehmen (Werkzeugplatz „Axe“, Baukosten nach Tags, Nahrung der Bergwerke),
+     werden wie im Bauplaner zugeteilt (Abschnitt „Warengruppen“). Was keine Ware der Gruppe hat, steht nur bei der
+     Gruppe. Die Zahl einer Ware ist deshalb die niedrigere aus ihrer eigenen Zahl und den Zahlen aller Gruppen, die sie
+     enthalten und die ein Abnehmer genau so anfragt. Beispiel: Eisenaxt Vorrat 3, Kupferaxt 0, Obsidianaxt 1; eine
+     Forschung will 1 Eisenaxt, 6 Plätze „Axe“ sind leer, Vorrat 2 Äxte geplant: Einzeln stehen alle drei Äxte bei 0,
+     die Gruppe bei −5. Alle drei bekommen −5, also sehen Schlosserei, Kupferwerk und Obsidianwerkstatt die Axt als
+     knappstes Produkt; sobald eine davon eine Axt herstellt, steigt die Gruppenzahl für alle drei.
+4. **Überschuss:** Zahl > max(8, 10 × Verbrauch pro Minute in der Bilanzlänge). Der Startvorrat zählt mit (anders
+   als im Bauplaner, Entscheidung des Nutzers).
+5. **Wertung:** Darin steht jede Ware, die ein fertiges Gebäude des Spielers als Produkt herstellt (nicht nur als
+   Nebenprodukt), die nicht unerwünscht und kein Wissensmedium ist. Wert = 1 000 000 × (höchste Zahl − Zahl) ÷ (höchste
+   Zahl − niedrigste Zahl): Der größte Mangel bekommt den höchsten Wert, die höchste Zahl 0. Alle gleich: alle den
+   höchsten Wert. Angezeigt wird 0–1000. Manuelle Werte bleiben, wie der Spieler sie stellt; die Spanne ergibt sich aus
+   den Zahlen aller Waren der Wertung.
+6. **Gebäude mit mehreren Produkten** (Lua-Werkstätten mit mehreren Produkten, Schlosserei, Waffenschmiede) wählen bei
+   jedem Arbeitsbeginn (Waffenschmiede beim Ablegen):
+   - zuerst ein bestelltes Produkt (die Bestellung gilt für alle Gebäude, wer zuerst anfängt, erfüllt sie);
+   - sonst unter den erwünschten Produkten: Gebäudewert = (Wert − niedrigster Wert der eigenen Produkte) ÷ (höchster −
+     niedrigster), höchstes 100 %, niedrigstes 0 %; Wahrscheinlichkeit = Gebäudewert ÷ Summe. Beispiel Schlosserei:
+     Axt −1, Sense 1, Säge 3, Hammer 9 (Überschuss, fällt heraus) → Axt 100 %, Sense 50 %, Säge 0 % → 2/3 Äxte, 1/3
+     Sensen. Alle gleich: gleich verteilt;
+   - sind alle Produkte unerwünscht, aber ein Nebenprodukt gebraucht: gleich verteilt unter allen Produkten.
+   - Bei Ertrag über 1 wird jede weitere Ware neu gewählt.
+7. **Anhalten:** Eine Ware ist unerwünscht, wenn sie automatisch angehalten wird und Überschuss ist, oder wenn der
+   Spieler sie angehalten hat. Ein Gebäude hält an, wenn alle seine Produkte und alle erforschten Nebenprodukte
+   unerwünscht sind und keines bestellt ist (Bauernhof: Getreide und Stroh). Angehalten heißt wie „Produktion
+   stoppen“: kein Arbeitsschritt, keine Eingänge und Werkzeuge bestellen (`nobUsual::IsProductionStopped`). Was von
+   selbst anhält, läuft von selbst wieder an; was der Spieler anhält, bleibt angehalten. Ein Gebäude speichert keinen
+   eigenen Zustand dafür; ändert er sich, wird der Arbeiter geweckt bzw. gestoppt.
+8. **Frequenz:** alle 200 GF (10 Sekunden), versetzt: Spieler p rechnet bei GF mod 200 = p × 200 ÷ Spielerzahl. Eine
+   geänderte Einstellung wirkt sofort.
+9. **Fenster** (statt des Werkzeugfensters, Knopf „Werkzeuge“ im Hauptmenü): eine Zeile je Ware unter Überschriften
+   (Werkzeugart, sonst Warenart aus Lua, sonst „Sonstige“), 12 Zeilen je Seite. Je Zeile: Name mit Zahl, Regler 0–1000
+   (verschieben = manuell), A/M für den Wert, Bestellungen mit +/−, Anhalten (A: automatisch, „läuft“, „angehalten“).
+   Oben: Werte aus Prognose oder Warenzahlen.
+10. **Waffenschmiede:** gehört dazu; das Addon „halbe Kosten für Militärausrüstung“ wirkt im Zivilisationsmodus nicht
+    (es setzt das Abwechseln voraus). Schilde aller Völker zählen als eine Ware.
+11. **Lua:** `outputChoice` gibt es nur noch als `"knowledge"`. `rttr:AddRegulator`, die Regler `Equipment`,
+    `WoodenTools`, `ObsidianTools` und der Werkzeugregler je Art entfallen.
+12. **KI:** Sie stellt keine Werkzeug-Regler mehr ein und bestellt keine Werkzeuge (`OrderTools`, `ResolveTools`,
+    `ComputeToolFlows` entfallen, Werkzeughersteller werden gemessen wie alle Gebäude). Ihr Planer entscheidet nur, wie
+    viele Gebäude es gibt. Automatisch angehaltene Gebäude behandelt er wie vom Spieler gestoppte.
+    **Regel A** (Gebäude mit mehreren Produkten): Ihre Kapazität zählt einmal über alle Produkte. Was ihre Gebäude in der
+    Bilanzlänge liefern müssen: je Produkt was sie davon jetzt herstellen, plus was fehlt, minus was übrig ist
+    (höchstens 0 abgezogen); ein Gruppenmangel zählt nur beim Herstellertyp, den der Planer für die Gruppe wählt. Fehlt
+    nach der Kapazität (Gebäude, die arbeiten können, und kommende × Waren je Minute, während sie arbeiten ×
+    Bilanzlänge) etwas, kommen so viele neue, bis es reicht. Beispiel: 1 Schlosserei, 2 Werkzeuge/min, in 5 min 5 Äxte
+    und 5 Sägen, Axt −8, Säge +3: Äxte 5 + 8 = 13, Sägen 5 − 3 = 2, zusammen 15, Kapazität 10, es fehlen 5 → 1 neue
+    Schlosserei (je Produkt gerechnet wären es 2).
+
+### Gemeinsame Rechnung
+
+`civ::EconomyForecast` ist die Rechnung des Bauplaners (Prognose, Zuteilung, Diagnose, Werte je Gebäude), verlegt ins
+Spiel und auf ganze Zahlen umgestellt. Der Bauplaner nutzt sie und gibt seine abgeschickten Baubefehle und seine
+Auftragsliste dazu (`Extra`). Gemessen wird mit dem Spielzustand: Fertigstellung und Arbeiter seit (`nobUsual`,
+Spielstand 30), abgerissene Gebäude der Bilanzlänge (`GamePlayer::GetGoneBuildings`).
+
+### Offen
+
+- Erstes Testspiel (Zufallskarte 512, 4 KI, „a lot“, 40 min): Land 1 432–1 646 statt 1 784–2 626, Gebäude 41–45 statt
+  47–57. Holz: Lager 3, Herstellung 13 → Prognose 16 > 8 → Holzfäller angehalten, während die Gruppe Baumaterial im
+  Bauplaner bei −80 steht: Die Aufträge der KI, die auf Material warten, sind keine Baustellen und fehlen in der
+  Rechnung des Spiels. Vorschlag an den Nutzer: Die KI schickt ihren geplanten Bedarf als Spielbefehl.
 
 ## Lagerkapazität (Stand 2026-11-14)
 

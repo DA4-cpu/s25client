@@ -293,15 +293,28 @@ void SetToolMaterialPriorities::Execute(GameWorld& world, uint8_t playerId)
     world.GetPlayer(playerId).GetResearch().SetToolMaterialPriorities(values);
 }
 
-void SetRegulatorValues::Execute(GameWorld& world, uint8_t playerId)
+void SetWareDistribution::Execute(GameWorld& world, uint8_t playerId)
 {
-    if(!civ::isEnabled(world))
+    if(!civ::isDistributionActive(world))
         return;
-    const civ::Content& content = world.GetTechTree().GetContent();
-    const auto& regulators = content.GetRegulators();
-    if(regulator >= regulators.size() || values.size() != regulators[regulator].entries.size())
+    civ::WareDistribution& distribution = world.GetPlayer(playerId).GetWareDistribution();
+    distribution.SetUsesForecast(usesForecast);
+    for(const auto& [good, setting] : settings)
+    {
+        if(civ::isInDistribution(good))
+            distribution.SetSetting(good, setting);
+    }
+    // Takes effect now (and the buildings are woken or stopped)
+    civ::updateDistribution(world, playerId);
+}
+
+void ChangeWareOrders::Execute(GameWorld& world, uint8_t playerId)
+{
+    if(!civ::isDistributionActive(world) || !civ::isInDistribution(good))
         return;
-    world.GetPlayer(playerId).GetResearch().SetRegulatorValues(content, regulator, values);
+    world.GetPlayer(playerId).GetWareDistribution().ChangeOrders(good, change);
+    if(change > 0)
+        civ::wakeBuildingsFor(world, playerId, good);
 }
 
 void SetClearingWoodcutter::Execute(GameWorld& world, uint8_t playerId)

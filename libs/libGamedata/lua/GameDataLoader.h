@@ -52,7 +52,6 @@ private:
     void SetBuildingOutputRatio(const kaguya::LuaTable& data);
     void SetBuildingCost(const kaguya::LuaTable& data);
     void SetToolMaterialPriorities(const kaguya::LuaTable& data);
-    void AddRegulator(const kaguya::LuaTable& data);
     void SetMapClimate(const kaguya::LuaTable& data);
     void AddMapZone(const kaguya::LuaTable& data);
     void AddMapResource(const kaguya::LuaTable& data);

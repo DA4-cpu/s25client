@@ -159,13 +159,18 @@ int EconomyStatistics::GetBalance(const GoodType good, const unsigned minutes, c
     return static_cast<int>(GetProduced(good, minutes, gf)) - static_cast<int>(GetConsumed(good, minutes, gf));
 }
 
-double EconomyStatistics::GetCoveredMinutes(const unsigned minutes, const unsigned gf) const
+unsigned EconomyStatistics::GetCoveredGFs(const unsigned minutes, const unsigned gf) const
 {
     const unsigned gfsPerMinute = GetGFsPerMinute();
     const unsigned queryMinute = gf / gfsPerMinute;
     const unsigned numMinutes = std::max(1u, std::min(minutes, HISTORY_MINUTES));
     const unsigned firstMinute = queryMinute + 1 > numMinutes ? queryMinute + 1 - numMinutes : 0u;
-    return static_cast<double>(gf + 1 - firstMinute * gfsPerMinute) / gfsPerMinute;
+    return gf + 1 - firstMinute * gfsPerMinute;
+}
+
+double EconomyStatistics::GetCoveredMinutes(const unsigned minutes, const unsigned gf) const
+{
+    return static_cast<double>(GetCoveredGFs(minutes, gf)) / GetGFsPerMinute();
 }
 
 double EconomyStatistics::GetConsumptionPerMinute(const GoodType good, const unsigned minutes, const unsigned gf) const

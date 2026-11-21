@@ -351,22 +351,16 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context + ": output is missing (only a plantation may have none: then it only plants)");
     inheritProperties = luaData.getOrDefault("inheritProperties", false);
     outputChoice = luaData.getOrDefault("outputChoice", std::string());
-    if(!outputChoice.empty() && !isValidIdentifier(outputChoice))
+    if(!outputChoice.empty() && outputChoice != "knowledge")
     {
         throw GameDataError(context
-                            + ": outputChoice must be \"knowledge\", \"tools\" or the name of a regulator "
-                              "(rttr:AddRegulator)");
+                            + ": outputChoice can only be \"knowledge\". A workshop with several products is steered "
+                              "by the distribution of all wares (Gesamtverteilung)");
     }
     if(!outputChoice.empty() && inheritProperties)
         throw GameDataError(context + ": outputChoice and inheritProperties can not be combined");
     if(!outputs.empty() && inheritProperties)
         throw GameDataError(context + ": outputs and inheritProperties can not be combined (use output)");
-    if(outputs.size() > 1u && outputChoice.empty())
-    {
-        throw GameDataError(context
-                            + ": with several outputs an outputChoice is needed (\"knowledge\", \"tools\" or the "
-                              "name of a regulator)");
-    }
     storage = luaData.getOrDefault("storage", 6u);
     if(storage == 0 || storage > 99)
         throw GameDataError(context + ": storage must be in [1, 99]");
@@ -434,40 +428,6 @@ OreDesc::OreDesc(const kaguya::LuaTable& luaTable)
     luaData.checkUnused();
 }
 
-RegulatorDesc::RegulatorDesc(const kaguya::LuaTable& luaTable)
-{
-    CheckedLuaTable luaData(luaTable);
-    name = readIdentifier(luaData, "Regulator");
-    const std::string context = "Regulator '" + name + "'";
-    if(name == "knowledge" || name == "tools")
-        throw GameDataError(context + ": the names \"knowledge\" and \"tools\" are reserved");
-    title = luaData.getOrDefault("title", name);
-    const auto entryTable = luaData.getOrThrow<kaguya::LuaTable>("entries");
-    for(const kaguya::LuaRef& entryValue : entryTable.values())
-    {
-        if(entryValue.type() != kaguya::LuaRef::TYPE_TABLE)
-            throw GameDataError(context + ": every entry must be a table like { tags = \"Jug\", value = 5 }");
-        CheckedLuaTable entryData(entryValue.get<kaguya::LuaTable>());
-        Entry entry;
-        const auto tagsValue = entryData.getOptional<kaguya::LuaRef>("tags");
-        if(!tagsValue)
-            throw GameDataError(context + ": tags of an entry are missing");
-        entry.tags = parseTagQuery(*tagsValue, context + ", entries");
-        entry.title = entryData.getOrDefault("title", entry.tags.front());
-        entry.value = entryData.getOrDefault("value", 5u);
-        if(entry.value > 10)
-            throw GameDataError(context + ", entry '" + entry.title + "': value must be in [0, 10]");
-        entryData.checkUnused();
-        entries.push_back(std::move(entry));
-    }
-    if(entries.empty())
-        throw GameDataError(context + ": entries are missing");
-    if(entries.size() > MAX_REGULATOR_ENTRIES)
-    {
-        throw GameDataError(context + ": at most " + std::to_string(MAX_REGULATOR_ENTRIES) + " entries are possible");
-    }
-    luaData.checkUnused();
-}
 
 ByproductDesc::ByproductDesc(const kaguya::LuaTable& luaTable)
 {

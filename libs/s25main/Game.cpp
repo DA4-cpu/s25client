@@ -11,6 +11,7 @@
 #include "addons/const_addons.h"
 #include "ai/AIPlayer.h"
 #include "civ/Research.h"
+#include "civ/WareDistribution.h"
 #include "lua/LuaInterfaceGame.h"
 #include "network/GameClient.h"
 #include "gameData/GameConsts.h"
@@ -94,6 +95,8 @@ void Game::RunGF()
     // Civilization mode: Pay research costs and complete technologies
     if(em_->GetCurrentGF() % civ::RESEARCH_UPDATE_INTERVAL == 0)
         civ::update(world_);
+    // Civilization mode: distribution of all wares, every player in turn
+    civ::runDistributions(world_, em_->GetCurrentGF());
     // Civilization mode: wares waiting at flags because all warehouses were full look for a goal again
     if(civ::isEnabled(world_) && em_->GetCurrentGF() % civ::WAITING_WARES_INTERVAL == 0)
     {

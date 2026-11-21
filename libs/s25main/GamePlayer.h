@@ -8,6 +8,7 @@
 #include "EconomyStatistics.h"
 #include "GamePlayerInfo.h"
 #include "civ/PlayerResearch.h"
+#include "civ/WareDistribution.h"
 #include "helpers/EnumArray.h"
 #include "helpers/MultiArray.h"
 #include "variant.h"
@@ -331,6 +332,17 @@ public:
     /// Research state of the civilization mode (tech tree)
     civ::PlayerResearch& GetResearch() { return research_; }
     const civ::PlayerResearch& GetResearch() const { return research_; }
+    /// Civilization mode: distribution of all wares (Gesamtverteilung)
+    civ::WareDistribution& GetWareDistribution() { return wareDistribution_; }
+    const civ::WareDistribution& GetWareDistribution() const { return wareDistribution_; }
+    /// A building (with worker place) gone: its minutes count in the measured values of its type until it is older
+    /// than the balance length (civ::EconomyForecast)
+    struct GoneBuilding
+    {
+        BuildingType type;
+        unsigned finished, gone;
+    };
+    const std::vector<GoneBuilding>& GetGoneBuildings() const { return goneBuildings_; }
     /// Set the area the player may have territory in
     /// Nothing means all is allowed. See Lua description
     std::vector<MapPoint>& GetRestrictedArea() { return restricted_area; }
@@ -496,6 +508,8 @@ private:
     helpers::EnumArray<bool, BuildingType> building_enabled;
     /// Research state of the civilization mode
     civ::PlayerResearch research_;
+    civ::WareDistribution wareDistribution_;
+    std::vector<GoneBuilding> goneBuildings_;
     EconomyStatistics economyStatistics_;
     std::vector<MapPoint> clearingWoodcutters_;
 

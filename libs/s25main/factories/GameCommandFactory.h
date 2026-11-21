@@ -5,6 +5,7 @@
 #pragma once
 
 #include "GameCommand.h"
+#include "civ/WareDistribution.h"
 #include "variant.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/Direction.h"
@@ -80,7 +81,10 @@ public:
     bool SetKnowledgeDistribution(const std::array<uint8_t, 3>& values);
     /// Civilization mode, tool reform: Set the regulator "Werkzeuge" (priority 0..10 per tool material)
     bool SetToolMaterialPriorities(const std::vector<uint8_t>& values);
-    bool SetRegulatorValues(unsigned regulator, const std::vector<uint8_t>& values);
+    /// Civilization mode: distribution of all wares: values from the forecast or the number of wares, settings of wares
+    bool SetWareDistribution(bool usesForecast, const std::vector<std::pair<GoodType, civ::WareSetting>>& settings);
+    /// Civilization mode: change the orders of a ware by `change`
+    bool ChangeWareOrders(GoodType good, int change);
     /// AI: mark the woodcutter at the point as clearing the land (or as a woodcutter for good)
     bool SetClearingWoodcutter(MapPoint pt, bool clearing);
     /// Starts Preparation of an sea expedition in a habor

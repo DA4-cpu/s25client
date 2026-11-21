@@ -91,7 +91,7 @@ void addUsualBuilding(EconomySnapshot& snapshot, const nobUsual& building)
     const BuildingType bld = building.GetBuildingType();
     BuildingTypeState& state = snapshot.buildings[bld];
     ++state.numBuildings;
-    const bool stopped = building.IsProductionDisabled();
+    const bool stopped = building.IsProductionStopped();
     if(stopped)
         ++state.stopped;
 

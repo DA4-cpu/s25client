@@ -82,6 +82,9 @@ protected:
     uint16_t outputCredit_ = 0;
     /// Tool reform: Slot a tool is ordered for right now (not serialized), -1: none
     int orderingToolSlot_ = -1;
+    /// GF the building was finished and since which its worker is there (NO_GF: none). For the measured values per
+    /// building of the forecast (civ::EconomyForecast)
+    unsigned finishedGF_ = 0, workerSinceGF_ = 0xFFFFFFFF;
 
     friend class SerializedGameData;
     friend class BuildingFactory;
@@ -175,6 +178,8 @@ public:
     const unsigned short* GetProductivityPointer() const { return &productivity; }
     unsigned short GetProductivity() const { return productivity; }
     const nofBuildingWorker* GetWorker() const { return worker; }
+    /// The worker, to tell him the production is allowed or stopped (distribution of all wares)
+    nofBuildingWorker* GetWorkerToNotify() { return worker; }
 
     /// Stoppt/Erlaubt Produktion (visuell)
     void ToggleProductionVirtual() { disableProductionVirtual = !disableProductionVirtual; }
@@ -184,6 +189,14 @@ public:
     bool IsProductionDisabledVirtual() const { return disableProductionVirtual; }
     /// Fragt ab, ob Produktion ausgeschaltet ist (real)
     bool IsProductionDisabled() const { return disableProduction; }
+    /// Stopped by the player or, in the civilization mode, by the distribution of all wares (all its products and
+    /// byproducts are not wanted, civ::WareDistribution). It does not work and orders no inputs and tools then
+    bool IsProductionStopped() const;
+    /// Civilization mode: stopped by the distribution of all wares (not by the player)
+    bool IsPausedByDistribution() const;
+    static constexpr unsigned NO_GF = 0xFFFFFFFF;
+    unsigned GetFinishedGF() const { return finishedGF_; }
+    unsigned GetWorkerSinceGF() const { return workerSinceGF_; }
     /// Called when there are no more resources
     void OnOutOfResources();
     /// Fängt an NICHT zu arbeiten (wird gemessen fürs Ausrechnen der Produktivität)

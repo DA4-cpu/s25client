@@ -1,0 +1,729 @@
+// Copyright (C) 2026 DA4-cpu
+//
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "civ/EconomyForecast.h"
+#include "BuildingRegister.h"
+#include "EconomyStatistics.h"
+#include "GamePlayer.h"
+#include "Ware.h"
+#include "ai/civ/MapProfile.h"
+#include "buildings/nobUsual.h"
+#include "civ/Content.h"
+#include "civ/PlayerResearch.h"
+#include "civ/TechTree.h"
+#include "figures/nofBuildingWorker.h"
+#include "figures/nofCustomPlanter.h"
+#include "figures/nofFarmer.h"
+#include "figures/nofFarmhand.h"
+#include "helpers/EnumRange.h"
+#include "helpers/containerUtils.h"
+#include "world/GameWorld.h"
+#include "nodeObjs/noDeposit.h"
+#include "nodeObjs/noFlag.h"
+#include "gameData/BuildingConsts.h"
+#include "gameData/BuildingProperties.h"
+#include "gameData/JobConsts.h"
+#include "gameData/ToolConsts.h"
+#include <algorithm>
+#include <cmath>
+
+namespace civ {
+
+namespace {
+    std::vector<GoodType> sorted(std::vector<GoodType> wares)
+    {
+        helpers::erase(wares, GoodType::Nothing);
+        std::sort(wares.begin(), wares.end());
+        wares.erase(std::unique(wares.begin(), wares.end()), wares.end());
+        return wares;
+    }
+
+    helpers::OptionalEnum<Job> getJob(const BuildingType bld)
+    {
+        if(isCustomBuilding(bld))
+            return getCustomJob(getCustomBuildingIdx(bld));
+        if(const auto& job = BLD_WORK_DESC[bld].job)
+            return *job;
+        return std::nullopt;
+    }
+
+    /// GFs of [from, to) in the window starting at windowStart
+    unsigned gfsIn(const unsigned from, const unsigned to, const unsigned windowStart)
+    {
+        const unsigned start = std::max(from, windowStart);
+        return to > start ? to - start : 0u;
+    }
+} // namespace
+
+bool needsFields(const BuildingType bld)
+{
+    if(bld == BuildingType::Farm)
+        return true;
+    if(!isCustomBuilding(bld))
+        return false;
+    const CustomBuilding* building = getActiveContent().GetBuilding(bld);
+    return building && building->IsPlanter();
+}
+
+unsigned countFieldNodes(const GameWorld& world, const BuildingType bld, const MapPoint pt, const bool placed)
+{
+    const MapPoint flagPt = world.GetNeighbour(pt, Direction::SouthEast);
+    const auto nextToBuilding = [&](const MapPoint node) {
+        return node == pt || node == flagPt || world.CalcDistance(node, pt) <= 1
+               || world.CalcDistance(node, flagPt) <= 1;
+    };
+    unsigned radius = 0;
+    std::function<bool(MapPoint)> isField;
+    const CustomBuilding* custom = isCustomBuilding(bld) ? getActiveContent().GetBuilding(bld) : nullptr;
+    if(bld == BuildingType::Farm)
+    {
+        radius = nofFarmhand::GetWorkRadius(Job::Farmer);
+        isField = [&](const MapPoint node) {
+            if(world.GetNO(node)->GetType() == NodalObjectType::Grainfield)
+                return true;
+            return nofFarmer::GetNewFieldPointQuality(world, node) != nofFarmhand::PointQuality::NotPossible;
+        };
+    } else if(custom && custom->IsPlanter())
+    {
+        radius = custom->plantRadius;
+        isField = [&](const MapPoint node) {
+            const auto* deposit = world.GetSpecObj<noDeposit>(node);
+            return (deposit && static_cast<int>(deposit->GetObjectIdx()) == custom->plantObject)
+                   || nofCustomPlanter::CanPlantAt(world, node, *custom);
+        };
+    } else
+        return 0;
+    unsigned result = 0;
+    world.CheckPointsInRadius(
+      pt, radius,
+      [&](const MapPoint node, unsigned) {
+          if(node == pt || node == flagPt || (!placed && nextToBuilding(node)))
+              return false;
+          if(isField(node))
+              ++result;
+          return false;
+      },
+      false);
+    return result;
+}
+
+SourceInfo countSources(const GameWorld& world, const MapPoint pt, const civai::Recipe& recipe, const bool placed)
+{
+    SourceInfo info;
+    info.inReach = recipe.reach > 0 ? civai::MapProfile::CountSourceNodes(world, pt, recipe.reach, recipe.source) : 0u;
+    info.nearby = recipe.reach >= 2 ? civai::MapProfile::CountSourceNodes(world, pt, recipe.reach / 2, recipe.source) :
+                                      info.inReach;
+    info.fields = needsFields(recipe.building) ? countFieldNodes(world, recipe.building, pt, placed) : 0u;
+    return info;
+}
+
+Diagnosis diagnose(const GamePlayer& player, const nobUsual& building, const civai::Recipe& recipe,
+                   std::vector<GoodType>& missingInputs, const std::function<SourceInfo()>& getSources)
+{
+    using civai::SourceKind;
+    // Every building, whatever its productivity: the first problem found
+    missingInputs.clear();
+    if(building.IsProductionStopped())
+        return Diagnosis::Stopped; // The player or the distribution stopped it: not examined
+    // No road at its flag besides the one to the building
+    bool road = false;
+    for(const auto dir : helpers::EnumRange<Direction>{})
+        road |= dir != Direction::NorthWest && building.GetFlag()->GetRoute(dir) != nullptr;
+    if(!road)
+        return Diagnosis::NoRoad;
+    if(!building.HasWorker())
+        return player.IsJobWanted(building) ? Diagnosis::NoWorker : Diagnosis::WorkerComing;
+    // Tool reform: it does not work without tools (base speed 0) and has none giving work speed. An empty slot of a
+    // building that works without that tool (slowly) is no reason to wait (Nutzer, 2026-11-18): reported below
+    const auto& slots = building.GetToolSlots();
+    if(!slots.empty() && building.GetWorkSpeed() == 0)
+        return Diagnosis::NoTool;
+    const nofBuildingWorker* worker = building.GetWorker();
+    if(worker && worker->GetState() == nofBuildingWorker::State::WaitingForWaresOrProductionStopped)
+    {
+        const BldWorkDescription& workDesc = BLD_WORK_DESC[building.GetBuildingType()];
+        bool anyThere = false;
+        for(unsigned i = 0; i < workDesc.waresNeeded.size(); ++i)
+        {
+            if(workDesc.waresNeeded[i] == GoodType::Nothing)
+                continue;
+            if(building.GetNumWares(i) == 0)
+                missingInputs.push_back(workDesc.waresNeeded[i]);
+            else
+                anyThere = true;
+        }
+        const bool canWork = workDesc.useOneWareEach ? missingInputs.empty() : anyThere;
+        if(!canWork && !missingInputs.empty())
+            return Diagnosis::NoInput;
+        missingInputs.clear();
+    }
+    if(worker && worker->GetState() == nofBuildingWorker::State::WaitForWareSpace)
+        return Diagnosis::FlagFull;
+    const bool countable = recipe.reach > 0
+                           && (recipe.source.kind == SourceKind::Trees || recipe.source.kind == SourceKind::StonePiles
+                               || recipe.source.kind == SourceKind::MapObject || recipe.source.kind == SourceKind::Ore
+                               || recipe.source.kind == SourceKind::Fish || recipe.source.kind == SourceKind::Water);
+    const bool fields = needsFields(recipe.building);
+    if(countable || fields)
+    {
+        const SourceInfo info = getSources();
+        if(countable && info.inReach == 0)
+            return Diagnosis::Exhausted;
+        if(fields && info.fields < MIN_FIELD_NODES)
+            return Diagnosis::FewFields;
+        // Harvesters walking to their source (miners and wells do not walk)
+        if(countable && recipe.reach >= 2 && recipe.source.kind != SourceKind::Ore
+           && recipe.source.kind != SourceKind::Water && info.nearby == 0)
+            return Diagnosis::SourceFar;
+    }
+    if(helpers::contains_if(slots, [](const nobUsual::ToolSlot& slot) { return slot.tool == GoodType::Nothing; }))
+        return Diagnosis::MissingTool;
+    // A tool in use worse than the best one of its slot
+    const auto& slotDescs = getActiveContent().GetBuildingTools(building.GetBuildingType()).slots;
+    for(unsigned i = 0; i < slots.size() && i < slotDescs.size(); ++i)
+    {
+        unsigned best = 0;
+        for(const GoodType good : slotDescs[i].wares)
+            best = std::max(best, getToolQuality(good));
+        if(getToolQuality(slots[i].tool) < best)
+            return Diagnosis::BadTool;
+    }
+    return Diagnosis::Working;
+}
+
+helpers::OptionalEnum<Tool> getToolKindOf(const GoodType good)
+{
+    for(const auto tool : helpers::enumRange<Tool>())
+    {
+        if(TOOL_TO_GOOD[tool] == good)
+            return tool;
+    }
+    if(const auto kind = getActiveContent().GetToolTypeOf(good))
+        return *kind;
+    return std::nullopt;
+}
+
+unsigned getToolQuality(const GoodType good)
+{
+    const ToolInfo* info = getActiveContent().GetTool(good);
+    if(!info)
+        return 0;
+    return (info->speed + info->outputRatio) * 1000u + std::min(info->durability, 999u);
+}
+
+GoodType getRecruitTool(const EconomySnapshot& snapshot, const BuildingType bld)
+{
+    const Content& content = getActiveContent();
+    const auto job = getJob(bld);
+    if(!job || snapshot.inWarehousesPeople[*job] > snapshot.jobsWanted[*job] || content.IsRecruitedWithoutTool(*job))
+        return GoodType::Nothing;
+    if(isCustomJob(*job))
+    {
+        const CustomWorker* worker = content.GetWorker(*job);
+        return worker ? worker->tool : GoodType::Nothing;
+    }
+    return JOB_CONSTS[*job].tool.value_or(GoodType::Nothing);
+}
+
+void addToolDemand(const EconomySnapshot& snapshot, std::vector<OpenDemand>& demand, const BuildingType bld)
+{
+    if(!BuildingProperties::IsUsual(bld))
+        return;
+    if(const GoodType tool = getRecruitTool(snapshot, bld); tool != GoodType::Nothing)
+        demand.push_back({{tool}, 1, WareUse::Tool});
+    // Tool reform: one tool per slot (also the slots of a building working without tools: it asks for them)
+    for(const BuildingTools::Slot& slot : getActiveContent().GetBuildingTools(bld).slots)
+    {
+        if(!slot.wares.empty())
+            demand.push_back({slot.wares, 1, WareUse::Tool});
+    }
+}
+
+EconomyForecast::EconomyForecast(const civai::EconomyGraph& graph) : graph_(graph)
+{
+    for(const civai::Recipe& recipe : graph_.GetRecipes())
+        nominalSteps_.push_back(static_cast<Amount>(std::llround(recipe.nominalStepsPerMinute * AMOUNT_UNIT)));
+}
+
+const civai::Recipe* EconomyForecast::FindRecipe(const BuildingType bld) const
+{
+    for(const civai::Recipe& recipe : graph_.GetRecipes())
+    {
+        if(recipe.building == bld)
+            return &recipe;
+    }
+    return nullptr;
+}
+
+Amount EconomyForecast::GetNominalSteps(const BuildingType bld) const
+{
+    const auto& recipes = graph_.GetRecipes();
+    for(unsigned i = 0; i < recipes.size(); ++i)
+    {
+        if(recipes[i].building == bld)
+            return nominalSteps_[i];
+    }
+    return 0;
+}
+
+void EconomyForecast::Compute(const GamePlayer& player, const unsigned gf, const EconomySnapshot& snapshot,
+                              const Extra& extra)
+{
+    gf_ = gf;
+    player_ = &player;
+    const EconomyStatistics& stats = player.GetEconomyStatistics();
+    coveredGFs_ = std::max(1u, stats.GetCoveredGFs(BALANCE_MINUTES, gf_));
+    // Less than a minute at the start counts as one minute: a burst in the first seconds is no rate per minute
+    measuredGFs_ = std::max(EconomyStatistics::GetGFsPerMinute(), coveredGFs_);
+    windowStart_ = gf_ + 1 > coveredGFs_ ? gf_ + 1 - coveredGFs_ : 0u;
+    ComputeMeasures(player);
+    ComputeFlows(player, snapshot, extra);
+    ComputeStatuses(player, snapshot, extra);
+}
+
+void EconomyForecast::ComputeMeasures(const GamePlayer& player)
+{
+    measures_ = {};
+    const EconomyStatistics& stats = player.GetEconomyStatistics();
+    const unsigned now = gf_ + 1;
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        if(!BuildingProperties::IsUsual(bld))
+            continue;
+        TypeMeasure& measure = measures_[bld];
+        for(const nobUsual* building : player.GetBuildingRegister().GetBuildings(bld))
+        {
+            measure.buildingGFs += gfsIn(building->GetFinishedGF(), now, windowStart_);
+            if(building->GetWorkerSinceGF() == nobUsual::NO_GF)
+                continue;
+            measure.worked = true;
+            measure.workingGFsPercent += static_cast<uint64_t>(gfsIn(building->GetWorkerSinceGF(), now, windowStart_))
+                                         * building->GetProductivity();
+        }
+    }
+    // Buildings gone: their minutes count until they are older than the balance length
+    for(const GamePlayer::GoneBuilding& gone : player.GetGoneBuildings())
+        measures_[gone.type].buildingGFs += gfsIn(gone.finished, std::min(gone.gone, now), windowStart_);
+    // A type whose buildings made anything in the window has worked (also if they are gone now)
+    for(const civai::Recipe& recipe : graph_.GetRecipes())
+    {
+        TypeMeasure& measure = measures_[recipe.building];
+        for(const GoodType good : recipe.outputs)
+        {
+            if(!measure.worked && stats.GetProducedBy(recipe.building, good, BALANCE_MINUTES, gf_) > 0)
+                measure.worked = true;
+        }
+    }
+}
+
+Amount EconomyForecast::ProducedPerBuilding(const BuildingType bld, const GoodType good) const
+{
+    const TypeMeasure& measure = measures_[bld];
+    const unsigned gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
+    if(player_ && measure.worked && measure.buildingGFs >= gfsPerMinute)
+    {
+        const Amount made = player_->GetEconomyStatistics().GetProducedBy(bld, good, BALANCE_MINUTES, gf_);
+        return made * AMOUNT_UNIT * gfsPerMinute / measure.buildingGFs;
+    }
+    // No building of the type worked yet: by the work time
+    const auto& recipes = graph_.GetRecipes();
+    for(unsigned i = 0; i < recipes.size(); ++i)
+    {
+        const civai::Recipe& recipe = recipes[i];
+        if(recipe.building != bld)
+            continue;
+        if(helpers::contains(recipe.outputs, good))
+            return nominalSteps_[i] / static_cast<Amount>(std::max<size_t>(1u, recipe.outputs.size()));
+        for(unsigned j = 0; j < recipe.byproducts.size(); ++j)
+        {
+            if(recipe.byproducts[j] == good)
+                return nominalSteps_[i] * recipe.byproductAmounts[j];
+        }
+        return 0;
+    }
+    return 0;
+}
+
+Amount EconomyForecast::UsedPerBuilding(const BuildingType bld, const GoodType good) const
+{
+    const TypeMeasure& measure = measures_[bld];
+    const unsigned gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
+    if(player_ && measure.worked && measure.buildingGFs >= gfsPerMinute)
+    {
+        const Amount used = player_->GetEconomyStatistics().GetUsedBy(bld, good, BALANCE_MINUTES, gf_);
+        return used * AMOUNT_UNIT * gfsPerMinute / measure.buildingGFs;
+    }
+    // By the work time: one of each input per work step, or one of them ("any of")
+    const auto& recipes = graph_.GetRecipes();
+    for(unsigned i = 0; i < recipes.size(); ++i)
+    {
+        const civai::Recipe& recipe = recipes[i];
+        if(recipe.building != bld)
+            continue;
+        if(!helpers::contains(recipe.inputs, good))
+            return 0;
+        return recipe.consumeEach ? nominalSteps_[i] : nominalSteps_[i] / static_cast<Amount>(recipe.inputs.size());
+    }
+    return 0;
+}
+
+Amount EconomyForecast::OutputPerWorkingMinute(const BuildingType bld) const
+{
+    // Wares (all products together) a building makes per minute while its worker is there
+    const civai::Recipe* recipe = FindRecipe(bld);
+    if(!recipe)
+        return 0;
+    const TypeMeasure& measure = measures_[bld];
+    const unsigned gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
+    // At least half a minute worked
+    if(player_ && measure.workingGFsPercent * 2 >= static_cast<uint64_t>(gfsPerMinute) * 100u)
+    {
+        Amount made = 0;
+        for(const GoodType good : recipe->outputs)
+            made += player_->GetEconomyStatistics().GetProducedBy(bld, good, BALANCE_MINUTES, gf_);
+        if(made > 0)
+            return made * AMOUNT_UNIT * gfsPerMinute * 100 / static_cast<Amount>(measure.workingGFsPercent);
+    }
+    return GetNominalSteps(bld);
+}
+
+void EconomyForecast::ComputeFlows(const GamePlayer& player, const EconomySnapshot& snapshot, const Extra& extra)
+{
+    const EconomyStatistics& stats = player.GetEconomyStatistics();
+    const Amount length = BALANCE_MINUTES;
+    const Amount gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
+    // Measured: what was made and used in the last balance length, extrapolated to the balance length
+    const auto perLength = [&](const Amount count) {
+        return count * AMOUNT_UNIT * length * gfsPerMinute / measuredGFs_;
+    };
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(good == GoodType::Nothing)
+            continue;
+        production_[good] = perLength(stats.GetProduced(good, BALANCE_MINUTES, gf_));
+        // Used as input of buildings. What is used for construction, tools, soldiers, research ... is asked for
+        // before it is used: it is part of "requested" (counting it here too would count it twice)
+        consumption_[good] = perLength(stats.GetUsed(good, WareUse::Production, BALANCE_MINUTES, gf_));
+    }
+    groupConsumption_.clear();
+    // Coming: building sites, sites ordered, and buildings finished less than a balance length ago (the part of their
+    // work not in the statistic yet), by the measured value per building of their type. Standing: buildings with a
+    // problem (input, tool, worker, flag, road, fields ...) make only what is measured, but what they would use by
+    // their work time counts always
+    const unsigned windowGFs = BALANCE_MINUTES * EconomyStatistics::GetGFsPerMinute();
+    const GameWorld& world = player.GetGameWorld();
+    const auto& recipes = graph_.GetRecipes();
+    std::vector<BuildingType> counted;
+    for(unsigned idx = 0; idx < recipes.size(); ++idx)
+    {
+        const civai::Recipe& recipe = recipes[idx];
+        if((extra.counts && !extra.counts(recipe.building)) || helpers::contains(counted, recipe.building))
+            continue;
+        counted.push_back(recipe.building);
+        // In hundredths of buildings
+        Amount coming =
+          (snapshot.buildings[recipe.building].numSites + extra.pendingSites[recipe.building]) * AMOUNT_UNIT;
+        Amount standing = 0;
+        for(const nobUsual* building : player.GetBuildingRegister().GetBuildings(recipe.building))
+        {
+            const unsigned age = gf_ > building->GetFinishedGF() ? gf_ - building->GetFinishedGF() : 0u;
+            if(age < windowGFs)
+            {
+                coming += AMOUNT_UNIT - AMOUNT_UNIT * age / windowGFs;
+                continue;
+            }
+            std::vector<GoodType> missing;
+            const Diagnosis diagnosis =
+              extra.diagnose ? extra.diagnose(*building, recipe) : diagnose(player, *building, recipe, missing, [&]() {
+                  return countSources(world, building->GetPos(), recipe, true);
+              });
+            if(diagnosis == Diagnosis::Working || diagnosis == Diagnosis::Stopped || diagnosis == Diagnosis::Exhausted)
+                continue;
+            standing += building->HasWorker() ?
+                          AMOUNT_UNIT - std::min<Amount>(AMOUNT_UNIT, building->GetProductivity()) :
+                          AMOUNT_UNIT;
+        }
+        if(coming > 0)
+        {
+            for(const GoodType good : recipe.outputs)
+                production_[good] += coming * ProducedPerBuilding(recipe.building, good) * length / AMOUNT_UNIT;
+            for(unsigned i = 0; i < recipe.byproducts.size(); ++i)
+            {
+                const int tech = recipe.byproductTechs[i];
+                if(tech < 0 || player.GetResearch().IsResearched(static_cast<TechIdx>(tech)))
+                {
+                    production_[recipe.byproducts[i]] +=
+                      coming * ProducedPerBuilding(recipe.building, recipe.byproducts[i]) * length / AMOUNT_UNIT;
+                }
+            }
+            if(recipe.consumeEach)
+            {
+                for(const GoodType good : recipe.inputs)
+                    consumption_[good] += coming * UsedPerBuilding(recipe.building, good) * length / AMOUNT_UNIT;
+            } else if(!recipe.inputs.empty())
+            {
+                Amount used = 0;
+                for(const GoodType good : recipe.inputs)
+                    used += UsedPerBuilding(recipe.building, good);
+                groupConsumption_.emplace_back(sorted(recipe.inputs), coming * used * length / AMOUNT_UNIT);
+            }
+        }
+        if(standing > 0)
+        {
+            const Amount steps = nominalSteps_[idx] * standing * length / AMOUNT_UNIT;
+            if(recipe.consumeEach)
+            {
+                for(const GoodType good : recipe.inputs)
+                    consumption_[good] += steps;
+            } else if(!recipe.inputs.empty())
+                groupConsumption_.emplace_back(sorted(recipe.inputs), steps);
+        }
+    }
+}
+
+void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySnapshot& snapshot, const Extra& extra)
+{
+    const EconomyStatistics& stats = player.GetEconomyStatistics();
+    const TechTree& techTree = player.GetGameWorld().GetTechTree();
+    const Amount gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
+
+    // "Reserviert": the wares on their way, without those on their way to a consumer (their request is not open any
+    // more, otherwise they would count twice)
+    helpers::EnumArray<unsigned, GoodType> onTheWay{};
+    for(const Ware* ware : player.GetWares())
+    {
+        if(ware->type != GoodType::Nothing)
+            ++onTheWay[ware->type];
+    }
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        ForecastStatus status;
+        if(good != GoodType::Nothing)
+        {
+            status.stock = snapshot.inWarehouses[good];
+            status.inTransit = snapshot.inTransit[good];
+            status.onTheWay =
+              static_cast<Amount>(onTheWay[good] > status.inTransit ? onTheWay[good] - status.inTransit : 0u)
+              * AMOUNT_UNIT;
+            status.balance = stats.GetBalance(good, BALANCE_MINUTES, gf_);
+            status.consumptionPerMinute = static_cast<Amount>(stats.GetConsumed(good, BALANCE_MINUTES, gf_))
+                                          * AMOUNT_UNIT * gfsPerMinute / coveredGFs_;
+            if(techTree.IsAIStartStockNoSurplus(good))
+            {
+                uint32_t used = 0;
+                for(const auto use : helpers::enumRange<WareUse>())
+                    used += stats.GetTotalUsed(good, use);
+                const uint32_t added = stats.GetTotalGained(good, WareSource::Added);
+                status.startStockLeft = added > used ? added - used : 0u;
+            }
+            status.production = production_[good];
+        }
+        wares_[good] = status;
+    }
+
+    // Every request is an entry: some wares (one of them will do) and an amount. Open: what the game asks for now.
+    // Consumption: what the buildings will use in the balance length (alone or "any of"). Planned: what the building
+    // sites and the AI will ask for, and the tools kept in stock.
+    // The entries are shared out among the wares, so that no ware is counted twice (Nutzer, 2026-11-17). What a ware
+    // has: its stock, the wares on their way and what will be made in the balance length. The entries with fewest wares
+    // first (a ware asked for alone can come from nowhere else); equal: open before consumption before planned, planned
+    // in the order given. In an entry the wares fewer other entries take first, equal: the one with more left. What
+    // none of its wares has left is missing for exactly the wares of the entry
+    enum class Part : uint8_t
+    {
+        Open,
+        Consumption,
+        Planned
+    };
+    struct Entry
+    {
+        std::vector<GoodType> wares;
+        Amount amount;
+        Part part;
+        bool byOrder;
+    };
+    std::vector<Entry> entries;
+    const auto addEntry = [&entries](std::vector<GoodType> wares, const Amount amount, const Part part,
+                                     const bool byOrder) {
+        wares = sorted(std::move(wares));
+        if(wares.empty() || amount <= 0)
+            return;
+        entries.push_back({std::move(wares), amount, part, byOrder});
+    };
+    for(const OpenDemand& demand : snapshot.openDemand)
+        addEntry(demand.wares, static_cast<Amount>(demand.amount) * AMOUNT_UNIT, Part::Open, false);
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(good != GoodType::Nothing)
+            addEntry({good}, consumption_[good], Part::Consumption, false);
+    }
+    for(const auto& [anyOf, amount] : groupConsumption_)
+        addEntry(anyOf, amount, Part::Consumption, false);
+    // Building sites: the tools they will ask for (their construction costs the game asks for: open)
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        for(unsigned i = snapshot.buildings[bld].numSites; i > 0; --i)
+        {
+            std::vector<OpenDemand> demand;
+            addToolDemand(snapshot, demand, bld);
+            for(const OpenDemand& entry : demand)
+                addEntry(entry.wares, static_cast<Amount>(entry.amount) * AMOUNT_UNIT, Part::Planned, false);
+        }
+    }
+    for(const PlannedEntry& entry : extra.planned)
+        addEntry(entry.wares, entry.amount, Part::Planned, entry.byOrder);
+    // The tools of a kind kept in stock are asked for too (so they are made before they are missing)
+    helpers::EnumArray<std::vector<GoodType>, Tool> toolKinds;
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(good == GoodType::Nothing)
+            continue;
+        if(const auto kind = getToolKindOf(good))
+            toolKinds[*kind].push_back(good);
+    }
+    for(const auto tool : helpers::enumRange<Tool>())
+    {
+        if(!toolKinds[tool].empty())
+            addEntry(toolKinds[tool], static_cast<Amount>(TOOLS_IN_STOCK) * AMOUNT_UNIT, Part::Planned, false);
+    }
+    std::stable_sort(entries.begin(), entries.end(), [](const Entry& lhs, const Entry& rhs) {
+        if(lhs.wares.size() != rhs.wares.size())
+            return lhs.wares.size() < rhs.wares.size();
+        return lhs.part < rhs.part;
+    });
+    // How many different entries (by their wares) take each ware
+    helpers::EnumArray<unsigned, GoodType> numTaking{};
+    entrySets_.clear();
+    for(const Entry& entry : entries)
+    {
+        if(helpers::contains(entrySets_, entry.wares))
+            continue;
+        entrySets_.push_back(entry.wares);
+        for(const GoodType good : entry.wares)
+            ++numTaking[good];
+    }
+    // Share out a list of entries among the wares (`left`: what each ware has), returns per ware what it got
+    const auto shareOut = [&numTaking](const std::vector<const Entry*>& list, helpers::EnumArray<Amount, GoodType> left,
+                                       const auto& give, const auto& lack) {
+        std::vector<GoodType> order;
+        for(const Entry* entry : list)
+        {
+            order = entry->wares;
+            std::stable_sort(order.begin(), order.end(), [&](const GoodType lhs, const GoodType rhs) {
+                if(numTaking[lhs] != numTaking[rhs])
+                    return numTaking[lhs] < numTaking[rhs];
+                return left[lhs] > left[rhs];
+            });
+            Amount need = entry->amount;
+            for(const GoodType good : order)
+            {
+                if(need <= 0)
+                    break;
+                const Amount taken = std::min(need, std::max<Amount>(0, left[good]));
+                if(taken <= 0)
+                    continue;
+                left[good] -= taken;
+                give(*entry, good, taken);
+                need -= taken;
+            }
+            if(need > 0)
+                lack(*entry, need);
+        }
+    };
+    const auto addShare = [](Shares& shares, const Entry& entry, const Amount amount) {
+        switch(entry.part)
+        {
+            case Part::Open: shares.open += amount; break;
+            case Part::Consumption: shares.consumption += amount; break;
+            case Part::Planned:
+                shares.planned += amount;
+                if(entry.byOrder)
+                    shares.plannedByOrders += amount;
+                break;
+        }
+    };
+    // Forecast: all entries, what a ware has = stock + on the way + production
+    given_ = {};
+    missing_.clear();
+    available_ = {};
+    availableCount_ = {};
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(good == GoodType::Nothing)
+            continue;
+        availableCount_[good] = static_cast<Amount>(wares_[good].stock) * AMOUNT_UNIT + wares_[good].onTheWay;
+        available_[good] = availableCount_[good] + production_[good];
+    }
+    std::vector<const Entry*> all, open;
+    for(const Entry& entry : entries)
+    {
+        all.push_back(&entry);
+        if(entry.part == Part::Open)
+            open.push_back(&entry);
+    }
+    shareOut(
+      all, available_,
+      [&](const Entry& entry, const GoodType good, const Amount amount) { addShare(given_[good], entry, amount); },
+      [&](const Entry& entry, const Amount amount) { addShare(missing_[entry.wares], entry, amount); });
+    // Number of wares: only the open requests, what a ware has = stock + on the way
+    givenCount_ = {};
+    missingCount_.clear();
+    shareOut(
+      open, availableCount_,
+      [&](const Entry&, const GoodType good, const Amount amount) { givenCount_[good] += amount; },
+      [&](const Entry& entry, const Amount amount) { missingCount_[entry.wares] += amount; });
+
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(good != GoodType::Nothing)
+            wares_[good] = GetGroup({good});
+    }
+}
+
+ForecastStatus EconomyForecast::GetGroup(const std::vector<GoodType>& wares) const
+{
+    ForecastStatus status;
+    Shares shares;
+    Amount countGiven = 0, countAvailable = 0;
+    for(const GoodType good : wares)
+    {
+        const ForecastStatus& ware = wares_[good];
+        status.stock += ware.stock;
+        status.onTheWay += ware.onTheWay;
+        status.inTransit += ware.inTransit;
+        status.balance += ware.balance;
+        status.consumptionPerMinute += ware.consumptionPerMinute;
+        status.startStockLeft += ware.startStockLeft;
+        status.production += production_[good];
+        shares.open += given_[good].open;
+        shares.consumption += given_[good].consumption;
+        shares.planned += given_[good].planned;
+        shares.plannedByOrders += given_[good].plannedByOrders;
+        countGiven += givenCount_[good];
+        countAvailable += availableCount_[good];
+    }
+    const auto lacking = missing_.find(wares);
+    if(lacking != missing_.end())
+    {
+        const Shares& lack = lacking->second;
+        shares.open += lack.open;
+        shares.consumption += lack.consumption;
+        shares.planned += lack.planned;
+        shares.plannedByOrders += lack.plannedByOrders;
+        status.missing = lack.open + lack.consumption + lack.planned;
+    }
+    status.openDemand = shares.open;
+    status.planned = shares.planned;
+    status.plannedByOrders = shares.plannedByOrders;
+    status.consumption = shares.consumption;
+    status.free =
+      static_cast<Amount>(status.stock) * AMOUNT_UNIT + status.onTheWay - status.openDemand - status.planned;
+    status.forecast = status.free + status.production - status.consumption;
+    const auto lackingCount = missingCount_.find(wares);
+    status.countMissing = lackingCount != missingCount_.end() ? lackingCount->second : 0;
+    status.count = countAvailable - countGiven - status.countMissing;
+    return status;
+}
+
+} // namespace civ

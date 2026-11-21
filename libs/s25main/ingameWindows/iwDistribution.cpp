@@ -46,14 +46,9 @@ iwDistribution::iwDistribution(const GameWorldViewer& gwv, GameCommandFactory& g
     hasKnowledgeTab = civEnabled && !content.GetKnowledgeMedia().empty();
     // Civilization mode, tool reform: Tab "Werkzeuge" for the priority of the tool materials
     hasToolTab = civEnabled && content.HasToolReform();
-    // Civilization mode: own regulators
-    const unsigned numRegulators = civEnabled ? static_cast<unsigned>(content.GetRegulators().size()) : 0u;
-    regulatorsChanged.assign(numRegulators, false);
-    const unsigned numTabs = groups.size() + (hasKnowledgeTab ? 1u : 0u) + (hasToolTab ? 1u : 0u) + numRegulators;
+    const unsigned numTabs = groups.size() + (hasKnowledgeTab ? 1u : 0u) + (hasToolTab ? 1u : 0u);
     // More than 5 regulators in a tab need a higher window
-    unsigned maxEntries = hasToolTab ? static_cast<unsigned>(content.GetToolMaterials().size()) : 0u;
-    for(unsigned r = 0; r < numRegulators; ++r)
-        maxEntries = std::max(maxEntries, static_cast<unsigned>(content.GetRegulators()[r].entries.size()));
+    const unsigned maxEntries = hasToolTab ? static_cast<unsigned>(content.GetToolMaterials().size()) : 0u;
     const unsigned height = std::max(312u, 60u + maxEntries * 40u + 80u);
 
     Resize(Extent(numTabs * TAB_ICON_SIZE + TAB_ICON_SIZE / 2 + 20, height));
@@ -107,18 +102,6 @@ iwDistribution::iwDistribution(const GameWorldViewer& gwv, GameCommandFactory& g
                         names, _("Gebäude bestellen das vorrätige Werkzeug mit dem höchsten Wert (0 = nie)"));
     }
 
-    for(unsigned r = 0; r < numRegulators; ++r)
-    {
-        const civ::Regulator& regulator = content.GetRegulators()[r];
-        std::vector<std::string> names;
-        for(const civ::Regulator::Entry& entry : regulator.entries)
-            names.push_back(entry.title);
-        // Icon: the first ware of the first entry
-        const std::vector<GoodType> wares = content.FindWares(regulator.entries.front().tags);
-        AddRegulatorTab(*tab, GetRegulatorTabId(r), wareIcon(wares.empty() ? GoodType::Boards : wares.front()),
-                        regulator.title, names, _("Was die Werkstätten herstellen (alle 0 = gleich verteilt)"));
-    }
-
     // Gruppe auswählen
     tab->SetSelection(0);
 
@@ -154,17 +137,6 @@ void iwDistribution::TransmitSettings()
             values[i] = static_cast<uint8_t>(tab->GetCtrl<ctrlProgress>(i)->GetPosition());
         if(gcFactory.SetToolMaterialPriorities(values))
             toolsChanged = false;
-    }
-    for(unsigned r = 0; r < regulatorsChanged.size(); ++r)
-    {
-        if(!regulatorsChanged[r])
-            continue;
-        ctrlGroup* tab = GetCtrl<ctrlTab>(0)->GetGroup(GetRegulatorTabId(r));
-        std::vector<uint8_t> values(civ::getActiveContent().GetRegulators()[r].entries.size());
-        for(unsigned i = 0; i < values.size(); ++i)
-            values[i] = static_cast<uint8_t>(tab->GetCtrl<ctrlProgress>(i)->GetPosition());
-        if(gcFactory.SetRegulatorValues(r, values))
-            regulatorsChanged[r] = false;
     }
     if(settings_changed)
     {
@@ -204,9 +176,6 @@ void iwDistribution::Msg_Group_ProgressChange(const unsigned /*group_id*/, const
         knowledgeChanged = true;
     else if(hasToolTab && currentTab == GetToolTabId())
         toolsChanged = true;
-    else if(!regulatorsChanged.empty() && currentTab >= GetRegulatorTabId(0)
-            && currentTab < GetRegulatorTabId(static_cast<unsigned>(regulatorsChanged.size())))
-        regulatorsChanged[currentTab - GetRegulatorTabId(0)] = true;
     else
         settings_changed = true;
 }
@@ -228,15 +197,6 @@ void iwDistribution::AddRegulatorTab(ctrlTab& tab, const unsigned tabId, glArchi
     }
     tabGrp->AddText(2 * numNames, DrawPoint(txtPos.x, txtPos.y + 10), text, COLOR_YELLOW,
                     FontStyle::CENTER | FontStyle::BOTTOM, SmallFont);
-}
-
-void iwDistribution::SetRegulatorValues(const unsigned regulator, const std::vector<uint8_t>& values)
-{
-    if(regulator >= regulatorsChanged.size())
-        return;
-    ctrlGroup* tab = GetCtrl<ctrlTab>(0)->GetGroup(GetRegulatorTabId(regulator));
-    for(unsigned i = 0; i < values.size(); ++i)
-        tab->GetCtrl<ctrlProgress>(i)->SetPosition(values[i]);
 }
 
 void iwDistribution::SetKnowledgeValues(const std::array<uint8_t, 3>& values)
@@ -284,11 +244,6 @@ void iwDistribution::UpdateSettings()
     }
     if(hasToolTab && !toolsChanged)
         SetToolValues(gwv.GetPlayer().GetResearch().GetToolMaterialPriorities(civ::getActiveContent()));
-    for(unsigned r = 0; r < regulatorsChanged.size(); ++r)
-    {
-        if(!regulatorsChanged[r])
-            SetRegulatorValues(r, gwv.GetPlayer().GetResearch().GetRegulatorValues(civ::getActiveContent(), r));
-    }
 }
 
 void iwDistribution::Msg_ButtonClick(const unsigned ctrl_id)
@@ -326,14 +281,6 @@ void iwDistribution::Msg_ButtonClick(const unsigned ctrl_id)
                     defaults.push_back(material.defaultPriority);
                 SetToolValues(defaults);
                 toolsChanged = true;
-            }
-            for(unsigned r = 0; r < regulatorsChanged.size(); ++r)
-            {
-                std::vector<uint8_t> defaults;
-                for(const civ::Regulator::Entry& entry : civ::getActiveContent().GetRegulators()[r].entries)
-                    defaults.push_back(entry.defaultValue);
-                SetRegulatorValues(r, defaults);
-                regulatorsChanged[r] = true;
             }
         }
         break;

@@ -235,6 +235,13 @@ void GamePlayer::Serialize(SerializedGameData& sgd) const
 
     sgd.PushBool(emergency);
     economyStatistics_.Serialize(sgd);
+    sgd.PushUnsignedInt(static_cast<unsigned>(goneBuildings_.size()));
+    for(const GoneBuilding& gone : goneBuildings_)
+    {
+        helpers::pushEnum<uint8_t>(sgd, gone.type);
+        sgd.PushUnsignedInt(gone.finished);
+        sgd.PushUnsignedInt(gone.gone);
+    }
     sgd.PushUnsignedInt(static_cast<unsigned>(clearingWoodcutters_.size()));
     for(const MapPoint pt : clearingWoodcutters_)
         helpers::pushPoint(sgd, pt);
@@ -245,6 +252,7 @@ void GamePlayer::Serialize(SerializedGameData& sgd) const
     if(hasResearch)
     {
         research_.Serialize(sgd, world.GetTechTree());
+        wareDistribution_.Serialize(sgd);
         // Wares and buildings defined in lua use slots in order of definition -> remember them to detect changes
         const std::vector<std::string> signature = world.GetTechTree().GetContent().GetSignature();
         sgd.PushVarSize(signature.size());
@@ -448,6 +456,17 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
     economyStatistics_ = EconomyStatistics();
     if(sgd.GetGameDataVersion() >= 26)
         economyStatistics_.Deserialize(sgd);
+    goneBuildings_.clear();
+    if(sgd.GetGameDataVersion() >= 30)
+    {
+        goneBuildings_.resize(sgd.PopUnsignedInt());
+        for(GoneBuilding& gone : goneBuildings_)
+        {
+            gone.type = helpers::popEnum<BuildingType>(sgd);
+            gone.finished = sgd.PopUnsignedInt();
+            gone.gone = sgd.PopUnsignedInt();
+        }
+    }
     clearingWoodcutters_.clear();
     if(sgd.GetGameDataVersion() >= 27)
     {
@@ -457,9 +476,13 @@ void GamePlayer::Deserialize(SerializedGameData& sgd)
     }
 
     research_ = civ::PlayerResearch();
+    wareDistribution_ = civ::WareDistribution();
     if(sgd.GetGameDataVersion() >= 16 && sgd.PopBool())
     {
         research_.Deserialize(sgd, world.GetTechTree());
+        wareDistribution_ = civ::WareDistribution();
+        if(sgd.GetGameDataVersion() >= 30)
+            wareDistribution_.Deserialize(sgd);
         if(sgd.GetGameDataVersion() >= 18)
         {
             std::vector<std::string> savedSignature(sgd.PopVarSize());
@@ -586,6 +609,14 @@ void GamePlayer::RemoveBuilding(noBuilding* bld, BuildingType bldType)
     RTTR_Assert(bld->GetPlayer() == GetPlayerId());
     buildings.Remove(bld, bldType);
     ChangeStatisticValue(StatisticType::Buildings, -1);
+    if(BuildingProperties::IsUsual(bldType))
+    {
+        // Its minutes count in the measured values of its type for one more balance length
+        const unsigned gf = world.GetEvMgr().GetCurrentGF();
+        const unsigned windowGFs = civ::BALANCE_MINUTES * EconomyStatistics::GetGFsPerMinute();
+        helpers::erase_if(goneBuildings_, [&](const GoneBuilding& gone) { return gone.gone + windowGFs < gf; });
+        goneBuildings_.push_back({bldType, static_cast<nobUsual*>(bld)->GetFinishedGF(), gf});
+    }
     if(bldType == BuildingType::HarborBuilding)
     { // Schiffen Bescheid sagen
         for(noShip* ship : ships)

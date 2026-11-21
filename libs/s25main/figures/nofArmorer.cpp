@@ -11,6 +11,7 @@
 #include "SoundManager.h"
 #include "addons/const_addons.h"
 #include "buildings/nobUsual.h"
+#include "civ/WareDistribution.h"
 #include "network/GameClient.h"
 #include "ogl/glArchivItem_Bitmap_Player.h"
 #include "world/GameWorld.h"
@@ -80,7 +81,7 @@ void nofArmorer::HandleDerivedEvent(const unsigned /*id*/)
     {
         case State::Waiting1:
         {
-            if(!world->GetGGS().isEnabled(AddonId::HALF_COST_MIL_EQUIP) || !sword_shield)
+            if(!HasHalfCost() || !sword_shield)
             {
                 // LOG.write(("armorer handlewait1 - consume wares %i \n",player);
                 nofWorkman::HandleStateWaiting1();
@@ -110,12 +111,24 @@ void nofArmorer::HandleDerivedEvent(const unsigned /*id*/)
 
 bool nofArmorer::AreWaresAvailable() const
 {
-    return workplace->WaresAvailable() || (world->GetGGS().isEnabled(AddonId::HALF_COST_MIL_EQUIP) && sword_shield);
+    return workplace->WaresAvailable() || (HasHalfCost() && sword_shield);
+}
+
+bool nofArmorer::HasHalfCost() const
+{
+    // The addon needs sword and shield in turn: not with the distribution of all wares (civilization mode)
+    return world->GetGGS().isEnabled(AddonId::HALF_COST_MIL_EQUIP) && !civ::isDistributionActive(*world);
 }
 
 helpers::OptionalEnum<GoodType> nofArmorer::ProduceWare()
 {
-    sword_shield = !sword_shield;
+    if(civ::isDistributionActive(*world))
+    {
+        // Civilization mode: chosen by the distribution of all wares (shields of all nations count as one ware)
+        const auto& products = civ::getBuildingProducts(*world, BuildingType::Armory).products;
+        sword_shield = civ::chooseProduct(*world, player, products, GetObjId()) == GoodType::Sword;
+    } else
+        sword_shield = !sword_shield;
 
     if(sword_shield)
         return GoodType::Sword;
