@@ -78,6 +78,9 @@ struct EconomyMinute
     /// Per building type and ware: wares made by its workers (products and byproducts) and inputs taken for its work
     /// steps. Only the pairs counted in the minute
     std::map<std::pair<BuildingType, GoodType>, uint16_t> producedBy, usedBy;
+    /// Per building type: GFs its buildings stood stopped (production stopped by the player or by the distribution of
+    /// all wares), summed over the buildings. Only the types counted in the minute
+    std::map<BuildingType, uint32_t> stoppedBy;
 };
 
 /// Exact economy statistic of a player: every ware that enters or leaves his stock, counted at the moment it happens,
@@ -100,6 +103,8 @@ public:
     void AddHelpersForJobs(unsigned count, unsigned gf);
     void AddProducedBy(BuildingType bld, GoodType good, unsigned count, unsigned gf);
     void AddUsedBy(BuildingType bld, GoodType good, unsigned count, unsigned gf);
+    /// The buildings of the type stood stopped for `gfs` GFs (summed over the buildings)
+    void AddStoppedBy(BuildingType bld, unsigned gfs, unsigned gf);
 
     /// Made in the last n minutes (n = 1..HISTORY_MINUTES)
     unsigned GetProduced(GoodType good, unsigned minutes, unsigned gf) const;
@@ -123,6 +128,8 @@ public:
     unsigned GetProducedBy(BuildingType bld, GoodType good, unsigned minutes, unsigned gf) const;
     /// Taken as input by the buildings of the type in the last n minutes
     unsigned GetUsedBy(BuildingType bld, GoodType good, unsigned minutes, unsigned gf) const;
+    /// GFs the buildings of the type stood stopped in the last n minutes (summed over the buildings)
+    unsigned GetStoppedBy(BuildingType bld, unsigned minutes, unsigned gf) const;
 
     /// Game minutes covered by the last n minutes at the given GF (the current minute counts as the part passed)
     double GetCoveredMinutes(unsigned minutes, unsigned gf) const;

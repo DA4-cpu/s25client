@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "EconomyStatistics.h"
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
 #include "SerializedGameData.h"
@@ -13,6 +14,7 @@
 #include "buildings/noBuildingSite.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobHQ.h"
+#include "buildings/nobUsual.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
 #include "civ/WareDistribution.h"
@@ -1549,6 +1551,46 @@ BOOST_FIXTURE_TEST_CASE(WaitingConsumersCountInTheForecast, PlannerFixture)
     BOOST_TEST((pit.cause == civai::OrderCause::Shortage));
     BOOST_TEST((pit.kind == civai::OrderKind::Needed));
     BOOST_TEST((pit.state == civai::OrderState::Placed));
+}
+
+BOOST_FIXTURE_TEST_CASE(StoppedBuildingsCountWithTheirFullWork, PlannerFixture)
+{
+    // A kiln stopped for longer than a balance length (by the player; by the distribution of all wares the same, Nutzer
+    // 2026-11-22). The research asks for clay: the stopped kiln counts with what it makes by its work time (none of its
+    // minutes ran), no other kiln comes. What it would use does not count: no needed pit for its loam
+    startGame(makeDesc());
+    placeDeposits();
+    MapPoint kilnPos = MapPoint::Invalid();
+    for(const Position offset : {Position(5, -3), Position(6, 2), Position(3, 5), Position(-3, -4)})
+    {
+        const MapPoint pt = world.MakeMapPoint(hqPos + offset);
+        if(world.GetBQ(pt, curPlayer) >= BuildingQuality::Hut)
+        {
+            BuildingFactory::CreateBuilding(world, KILN, pt, curPlayer, Nation::Romans);
+            kilnPos = pt;
+            break;
+        }
+    }
+    BOOST_TEST_REQUIRE(kilnPos.isValid());
+    world.GetSpecObj<nobUsual>(kilnPos)->SetProductionEnabled(false);
+    const unsigned windowGFs = civai::EconomyPlanner::BALANCE_MINUTES * EconomyStatistics::GetGFsPerMinute();
+    for(unsigned i = 0; i < windowGFs + 600; ++i)
+    {
+        em.ExecuteNextGF();
+        civ::runDistributions(world, em.GetCurrentGF());
+    }
+    startAI();
+    BOOST_TEST_REQUIRE(civ::setResearch(world, curPlayer, 0));
+    step();
+    step();
+    BOOST_TEST_INFO(planner()->GetReport());
+    BOOST_TEST(ware(CLAY).forecastProduction >= 5.);
+    BOOST_TEST(ware(LOAM).forecastConsumption == 0.);
+    BOOST_TEST(findOrder(KILN) == -1);
+    // A pit comes at most as a harvester of the deposits (expanding), not for the loam of the kiln
+    BOOST_TEST(!helpers::contains_if(list(), [](const civai::Order* order) {
+        return order->building == PIT && order->kind == civai::OrderKind::Needed;
+    }));
 }
 
 BOOST_FIXTURE_TEST_CASE(ExpandingOrderGetsExpandingSolutions, PlannerFixture)

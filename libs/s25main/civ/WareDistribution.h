@@ -141,8 +141,13 @@ struct DistributionData
     helpers::EnumArray<BuildingProducts, BuildingType> products;
 };
 
-/// Compute the distributions of the players whose turn it is (Game::RunGF)
+/// Compute the distributions of the players whose turn it is (Game::RunGF). Before: the buildings stopped in the
+/// interval are counted in the economy statistic (recordStoppedBuildings)
 void runDistributions(GameWorld& world, unsigned gf);
+/// Count the GFs the buildings of the player stood stopped (by the player or the distribution of all wares) since the
+/// last computation of the distribution: the state now, for DISTRIBUTION_INTERVAL GFs. For the measured values per
+/// building (EconomyForecast: the stopped minutes do not count)
+void recordStoppedBuildings(GameWorld& world, unsigned playerId, unsigned gf);
 /// Compute the distribution of the player now and wake or stop its buildings
 void updateDistribution(GameWorld& world, unsigned playerId);
 /// Wake the buildings of the player making the ware (an order was placed)

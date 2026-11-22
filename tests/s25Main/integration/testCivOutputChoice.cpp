@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "BuildingRegister.h"
+#include "EconomySnapshot.h"
+#include "EconomyStatistics.h"
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
 #include "PointOutput.h"
@@ -15,6 +17,7 @@
 #include "buildings/nobHQ.h"
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
+#include "civ/EconomyForecast.h"
 #include "civ/PlayerResearch.h"
 #include "civ/Research.h"
 #include "civ/TechTree.h"
@@ -330,6 +333,62 @@ BOOST_FIXTURE_TEST_CASE(SurplusByTheNumberOfWares, OutputChoiceFixture)
     civ::updateDistribution(world, 0);
     BOOST_TEST((distribution().GetState(BRICK) == civ::WareDistState::Surplus));
     BOOST_TEST(kiln.IsProductionStopped());
+}
+
+BOOST_FIXTURE_TEST_CASE(StoppedBuildingsCountWithTheirFullWork, OutputChoiceFixture)
+{
+    // A stopped building (here by the player; stopped by the distribution of all wares counts the same, Nutzer
+    // 2026-11-22): its stopped minutes do not count for the measured value per building, and in the forecast it makes
+    // in them what one makes per minute. Not what it would use. 5 stones: at most 5 bricks, no surplus
+    hq().AddToInventory(GoodCounts::make(GoodType::Stones, 5), true);
+    const MapPoint pos = placeConnectedBuilding(KILN);
+    const nobUsual& kiln = *world.GetSpecObj<nobUsual>(pos);
+    RTTR_EXEC_TILL(2000, kiln.HasWorker());
+    // Bricks made by the kiln: measured
+    RTTR_EXEC_TILL(4000, countInHQ(BRICK) >= 3u);
+    this->SetProductionEnabled(pos, false);
+    BOOST_TEST_REQUIRE(kiln.IsProductionStopped());
+    // The stopped GFs are counted when the distribution is computed (every DISTRIBUTION_INTERVAL GFs)
+    for(unsigned i = 0; i < 3000; ++i)
+    {
+        em.ExecuteNextGF();
+        civ::runDistributions(world, em.GetCurrentGF());
+    }
+    const GamePlayer& player = world.GetPlayer(0);
+    const EconomyStatistics& stats = player.GetEconomyStatistics();
+    const unsigned gf = em.GetCurrentGF();
+    civ::EconomyForecast forecast(world.GetDistributionData().graph);
+    forecast.Compute(player, gf, takeEconomySnapshot(player), {});
+    const civ::TypeMeasure& measure = forecast.GetMeasure(KILN);
+    BOOST_TEST(measure.stoppedGFs >= 3000u - civ::DISTRIBUTION_INTERVAL);
+    BOOST_TEST(measure.stoppedGFs <= 3000u + civ::DISTRIBUTION_INTERVAL);
+    BOOST_TEST(measure.stoppedGFs < measure.buildingGFs);
+    const unsigned gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
+    const civ::Amount made = stats.GetProducedBy(KILN, BRICK, civ::BALANCE_MINUTES, gf);
+    BOOST_TEST_REQUIRE(made >= 3);
+    const civ::Amount perBuilding = forecast.ProducedPerBuilding(KILN, BRICK);
+    BOOST_TEST(perBuilding == made * civ::AMOUNT_UNIT * gfsPerMinute / (measure.buildingGFs - measure.stoppedGFs));
+    // Production: the measured one and the stopped minutes with the value per building
+    const civ::Amount measured =
+      made * civ::AMOUNT_UNIT * civ::BALANCE_MINUTES * gfsPerMinute / forecast.GetMeasuredGFs();
+    const civ::Amount stopped =
+      static_cast<civ::Amount>(measure.stoppedGFs) * perBuilding * civ::BALANCE_MINUTES / forecast.GetMeasuredGFs();
+    BOOST_TEST(stopped > 0);
+    // The kiln is younger than a balance length: the rest of it counts as a coming building
+    const unsigned windowGFs = civ::BALANCE_MINUTES * gfsPerMinute;
+    const unsigned age = gf - kiln.GetFinishedGF();
+    BOOST_TEST_REQUIRE(age < windowGFs);
+    const civ::Amount coming = civ::AMOUNT_UNIT - civ::AMOUNT_UNIT * age / windowGFs;
+    BOOST_TEST(forecast.GetWare(BRICK).production
+               == measured + stopped + coming * perBuilding * civ::BALANCE_MINUTES / civ::AMOUNT_UNIT);
+    // Running again: no more stopped GFs are counted
+    this->SetProductionEnabled(pos, true);
+    for(unsigned i = 0; i < 1000; ++i)
+    {
+        em.ExecuteNextGF();
+        civ::runDistributions(world, em.GetCurrentGF());
+    }
+    BOOST_TEST(stats.GetStoppedBy(KILN, civ::BALANCE_MINUTES, em.GetCurrentGF()) == measure.stoppedGFs);
 }
 
 BOOST_FIXTURE_TEST_CASE(PlannedDemandCountsInTheForecast, OutputChoiceFixture)

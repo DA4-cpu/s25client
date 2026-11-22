@@ -205,6 +205,8 @@ public:
     void CountHelperRecruited();
     /// A worker of a building of the type put a ware at the flag / took an input for a work step (economy statistic)
     void CountProducedBy(BuildingType bld, GoodType ware);
+    /// The buildings of the type stood stopped for `gfs` GFs (summed over the buildings; economy statistic)
+    void CountStoppedBy(BuildingType bld, unsigned gfs);
     void CountUsedBy(BuildingType bld, GoodType ware);
     /// Soldiers recruited in a warehouse / sent from a warehouse to a military building (economy statistic)
     void CountSoldiersCreated(unsigned count);

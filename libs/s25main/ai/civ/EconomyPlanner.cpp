@@ -879,17 +879,22 @@ double EconomyPlanner::GetMultiProductUnmet(const Recipe& recipe, const std::vec
     // What its buildings must make of each product in the balance length: what they make of it now, plus what is
     // missing of it (forecast below 0), minus what is left over (forecast above 0). A group short of wares counts only
     // for the type chosen for it (`groupWares`, `groupForecast`). What all of them can make: the buildings that can
-    // work and the coming ones, by what one makes per minute while it works. Returns what they cannot make, per minute
+    // work, the stopped ones (Nutzer, 2026-11-22: with their full work) and the coming ones, by what one makes per
+    // minute while it works. Returns what they cannot make, per minute
     const double length = BALANCE_MINUTES;
     const EconomyStatistics& stats = player_.GetEconomyStatistics();
     const double measured = GetMeasuredMinutes();
     const AIJH::AIConstruction& construction = aijh_.GetConstruction();
     const double coming =
       snapshot_.buildings[recipe.building].numSites + construction.GetNumPendingSites(recipe.building);
+    // The stopped minutes count in the forecast with what one makes per minute (as the measured production)
+    const double stopped =
+      static_cast<double>(forecast_->GetMeasure(recipe.building).stoppedGFs) / EconomyStatistics::GetGFsPerMinute();
     double needed = 0;
     for(const GoodType good : recipe.outputs)
     {
         const double made = stats.GetProducedBy(recipe.building, good, BALANCE_MINUTES, currentGF_) / measured * length
+                            + stopped / measured * length * ProducedPerBuilding(recipe.building, good)
                             + coming * ProducedPerBuilding(recipe.building, good) * length;
         const WareStatus& status = GetWareStatus(good);
         double forecast = evaluated ? status.evaluated : status.forecast;
@@ -904,9 +909,9 @@ double EconomyPlanner::GetMultiProductUnmet(const Recipe& recipe, const std::vec
         std::vector<GoodType> missing;
         const Diagnosis diagnosis = GetDiagnosis(*building, recipe, missing);
         const unsigned age = currentGF_ > building->GetFinishedGF() ? currentGF_ - building->GetFinishedGF() : 0u;
-        if(age < windowGFs || diagnosis == Diagnosis::Working || diagnosis == Diagnosis::BadTool
-           || diagnosis == Diagnosis::MissingTool || diagnosis == Diagnosis::SourceFar
-           || diagnosis == Diagnosis::FewFields)
+        if(age < windowGFs || diagnosis == Diagnosis::Working || diagnosis == Diagnosis::Stopped
+           || diagnosis == Diagnosis::BadTool || diagnosis == Diagnosis::MissingTool
+           || diagnosis == Diagnosis::SourceFar || diagnosis == Diagnosis::FewFields)
             num += 1;
     }
     const double capacity = num * OutputPerWorkingMinute(recipe.building) * length;

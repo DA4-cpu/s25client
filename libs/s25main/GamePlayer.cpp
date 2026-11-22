@@ -2112,6 +2112,11 @@ void GamePlayer::CountProducedBy(const BuildingType bld, const GoodType ware)
     economyStatistics_.AddProducedBy(bld, ConvertShields(ware), 1, world.GetEvMgr().GetCurrentGF());
 }
 
+void GamePlayer::CountStoppedBy(const BuildingType bld, const unsigned gfs)
+{
+    economyStatistics_.AddStoppedBy(bld, gfs, world.GetEvMgr().GetCurrentGF());
+}
+
 void GamePlayer::CountUsedBy(const BuildingType bld, const GoodType ware)
 {
     economyStatistics_.AddUsedBy(bld, ConvertShields(ware), 1, world.GetEvMgr().GetCurrentGF());

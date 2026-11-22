@@ -16,6 +16,12 @@ void addSaturated(uint16_t& value, const unsigned count)
     value = static_cast<uint16_t>(std::min<unsigned>(value + count, std::numeric_limits<uint16_t>::max()));
 }
 
+void addSaturated(uint32_t& value, const unsigned count)
+{
+    value = static_cast<uint32_t>(
+      std::min<uint64_t>(static_cast<uint64_t>(value) + count, std::numeric_limits<uint32_t>::max()));
+}
+
 /// Entry types in the savegame
 enum class EntryKind : uint8_t
 {
@@ -101,6 +107,12 @@ void EconomyStatistics::AddUsedBy(const BuildingType bld, const GoodType good, c
 {
     if(count > 0)
         addSaturated(Current(gf).usedBy[{bld, good}], count);
+}
+
+void EconomyStatistics::AddStoppedBy(const BuildingType bld, const unsigned gfs, const unsigned gf)
+{
+    if(gfs > 0)
+        addSaturated(Current(gf).stoppedBy[bld], gfs);
 }
 
 const EconomyMinute* EconomyStatistics::GetMinute(const unsigned minutesAgo, const unsigned gf) const
@@ -221,6 +233,14 @@ unsigned EconomyStatistics::GetUsedBy(const BuildingType bld, const GoodType goo
     });
 }
 
+unsigned EconomyStatistics::GetStoppedBy(const BuildingType bld, const unsigned minutes, const unsigned gf) const
+{
+    return Sum(minutes, gf, [&](const EconomyMinute& minute) {
+        const auto it = minute.stoppedBy.find(bld);
+        return it == minute.stoppedBy.end() ? 0u : static_cast<unsigned>(it->second);
+    });
+}
+
 void EconomyStatistics::Serialize(SerializedGameData& sgd) const
 {
     const auto pushByBuilding = [&sgd](const std::map<std::pair<BuildingType, GoodType>, uint16_t>& counts) {
@@ -279,6 +299,12 @@ void EconomyStatistics::Serialize(SerializedGameData& sgd) const
         sgd.PushUnsignedShort(minute.helpersForJobs);
         pushByBuilding(minute.producedBy);
         pushByBuilding(minute.usedBy);
+        sgd.PushVarSize(static_cast<unsigned>(minute.stoppedBy.size()));
+        for(const auto& [bld, gfs] : minute.stoppedBy)
+        {
+            sgd.PushEnum<uint8_t>(bld);
+            sgd.PushUnsignedInt(gfs);
+        }
     }
     pushEntries(totalGained_, totalUsed_, [&sgd](const uint32_t value) { sgd.PushUnsignedInt(value); });
 }
@@ -333,6 +359,15 @@ void EconomyStatistics::Deserialize(SerializedGameData& sgd)
             minute.helpersForJobs = sgd.PopUnsignedShort();
             popByBuilding(minute.producedBy);
             popByBuilding(minute.usedBy);
+        }
+        if(sgd.GetGameDataVersion() >= 31)
+        {
+            const unsigned num = sgd.PopVarSize();
+            for(unsigned j = 0; j < num; ++j)
+            {
+                const auto bld = sgd.Pop<BuildingType>();
+                minute.stoppedBy[bld] = sgd.PopUnsignedInt();
+            }
         }
     }
     popEntries(totalGained_, totalUsed_, [&sgd]() { return sgd.PopUnsignedInt(); });

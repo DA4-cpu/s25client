@@ -132,7 +132,8 @@
 /// 29: Economy statistic per building type (made and used wares) and helpers recruited as workers
 /// 30: Civilization mode: distribution of all wares (Gesamtverteilung) of the players instead of own regulators,
 ///     finish GF and worker GF of buildings, buildings gone in the balance length
-static const unsigned currentGameDataVersion = 30;
+/// 31: GFs the buildings of a type stood stopped per minute in the economy statistic
+static const unsigned currentGameDataVersion = 31;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

@@ -300,6 +300,27 @@ void updateDistribution(GameWorld& world, const unsigned playerId)
     notifyChanged(before);
 }
 
+void recordStoppedBuildings(GameWorld& world, const unsigned playerId, const unsigned gf)
+{
+    // The state now counts for the interval since the last computation (exact to DISTRIBUTION_INTERVAL GFs), a building
+    // finished in it only from its finish
+    GamePlayer& player = world.GetPlayer(playerId);
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        if(!BuildingProperties::IsUsual(bld))
+            continue;
+        unsigned stopped = 0;
+        for(const nobUsual* building : player.GetBuildingRegister().GetBuildings(bld))
+        {
+            if(!building->IsProductionStopped())
+                continue;
+            const unsigned age = gf > building->GetFinishedGF() ? gf - building->GetFinishedGF() : 0u;
+            stopped += std::min(DISTRIBUTION_INTERVAL, age);
+        }
+        player.CountStoppedBy(bld, stopped);
+    }
+}
+
 void runDistributions(GameWorld& world, const unsigned gf)
 {
     if(!isDistributionActive(world))
@@ -308,7 +329,11 @@ void runDistributions(GameWorld& world, const unsigned gf)
     for(unsigned i = 0; i < numPlayers; ++i)
     {
         if(world.GetPlayer(i).isUsed() && gf % DISTRIBUTION_INTERVAL == i * DISTRIBUTION_INTERVAL / numPlayers)
+        {
+            // The stopped buildings of the interval before, then the new values (they may stop or wake buildings)
+            recordStoppedBuildings(world, i, gf);
             updateDistribution(world, i);
+        }
     }
 }
 

@@ -312,6 +312,13 @@ void EconomyForecast::ComputeMeasures(const GamePlayer& player)
     // Buildings gone: their minutes count until they are older than the balance length
     for(const GamePlayer::GoneBuilding& gone : player.GetGoneBuildings())
         measures_[gone.type].buildingGFs += gfsIn(gone.finished, std::min(gone.gone, now), windowStart_);
+    // Stopped (by the player or the distribution of all wares, Nutzer 2026-11-22): these minutes say nothing about what
+    // a building makes. Counted every DISTRIBUTION_INTERVAL GFs: at most the minutes they stood finished
+    for(const auto bld : helpers::enumRange<BuildingType>())
+    {
+        TypeMeasure& measure = measures_[bld];
+        measure.stoppedGFs = std::min(measure.buildingGFs, stats.GetStoppedBy(bld, BALANCE_MINUTES, gf_));
+    }
     // A type whose buildings made anything in the window has worked (also if they are gone now)
     for(const civai::Recipe& recipe : graph_.GetRecipes())
     {
@@ -326,14 +333,16 @@ void EconomyForecast::ComputeMeasures(const GamePlayer& player)
 
 Amount EconomyForecast::ProducedPerBuilding(const BuildingType bld, const GoodType good) const
 {
+    // Per minute the buildings of the type stood finished and not stopped (Nutzer, 2026-11-22)
     const TypeMeasure& measure = measures_[bld];
     const unsigned gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
-    if(player_ && measure.worked && measure.buildingGFs >= gfsPerMinute)
+    const unsigned runningGFs = measure.buildingGFs - measure.stoppedGFs;
+    if(player_ && measure.worked && runningGFs >= gfsPerMinute)
     {
         const Amount made = player_->GetEconomyStatistics().GetProducedBy(bld, good, BALANCE_MINUTES, gf_);
-        return made * AMOUNT_UNIT * gfsPerMinute / measure.buildingGFs;
+        return made * AMOUNT_UNIT * gfsPerMinute / runningGFs;
     }
-    // No building of the type worked yet: by the work time
+    // No building of the type worked yet, or they stood stopped (almost) all the time: by the work time
     const auto& recipes = graph_.GetRecipes();
     for(unsigned i = 0; i < recipes.size(); ++i)
     {
@@ -354,12 +363,14 @@ Amount EconomyForecast::ProducedPerBuilding(const BuildingType bld, const GoodTy
 
 Amount EconomyForecast::UsedPerBuilding(const BuildingType bld, const GoodType good) const
 {
+    // Per minute the buildings of the type stood finished and not stopped (Nutzer, 2026-11-22)
     const TypeMeasure& measure = measures_[bld];
     const unsigned gfsPerMinute = EconomyStatistics::GetGFsPerMinute();
-    if(player_ && measure.worked && measure.buildingGFs >= gfsPerMinute)
+    const unsigned runningGFs = measure.buildingGFs - measure.stoppedGFs;
+    if(player_ && measure.worked && runningGFs >= gfsPerMinute)
     {
         const Amount used = player_->GetEconomyStatistics().GetUsedBy(bld, good, BALANCE_MINUTES, gf_);
-        return used * AMOUNT_UNIT * gfsPerMinute / measure.buildingGFs;
+        return used * AMOUNT_UNIT * gfsPerMinute / runningGFs;
     }
     // By the work time: one of each input per work step, or one of them ("any of")
     const auto& recipes = graph_.GetRecipes();
@@ -450,6 +461,24 @@ void EconomyForecast::ComputeFlows(const GamePlayer& player, const EconomySnapsh
             standing += building->HasWorker() ?
                           AMOUNT_UNIT - std::min<Amount>(AMOUNT_UNIT, building->GetProductivity()) :
                           AMOUNT_UNIT;
+        }
+        // Stopped buildings (by the player or the distribution of all wares, also those gone since) count with their
+        // full work (Nutzer, 2026-11-22): in the minutes they stood stopped what one makes per minute, extrapolated
+        // like the measured production. Not what they would use: they take their inputs once they work again
+        const Amount stoppedGFs = measures_[recipe.building].stoppedGFs;
+        if(stoppedGFs > 0)
+        {
+            const auto addStopped = [&](const GoodType good) {
+                production_[good] += stoppedGFs * ProducedPerBuilding(recipe.building, good) * length / measuredGFs_;
+            };
+            for(const GoodType good : recipe.outputs)
+                addStopped(good);
+            for(unsigned i = 0; i < recipe.byproducts.size(); ++i)
+            {
+                const int tech = recipe.byproductTechs[i];
+                if(tech < 0 || player.GetResearch().IsResearched(static_cast<TechIdx>(tech)))
+                    addStopped(recipe.byproducts[i]);
+            }
         }
         if(coming > 0)
         {

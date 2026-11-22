@@ -229,6 +229,8 @@ BOOST_FIXTURE_TEST_CASE(StatisticIsSaved, EconomyFixture)
     hq().AddToInventory(PeopleCounts::make(Job::Carpenter, 1), true);
     placeConnectedBuilding(BuildingType::Sawmill, Position(4, 2));
     RTTR_EXEC_TILL(6000, stats().GetTotalGained(GoodType::Boards, WareSource::Production) == 4u);
+    // Stopped sawmills: GFs per building type (distribution of all wares)
+    player().CountStoppedBy(BuildingType::Sawmill, 300);
     const unsigned savedGf = gf();
     const unsigned producedBefore = stats().GetProduced(GoodType::Boards, 10, savedGf);
     const int balanceBefore = stats().GetBalance(GoodType::Wood, 10, savedGf);
@@ -247,6 +249,7 @@ BOOST_FIXTURE_TEST_CASE(StatisticIsSaved, EconomyFixture)
     // Per building type: what the sawmill made and used
     BOOST_TEST(stats().GetProducedBy(BuildingType::Sawmill, GoodType::Boards, 10, savedGf) == producedBefore);
     BOOST_TEST(stats().GetUsedBy(BuildingType::Sawmill, GoodType::Wood, 10, savedGf) == 4u);
+    BOOST_TEST(stats().GetStoppedBy(BuildingType::Sawmill, 10, savedGf) == 300u);
     checkStockMatchesCounts(player());
 }
 
@@ -266,6 +269,12 @@ BOOST_AUTO_TEST_CASE(CountsPerBuildingType)
     stats.AddHelpersForJobs(2, GFS_PER_MINUTE + 40);
     BOOST_TEST(stats.GetHelpersUsed(1, GFS_PER_MINUTE + 50) == 3u);
     BOOST_TEST(stats.GetHelpersForJobs(1, GFS_PER_MINUTE + 50) == 2u);
+    // GFs stopped: summed over the buildings, more than a minute has (several buildings)
+    stats.AddStoppedBy(BuildingType::Sawmill, 200, 2 * GFS_PER_MINUTE + 10);
+    stats.AddStoppedBy(BuildingType::Sawmill, 70000, 3 * GFS_PER_MINUTE + 10);
+    BOOST_TEST(stats.GetStoppedBy(BuildingType::Sawmill, 1, 3 * GFS_PER_MINUTE + 20) == 70000u);
+    BOOST_TEST(stats.GetStoppedBy(BuildingType::Sawmill, 2, 3 * GFS_PER_MINUTE + 20) == 70200u);
+    BOOST_TEST(stats.GetStoppedBy(BuildingType::Woodcutter, 2, 3 * GFS_PER_MINUTE + 20) == 0u);
 }
 
 BOOST_FIXTURE_TEST_CASE(SoldiersRecruitedAndSentAreCounted, EconomyFixture)

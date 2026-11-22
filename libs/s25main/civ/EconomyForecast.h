@@ -136,6 +136,10 @@ struct TypeMeasure
 {
     /// GFs the buildings of the type stood finished in the window (also those gone since)
     unsigned buildingGFs = 0;
+    /// Of these: GFs they stood stopped (by the player or the distribution of all wares; EconomyStatistics::
+    /// GetStoppedBy). They do not count for the measured values per building, and the buildings count with what they
+    /// would have made in them (Nutzer, 2026-11-22)
+    unsigned stoppedGFs = 0;
     /// GFs their workers were there, weighted by the productivity (percent)
     uint64_t workingGFsPercent = 0;
     /// A building of the type worked (has a worker, or made or used anything)

@@ -1362,10 +1362,23 @@ Beträge unter 0,005 gelten als 0 (2026-11-18): Rundungsfehler der Anteile und d
   als einer Bilanzlänge fertig wurden, anteilig; auch expandierende) voll mit dem **gemessenen Wert je Gebäude** ihres
   Typs. Aufträge der Liste stellen nichts her. Stehende Gebäude stellen nur her, was gemessen ist (kein Zuschlag für
   einen gelösten Grund).
+  **Angehaltene Gebäude** (Nutzer, 2026-11-22; vom Spieler „Produktion stoppen“, auch von der alten KI, oder von der
+  Gesamtverteilung, automatisch oder manuell, kein Unterschied) zählen mit ihrer vollen Arbeitskraft: In den Minuten
+  der Bilanzlänge, in denen sie angehalten waren, stellen sie den Wert je Gebäude her (hochgerechnet wie die gemessene
+  Herstellung, auch abgerissene). Ihr Verbrauch zählt dafür nicht: Eingänge nehmen sie erst, wenn sie wieder arbeiten.
+  Beispiel (Testspiel 21.11., Seed 5, Spieler 2, 1:15): 7 Kupfersammler angehalten (Überschuss: Warenzahl 10 > 8),
+  Kupfererz Prognose −2 = frei 10 + Herstellung 0,0 − Verbrauch 12,0 (neuer Bronzeschmelzer) → benötigte Kupfermine.
+  Neu: mit angenommen 0,5 Erz/min je Sammler +35, Prognose 33, keine Mine. Eine Sperre „kein weiterer Auftrag eines
+  Typs, solange eines angehalten ist“ gibt es nicht (Nutzer: „Overkill“).
 - Wert je Gebäude (Nutzer, 2026-11-15): was alle Gebäude des Typs in der Bilanzlänge hergestellt bzw. verbraucht haben
-  ÷ die Minuten, die sie in dieser Zeit fertig standen. Gebäude mit Problemen zählen mit (ein neues trifft
-  wahrscheinlich auf ähnliche Probleme). Hat noch keines gearbeitet, gilt die Arbeitszeit. Statistik je Gebäudetyp:
-  `EconomyStatistics::GetProducedBy/GetUsedBy` (Spielstand 29).
+  ÷ die Minuten, die sie in dieser Zeit fertig und nicht angehalten standen (Nutzer, 2026-11-22: angehaltene Minuten
+  sagen nichts darüber, was ein Gebäude herstellt). Gebäude mit Problemen zählen mit (ein neues trifft
+  wahrscheinlich auf ähnliche Probleme), auch das Warten auf Eingang, Werkzeug oder Arbeiter. Hat noch keines
+  gearbeitet oder standen sie (fast) die ganze Zeit angehalten (weniger als eine Minute übrig), gilt die Arbeitszeit.
+  Beispiel: 7 Sammler, 3 davon arbeiteten je 4 Minuten und machten 6 Erz: bisher 6 ÷ 70 = 0,09/min, neu 6 ÷ 12 =
+  0,5/min. Statistik je Gebäudetyp: `EconomyStatistics::GetProducedBy/GetUsedBy` (Spielstand 29), angehaltene GF je
+  Typ `GetStoppedBy` (Spielstand 31; gezählt bei jeder Rechnung der Gesamtverteilung, alle 200 GF je Spieler, mit dem
+  Zustand in diesem Moment, `civ::recordStoppedBuildings`).
 - Verbrauch = gemessener Verbrauch als Eingang von Gebäuden + kommende Gebäude mit dem gemessenen Wert je Gebäude +
   **jedes stehende Gebäude mit einem Problem** (Eingang, Werkzeug, Arbeiter, Fahne, Straße, Felder, Vorkommen weit,
   schlechtes Werkzeug) mit dem Teil, den es laut Arbeitszeit mehr verbrauchen würde (1 − Produktivität; Nutzer,
@@ -1879,7 +1892,9 @@ können? Das passt nicht zum Spiel.“
    des Nutzers, 2026-11-21: Im Prognose-Modus hielte ein Gebäude sonst wegen seiner eigenen Herstellung an, z. B. Holz
    Lager 3 + Herstellung 13 = Prognose 16 > 8). Die Werte kommen weiter aus der Zahl des eingestellten Modus. Für die
    Warenzahl gilt dieselbe Gruppenregel wie in Regel 3. Der Startvorrat zählt mit (anders als im Bauplaner,
-   Entscheidung des Nutzers).
+   Entscheidung des Nutzers). Der Verbrauch der Schwelle ist der gemessene, nicht der der Prognose (Nutzer,
+   2026-11-22): Angehaltene Gebäude laufen wieder an, wenn die Warenzahl auf die Schwelle fällt oder der gemessene
+   Verbrauch die Schwelle hebt.
 5. **Wertung:** Darin steht jede Ware, die ein fertiges Gebäude des Spielers als Produkt herstellt (nicht nur als
    Nebenprodukt), die nicht unerwünscht und kein Wissensmedium ist. Wert = 1 000 000 × (höchste Zahl − Zahl) ÷ (höchste
    Zahl − niedrigste Zahl): Der größte Mangel bekommt den höchsten Wert, die höchste Zahl 0. Alle gleich: alle den
@@ -1912,12 +1927,14 @@ können? Das passt nicht zum Spiel.“
     `WoodenTools`, `ObsidianTools` und der Werkzeugregler je Art entfallen.
 12. **KI:** Sie stellt keine Werkzeug-Regler mehr ein und bestellt keine Werkzeuge (`OrderTools`, `ResolveTools`,
     `ComputeToolFlows` entfallen, Werkzeughersteller werden gemessen wie alle Gebäude). Ihr Planer entscheidet nur, wie
-    viele Gebäude es gibt. Automatisch angehaltene Gebäude behandelt er wie vom Spieler gestoppte.
+    viele Gebäude es gibt. Angehaltene Gebäude (automatisch, manuell oder vom Spieler gestoppt) zählen mit ihrer vollen
+    Arbeitskraft (Abschnitt „Prognose“, Herstellung; Nutzer, 2026-11-22).
     **Regel A** (Gebäude mit mehreren Produkten): Ihre Kapazität zählt einmal über alle Produkte. Was ihre Gebäude in der
     Bilanzlänge liefern müssen: je Produkt was sie davon jetzt herstellen, plus was fehlt, minus was übrig ist
     (höchstens 0 abgezogen); ein Gruppenmangel zählt nur beim Herstellertyp, den der Planer für die Gruppe wählt. Fehlt
-    nach der Kapazität (Gebäude, die arbeiten können, und kommende × Waren je Minute, während sie arbeiten ×
-    Bilanzlänge) etwas, kommen so viele neue, bis es reicht. Beispiel: 1 Schlosserei, 2 Werkzeuge/min, in 5 min 5 Äxte
+    nach der Kapazität (Gebäude, die arbeiten können, angehaltene und kommende × Waren je Minute, während sie arbeiten ×
+    Bilanzlänge) etwas, kommen so viele neue, bis es reicht. „Was sie jetzt herstellen“ enthält die volle Arbeitskraft
+    der angehaltenen Minuten, wie die Prognose. Beispiel: 1 Schlosserei, 2 Werkzeuge/min, in 5 min 5 Äxte
     und 5 Sägen, Axt −8, Säge +3: Äxte 5 + 8 = 13, Sägen 5 − 3 = 2, zusammen 15, Kapazität 10, es fehlen 5 → 1 neue
     Schlosserei (je Produkt gerechnet wären es 2).
 
