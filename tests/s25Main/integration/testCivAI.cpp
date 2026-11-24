@@ -52,7 +52,6 @@ WorkshopDesc makeWorkshop(const std::string& name)
     desc.cost = {{{"Boards"}, 2}};
     desc.look = "Quarry";
     desc.worker.title = name + "Worker";
-    desc.worker.tool = "none";
     desc.worker.look = "Stonemason";
     desc.workTime = 10;
     return desc;
@@ -288,7 +287,7 @@ BOOST_AUTO_TEST_CASE(ExpandingBuildingsFromLua)
     const std::string workshop = R"(
 rttr:AddWare{ name = "Loam", look = "Stones", transport = "Stones" }
 rttr:AddWorkshop{ name = "Pit", size = "small", cost = { Boards = 2 }, look = "Quarry",
-    worker = { tool = "none", look = "Stonemason" }, output = "Loam", workTime = 5 }
+    worker = { look = "Stonemason" }, output = "Loam", workTime = 5 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIExpandingBuildings{ "Woodcutter", "Pit", "Barracks" })", desc));
@@ -339,24 +338,27 @@ BOOST_AUTO_TEST_CASE(ExpandingBuildingsOfTheGameData)
         {BuildingType::Sawmill, BuildingType::Quarry, BuildingType::Metalworks, BuildingType::Mill})
         BOOST_TEST(techTree.GetAIBasicEconomyLevel(bld) == 0u);
     BOOST_TEST(techTree.GetAIBasicEconomyLevel(*copperworks) == 0u);
+    // "BasicBuildingMaterial" is a tag of wood, boards and stones
     for(const GoodType good :
         {GoodType::Wood, GoodType::Boards, GoodType::Stones, GoodType::Fish, GoodType::Bread, GoodType::Meat})
         BOOST_TEST(techTree.IsAIStartStockNoSurplus(good));
     BOOST_TEST(!techTree.IsAIStartStockNoSurplus(GoodType::IronOre));
     BOOST_TEST(techTree.GetAIBuildingLimitBase() == 5u);
-    BOOST_TEST(techTree.GetAIBuildingLimitPerStartArea() == 1u);
+    BOOST_TEST(techTree.GetAIBuildingLimitPerArea() == 1u);
+    BOOST_TEST(techTree.GetAIBuildingLimitAreaSize() == 331u);
 }
 
 BOOST_AUTO_TEST_CASE(BasicEconomyAndStartStockFromLua)
 {
     const std::string workshop = R"(
-rttr:AddWare{ name = "Loam", look = "Stones", transport = "Stones" }
+rttr:AddWare{ name = "Loam", kind = "Soil", look = "Stones", transport = "Stones" }
 rttr:AddWorkshop{ name = "Pit", size = "small", cost = { Boards = 2 }, look = "Quarry",
-    worker = { tool = "none", look = "Stonemason" }, output = "Loam", workTime = 5 }
+    worker = { look = "Stonemason" }, output = "Loam", workTime = 5 }
 )";
     WorldDescription desc;
+    // Tag queries: "Wood" (name of a built-in ware), "Soil" (kind of Loam), a list of tags
     BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIBasicEconomy{ { "Woodcutter", "Pit" }, { "IronMine" } }
-rttr:SetAIStartStockNoSurplus{ "Wood", "Loam" })",
+rttr:SetAIStartStockNoSurplus{ "Wood", "Soil", { "Loam", "Soil" } })",
                                desc));
     BOOST_TEST(desc.aiBasicEconomy.size() == 2u);
     const civ::TechTree techTree(desc);
@@ -372,7 +374,8 @@ rttr:SetAIStartStockNoSurplus{ "Wood", "Loam" })",
         {std::string(R"(rttr:SetAIBasicEconomy{ { "Woodcutter" }, { "Woodcutter" } })"),
          std::string(R"(rttr:SetAIBasicEconomy{ "Woodcutter" })"), std::string(R"(rttr:SetAIBasicEconomy{ })"),
          std::string(R"(rttr:SetAIBasicEconomy{ { } })"), std::string(R"(rttr:SetAIStartStockNoSurplus{ "Wood", 2 })"),
-         std::string(R"(rttr:SetAIStartStockNoSurplus{ "Wood", "Wood" })")})
+         std::string(R"(rttr:SetAIStartStockNoSurplus{ })"), std::string(R"(rttr:SetAIStartStockNoSurplus{ "Wood" }
+rttr:SetAIStartStockNoSurplus{ "Soil" })")})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(invalid);
@@ -386,16 +389,21 @@ rttr:SetAIStartStockNoSurplus{ "Wood", "Loam" })",
 BOOST_AUTO_TEST_CASE(BuildingLimitFromLua)
 {
     WorldDescription desc;
-    BOOST_TEST_REQUIRE(loadLua(R"(rttr:SetAIBuildingLimit{ base = 5, perStartArea = 2 })", desc));
+    BOOST_TEST_REQUIRE(loadLua(R"(rttr:SetAIBuildingLimit{ base = 5, perArea = 2, areaSize = 500 })", desc));
     const civ::TechTree techTree(desc);
     BOOST_TEST(techTree.GetAIBuildingLimitBase() == 5u);
-    BOOST_TEST(techTree.GetAIBuildingLimitPerStartArea() == 2u);
-    for(const std::string& invalid : {std::string(R"(rttr:SetAIBuildingLimit{ base = 3 })"),
-                                      std::string(R"(rttr:SetAIBuildingLimit{ base = -1, perStartArea = 1 })"),
-                                      std::string(R"(rttr:SetAIBuildingLimit{ base = 1.5, perStartArea = 1 })"),
-                                      std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1, max = 2 })"),
-                                      std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 }
-rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1 })")})
+    BOOST_TEST(techTree.GetAIBuildingLimitPerArea() == 2u);
+    BOOST_TEST(techTree.GetAIBuildingLimitAreaSize() == 500u);
+    for(const std::string& invalid :
+        {std::string(R"(rttr:SetAIBuildingLimit{ base = 3 })"),
+         std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perArea = 1 })"),
+         std::string(R"(rttr:SetAIBuildingLimit{ base = -1, perArea = 1, areaSize = 331 })"),
+         std::string(R"(rttr:SetAIBuildingLimit{ base = 1.5, perArea = 1, areaSize = 331 })"),
+         std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perArea = 1, areaSize = 0 })"),
+         std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perStartArea = 1, areaSize = 331 })"),
+         std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perArea = 1, areaSize = 331, max = 2 })"),
+         std::string(R"(rttr:SetAIBuildingLimit{ base = 3, perArea = 1, areaSize = 331 }
+rttr:SetAIBuildingLimit{ base = 3, perArea = 1, areaSize = 331 })")})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(invalid);

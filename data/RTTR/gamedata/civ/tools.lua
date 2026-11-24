@@ -39,7 +39,7 @@ rttr:SetBuildingTools{...}: Werkzeuge der eingebauten Gebäude
   Nicht genannte Gebäude nutzen das bisherige Werkzeug ihres Arbeiters mit baseSpeed = 0; Gebäude, deren Arbeiter
   kein Werkzeug hatte, arbeiten wie bisher (Tempo 100).
   Werkstätten aus workshops.lua bekommen ihre Werkzeuge dort: tools = { baseSpeed = 0, tools = { "Saw" } }.
-  Ohne diese Angabe gilt worker.tool mit baseSpeed = 0.
+  Ohne diese Angabe braucht eine Werkstatt kein Werkzeug und arbeitet mit Tempo 100.
 
 rttr:SetBuildingOutputRatio{...}: Waren pro Arbeitsschritt der eingebauten Gebäude ohne Werkzeug (Standard 1), 0 bis 8,
   z.B. rttr:SetBuildingOutputRatio{ Woodcutter = 1, Quarry = 1.5 }. Bedeutung wie outputRatio in workshops.lua
@@ -60,11 +60,8 @@ rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 200, speed = 
 rttr:AddTool{ ware = "PickAxe",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Spitzhacke
 rttr:AddTool{ ware = "Shovel",     material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schaufel
 rttr:AddTool{ ware = "Crucible",   material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schmelztiegel
--- rttr:AddTool{ ware = "RodAndLine", material = "Iron", durability = 200, speed = 100 } -- Angel sollte nur als Holzwerkzeug in der Holzwrekstatt hergestellt werden
 rttr:AddTool{ ware = "Scythe",     material = "Iron", durability = 200, speed = 50, outputRatio = 0.5 } -- Sense
 rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Beil
--- rttr:AddTool{ ware = "Rollingpin", material = "Iron", durability = 200, speed = 100 } -- Nudelholz sollte nur als Holzwerkzeug in der Holzwrekstatt hergestellt werden
--- rttr:AddTool{ ware = "Bow",        material = "Iron", durability = 200, speed = 100 } -- Bogen sollte nur als Holzbogen in der Holzwrekstatt hergestellt werden
 rttr:AddTool{ ware = "IronPlough",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 }
 
 rttr:AddToolMaterial{ name = "Copper", title = "Copper" }

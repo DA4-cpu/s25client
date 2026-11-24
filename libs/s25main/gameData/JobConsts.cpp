@@ -94,8 +94,9 @@ JobConst JobConstsTable::operator[](Job job) const
     const civ::CustomBuilding* building = content.GetBuilding(getCustomBuilding(getCustomJobIdx(job)));
     RTTR_Assert(building);
     const auto toShort = [](unsigned gfs) { return static_cast<unsigned short>(std::min(gfs, 65535u)); };
-    return JobConst{worker->tool, toShort(std::max(building->workGFs, 1u)), toShort(std::max(building->waitGFs, 1u)),
-                    5};
+    // Recruited from a helper without a tool
+    return JobConst{GoodType::Nothing, toShort(std::max(building->workGFs, 1u)),
+                    toShort(std::max(building->waitGFs, 1u)), 5};
 }
 
 const JobSpriteData& JobSpriteConstsTable::operator[](Job job) const

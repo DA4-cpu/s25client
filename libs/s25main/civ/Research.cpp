@@ -67,9 +67,9 @@ TechState getTechState(const GameWorldBase& world, unsigned playerId, TechIdx te
         return TechState::Unavailable;
     if(getExclusiveOwner(world, tech))
         return TechState::TakenByOther;
-    for(const TechIdx req : technology.requirements)
+    for(const std::vector<TechIdx>& group : technology.requirements)
     {
-        if(!research.IsResearched(req))
+        if(!helpers::contains_if(group, [&research](const TechIdx req) { return research.IsResearched(req); }))
             return TechState::MissingRequirements;
     }
     if(research.GetCurrent() == tech)

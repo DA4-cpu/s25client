@@ -78,11 +78,9 @@ GoodType getRecruitTool(const GameWorld& world, const Job job)
     const bool civMode = civ::isEnabled(world);
     if(civMode && civ::getActiveContent().IsRecruitedWithoutTool(job))
         return GoodType::Nothing;
+    // Workers of workshops need no tool
     if(isCustomJob(job))
-    {
-        const civ::CustomWorker* worker = civMode ? civ::getActiveContent().GetWorker(job) : nullptr;
-        return worker ? worker->tool : GoodType::Nothing;
-    }
+        return GoodType::Nothing;
     return JOB_CONSTS[job].tool.value_or(GoodType::Nothing);
 }
 

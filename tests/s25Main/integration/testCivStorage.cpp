@@ -237,7 +237,7 @@ BOOST_AUTO_TEST_CASE(WarehouseFromLua)
     BOOST_TEST(!content.IsCustomWarehouse(BuildingType::Storehouse));
 
     for(const std::string& extra :
-        {std::string(R"(, worker = { tool = "none", look = "Helper" })"), std::string(R"(, output = "Boards")"),
+        {std::string(R"(, worker = { look = "Helper" })"), std::string(R"(, output = "Boards")"),
          std::string(R"(, inputs = { "Wood" })"), std::string(", workTime = 5")})
     {
         WorldDescription invalidDesc;

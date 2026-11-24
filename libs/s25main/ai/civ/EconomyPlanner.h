@@ -344,9 +344,8 @@ public:
     bool IsClearingWoodcutter(MapPoint pt) const;
     /// The planner decides about this building type (the old AI does not build it)
     bool IsManaged(BuildingType bld) const { return managed_[bld]; }
-    /// Most buildings of one type for expanding orders: base + per start area * start areas (ai.lua,
-    /// rttr:SetAIBuildingLimit). A start area is the land of an HQ; the land is counted in whole start areas, at least
-    /// 1
+    /// Most buildings of one type for expanding orders: base + perArea * areas (ai.lua, rttr:SetAIBuildingLimit). The
+    /// land is counted in whole areas of areaSize nodes
     unsigned GetBuildingLimit() const;
     /// Buildings, building sites and ordered sites of the type
     unsigned GetNumBuildings(BuildingType bld) const;

@@ -219,11 +219,9 @@ GoodType getRecruitTool(const EconomySnapshot& snapshot, const BuildingType bld)
     const auto job = getJob(bld);
     if(!job || snapshot.inWarehousesPeople[*job] > snapshot.jobsWanted[*job] || content.IsRecruitedWithoutTool(*job))
         return GoodType::Nothing;
+    // Workers of workshops need no tool
     if(isCustomJob(*job))
-    {
-        const CustomWorker* worker = content.GetWorker(*job);
-        return worker ? worker->tool : GoodType::Nothing;
-    }
+        return GoodType::Nothing;
     return JOB_CONSTS[*job].tool.value_or(GoodType::Nothing);
 }
 

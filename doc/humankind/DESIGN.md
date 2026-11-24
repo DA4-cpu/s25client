@@ -103,7 +103,8 @@ rttr:AddTechnology{
     title = "Ackerbau",              -- Anzeigename
     description = "…",               -- Beschreibungstext
     era = 0,                         -- Zeitalter/Ebene 0…6
-    requires = { "toolmaking" },     -- Voraussetzungen; müssen VORHER definiert sein (verhindert Zyklen)
+    requires = { "toolmaking", { "milling", "animal_husbandry" } }, -- Voraussetzungen, VORHER definiert (keine Zyklen);
+                                     -- eine Liste in der Liste = mindestens eine davon
     knowledge = { LWP = 4 },         -- Kosten in Wissenspunkten (LWP, IWP, MWP)
     cost = { Boards = 4, Stones = 2 }, -- Warenkosten (Bezeichner wie im Enum GoodType)
     time = 60,                       -- Mindestdauer in Sekunden ab Forschungsbeginn (optional)
@@ -233,9 +234,10 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
 - **Werkstätten** sind normale Produktionsgebäude (`nobUsual`) mit dem Arbeiter `nofCustomWorker`: Er holt die
   Eingangswaren, arbeitet `workTime` Sekunden im Gebäude und trägt das Produkt heraus. Die Werkstatt wird
   automatisch als Abnehmer ihrer Eingangswaren eingetragen.
-- **Tags:** Jede Ware hat ihren Bezeichner als Name-Tag, dazu optional Warenart (`kind`) und Eigenschaften
-  (`properties`). Eine Tag-Abfrage trifft alle Waren, die alle genannten Tags haben. Mit `inheritProperties` bekommt
-  das Produkt die Eigenschaften der verbrauchten Ware (Nadelholz → Nadelholzbretter).
+- **Tags:** Jede Ware hat ihren Bezeichner als Name-Tag, dazu optional Warenarten (`kind`, ein Tag oder eine Liste
+  beliebig vieler Tags, seit 2026-11-24) und Eigenschaften (`properties`). Eine Tag-Abfrage trifft alle Waren, die alle
+  genannten Tags haben. Mit `inheritProperties` bekommt das Produkt die Eigenschaften der verbrauchten Ware
+  (Nadelholz → Nadelholzbretter); Warenarten werden nicht weitergegeben.
 - Bisherige Grenzen: höchstens 3 Eingangswaren pro Werkstatt (bei `consume = "each"` trifft jeder Eingang genau eine
   Ware, bei `"any"` wird wie bei Minen eine Ware des größten Vorrats verbraucht); Baukosten nur Bretter und Steine;
   Arbeiter ohne eigene Arbeitsanimation.
@@ -341,15 +343,13 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
 Dateien: `data/RTTR/gamedata/civ/wares.lua` und `civ/workshops.lua` (dort ausführlich erklärt, mit Beispiel).
 
 ```lua
-rttr:AddWare{ name = "NeedleWood", title = "Nadelholz", kind = "Holz", properties = { "Nadelholz" },
-              look = "Wood", transport = "Wood" }
-rttr:AddWare{ name = "NeedleBoards", title = "Nadelholzbretter", kind = "Bretter", properties = { "Nadelholz" },
-              look = "Boards", transport = "Boards" }
-rttr:SetWareTags{ Fish = { kind = "Nahrung" } }   -- Tags für eingebaute Waren
+rttr:AddWare{ name = "NeedleWood", title = "Nadelholz", kind = { "Holz", "Baumaterial" }, properties = { "Nadelholz" }, look = "Wood", transport = "Wood" }
+rttr:AddWare{ name = "NeedleBoards", title = "Nadelholzbretter", kind = "Bretter", properties = { "Nadelholz" }, look = "Boards", transport = "Boards" }
+rttr:SetWareTags{ Fish = { kind = { "Nahrung" } } }   -- Tags für eingebaute Waren
 
 rttr:AddWorkshop{
     name = "Sawmill2", title = "Sägewerk", size = "medium", cost = { Boards = 2, Stones = 2 }, look = "Sawmill",
-    worker = { title = "Säger", tool = "Saw", look = "Carpenter" },
+    worker = { title = "Säger", look = "Carpenter" }, tools = { tools = { "Saw" } },
     inputs = { "Holz" }, consume = "any", output = "Bretter", inheritProperties = true, workTime = 20,
 }
 ```
@@ -461,7 +461,8 @@ sonst gilt das alte System.
 
 - **Berufe ohne Werkzeug:** Im Lager wird aus einem Helfer ohne Werkzeug ein Arbeiter (`nobBaseWarehouse::CanRecruit`,
   `Content::IsRecruitedWithoutTool`). Ausnahmen: Bauarbeiter, Planierer, Geologe, Späher. Kommt ein Arbeiter ins Lager
-  zurück, ist er wieder Helfer (`ConvertToHelpers`).
+  zurück, ist er wieder Helfer (`ConvertToHelpers`). Arbeiter von Werkstätten brauchen seit 2026-11-24 auch ohne
+  Werkzeugreform kein Werkzeug (`worker.tool` gibt es nicht mehr); eine Werkstatt ohne `tools` arbeitet mit Tempo 100.
 - **Spielstart:** Die Arbeiter im Lager werden zu Helfern, ihre Werkzeuge kommen als Waren ins Lager
   (`civ::startNewGame`, nur bei neuem Spiel).
 - **Werkzeugplätze:** Jedes Gebäude hat je Werkzeugtyp einen Platz (`nobUsual::ToolSlot`: Werkzeug in Gebrauch,
@@ -1834,6 +1835,38 @@ Baustelle mit „eins von“-Kosten jetzt die anderen Waren, wenn eine nicht ges
 - Forschung (Schritt 4, nach dem Militär): wählt noch das Spiel für die KI (`civ::chooseResearchForAI`).
 - Mangel eines Zwischenprodukts, dessen Endprodukt im Überschuss liegt: bewusst keine Regel (Nutzer, 2026-11-15).
 - Umbau der Eingänge nach Tags (ein Eingang je Tag, mehr als 3, Mischen).
+
+## Notizen aus den Lua-Dateien, Schritt 1 (Stand 2026-11-24)
+
+Sammlung aller Notizen und Antworten des Nutzers: Projektdokument `claude/notizen-2026-11-22-lua-kommentare.md`,
+Antworten im Dokument „S2 Modding – Offene Fragen zu den Lua-Notizen“ (Claude Docs). Umgesetzt in Schritt 1:
+
+- **`kind` als Liste (A2):** `kind = "Ore"` oder `kind = { "Fibers", "BasicRoofMaterial" }` in `rttr:AddWare` und
+  `rttr:SetWareTags`. `properties` bleibt unverändert (nur sie gibt `inheritProperties` weiter). Code:
+  `WareDesc::kind`, `WareTagsDesc::kind` als `std::vector<std::string>` (gelesen mit `parseTagQuery`),
+  `Content::SetTags`. Daten: „BasicRoofMaterial“ bei Holz, Brettern, Steinen und Thatch von `properties` nach `kind`
+  (F-31), LoamBrick `kind = { "Stones", "BasicRoofMaterial" }` (F-25).
+- **`worker.tool` entfernt (C4):** Der Arbeiter einer Werkstatt hat kein Werkzeug mehr; das Feld `tool` ist ein
+  Ladefehler. Jeder Helfer wird ohne Werkzeug Arbeiter einer Werkstatt, auch ohne Werkzeugreform
+  (`JOB_CONSTS[custom].tool` = `GoodType::Nothing`). Werkzeuge einer Werkstatt gibt es nur über `tools`; ohne `tools`
+  braucht sie kein Werkzeug und arbeitet mit Tempo 100 (`makeDefaultTools(GoodType::Nothing)`). Die ObsidianWorkshop
+  hatte `tools = { baseSpeed = 25 }` ohne Werkzeugtypen (immer 25 %); laut Nutzer (F-32) soll sie kein Werkzeug haben,
+  die Zeile ist entfernt (Tempo 100).
+- **Oder-Voraussetzung (D1):** `requires = { "storage", { "milling", "animal_husbandry" } }`: eine Liste in der Liste
+  heißt „mindestens eine davon“, sie braucht mindestens 2 Einträge; jede Technologie darf nur einmal vorkommen.
+  `TechnologyDesc::requirements` und `Technology::requirements` sind Gruppen (`std::vector<std::vector<…>>`),
+  `civ::getTechState` prüft je Gruppe, das Forschungsfenster zeigt „A oder B“. Daten: „UndergroundMining“ verlangt
+  `{ "milling", "animal_husbandry" }` statt „agriculture“ (beide setzen Ackerbau voraus).
+- **Startvorrat der KI nach Tags (B1):** Jeder Eintrag von `rttr:SetAIStartStockNoSurplus` ist eine Tag-Abfrage, jede
+  passende Ware bekommt die Regel. Gerechnet wird wie bisher im Wirtschaftsplaner: Startvorrat übrig je Ware, für eine
+  Warengruppe die Summe ihrer Waren (Antwort F-7). Daten: `{ "BasicBuildingMaterial", "Fish", "Bread", "Meat" }`.
+- **Gebäudegrenze der KI (B2):** `rttr:SetAIBuildingLimit{ base = 5, perArea = 1, areaSize = 331 }`, alle drei Pflicht.
+  Grenze = base + perArea × ⌊Land ÷ areaSize⌋, ohne „mindestens 1 Gebiet“ (F-8). `perStartArea` gibt es nicht mehr.
+- **Aufräumen:** erledigte Notizen entfernt, jede Ware und jedes Kartenobjekt in einer Zeile, keine
+  „PLATZHALTER“-Markierungen mehr (Projektregel; in `world.lua` bleibt der Originalwert als „Original: …“ stehen,
+  `platzhalterPakete` heißt `standardPakete`), Beschreibung der Technologie „Well“ (war der Text der
+  Knochenschnitzerei), WP-Summen im Kopf von `techtree.lua`.
+- **Noch nicht umgesetzt:** A3 (eingebaute Waren umbenennen) wartet auf die Antwort zum Vorschlag `rttr:SetWare`.
 
 ## Gesamtverteilung (Stand 2026-11-21)
 

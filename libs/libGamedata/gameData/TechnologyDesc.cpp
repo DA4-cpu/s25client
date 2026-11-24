@@ -43,16 +43,46 @@ TechnologyDesc::TechnologyDesc(CheckedLuaTable luaData, const WorldDescription& 
     if(era > 6)
         throw GameDataError("Technology '" + name + "': era must be in [0, 6]");
 
-    requirements = luaData.getOrDefault("requires", std::vector<std::string>());
-    std::set<std::string> seenRequirements;
-    for(const std::string& req : requirements)
+    // requires = { "a", { "b", "c" } }: a and (b or c)
+    if(const auto requiresTable = luaData.getOptional<kaguya::LuaTable>("requires"))
     {
-        // Requiring earlier definition guarantees that there are no cycles
-        if(!worldDesc.technologies.getIndex(req))
-            throw GameDataError("Technology '" + name + "' requires unknown technology '" + req
-                                + "'. Prerequisites must be defined before the technology using them.");
-        if(!seenRequirements.insert(req).second)
-            throw GameDataError("Technology '" + name + "' requires '" + req + "' twice");
+        const std::string context = "Technology '" + name + "', requires";
+        for(const kaguya::LuaRef& entry : requiresTable->values())
+        {
+            std::vector<std::string> group;
+            if(entry.type() == kaguya::LuaRef::TYPE_STRING)
+                group.push_back(entry.get<std::string>());
+            else if(entry.type() == kaguya::LuaRef::TYPE_TABLE)
+            {
+                for(const kaguya::LuaRef& alternative : entry.get<kaguya::LuaTable>().values())
+                {
+                    if(alternative.type() != kaguya::LuaRef::TYPE_STRING)
+                        throw GameDataError(context + ": a list of alternatives may only contain names");
+                    group.push_back(alternative.get<std::string>());
+                }
+                if(group.size() < 2u)
+                {
+                    throw GameDataError(context
+                                        + ": a list inside requires needs at least 2 technologies (one of them is "
+                                          "required)");
+                }
+            } else
+                throw GameDataError(context + ": expected names or lists of names");
+            requirements.push_back(std::move(group));
+        }
+    }
+    std::set<std::string> seenRequirements;
+    for(const auto& group : requirements)
+    {
+        for(const std::string& req : group)
+        {
+            // Requiring earlier definition guarantees that there are no cycles
+            if(!worldDesc.technologies.getIndex(req))
+                throw GameDataError("Technology '" + name + "' requires unknown technology '" + req
+                                    + "'. Prerequisites must be defined before the technology using them.");
+            if(!seenRequirements.insert(req).second)
+                throw GameDataError("Technology '" + name + "' requires '" + req + "' twice");
+        }
     }
 
     cost = luaData.getOrDefault("cost", std::map<std::string, unsigned>());

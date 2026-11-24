@@ -71,7 +71,6 @@ WorldDescription makeDesc(unsigned outputRatio, bool withByproduct = false)
     shop.cost = {{{"Boards"}, 2}};
     shop.look = "Sawmill";
     shop.worker.title = "ShopWorker";
-    shop.worker.tool = "none";
     shop.worker.look = "Carpenter";
     shop.inputs = {{"Raw"}};
     shop.output = {"Product"};
@@ -141,10 +140,11 @@ rttr:AddToolMaterial{ name = "Iron" }
 rttr:AddTool{ ware = "Saw", material = "Iron", durability = 100, speed = 100, outputRatio = 0.5 }
 rttr:AddTool{ ware = "CopperSaw", material = "Iron", durability = 100, speed = 50 }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "Sawmill",
-    worker = { tool = "Saw", look = "Carpenter" }, inputs = { "Raw" }, output = "Product", workTime = 5,
+    worker = { look = "Carpenter" }, tools = { tools = { "Saw" } }, inputs = { "Raw" }, output = "Product",
+    workTime = 5,
     outputRatio = 1.25 }
 rttr:AddWorkshop{ name = "Plain", size = "small", cost = { Boards = 2 }, look = "Sawmill",
-    worker = { tool = "none", look = "Carpenter" }, inputs = { "Raw" }, output = "Product", workTime = 5 }
+    worker = { look = "Carpenter" }, inputs = { "Raw" }, output = "Product", workTime = 5 }
 rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
 )";
     WorldDescription desc;
@@ -174,7 +174,7 @@ rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
          replaced("outputRatio = 1.25", "outputRatio = \"much\""), replaced("outputRatio = 0.5 }", "outputRatio = 9 }"),
          replaced("Quarry = 0.25", "Quarry = \"low\""), base + "rttr:SetBuildingOutputRatio{ Woodcutter = 1 }",
          base
-           + "rttr:AddWorkshop{ name = \"Lib\", size = \"small\", look = \"Sawmill\", worker = { tool = \"none\", "
+           + "rttr:AddWorkshop{ name = \"Lib\", size = \"small\", look = \"Sawmill\", worker = { "
              "look = \"Carpenter\" }, library = { capacity = 5 }, outputRatio = 2 }"})
     {
         WorldDescription invalidDesc;

@@ -538,10 +538,8 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
         if(GetNumBuildingSites(bld) > 0)
             continue;
         // Workers for this building: All workers of its job the player has (also those already working in a building)
-        // plus the tools in stock, as every tool can make a helper a worker. Workers without a tool can be made from
-        // any helper. Note: The tool may also be needed by other jobs (e.g. Cleaver for the butcher)
+        // plus the helpers, as workers of workshops need no tool to be recruited
         const Job job = getCustomJob(i); // Job i belongs to workshop i
-        const civ::CustomWorker* worker = content.GetWorker(job);
         unsigned potentialWorkers = inventory.people[job];
         const civ::BuildingTools& buildingTools = content.GetBuildingTools(bld);
         if(content.HasToolReform())
@@ -554,9 +552,7 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
                 for(const GoodType tool : buildingTools.slots.front().wares)
                     potentialWorkers += inventory.goods[tool];
             }
-        } else if(worker && worker->tool != GoodType::Nothing)
-            potentialWorkers += inventory.goods[worker->tool];
-        else
+        } else
             potentialWorkers += inventory.people[Job::Helper];
         if(building.IsLibrary())
         {

@@ -201,7 +201,8 @@ WareDesc::WareDesc(const kaguya::LuaTable& luaTable)
     name = readIdentifier(luaData, "Ware");
     const std::string context = "Ware '" + name + "'";
     title = luaData.getOrDefault("title", name);
-    kind = luaData.getOrDefault("kind", std::string());
+    if(const auto kindValue = luaData.getOptional<kaguya::LuaRef>("kind"))
+        kind = parseTagQuery(*kindValue, context + ", kind");
     properties = readTagList(luaData, "properties", context);
     luaData.getOrThrow(look, "look");
     luaData.getOrThrow(transport, "transport");
@@ -257,7 +258,6 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         auto workerTable = luaData.getOrThrow<kaguya::LuaTable>("worker");
         CheckedLuaTable workerData(workerTable);
         worker.title = workerData.getOrDefault("title", title);
-        workerData.getOrThrow(worker.tool, "tool");
         workerData.getOrThrow(worker.look, "look");
         workerData.checkUnused();
     }

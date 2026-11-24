@@ -8,10 +8,6 @@
 --
 -- Diese Datei steuert, was der Zufallskarten-Generator wo auf die Karte setzt. Sie gilt nur für erzeugte Karten.
 --
--- ACHTUNG: Alle Inhalte und Zahlenwerte in dieser Datei sind PLATZHALTER von Claude (markiert mit "PLATZHALTER").
--- Gamedesign und Balancing legt der Nutzer fest. Die Platzhalter sind so gewählt, dass die Karten ungefähr wie bisher
--- aussehen.
---
 -- Begriffe
 -- --------
 -- Jeder Knoten der Karte hat drei Klimawerte, jeweils 0 bis 100:
@@ -42,23 +38,23 @@
 --   Pineapple (Ananas), Cypress (Zypresse), Cherry (Kirschbaum), Fir (Tanne)
 -- Vorhandene Tierarten (für animals): Rabbit (Hase), Fox (Fuchs), Stag (Hirsch), Deer (Reh), Duck (Ente, nur auf dem
 --   Wasser), Sheep (Schaf)
--- Neue Pflanzen und Tiere (Mahagoni, Schimpanse ...) brauchen erst Grafiken und Code. Bis dahin stehen die vorhandenen
--- Arten als Platzhalter.
+-- Neue Pflanzen und Tiere (Mahagoni, Schimpanse ...) brauchen erst Grafiken und Code. Bis dahin stehen vorhandene
+-- Arten an ihrer Stelle.
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- Allgemeine Einstellungen (Klima, Flüsse, Gebirge)
 -- ---------------------------------------------------------------------------------------------------------------------
 rttr:SetMapClimate{
 	-- Um so viele Punkte sinkt die Temperatur am höchsten Punkt der Karte (gleichmäßig mit der Höhe). 0 = gar nicht
-	heightCooling = 30, -- PLATZHALTER
+	heightCooling = 30,
 	-- Streuung von Temperatur und Feuchtigkeit um den Mittelwert der Voreinstellung im Generatorfenster
 	-- (Kalt 27,5 / Kühl 37,5 / Gemäßigt 50 / Warm 62,5 / Heiß 72,5; Feucht 72,5 / Gemäßigt 50 / Trocken 27,5).
 	-- 68 % der Karte liegen innerhalb Mittelwert +- Streuung, 95 % innerhalb +- doppelter Streuung.
-	temperatureSpread = 33, -- PLATZHALTER
-	humiditySpread = 33, -- PLATZHALTER
+	temperatureSpread = 33,
+	humiditySpread = 33,
 	-- Abstand in Knoten für "near_fresh", "near_salt" und "near_river" (Gelände in den Ressourcenregeln). Die höhere
 	-- Feuchtigkeit an Seen und Flüssen (waterHumidity) hängt nicht davon ab
-	nearWaterDistance = 1, -- PLATZHALTER
+	nearWaterDistance = 1,
 	-- Gewässer bis zu dieser Größe (Anzahl Knoten, unabhängig von der Kartengröße) sind Seen (Süßwasser, ohne Strand),
 	-- größere sind Meer (Salzwasser, mit Sandstrand)
 	lakeMaxSize = 500,
@@ -73,13 +69,13 @@ rttr:SetMapClimate{
 	-- Flüsse entspringen nur ab dieser Höhe (Prozent des höchsten Punkts der Karte), meist also im Gebirge
 	riverMinHeight = 30,
 	-- Kürzere Flüsse werden nicht angelegt (Schritte entlang der Kanten, etwa Knoten)
-	riverMinLength = 15, -- PLATZHALTER
+	riverMinLength = 15,
 	-- Weniger (oder mehr) Gebirge je Klima: Faktor für den Gebirgsanteil (Regler "Gebirge %"), der erste passende
 	-- Eintrag gilt, sonst 1. Nur Temperatur und Feuchtigkeit (die Höhe gibt es da noch nicht). Der Faktor nimmt nur dort
 	-- Gebirge weg, das restliche Land bleibt wie es ist. Mit dem Gebirge gibt es dort auch weniger Bauflächen und Minen.
 	-- Konzept: Im feuchten, warmen Gebiet sind Minenplätze selten, weil sie von der Vegetation verdeckt werden.
 	mountainWeights = {
-		{ temperature = {60, 100}, humidity = {60, 100}, factor = 0.5 } -- PLATZHALTER
+		{ temperature = {60, 100}, humidity = {60, 100}, factor = 0.5 }
 	},
 	-- Abstand in Knoten zwischen den kleinen Bauflächen im Gebirge (für Militärgebäude, wie im Online-Generator).
 	-- 0 = keine
@@ -106,8 +102,8 @@ rttr:SetMapClimate{
 -- Passt an einem Ort kein Paket, wachsen dort keine Bäume und es leben dort keine Tiere. Deshalb sollte das letzte Paket
 -- jeder Zone ohne Bereiche auskommen (gilt dann überall sonst).
 
--- Platzhalter-Pakete nach Klima, solange es für eine Zone noch keine eigenen gibt. PLATZHALTER
-local function platzhalterPakete()
+-- Pakete nach Klima für Zonen, die noch keine eigenen haben
+local function standardPakete()
 	return {
 		{ name = "heiss_feucht", temperature = {65, 100}, humidity = {55, 100},
 		  trees = { Palm1 = 2, Palm2 = 2, Pineapple = 1 }, animals = { Deer = 1, Fox = 1, Duck = 1 } },
@@ -125,14 +121,14 @@ rttr:AddMapZone{
 	name = "Nordamerika",
 	title = "Nordamerika",
 	color = 0x4060E0,
-	packages = platzhalterPakete() -- PLATZHALTER
+	packages = standardPakete()
 }
 
 rttr:AddMapZone{
 	name = "Suedamerika",
 	title = "Südamerika",
 	color = 0x40C060,
-	packages = platzhalterPakete() -- PLATZHALTER
+	packages = standardPakete()
 }
 
 rttr:AddMapZone{
@@ -140,7 +136,7 @@ rttr:AddMapZone{
 	title = "Europa",
 	color = 0xE0E040,
 	-- Beispiel aus dem Konzept (gemäßigt): Schwein, Rind, Wolf; Schilfrohr, Haselnuss, Apfelbaum.
-	-- Bis es diese Arten gibt, stehen vorhandene Arten da. PLATZHALTER
+	-- Bis es diese Arten gibt, stehen vorhandene Arten da.
 	packages = {
 		{ name = "gemaessigt", temperature = {35, 64},
 		  trees = { Oak = 3, Birch = 2, Cherry = 2 }, animals = { Sheep = 2, Stag = 1, Fox = 1, Duck = 1 } },
@@ -156,7 +152,7 @@ rttr:AddMapZone{
 	title = "Afrika",
 	color = 0xE08030,
 	-- Beispiel aus dem Konzept (heiß, feucht, nicht sehr hoch): Schimpanse, Leopard, Waldelefant; Mahagoni, Kola-Baum,
-	-- Gummibaum. Bis es diese Arten gibt, stehen vorhandene Arten da. PLATZHALTER
+	-- Gummibaum. Bis es diese Arten gibt, stehen vorhandene Arten da.
 	packages = {
 		{ name = "regenwald", temperature = {65, 100}, humidity = {55, 100}, height = {0, 40},
 		  trees = { Palm1 = 2, Palm2 = 2, Pineapple = 1 }, animals = { Deer = 2, Fox = 1, Duck = 1 } },
@@ -171,21 +167,21 @@ rttr:AddMapZone{
 	name = "Asien",
 	title = "Asien",
 	color = 0xC04040,
-	packages = platzhalterPakete() 
+	packages = standardPakete()
 }
 
 rttr:AddMapZone{
 	name = "Ozeanien",
 	title = "Ozeanien",
 	color = 0x40C0C0,
-	packages = platzhalterPakete() -- PLATZHALTER
+	packages = standardPakete()
 }
 
 rttr:AddMapZone{
 	name = "Australien",
 	title = "Australien",
 	color = 0xA040C0,
-	packages = platzhalterPakete() -- PLATZHALTER
+	packages = standardPakete()
 }
 
 -- ---------------------------------------------------------------------------------------------------------------------
@@ -431,35 +427,35 @@ rttr:AddMapResource{	name = "Tin",	object = "Tin", 	amount = 10, 	terrain = { "m
 rttr:AddMapResource{
 	name = "Deko",
 	object = "decoration",
-	amount = 2, -- PLATZHALTER
+	amount = 2,
 	terrain = { "land" }
 }
 
 rttr:AddMapResource{
 	name = "Landtiere",
 	object = "animals",
-	amount = 2, -- PLATZHALTER
+	amount = 2,
 	terrain = { "land" }
 }
 
 rttr:AddMapResource{
 	name = "Wasservoegel",
 	object = "animals",
-	amount = 2, -- PLATZHALTER
+	amount = 2,
 	terrain = { "freshwater", "saltwater" }
 }
 
 rttr:AddMapResource{
 	name = "Fische",
 	object = "fish",
-	amount = 100, -- PLATZHALTER
+	amount = 100,
 	terrain = { "freshwater", "saltwater", "river" }
 }
 
 rttr:AddMapResource{
 	name = "Grundwasser",
 	object = "groundwater",
-	amount = 100, -- PLATZHALTER
+	amount = 100,
 	terrain = { "land", "shore_fresh", "shore_salt", "shore_river" }
 }
 

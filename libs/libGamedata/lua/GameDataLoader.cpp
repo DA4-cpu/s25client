@@ -156,10 +156,11 @@ void GameDataLoader::SetWareTags(const kaguya::LuaTable& data)
     {
         const kaguya::LuaRef value = data[ware];
         if(value.type() != kaguya::LuaRef::TYPE_TABLE)
-            throw GameDataError("Tags of ware '" + ware + "' must be a table like { kind = \"Bretter\" }");
+            throw GameDataError("Tags of ware '" + ware + "' must be a table like { kind = { \"Bretter\" } }");
         CheckedLuaTable tagData(value.get<kaguya::LuaTable>());
         WareTagsDesc tags;
-        tags.kind = tagData.getOrDefault("kind", std::string());
+        if(const auto kindValue = tagData.getOptional<kaguya::LuaRef>("kind"))
+            tags.kind = parseTagQuery(*kindValue, "Tags of ware '" + ware + "', kind");
         tags.properties = tagData.getOrDefault("properties", std::vector<std::string>());
         tagData.checkUnused();
         if(!worldDesc_.wareTags.emplace(ware, tags).second)
@@ -420,26 +421,30 @@ void GameDataLoader::SetAIBuildingLimit(const kaguya::LuaTable& data)
     const std::string context = "Building limit of the AI (rttr:SetAIBuildingLimit)";
     if(worldDesc_.aiBuildingLimitSet)
         throw GameDataError(context + " is defined twice");
-    const std::string example = "{ base = 3, perStartArea = 1 }";
+    const std::string example = "{ base = 3, perArea = 1, areaSize = 331 }";
     std::vector<std::string> keys = data.keys<std::string>();
     if(keys.size() != data.keys<kaguya::LuaRef>().size())
         throw GameDataError(context + ": expected a table like " + example);
     for(const std::string& key : keys)
     {
-        if(key != "base" && key != "perStartArea")
+        if(key != "base" && key != "perArea" && key != "areaSize")
             throw GameDataError(context + ": unknown entry '" + key + "', expected a table like " + example);
     }
-    const auto getValue = [&](const std::string& key) {
+    const auto getValue = [&](const std::string& key, const unsigned minValue, const unsigned maxValue) {
         const kaguya::LuaRef value = data[key];
         if(value.type() != kaguya::LuaRef::TYPE_NUMBER)
             throw GameDataError(context + ": '" + key + "' is missing or no number (" + example + ")");
         const double number = value.get<double>();
-        if(number < 0 || number > 1000 || number != static_cast<double>(static_cast<unsigned>(number)))
-            throw GameDataError(context + ": '" + key + "' must be a whole number in [0, 1000]");
+        if(number < minValue || number > maxValue || number != static_cast<double>(static_cast<unsigned>(number)))
+        {
+            throw GameDataError(context + ": '" + key + "' must be a whole number in [" + std::to_string(minValue)
+                                + ", " + std::to_string(maxValue) + "]");
+        }
         return static_cast<unsigned>(number);
     };
-    worldDesc_.aiBuildingLimitBase = getValue("base");
-    worldDesc_.aiBuildingLimitPerStartArea = getValue("perStartArea");
+    worldDesc_.aiBuildingLimitBase = getValue("base", 0, 1000);
+    worldDesc_.aiBuildingLimitPerArea = getValue("perArea", 0, 1000);
+    worldDesc_.aiBuildingLimitAreaSize = getValue("areaSize", 1, 1000000);
     worldDesc_.aiBuildingLimitSet = true;
 }
 
@@ -482,7 +487,11 @@ void GameDataLoader::SetAIStartStockNoSurplus(const kaguya::LuaTable& data)
     const std::string context = "Start stock of the AI that is no surplus (rttr:SetAIStartStockNoSurplus)";
     if(!worldDesc_.aiStartStockNoSurplus.empty())
         throw GameDataError(context + " is defined twice");
-    worldDesc_.aiStartStockNoSurplus = readNameList(data, context, "ware", "{ \"Wood\", \"Boards\" }");
+    // Every entry is a tag query: "BasicBuildingMaterial" or { "Bretter", "Nadelholz" }
+    for(const kaguya::LuaRef& entry : data.values())
+        worldDesc_.aiStartStockNoSurplus.push_back(parseTagQuery(entry, context));
+    if(worldDesc_.aiStartStockNoSurplus.empty())
+        throw GameDataError(context + ": the list is empty");
 }
 
 void loadGameData(WorldDescription& worldDesc)

@@ -88,7 +88,6 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     mine.cost = {{{"Boards"}, 4}};
     mine.look = "IronMine";
     mine.worker.title = "Bergmann";
-    mine.worker.tool = "PickAxe";
     mine.worker.look = "Miner";
     mine.inputs = {{"Fish"}, {"Meat"}, {"Bread"}};
     mine.consumeEach = false;
@@ -106,7 +105,6 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     plantation.cost = {{{"Boards"}, 2}};
     plantation.look = "Farm";
     plantation.worker.title = "Papyrusbauer";
-    plantation.worker.tool = "Scythe";
     plantation.worker.look = "Farmer";
     plantation.inputs = {{"Water"}};
     plantation.plantObject = "Papyrus";
@@ -227,11 +225,11 @@ rttr:AddMapObject{ name = "PapyrusDeposit", title = "Papyrus", sizes = 8, look =
     plantSize = 4 }
 rttr:AddOre{ name = "Copper", title = "Kupfer", look = "Iron", tint = 0xC07040 }
 rttr:AddWorkshop{ name = "CopperMine", title = "Kupfermine", size = "mine", cost = { Boards = 4 }, look = "IronMine",
-    worker = { title = "Bergmann", tool = "PickAxe", look = "Miner" }, inputs = { "Fish", "Meat", "Bread" },
+    worker = { title = "Bergmann", look = "Miner" }, inputs = { "Fish", "Meat", "Bread" },
     consume = "any", mine = { resource = "Copper" }, output = "CopperOre", workTime = 28, waitTime = 29,
     knowledge = { IWP = 2 } }
 rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small", cost = { Boards = 2 },
-    look = "Farm", worker = { title = "Bauer", tool = "Scythe", look = "Farmer" }, inputs = { "Water" },
+    look = "Farm", worker = { title = "Bauer", look = "Farmer" }, inputs = { "Water" },
     plant = { object = "PapyrusDeposit", radius = 4 }, output = "PapyrusPlant", workTime = 6 }
 )";
     {

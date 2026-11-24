@@ -42,8 +42,9 @@ struct TechnologyDesc
     std::string title, description;
     /// Era/level of the technology (0 = neolithic, 6 = contemporary)
     unsigned era = 0;
-    /// Technologies which have to be researched first. Must be defined before this one
-    std::vector<std::string> requirements;
+    /// Technologies which have to be researched first, as groups: at least one technology of every group. A group with
+    /// one entry requires exactly this technology. All must be defined before this one
+    std::vector<std::vector<std::string>> requirements;
     /// Costs: Good identifier -> amount
     std::map<std::string, unsigned> cost;
     /// Knowledge points required (and spent on completion), never negative

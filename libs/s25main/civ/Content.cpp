@@ -32,11 +32,6 @@ namespace {
         return !isCustomGood(good) && good != GoodType::WaterEmpty && ConvertShields(good) == good;
     }
 
-    constexpr std::array<GoodType, 12> TOOLS = {GoodType::Tongs,    GoodType::Hammer,     GoodType::Axe,
-                                                GoodType::Saw,      GoodType::PickAxe,    GoodType::Shovel,
-                                                GoodType::Crucible, GoodType::RodAndLine, GoodType::Scythe,
-                                                GoodType::Cleaver,  GoodType::Rollingpin, GoodType::Bow};
-
     std::string joinTags(const TagQuery& query)
     {
         std::string result;
@@ -260,7 +255,6 @@ Content::Content(const WorldDescription& desc) : Content()
             CustomWorker noWorker;
             noWorker.name = wsDesc.name;
             noWorker.title = wsDesc.title;
-            noWorker.tool = GoodType::Nothing;
             noWorker.look = Job::Helper;
             workers_.push_back(std::move(noWorker));
             continue;
@@ -270,19 +264,6 @@ Content::Content(const WorldDescription& desc) : Content()
         CustomWorker worker;
         worker.name = wsDesc.name;
         worker.title = wsDesc.worker.title;
-        if(wsDesc.worker.tool == "none")
-            worker.tool = GoodType::Nothing;
-        else
-        {
-            const auto tool = goodFromIdentifier(wsDesc.worker.tool);
-            if(!tool || !helpers::contains(TOOLS, *tool))
-            {
-                throw GameDataError(context
-                                    + ": the tool of the worker must be a tool (e.g. \"Hammer\") or \"none\", not '"
-                                    + wsDesc.worker.tool + "'");
-            }
-            worker.tool = *tool;
-        }
         const auto workerLook = jobFromIdentifier(wsDesc.worker.look);
         if(!workerLook)
             throw GameDataError(context + ": the look of the worker must be a built-in job (e.g. \"Carpenter\"), not '"
@@ -600,7 +581,8 @@ Content::Content(const WorldDescription& desc) : Content()
         }
         return result;
     };
-    // Default: The tool of the worker and no work without it. Workers without a tool work as before
+    // Default of built-in buildings: The tool of the worker and no work without it. Workers without a tool and
+    // workshops without tools work as before (full speed)
     const auto makeDefaultTools = [this](const GoodType workerTool) {
         BuildingToolsDesc toolsDesc;
         if(workerTool != GoodType::Nothing && tools_[workerTool])
@@ -638,7 +620,7 @@ Content::Content(const WorldDescription& desc) : Content()
     {
         const WorkshopDesc& wsDesc = desc.workshops[i];
         buildingTools_[getCustomBuilding(i)] = resolveTools(
-          wsDesc.tools ? *wsDesc.tools : makeDefaultTools(workers_[i].tool), "Workshop '" + wsDesc.name + "'");
+          wsDesc.tools ? *wsDesc.tools : makeDefaultTools(GoodType::Nothing), "Workshop '" + wsDesc.name + "'");
     }
 }
 
@@ -670,11 +652,14 @@ std::string Content::getIdentifierOf(GoodType good) const
     return getIdentifier(good);
 }
 
-void Content::SetTags(GoodType good, const std::string& kind, const std::vector<std::string>& properties)
+void Content::SetTags(GoodType good, const std::vector<std::string>& kinds, const std::vector<std::string>& properties)
 {
     std::vector<std::string>& tags = tags_[good];
-    if(!kind.empty() && !helpers::contains(tags, kind))
-        tags.push_back(kind);
+    for(const std::string& kind : kinds)
+    {
+        if(!helpers::contains(tags, kind))
+            tags.push_back(kind);
+    }
     for(const std::string& property : properties)
     {
         if(!helpers::contains(tags, property))

@@ -85,14 +85,21 @@ TechTree::TechTree(const WorldDescription& desc)
     }
     aiStorageFullPercent_ = desc.aiStorageFullPercent;
     aiBuildingLimitBase_ = desc.aiBuildingLimitBase;
-    aiBuildingLimitPerStartArea_ = desc.aiBuildingLimitPerStartArea;
+    aiBuildingLimitPerArea_ = desc.aiBuildingLimitPerArea;
+    aiBuildingLimitAreaSize_ = std::max(1u, desc.aiBuildingLimitAreaSize);
     std::fill(aiStartStockNoSurplus_.begin(), aiStartStockNoSurplus_.end(), false);
-    for(const std::string& name : desc.aiStartStockNoSurplus)
+    for(const TagQuery& query : desc.aiStartStockNoSurplus)
     {
-        const auto good = content_->FindGood(name);
-        if(!good)
-            throw GameDataError("Start stock of the AI that is no surplus contains an invalid ware '" + name + "'");
-        aiStartStockNoSurplus_[*good] = true;
+        const std::vector<GoodType> wares = content_->FindWares(query);
+        if(wares.empty())
+        {
+            std::string tags;
+            for(const std::string& tag : query)
+                tags += (tags.empty() ? "" : ", ") + tag;
+            throw GameDataError("Start stock of the AI that is no surplus: '" + tags + "' matches no ware");
+        }
+        for(const GoodType good : wares)
+            aiStartStockNoSurplus_[good] = true;
     }
     techs_.reserve(desc.technologies.size());
     for(const TechnologyDesc& techDesc : desc.technologies)
@@ -102,13 +109,20 @@ TechTree::TechTree(const WorldDescription& desc)
         tech.title = techDesc.title;
         tech.description = techDesc.description;
         tech.era = techDesc.era;
-        for(const std::string& req : techDesc.requirements)
+        for(const auto& reqGroup : techDesc.requirements)
         {
-            const auto reqIdx = find(req);
-            // Checked by the loader already
-            if(!reqIdx)
-                throw GameDataError("Technology '" + tech.name + "' requires unknown technology '" + req + "'");
-            tech.requirements.push_back(*reqIdx);
+            std::vector<TechIdx> group;
+            for(const std::string& req : reqGroup)
+            {
+                const auto reqIdx = find(req);
+                // Checked by the loader already
+                if(!reqIdx)
+                    throw GameDataError("Technology '" + tech.name + "' requires unknown technology '" + req + "'");
+                group.push_back(*reqIdx);
+            }
+            if(group.empty())
+                throw GameDataError("Technology '" + tech.name + "' has an empty group of requirements");
+            tech.requirements.push_back(std::move(group));
         }
         for(const auto& entry : techDesc.cost)
         {

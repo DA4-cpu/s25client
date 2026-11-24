@@ -41,11 +41,12 @@ struct WorldDescription
     /// AI of the civilization mode: buildings of the basic economy by level, the first level most important
     /// (rttr:SetAIBasicEconomy). Their orders come first within the needed and within the expanding orders
     std::vector<std::vector<std::string>> aiBasicEconomy;
-    /// AI of the civilization mode: wares whose start stock is no surplus (rttr:SetAIStartStockNoSurplus)
-    std::vector<std::string> aiStartStockNoSurplus;
-    /// AI of the civilization mode: at most base + perStartArea * (land / land of the HQ) buildings of a type
-    /// (rttr:SetAIBuildingLimit)
-    unsigned aiBuildingLimitBase = 3, aiBuildingLimitPerStartArea = 1;
+    /// AI of the civilization mode: tag queries of the wares whose start stock is no surplus
+    /// (rttr:SetAIStartStockNoSurplus)
+    std::vector<TagQuery> aiStartStockNoSurplus;
+    /// AI of the civilization mode: at most base + perArea * (land / areaSize) buildings of a type, areaSize in nodes
+    /// (rttr:SetAIBuildingLimit). 331 = the land of an HQ (radius 10)
+    unsigned aiBuildingLimitBase = 3, aiBuildingLimitPerArea = 1, aiBuildingLimitAreaSize = 331;
     bool aiBuildingLimitSet = false;
     /// AI of the civilization mode: the storage counts as full at this percentage (rttr:SetAIStorageFull)
     unsigned aiStorageFullPercent = 90;

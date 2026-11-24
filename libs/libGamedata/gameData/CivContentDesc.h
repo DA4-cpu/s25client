@@ -25,8 +25,8 @@ struct WareDesc
     std::string name;
     /// Displayed name
     std::string title;
-    /// Kind of ware ("Warenart"), also a tag. Optional
-    std::string kind;
+    /// Kinds of ware ("Warenarten"), each also a tag. Optional, any number
+    std::vector<std::string> kind;
     /// Properties ("Eigenschaften"), also tags. Can be passed on to products of workshops
     std::vector<std::string> properties;
     /// Identifier of an existing ware whose graphics are used (placeholder)
@@ -43,7 +43,7 @@ struct WareDesc
 /// Additional tags of a built-in ware (rttr:SetWareTags)
 struct WareTagsDesc
 {
-    std::string kind;
+    std::vector<std::string> kind;
     std::vector<std::string> properties;
 };
 
@@ -97,9 +97,6 @@ struct CostDesc
 struct WorkerDesc
 {
     std::string title;
-    /// Identifier of the tool of the worker or "none". Without the tool reform the tool required to recruit the worker,
-    /// with it the tool used in the workshop unless the workshop lists its tools
-    std::string tool;
     /// Identifier of an existing job whose graphics are used (placeholder)
     std::string look;
 };
@@ -197,7 +194,7 @@ struct WorkshopDesc
     std::optional<KnowledgeValues> knowledge;
     /// True: The AI may build it near a land border (otherwise that space is kept free for military buildings)
     bool aiNearBorder = false;
-    /// Tools used in the workshop. Not set: the tool of the worker (if any) with base speed 0
+    /// Tools used in the workshop. Not set: no tools, full speed (100 %)
     std::optional<BuildingToolsDesc> tools;
     /// Wares per work step in hundredths (100 = 1 ware, 50 = 1 ware every 2nd step). Tools can add to it
     unsigned outputRatio = 100;

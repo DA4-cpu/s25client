@@ -35,7 +35,8 @@ struct Technology
 {
     std::string name, title, description;
     unsigned era = 0;
-    std::vector<TechIdx> requirements;
+    /// At least one technology of every group must be researched first (a group with one entry: exactly this one)
+    std::vector<std::vector<TechIdx>> requirements;
     /// Costs, sorted by good type
     std::vector<TechCost> cost;
     /// Knowledge points (whole points) required and spent on completion
@@ -96,10 +97,12 @@ public:
     unsigned GetAIBasicEconomyLevel(BuildingType bld) const { return aiBasicLevel_[bld]; }
     /// AI: the start stock of the ware is no surplus (ai.lua)
     bool IsAIStartStockNoSurplus(GoodType good) const { return aiStartStockNoSurplus_[good]; }
-    /// AI: at most GetAIBuildingLimitBase() + GetAIBuildingLimitPerStartArea() * (land / land of the HQ) buildings of a
-    /// type (ai.lua)
+    /// AI: at most GetAIBuildingLimitBase() + GetAIBuildingLimitPerArea() * (land / GetAIBuildingLimitAreaSize())
+    /// buildings of a type (ai.lua)
     unsigned GetAIBuildingLimitBase() const { return aiBuildingLimitBase_; }
-    unsigned GetAIBuildingLimitPerStartArea() const { return aiBuildingLimitPerStartArea_; }
+    unsigned GetAIBuildingLimitPerArea() const { return aiBuildingLimitPerArea_; }
+    /// Size of an area in nodes (at least 1)
+    unsigned GetAIBuildingLimitAreaSize() const { return aiBuildingLimitAreaSize_; }
     /// AI: the storage counts as full at this percentage of its capacity (ai.lua)
     unsigned GetAIStorageFullPercent() const { return aiStorageFullPercent_; }
     /// Byproducts of the building (in order of definition)
@@ -116,7 +119,7 @@ private:
     helpers::EnumArray<bool, BuildingType> aiExpanding_;
     helpers::EnumArray<unsigned, BuildingType> aiBasicLevel_;
     helpers::EnumArray<bool, GoodType> aiStartStockNoSurplus_;
-    unsigned aiBuildingLimitBase_, aiBuildingLimitPerStartArea_, aiStorageFullPercent_;
+    unsigned aiBuildingLimitBase_, aiBuildingLimitPerArea_, aiBuildingLimitAreaSize_, aiStorageFullPercent_;
     helpers::EnumArray<std::vector<Byproduct>, BuildingType> byproducts_;
 };
 

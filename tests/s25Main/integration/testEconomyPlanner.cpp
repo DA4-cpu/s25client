@@ -62,7 +62,6 @@ WorkshopDesc makeWorkshop(const std::string& name)
     desc.cost = {{{"Boards"}, 2}};
     desc.look = "Quarry";
     desc.worker.title = name + "Worker";
-    desc.worker.tool = "none";
     desc.worker.look = "Stonemason";
     desc.workTime = 10;
     return desc;
@@ -495,10 +494,11 @@ BOOST_FIXTURE_TEST_CASE(PlansWithAWarehouseFromLua, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(BuildingLimitDependsOnTheLand, PlannerFixture)
 {
-    // Limit base 0 + 1 per start area: one pit on the land of the HQ
+    // Limit base 0 + 1 per area of 331 nodes (the land of the HQ): one pit
     WorldDescription desc = makeDesc({"Pit"});
     desc.aiBuildingLimitBase = 0;
-    desc.aiBuildingLimitPerStartArea = 1;
+    desc.aiBuildingLimitPerArea = 1;
+    desc.aiBuildingLimitAreaSize = 331;
     startGame(desc);
     placeDeposits();
     placeDeposits(Position(-4, 4));
@@ -513,6 +513,18 @@ BOOST_FIXTURE_TEST_CASE(BuildingLimitDependsOnTheLand, PlannerFixture)
     BOOST_TEST(world.GetPlayer(curPlayer).GetBuildingRegister().GetBuildingSites().size() == 1u);
 }
 
+BOOST_FIXTURE_TEST_CASE(BuildingLimitCountsOnlyWholeAreas, PlannerFixture)
+{
+    // Less land than one area: only the base counts (no "at least 1 area")
+    WorldDescription desc = makeDesc({"Pit"});
+    desc.aiBuildingLimitBase = 2;
+    desc.aiBuildingLimitPerArea = 3;
+    desc.aiBuildingLimitAreaSize = 100000;
+    startGame(desc);
+    startAI();
+    BOOST_TEST(planner()->GetBuildingLimit() == 2u);
+}
+
 BOOST_FIXTURE_TEST_CASE(OneExpandingOrderPerBuildingType, PlannerFixture)
 {
     // The carver makes two knowledge media, both in normal state, and is in the list of ai.lua: one expanding order,
@@ -521,7 +533,7 @@ BOOST_FIXTURE_TEST_CASE(OneExpandingOrderPerBuildingType, PlannerFixture)
     for(unsigned i = 0; i < 2; i++)
     {
         WareDesc ware = makeWare(i == 0 ? "CarvedL" : "CarvedI");
-        ware.kind = "Carved";
+        ware.kind = {"Carved"};
         ware.knowledge[i] = 1;
         desc.wares.push_back(ware);
     }
@@ -800,7 +812,7 @@ BOOST_FIXTURE_TEST_CASE(BasicEconomyComesFirst, PlannerFixture)
 BOOST_FIXTURE_TEST_CASE(StartStockIsNoSurplus, PlannerFixture)
 {
     WorldDescription desc = makeDesc();
-    desc.aiStartStockNoSurplus = {"Loam"};
+    desc.aiStartStockNoSurplus = {{"Loam"}};
     startGame(desc);
     hq().AddToInventory(GoodCounts::make(LOAM, 20), true);
     startAI();
@@ -978,7 +990,7 @@ BOOST_FIXTURE_TEST_CASE(NeededOrderReplacesTheExpandingOne, PlannerFixture)
     // needed one replaces the expanding one (same building and ware). Needed orders ignore the limit per building type
     WorldDescription desc = makeDesc();
     desc.aiBuildingLimitBase = 0;
-    desc.aiBuildingLimitPerStartArea = 0;
+    desc.aiBuildingLimitPerArea = 0;
     startGame(desc);
     placeDeposits();
     startAI();
@@ -1239,11 +1251,11 @@ namespace {
 WorldDescription makeHutDesc()
 {
     WorldDescription desc = makeDesc({}, {{"Hutwork", 5}});
-    desc.wares[0].kind = "Wall";
-    desc.wares[1].kind = "Wall";
+    desc.wares[0].kind = {"Wall"};
+    desc.wares[1].kind = {"Wall"};
     desc.wares[1].properties = {"Roof"};
     desc.wares.push_back(makeWare("Straw"));
-    desc.wares.back().kind = "Roof";
+    desc.wares.back().kind = {"Roof"};
     desc.wares.push_back(makeWare("Hutwork"));
     WorkshopDesc hut = makeWorkshop("Hut");
     hut.cost = {{{"Wall"}, 2}, {{"Roof"}, 2}};

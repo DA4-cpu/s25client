@@ -11,7 +11,9 @@ Felder von rttr:AddTechnology{...}:
   description Beschreibung
   era         Zeitalter 0..6 (0 Jungsteinzeit, 1 Antike, 2 Klassik, 3 Mittelalter, 4 Frühe Neuzeit,
               5 Industriezeitalter, 6 Moderne)
-  requires    Liste von Voraussetzungen (Bezeichner). Müssen WEITER OBEN definiert sein.
+  requires    Liste von Voraussetzungen (Bezeichner). Müssen WEITER OBEN definiert sein. Eine Liste in der Liste heißt
+              "mindestens eine davon": requires = { "storage", { "milling", "animal_husbandry" } } verlangt
+              Vorratshaltung und dazu Mahlen und Backen oder Viehzucht.
   knowledge   Kosten in Wissenspunkten, z.B. { LWP = 4, IWP = 2 } (LWP Landwirtschaft, IWP Industrie, MWP Militär). Standardwert+Wissensmedienzusatz
               Werden erst beim Abschluss abgebucht. Die WP der Gebäude stehen in knowledge.lua.
   cost        Warenkosten, z.B. { Boards = 4, Stones = 2 }. Bezeichner wie im Enum GoodType:
@@ -38,8 +40,8 @@ Ohne Forschung verfügbar (Grundwirtschaft): Holzfäller, Förster, Steinbruch, 
 Brunnen, Baracke, Wachstube, Spähturm.
 
 WP-Hinweis: Wissenspunkte werden nicht verbraucht, sondern "belegt". Um alle Technologien zu haben, braucht ein Spieler
-mindestens so viele Gesamt-WP wie die Summe aller WP-Kosten (derzeit LWP 43, IWP 50, MWP 41 mit allen Addons).
-Zum Start bringt das Hauptquartier 5/5/5. Die WP-Kosten waren Startwerte; Balancing macht der Nutzer.
+mindestens so viele Gesamt-WP wie die Summe aller WP-Kosten (Stand 2026-11-24: LWP 116, IWP 190, MWP 137 mit allen
+Addons). Zum Start bringt das Hauptquartier 7/7/7 (knowledge.lua).
 ]]
 
 -------------------------------------------------------------------------------
@@ -94,8 +96,8 @@ rttr:AddTechnology{
 
 rttr:AddTechnology{
     name = "Well",
-    title = "Well", -- PLATZHALTER: Anzeigename
-    description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
+    title = "Well",
+    description = "Brunnen fördern Grundwasser. Bäcker, Brauereien und Schweinezuchten brauchen Wasser.",
     era = 0,
     requires = { "agriculture" },  
     knowledge = { LWP = 4 }, 
@@ -166,8 +168,8 @@ rttr:AddTechnology{
 
 rttr:AddTechnology{
     name = "bone_carving",
-    title = "Knochenschnitzerei", -- PLATZHALTER: Anzeigename
-    description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.", -- PLATZHALTER
+    title = "Knochenschnitzerei",
+    description = "Jäger und Metzger heben die Knochen auf. In Knochen geritzte Zeichen bewahren Wissen.",
     era = 0,
     knowledge = { LWP = 7, IWP = 7 }, 
     requires = { "storage" },
@@ -251,7 +253,7 @@ rttr:AddTechnology{
     description = "Stollen werden in die Berge getrieben, um Kohle, Eisenerz und Granit abzubauen. "
         .. "Bergleute brauchen Nahrung.",
     era = 1,
-    requires = { "agriculture", "storage", "BronzeAge" }, -- hier soll eigentlich milling oder animal_husbandry als Voraussetzung hin (mindestens 1 von den beiden muss erforscht sein), aber es gibt kein "or" bei der Abfrage glaube ich
+    requires = { { "milling", "animal_husbandry" }, "storage", "BronzeAge" },
     knowledge = { IWP = 15 },
     time = 60,
     unlocks = { buildings = { "CoalMine", "IronMine", "GraniteMine", "GoldMine", "CopperMine", "TinMine", "LimeMine" } }, -- Minen überarbeiten, dass es nur noch einen Minentypen gibt, der aber alles abbauen kann

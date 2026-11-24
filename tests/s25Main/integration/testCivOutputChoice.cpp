@@ -64,7 +64,8 @@ WareDesc makeWare(const std::string& name, const std::string& kind, const std::s
     WareDesc desc;
     desc.name = name;
     desc.title = name + "Title";
-    desc.kind = kind;
+    if(!kind.empty())
+        desc.kind = {kind};
     desc.look = look;
     desc.transport = look;
     return desc;
@@ -79,7 +80,6 @@ WorkshopDesc makeWorkshop(const std::string& name, const std::string& input, std
     desc.cost = {{{"Boards"}, 2}};
     desc.look = "Metalworks";
     desc.worker.title = name + "Worker";
-    desc.worker.tool = "none";
     desc.worker.look = "Metalworker";
     desc.inputs = {{input}};
     desc.outputs = std::move(outputs);
@@ -157,10 +157,10 @@ BOOST_AUTO_TEST_CASE(SeveralProductsFromLua)
 rttr:AddWare{ name = "CopperAxe", kind = "Axe", look = "Axe", transport = "Axe" }
 rttr:AddWare{ name = "CopperSaw", kind = "Saw", properties = { "Copper" }, look = "Saw", transport = "Saw" }
 rttr:AddWorkshop{ name = "Copperworks", size = "medium", cost = { Boards = 2 }, look = "Metalworks",
-    worker = { tool = "Tongs", look = "Metalworker" }, inputs = { "IronOre", "Coal" },
+    worker = { look = "Metalworker" }, inputs = { "IronOre", "Coal" },
     outputs = { "CopperAxe", { "Saw", "Copper" }, "Bow" }, workTime = 120 }
 rttr:AddWorkshop{ name = "Single", size = "small", cost = { Boards = 2 }, look = "Bakery",
-    worker = { tool = "none", look = "Baker" }, inputs = { "Stones" }, outputs = { "CopperAxe" }, workTime = 40 }
+    worker = { look = "Baker" }, inputs = { "Stones" }, outputs = { "CopperAxe" }, workTime = 40 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));

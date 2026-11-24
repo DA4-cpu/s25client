@@ -151,6 +151,8 @@ rttr:AddTechnology{ name = "a", title = "A", era = 0, cost = { Boards = 2, Stone
                     knowledge = { LWP = 3, MWP = 1 }, unlocks = { buildings = { "Farm" } } }
 rttr:AddTechnology{ name = "b", title = "B", description = "Desc", era = 2, requires = { "a" }, time = 30,
                     exclusive = true, addon = "WINE", aiPriority = 5 }
+rttr:AddTechnology{ name = "x" }
+rttr:AddTechnology{ name = "c", requires = { "b", { "a", "x" } } }
 rttr:SetBuildingKnowledge{ Headquarters = { LWP = 5, IWP = 5, MWP = 5 }, Catapult = { MWP = -5 } }
 rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
 )";
@@ -158,7 +160,7 @@ rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
     WorldDescription desc;
     GameDataLoader loader(desc, tmp);
     BOOST_TEST_REQUIRE(loader.Load());
-    BOOST_TEST_REQUIRE(desc.technologies.size() == 2u);
+    BOOST_TEST_REQUIRE(desc.technologies.size() == 4u);
     const TechnologyDesc& a = *desc.technologies.tryGet("a");
     BOOST_TEST(a.title == "A");
     BOOST_TEST(a.cost.size() == 2u);
@@ -169,12 +171,15 @@ rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
     const TechnologyDesc& b = *desc.technologies.tryGet("b");
     BOOST_TEST(b.description == "Desc");
     BOOST_TEST(b.era == 2u);
-    BOOST_TEST((b.requirements == std::vector<std::string>{"a"}));
+    BOOST_TEST((b.requirements == std::vector<std::vector<std::string>>{{"a"}}));
     BOOST_TEST(b.time == 30u);
     BOOST_TEST(b.exclusive);
     BOOST_TEST(b.requiredAddon == "WINE");
     BOOST_TEST(b.aiPriority == 5);
     BOOST_TEST((b.knowledge == KnowledgeValues{0, 0, 0}));
+    // b and (a or x)
+    const TechnologyDesc& c = *desc.technologies.tryGet("c");
+    BOOST_TEST((c.requirements == std::vector<std::vector<std::string>>{{"b"}, {"a", "x"}}));
 
     BOOST_TEST_REQUIRE(desc.buildingKnowledge.size() == 3u);
     BOOST_TEST((desc.buildingKnowledge.at("Headquarters") == KnowledgeValues{5, 5, 5}));
@@ -195,6 +200,14 @@ BOOST_AUTO_TEST_CASE(DetectInvalidTechnologies)
         rttr::test::LogAccessor logAcc;
         BOOST_TEST(!loader.Load());
     };
+    // A list of alternatives needs at least two, every technology only once, only names
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a" }
+rttr:AddTechnology{ name = "b", requires = { { "a" } } })");
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a" }
+rttr:AddTechnology{ name = "x" }
+rttr:AddTechnology{ name = "b", requires = { "a", { "a", "x" } } })");
+    expectLoadFailure(R"(rttr:AddTechnology{ name = "a" }
+rttr:AddTechnology{ name = "b", requires = { { "a", 3 } } })");
     // Prerequisite defined after use (would allow cycles)
     expectLoadFailure(R"(rttr:AddTechnology{ name = "b", requires = { "a" } }
 rttr:AddTechnology{ name = "a" })");
@@ -227,15 +240,16 @@ BOOST_AUTO_TEST_CASE(LoadWaresAndWorkshops)
         file << R"(
 rttr:AddWare{ name = "Raw", title = "Rohstoff", kind = "RawKind", properties = { "A", "B" }, look = "Stones",
               transport = "Stones", knowledge = { LWP = 1 } }
-rttr:AddWare{ name = "Product", look = "Boards", transport = "Boards" }
+rttr:AddWare{ name = "Product", kind = { "KindA", "KindB" }, look = "Boards", transport = "Boards" }
 rttr:SetWareTags{ Boards = { kind = "Bretter", properties = { "Nadelholz" } } }
+rttr:SetWareTags{ Stones = { kind = { "Wall", "Roof" } } }
 rttr:AddWorkshop{ name = "Shop", title = "Werkstatt", description = "Desc", size = "medium",
                   cost = { Boards = 2, Stones = 1 }, look = "Sawmill",
-                  worker = { title = "Arbeiter", tool = "none", look = "Carpenter" },
+                  worker = { title = "Arbeiter", look = "Carpenter" },
                   inputs = { "Raw", { "Bretter", "Nadelholz" } }, consume = "any", output = "Product",
                   inheritProperties = true, storage = 4, workTime = 20, waitTime = 5 }
 rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = { "Product" }, workTime = 1,
-                  worker = { tool = "Hammer", look = "Helper" } }
+                  worker = { look = "Helper" } }
 )";
     }
     WorldDescription desc;
@@ -245,14 +259,16 @@ rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = 
     const WareDesc& raw = desc.wares[0];
     BOOST_TEST(raw.name == "Raw");
     BOOST_TEST(raw.title == "Rohstoff");
-    BOOST_TEST(raw.kind == "RawKind");
+    BOOST_TEST((raw.kind == std::vector<std::string>{"RawKind"}));
     BOOST_TEST((raw.properties == std::vector<std::string>{"A", "B"}));
     BOOST_TEST(raw.look == "Stones");
     BOOST_TEST(raw.transport == "Stones");
     BOOST_TEST((raw.knowledge == KnowledgeValues{1, 0, 0}));
     BOOST_TEST(desc.wares[1].title == "Product"); // Default: name
+    BOOST_TEST((desc.wares[1].kind == std::vector<std::string>{"KindA", "KindB"}));
+    BOOST_TEST((desc.wareTags.at("Stones").kind == std::vector<std::string>{"Wall", "Roof"}));
     BOOST_TEST_REQUIRE(desc.wareTags.count("Boards") == 1u);
-    BOOST_TEST(desc.wareTags.at("Boards").kind == "Bretter");
+    BOOST_TEST((desc.wareTags.at("Boards").kind == std::vector<std::string>{"Bretter"}));
     BOOST_TEST((desc.wareTags.at("Boards").properties == std::vector<std::string>{"Nadelholz"}));
 
     BOOST_TEST_REQUIRE(desc.workshops.size() == 2u);
@@ -269,7 +285,6 @@ rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = 
     BOOST_TEST(shop.cost[1].amount == 1u);
     BOOST_TEST(shop.look == "Sawmill");
     BOOST_TEST(shop.worker.title == "Arbeiter");
-    BOOST_TEST(shop.worker.tool == "none");
     BOOST_TEST(shop.worker.look == "Carpenter");
     BOOST_TEST_REQUIRE(shop.inputs.size() == 2u);
     BOOST_TEST((shop.inputs[0] == TagQuery{"Raw"}));
@@ -300,7 +315,7 @@ BOOST_AUTO_TEST_CASE(DetectInvalidWaresAndWorkshops)
         rttr::test::LogAccessor logAcc;
         BOOST_TEST(!loader.Load());
     };
-    const std::string worker = R"(worker = { tool = "none", look = "Helper" })";
+    const std::string worker = R"(worker = { look = "Helper" })";
     // Invalid characters in the name
     expectLoadFailure(R"(rttr:AddWare{ name = "Kno chen", look = "Stones", transport = "Stones" })");
     expectLoadFailure(R"(rttr:AddWare{ name = "Bäume", look = "Stones", transport = "Stones" })");
@@ -311,6 +326,11 @@ BOOST_AUTO_TEST_CASE(DetectInvalidWaresAndWorkshops)
     expectLoadFailure(R"(rttr:AddWare{ name = "Bones", look = "Stones", transport = "Stones", kinf = "X" })");
     // Tags must be tables
     expectLoadFailure(R"(rttr:SetWareTags{ Boards = "Bretter" })");
+    expectLoadFailure(R"(rttr:SetWareTags{ Boards = { kind = { } } })");
+    expectLoadFailure(R"(rttr:AddWare{ name = "Bones", kind = { "A", 2 }, look = "Stones", transport = "Stones" })");
+    // The worker has no tool any more (tools of a workshop: tools = { ... })
+    expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards",
+                      workTime = 1, worker = { tool = "Saw", look = "Helper" } })");
     // Workshops
     expectLoadFailure(
       R"(rttr:AddWorkshop{ name = "W", size = "huge", look = "Sawmill", output = "Boards", workTime = 1, )" + worker

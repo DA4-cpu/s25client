@@ -790,7 +790,7 @@ rttr:AddTerrain{
 -- "optional = true": Fehlt eine Datei, verwendet der Kartengenerator diese Böden einfach nicht.
 -- Jede Gruppe kopiert die 6 bebaubaren Böden ihrer Landschaft mit dem neuen Aussehen.
 -- humidity/temperature legen fest, bei welchem Klima der Generator den Boden wählt (der nächstgelegene Boden gewinnt).
--- Die Werte sind PLATZHALTER von Claude: die relative Lage der Originalböden, verschoben in eine Lücke des Klimas
+-- Die Werte sind die relative Lage der Originalböden, verschoben in eine Lücke des Klimas
 -- (Wetlands: heiß und sehr feucht, Rusty: gemäßigt warm und trocken, Polar: kühl). s2Id 44-61 (höchstens 63).
 
 -- Wetlands (Ersatz für Grönland): feuchter, mit nassen Steinen statt trockener Stellen
@@ -814,8 +814,8 @@ rttr:AddTerrain{
 	s2Id = 44,
 	edgePriority = 35,
 	kind = "land",
-	humidity = 95, -- PLATZHALTER (Original w_gl_meadowFlowers: 75)
-	temperature = 81, -- PLATZHALTER (Original: 48)
+	humidity = 95, -- Original w_gl_meadowFlowers: 75
+	temperature = 81, -- Original: 48
 	texture = texFile,
 	pos = {144, 0, 32, 31},
 	color = 0xFF5c943e,
@@ -828,8 +828,8 @@ rttr:AddTerrain{
 	s2Id = 45,
 	edgePriority = 15,
 	kind = "land",
-	humidity = 86, -- PLATZHALTER (Original w_gl_savannah: 45)
-	temperature = 92, -- PLATZHALTER (Original: 60)
+	humidity = 86, -- Original w_gl_savannah: 45
+	temperature = 92, -- Original: 60
 	texture = texFile,
 	pos = {0, 96, 32, 31},
 	color = 0xFF4b893c,
@@ -842,8 +842,8 @@ rttr:AddTerrain{
 	s2Id = 46,
 	edgePriority = 30,
 	kind = "land",
-	humidity = 100, -- PLATZHALTER (Original w_gl_meadow1: 90)
-	temperature = 78, -- PLATZHALTER (Original: 45)
+	humidity = 100, -- Original w_gl_meadow1: 90
+	temperature = 78, -- Original: 45
 	texture = texFile,
 	pos = {48, 96, 32, 31},
 	color = 0xFF52923a,
@@ -856,8 +856,8 @@ rttr:AddTerrain{
 	s2Id = 47,
 	edgePriority = 25,
 	kind = "land",
-	humidity = 92, -- PLATZHALTER (Original w_gl_meadow2: 65)
-	temperature = 83, -- PLATZHALTER (Original: 50)
+	humidity = 92, -- Original w_gl_meadow2: 65
+	temperature = 83, -- Original: 50
 	texture = texFile,
 	pos = {96, 96, 32, 31},
 	color = 0xFF52913a,
@@ -870,8 +870,8 @@ rttr:AddTerrain{
 	s2Id = 48,
 	edgePriority = 20,
 	kind = "land",
-	humidity = 89, -- PLATZHALTER (Original w_gl_meadow3: 55)
-	temperature = 87, -- PLATZHALTER (Original: 55)
+	humidity = 89, -- Original w_gl_meadow3: 55
+	temperature = 87, -- Original: 55
 	texture = texFile,
 	pos = {144, 96, 32, 31},
 	color = 0xFF55933b,
@@ -884,8 +884,8 @@ rttr:AddTerrain{
 	s2Id = 49,
 	edgePriority = 60,
 	kind = "land",
-	humidity = 80, -- PLATZHALTER (Original w_gl_steppe: 25)
-	temperature = 95, -- PLATZHALTER (Original: 63)
+	humidity = 80, -- Original w_gl_steppe: 25
+	temperature = 95, -- Original: 63
 	texture = texFile,
 	pos = {0, 144, 32, 31},
 	color = 0xFF518049,
@@ -913,8 +913,8 @@ rttr:AddTerrain{
 	s2Id = 50,
 	edgePriority = 40,
 	kind = "land",
-	humidity = 35, -- PLATZHALTER (Original w_wl_flowerPasture: 70)
-	temperature = 50, -- PLATZHALTER (Original: 65)
+	humidity = 35, -- Original w_wl_flowerPasture: 70
+	temperature = 50, -- Original: 65
 	texture = texFile,
 	pos = {144, 0, 32, 31},
 	color = 0xFFa07544,
@@ -927,8 +927,8 @@ rttr:AddTerrain{
 	s2Id = 51,
 	edgePriority = 40,
 	kind = "land",
-	humidity = 12, -- PLATZHALTER (Original w_wl_dSteppe: 20)
-	temperature = 61, -- PLATZHALTER (Original: 85)
+	humidity = 12, -- Original w_wl_dSteppe: 20
+	temperature = 61, -- Original: 85
 	texture = texFile,
 	pos = {0, 96, 32, 31},
 	color = 0xFF8f7552,
@@ -941,8 +941,8 @@ rttr:AddTerrain{
 	s2Id = 52,
 	edgePriority = 40,
 	kind = "land",
-	humidity = 40, -- PLATZHALTER (Original w_wl_pasture1: 80)
-	temperature = 53, -- PLATZHALTER (Original: 70)
+	humidity = 40, -- Original w_wl_pasture1: 80
+	temperature = 53, -- Original: 70
 	texture = texFile,
 	pos = {48, 96, 32, 31},
 	color = 0xFF917652,
@@ -955,8 +955,8 @@ rttr:AddTerrain{
 	s2Id = 53,
 	edgePriority = 40,
 	kind = "land",
-	humidity = 26, -- PLATZHALTER (Original w_wl_pasture2: 50)
-	temperature = 55, -- PLATZHALTER (Original: 75)
+	humidity = 26, -- Original w_wl_pasture2: 50
+	temperature = 55, -- Original: 75
 	texture = texFile,
 	pos = {96, 96, 32, 31},
 	color = 0xFF927840,
@@ -969,8 +969,8 @@ rttr:AddTerrain{
 	s2Id = 54,
 	edgePriority = 40,
 	kind = "land",
-	humidity = 19, -- PLATZHALTER (Original w_wl_pasture3: 35)
-	temperature = 58, -- PLATZHALTER (Original: 80)
+	humidity = 19, -- Original w_wl_pasture3: 35
+	temperature = 58, -- Original: 80
 	texture = texFile,
 	pos = {144, 96, 32, 31},
 	color = 0xFF9d733f,
@@ -983,8 +983,8 @@ rttr:AddTerrain{
 	s2Id = 55,
 	edgePriority = 60,
 	kind = "land",
-	humidity = 5, -- PLATZHALTER (Original w_wl_lSteppe: 5)
-	temperature = 66, -- PLATZHALTER (Original: 95)
+	humidity = 5, -- Original w_wl_lSteppe: 5
+	temperature = 66, -- Original: 95
 	texture = texFile,
 	pos = {0, 144, 32, 31},
 	color = 0xFF9c7a4a,
@@ -1006,8 +1006,8 @@ rttr:AddTerrain{
 	s2Id = 56,
 	edgePriority = 13,
 	kind = "land",
-	humidity = 82, -- PLATZHALTER (Original w_ww_tundraFlower: 85)
-	temperature = 46, -- PLATZHALTER (Original: 32)
+	humidity = 82, -- Original w_ww_tundraFlower: 85
+	temperature = 46, -- Original: 32
 	texture = texFile,
 	pos = {144, 0, 32, 31},
 	color = 0xFF84884f,
@@ -1020,8 +1020,8 @@ rttr:AddTerrain{
 	s2Id = 57,
 	edgePriority = 18,
 	kind = "land",
-	humidity = 64, -- PLATZHALTER (Original w_ww_taiga: 60)
-	temperature = 45, -- PLATZHALTER (Original: 30)
+	humidity = 64, -- Original w_ww_taiga: 60
+	temperature = 45, -- Original: 30
 	texture = texFile,
 	pos = {0, 96, 32, 31},
 	color = 0xFF9e9d7e,
@@ -1034,8 +1034,8 @@ rttr:AddTerrain{
 	s2Id = 58,
 	edgePriority = 23,
 	kind = "land",
-	humidity = 90, -- PLATZHALTER (Original w_ww_tundra1: 95)
-	temperature = 36, -- PLATZHALTER (Original: 10)
+	humidity = 90, -- Original w_ww_tundra1: 95
+	temperature = 36, -- Original: 10
 	texture = texFile,
 	pos = {48, 96, 32, 31},
 	color = 0xFF808015,
@@ -1048,8 +1048,8 @@ rttr:AddTerrain{
 	s2Id = 59,
 	edgePriority = 28,
 	kind = "land",
-	humidity = 60, -- PLATZHALTER (Original w_ww_tundra2: 55)
-	temperature = 38, -- PLATZHALTER (Original: 15)
+	humidity = 60, -- Original w_ww_tundra2: 55
+	temperature = 38, -- Original: 15
 	texture = texFile,
 	pos = {96, 96, 32, 31},
 	color = 0xFF808014,
@@ -1062,8 +1062,8 @@ rttr:AddTerrain{
 	s2Id = 60,
 	edgePriority = 33,
 	kind = "land",
-	humidity = 75, -- PLATZHALTER (Original w_ww_tundra3: 75)
-	temperature = 41, -- PLATZHALTER (Original: 20)
+	humidity = 75, -- Original w_ww_tundra3: 75
+	temperature = 41, -- Original: 20
 	texture = texFile,
 	pos = {144, 96, 32, 31},
 	color = 0xFF7b7b10,
@@ -1076,8 +1076,8 @@ rttr:AddTerrain{
 	s2Id = 61,
 	edgePriority = 8,
 	kind = "land",
-	humidity = 30, -- PLATZHALTER (Original w_ww_tundra4: 15)
-	temperature = 34, -- PLATZHALTER (Original: 5)
+	humidity = 30, -- Original w_ww_tundra4: 15
+	temperature = 34, -- Original: 5
 	texture = texFile,
 	pos = {0, 144, 32, 31},
 	color = 0xFFa7aa9d,

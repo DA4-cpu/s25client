@@ -386,12 +386,20 @@ void iwResearch::RefreshSelection()
     {
         std::string reqs;
         bool allResearched = true;
-        for(const civ::TechIdx req : technology.requirements)
+        for(const std::vector<civ::TechIdx>& group : technology.requirements)
         {
             if(!reqs.empty())
                 reqs += ", ";
-            reqs += _(techTree.get(req).title);
-            if(!research.IsResearched(req))
+            // A group needs one of its technologies: "A oder B"
+            bool groupResearched = false;
+            for(unsigned i = 0; i < group.size(); ++i)
+            {
+                if(i > 0)
+                    reqs += _(" oder ");
+                reqs += _(techTree.get(group[i]).title);
+                groupResearched |= research.IsResearched(group[i]);
+            }
+            if(!groupResearched)
             {
                 reqs += _(" (fehlt)");
                 allResearched = false;

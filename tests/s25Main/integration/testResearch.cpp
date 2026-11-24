@@ -93,8 +93,12 @@ BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
         const civ::Technology& tech = techTree.get(i);
         BOOST_TEST(!tech.title.empty());
         BOOST_TEST(tech.era <= 6u);
-        for(const civ::TechIdx req : tech.requirements)
-            BOOST_TEST(req < i); // Defined before -> no cycles
+        for(const std::vector<civ::TechIdx>& group : tech.requirements)
+        {
+            BOOST_TEST(!group.empty());
+            for(const civ::TechIdx req : group)
+                BOOST_TEST(req < i); // Defined before -> no cycles
+        }
     }
     // Balancing (which buildings are free at the start, all numbers) is done by the user in lua and not tested here.
     // At least the woodcutter is needed to get started
@@ -133,7 +137,8 @@ TechnologyDesc makeTech(const std::string& name, std::map<std::string, unsigned>
     desc.title = name;
     desc.cost = std::move(cost);
     desc.unlockedBuildings = std::move(buildings);
-    desc.requirements = std::move(requirements);
+    for(std::string& req : requirements)
+        desc.requirements.push_back({std::move(req)});
     desc.time = time;
     desc.exclusive = exclusive;
     return desc;
@@ -204,6 +209,38 @@ BOOST_FIXTURE_TEST_CASE(BuildingsLockedAtStart, ResearchFixture)
     BOOST_TEST(player.IsBuildingEnabled(BuildingType::Mill));
     this->SetBuildingSite(bldPos, BuildingType::Mill);
     BOOST_TEST(world.GetSpecObj<noBaseBuilding>(bldPos));
+}
+
+BOOST_FIXTURE_TEST_CASE(OneOfSeveralRequirements, WorldWithGCExecution2P)
+{
+    ggs.setSelection(AddonId::CIVILIZATION, 1);
+    WorldDescription desc;
+    desc.technologies.add(makeTech("a", {}, {"Farm"}));
+    desc.technologies.add(makeTech("b", {}, {"Mill"}));
+    desc.technologies.add(makeTech("c", {}, {"Bakery"}));
+    // requires = { "c", { "a", "b" } }: c and (a or b)
+    auto miningDesc = makeTech("mining", {}, {"CoalMine"}, {"c"});
+    miningDesc.requirements.push_back({"a", "b"});
+    desc.technologies.add(miningDesc);
+    world.SetTechTree(std::make_unique<civ::TechTree>(desc));
+    civ::startGame(world);
+    const civ::TechIdx a = 0, b = 1, c = 2, mining = 3;
+    BOOST_TEST_REQUIRE(world.GetTechTree().get(mining).requirements.size() == 2u);
+
+    civ::PlayerResearch& research0 = world.GetPlayer(0).GetResearch();
+    BOOST_TEST((civ::getTechState(world, 0, mining) == civ::TechState::MissingRequirements));
+    research0.SetResearched(c);
+    // a or b still missing
+    BOOST_TEST((civ::getTechState(world, 0, mining) == civ::TechState::MissingRequirements));
+    research0.SetResearched(b);
+    BOOST_TEST((civ::getTechState(world, 0, mining) == civ::TechState::Available));
+
+    // The other alternative works as well, but not without c
+    civ::PlayerResearch& research1 = world.GetPlayer(1).GetResearch();
+    research1.SetResearched(a);
+    BOOST_TEST((civ::getTechState(world, 1, mining) == civ::TechState::MissingRequirements));
+    research1.SetResearched(c);
+    BOOST_TEST((civ::getTechState(world, 1, mining) == civ::TechState::Available));
 }
 
 BOOST_FIXTURE_TEST_CASE(ResearchRequiresPrerequisitesAndUnlocksBuildings, ResearchFixture)

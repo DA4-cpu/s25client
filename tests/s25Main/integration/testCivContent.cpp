@@ -67,7 +67,8 @@ WareDesc makeWare(const std::string& name, const std::string& kind = "", std::ve
     WareDesc desc;
     desc.name = name;
     desc.title = name + "Title";
-    desc.kind = kind;
+    if(!kind.empty())
+        desc.kind = {kind};
     desc.properties = std::move(properties);
     desc.look = look;
     desc.transport = look;
@@ -83,7 +84,6 @@ WorkshopDesc makeWorkshop(const std::string& name, std::vector<TagQuery> inputs,
     desc.cost = {{{"Boards"}, 2}, {{"Stones"}, 1}};
     desc.look = "Sawmill";
     desc.worker.title = name + "Worker";
-    desc.worker.tool = "Saw";
     desc.worker.look = "Carpenter";
     desc.inputs = std::move(inputs);
     desc.output = std::move(output);
@@ -175,7 +175,6 @@ WorldDescription makeLibraryDesc(unsigned capacity = 20)
     library.cost = {{{"Boards"}, 2}};
     library.look = "Bakery";
     library.worker.title = "Librarian";
-    library.worker.tool = "none";
     library.worker.look = "Helper";
     library.libraryCapacity = capacity;
     desc.workshops.push_back(library);
@@ -194,7 +193,6 @@ WorldDescription makeCollectorDesc(unsigned radius = 6)
     deposit.look = "Granite1";
     desc.mapObjects.push_back(deposit);
     auto pit = makeWorkshop("Pit", {}, {"Loam"});
-    pit.worker.tool = "Shovel";
     pit.worker.look = "Planer";
     pit.collectObject = "Deposit";
     pit.collectRadius = radius;
@@ -237,10 +235,25 @@ BOOST_AUTO_TEST_CASE(EmptyContent)
     BOOST_TEST(!JOB_CONSTS[Job::Custom0].tool);
 }
 
+BOOST_AUTO_TEST_CASE(KindListGivesEveryTag)
+{
+    WorldDescription desc = makeSimpleDesc();
+    desc.wares[1].kind = {"Wall", "Roof"};
+    desc.wareTags["Stones"] = WareTagsDesc{{"Wall", "Roof"}, {}};
+    const civ::Content content(desc);
+    BOOST_TEST((content.GetTags(getCustomGood(1)) == std::vector<std::string>{"Product", "Wall", "Roof"}));
+    // Kinds are no properties (those are only passed on by inheritProperties)
+    BOOST_TEST(content.GetProperties(getCustomGood(1)).empty());
+    const std::vector<GoodType> expected{GoodType::Stones, getCustomGood(1)};
+    BOOST_TEST((content.FindWares({"Wall"}) == expected));
+    BOOST_TEST((content.FindWares({"Roof"}) == expected));
+    BOOST_TEST((content.FindWares({"Wall", "Roof"}) == expected));
+}
+
 BOOST_AUTO_TEST_CASE(WaresGetSlotsAndTags)
 {
     WorldDescription desc = makeSimpleDesc();
-    desc.wareTags["Boards"] = WareTagsDesc{"Bretter", {"Nadel"}};
+    desc.wareTags["Boards"] = WareTagsDesc{{"Bretter"}, {"Nadel"}};
     const civ::Content content(desc);
     BOOST_TEST_REQUIRE(content.GetNumWares() == 2u);
     const civ::CustomWare* raw = content.GetWare(GoodType::Custom0);
@@ -284,7 +297,6 @@ BOOST_AUTO_TEST_CASE(WaresGetSlotsAndTags)
     BOOST_TEST(shop->workGFs > 0u);
     const civ::CustomWorker* worker = content.GetWorker(Job::Custom0);
     BOOST_TEST_REQUIRE(worker);
-    BOOST_TEST((worker->tool == GoodType::Saw));
     BOOST_TEST((worker->look == Job::Carpenter));
     BOOST_TEST((content.FindBuilding("Shop") == BuildingType::Custom0));
     BOOST_TEST((content.FindBuilding("Sawmill") == BuildingType::Sawmill));
@@ -339,7 +351,7 @@ BOOST_AUTO_TEST_CASE(InvalidDefinitions)
     }
     {
         WorldDescription desc;
-        desc.wareTags["Raw"] = WareTagsDesc{"Kind", {}}; // Only built-in wares
+        desc.wareTags["Raw"] = WareTagsDesc{{"Kind"}, {}}; // Only built-in wares
         expectError(desc);
     }
     {
@@ -385,11 +397,6 @@ BOOST_AUTO_TEST_CASE(InvalidDefinitions)
     }
     {
         WorldDescription desc = makeSimpleDesc();
-        desc.workshops.front().worker.tool = "Wood"; // Not a tool
-        expectError(desc);
-    }
-    {
-        WorldDescription desc = makeSimpleDesc();
         desc.workshops.front().worker.look = "NotAJob";
         expectError(desc);
     }
@@ -417,7 +424,8 @@ BOOST_AUTO_TEST_CASE(DocumentedExamplesAreValid)
         bnw::ifstream in(file);
         const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         const auto start = content.find("\nrttr:", content.find("Beispiel"));
-        const auto end = content.rfind("]]");
+        // End of the comment that holds the example (later comments may hold commented out definitions)
+        const auto end = content.find("]]", start);
         BOOST_TEST_REQUIRE(start != std::string::npos);
         BOOST_TEST_REQUIRE(end != std::string::npos);
         return content.substr(start, end - start);
@@ -483,7 +491,7 @@ BOOST_AUTO_TEST_CASE(MapObjectsAndCollectorsFromLua)
 rttr:AddWare{ name = "Loam", title = "Lehm", look = "Stones", transport = "Stones" }
 rttr:AddMapObject{ name = "LoamDeposit", title = "Lehmvorkommen", sizes = 4, look = "Granite2", tint = 0xC08050 }
 rttr:AddWorkshop{ name = "LoamPit", title = "Lehmgrube", size = "small", cost = { Boards = 2 }, look = "Quarry",
-    worker = { title = "Lehmstecher", tool = "Shovel", look = "Planer" },
+    worker = { title = "Lehmstecher", look = "Planer" },
     collect = { object = "LoamDeposit", radius = 8 }, output = "Loam", workTime = 7, waitTime = 40 }
 )";
     const auto load = [](const std::string& content, WorldDescription& desc) {
@@ -531,7 +539,7 @@ BOOST_AUTO_TEST_CASE(WorkshopNearBorderFromLua)
 rttr:AddWare{ name = "Loam", title = "Lehm", look = "Stones", transport = "Stones" }
 rttr:AddMapObject{ name = "LoamDeposit", title = "Lehmvorkommen", sizes = 4, look = "Granite2" }
 rttr:AddWorkshop{ name = "LoamPit", title = "Lehmgrube", size = "small", cost = { Boards = 2 }, look = "Quarry",
-    worker = { title = "Lehmstecher", tool = "Shovel", look = "Planer" },
+    worker = { title = "Lehmstecher", look = "Planer" },
     collect = { object = "LoamDeposit", radius = 8 }, output = "Loam", workTime = 7 AI_NEAR_BORDER }
 )";
     const auto load = [&base](const std::string& aiNearBorder, WorldDescription& desc) {
@@ -586,7 +594,7 @@ BOOST_AUTO_TEST_CASE(GlobalTablesUseActiveContent)
     BOOST_TEST((BUILDING_SIZE[BuildingType::Custom0] == BuildingQuality::Hut));
     BOOST_TEST((BLD_WORK_DESC[BuildingType::Custom0].job == Job::Custom0));
     BOOST_TEST(JOB_NAMES[Job::Custom0] == "ShopWorker");
-    BOOST_TEST((JOB_CONSTS[Job::Custom0].tool == GoodType::Saw));
+    BOOST_TEST((JOB_CONSTS[Job::Custom0].tool == GoodType::Nothing)); // Recruited without a tool
     BOOST_TEST(JOB_CONSTS[Job::Custom0].work_length > 0u);
     BOOST_TEST(&JOB_SPRITE_CONSTS[Job::Custom0] == &JOB_SPRITE_CONSTS[Job::Carpenter]);
     BOOST_TEST(STD_TRANSPORT_PRIO[GoodType::Custom0] == STD_TRANSPORT_PRIO[GoodType::Stones]);
@@ -743,7 +751,7 @@ rttr:AddWare{ name = "CarvedL", kind = "Carved", properties = { "LWP" }, look = 
 rttr:AddWare{ name = "CarvedI", kind = "Carved", properties = { "IWP" }, look = "Stones", transport = "Stones",
               knowledge = { IWP = 1 } }
 rttr:AddWorkshop{ name = "Carver", size = "small", cost = { Boards = 2 }, look = "Hunter",
-                  worker = { tool = "Cleaver", look = "Butcher" }, inputs = { "Bones" }, output = "Carved",
+                  worker = { look = "Butcher" }, inputs = { "Bones" }, output = "Carved",
                   outputChoice = "knowledge", workTime = 30 }
 rttr:AddTechnology{ name = "bones", title = "Bones", knowledge = { LWP = 1 }, unlocks = { buildings = { "Carver" } } }
 )";
@@ -840,7 +848,7 @@ rttr:AddWare{ name = "CarvedL", kind = "Carved", properties = { "LWP" }, look = 
 )";
     const std::string library = R"(
 rttr:AddWorkshop{ name = "Library", size = "medium", cost = { Boards = 2 }, look = "Bakery",
-                  worker = { tool = "none", look = "Helper" }, library = { capacity = 20 } }
+                  worker = { look = "Helper" }, library = { capacity = 20 } }
 )";
     {
         WorldDescription desc;

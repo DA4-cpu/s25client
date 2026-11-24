@@ -45,8 +45,6 @@ struct CustomWorker
     /// Identifier (same as the workshop)
     std::string name;
     std::string title;
-    /// Tool to recruit the worker. GoodType::Nothing: No tool required
-    GoodType tool;
     /// Built-in job whose graphics are used
     Job look;
 };
@@ -282,7 +280,7 @@ public:
     bool IsCompatibleTo(const std::vector<std::string>& savedSignature) const;
 
 private:
-    void SetTags(GoodType good, const std::string& kind, const std::vector<std::string>& properties);
+    void SetTags(GoodType good, const std::vector<std::string>& kinds, const std::vector<std::string>& properties);
     /// Identifier of the ware according to this content
     std::string getIdentifierOf(GoodType good) const;
     /// Original costs of a built-in building (boards and stones)

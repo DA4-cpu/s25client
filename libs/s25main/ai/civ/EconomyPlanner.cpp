@@ -940,11 +940,9 @@ bool EconomyPlanner::InputsSuffice(const Recipe& recipe, const GoodType given) c
 unsigned EconomyPlanner::GetBuildingLimit() const
 {
     const civ::TechTree& techTree = player_.GetGameWorld().GetTechTree();
-    // Land of an HQ: the nodes in its radius
-    constexpr unsigned startArea = 1 + 3 * HQ_RADIUS * (HQ_RADIUS + 1);
     const unsigned land = player_.GetStatisticCurrentValue(StatisticType::Country);
-    const unsigned numStartAreas = std::max(1u, land / startArea);
-    return techTree.GetAIBuildingLimitBase() + techTree.GetAIBuildingLimitPerStartArea() * numStartAreas;
+    const unsigned numAreas = land / techTree.GetAIBuildingLimitAreaSize();
+    return techTree.GetAIBuildingLimitBase() + techTree.GetAIBuildingLimitPerArea() * numAreas;
 }
 
 unsigned EconomyPlanner::GetNumBuildings(const BuildingType bld) const

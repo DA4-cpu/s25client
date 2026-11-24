@@ -49,7 +49,7 @@ rttr:SetBuildingCost{
     Storehouse     = { BasicBuildingMaterial = 7, BasicRoofMaterial = 7  }, -- Lagerhaus
 
     -- Holz, Stein, Bergbau
-    Woodcutter     = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },             -- hier soll noch Dachmaterial ergänzt werden
+    Woodcutter     = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },             -- Holzfäller
     Forester       = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2},             -- Förster
     Sawmill        = { BasicBuildingMaterial = 4, BasicRoofMaterial = 3 }, -- Sägewerk
     Quarry         = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },             -- Steinbruch

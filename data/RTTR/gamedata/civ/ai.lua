@@ -48,15 +48,18 @@ rttr:SetAIBasicEconomy{
 --   Waren, deren Startvorrat für die KI kein Überschuss ist. Liegt von ihnen mehr im Lager als die Schwelle, baut die
 --   KI trotzdem keine Verbraucher dafür, solange der Startvorrat nicht aufgebraucht ist. So expandiert sie am Anfang
 --   mit Holzfällern, Sägewerken und Steinbrüchen, statt den Vorrat nur zu verarbeiten.
-rttr:SetAIStartStockNoSurplus{ "Wood", "Boards", "Stones", "Fish", "Bread", "Meat"} -- hier sollten die Tags (zB. "BasicBuildingMaterial") zählen, nicht die Warennamen
+--   Jeder Eintrag ist eine Tag-Abfrage wie bei den Eingängen der Werkstätten ("BasicBuildingMaterial" trifft Holz,
+--   Bretter, Steine und Adobe). Gerechnet wird wie im Wirtschaftsplaner: Startvorrat übrig = beim Start eingelagert
+--   minus seitdem verbraucht, je Ware und für eine Warengruppe als Summe ihrer Waren.
+rttr:SetAIStartStockNoSurplus{ "BasicBuildingMaterial", "Fish", "Bread", "Meat" }
 
--- rttr:SetAIBuildingLimit{ base = ..., perStartArea = ... }
---   Höchstzahl der Gebäude je Typ (Holzfäller, Steinbruch, Sägewerk ...) für expandierende Aufträge: base +
---   perStartArea × Startgebiete. Benötigte Aufträge lösen ein Problem und beachten sie nicht.
---   Ein Startgebiet ist das Land eines Hauptquartiers (Radius 10, 331 Knoten), gezählt wird ganz (abgerundet), am
---   Anfang 1. Beispiel mit base = 3, perStartArea = 1: am Start 4 Steinbrüche, bei doppelter Landgröße 5, bei
---   dreifacher 6. Wieso kann ich die Größe nicht selbst anpassen? Wieso perStartArea? Ich will die Größe des Gebiets selbst anpassen können
-rttr:SetAIBuildingLimit{ base = 5, perStartArea = 1 }
+-- rttr:SetAIBuildingLimit{ base = ..., perArea = ..., areaSize = ... }
+--   Höchstzahl der Gebäude je Typ (Holzfäller, Steinbruch, Sägewerk ...) für expandierende Aufträge:
+--   base + perArea × (Land ÷ areaSize, abgerundet). Benötigte Aufträge lösen ein Problem und beachten sie nicht.
+--   areaSize ist die Größe eines Gebiets in Landknoten (mindestens 1). Zum Umrechnen: Radius r um einen Punkt =
+--   1 + 3 × r × (r + 1) Knoten, das Land eines Hauptquartiers (Radius 10) also 331 Knoten.
+--   Beispiel mit base = 5, perArea = 1, areaSize = 500: Land 331 (Spielbeginn) → 5, Land 1000 → 7, Land 1600 → 8.
+rttr:SetAIBuildingLimit{ base = 5, perArea = 1, areaSize = 331 }
 
 -- rttr:SetAIStorageFull(Prozent)
 --   Ab dieser Belegung aller Lager zusammen (siehe storage.lua) gilt das Lager für die KI als voll: Sie baut dann nur

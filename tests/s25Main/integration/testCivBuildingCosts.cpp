@@ -56,7 +56,8 @@ WareDesc makeWare(const std::string& name, const std::string& kind, const std::s
     WareDesc desc;
     desc.name = name;
     desc.title = name + "Title";
-    desc.kind = kind;
+    if(!kind.empty())
+        desc.kind = {kind};
     desc.look = look;
     desc.transport = look;
     return desc;
@@ -111,7 +112,7 @@ rttr:SetBuildingCost{
     Sawmill = { { tags = "Stones", amount = 1 }, { tags = { "Bretter", "Nadel" }, amount = 2 } },
 }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { { tags = "Bretter", amount = 3 } }, look = "Sawmill",
-    worker = { tool = "none", look = "Carpenter" }, inputs = { "Stones" }, output = "Boards", workTime = 5 }
+    worker = { look = "Carpenter" }, inputs = { "Stones" }, output = "Boards", workTime = 5 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));

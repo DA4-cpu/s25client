@@ -31,37 +31,23 @@ Ohne Zivilisationsmodus gibt es diese Objekte im Spiel nicht (sie werden beim La
 -- Lehm (Konzept: Rohstoff auf der Karte wie Bäume und Steinhaufen, Abbau wie beim Steinbruch)
 -------------------------------------------------------------------------------
 
-rttr:AddMapObject{
-    name = "LoamDeposit",
-    title = "Lehmvorkommen",
-    sizes = 8,         
-    look = "Granite1",
-    tint = 0xC08050,    
-}
+rttr:AddMapObject{ name = "LoamDeposit", title = "Lehmvorkommen", sizes = 8, look = "Granite1", tint = 0xC08050 }
 
-rttr:AddMapObject{
-    name = "PapyrusDeposit",
-    title = "Papyrusvorkommen",
-    sizes = 2,          
-    look = "Granite1",
-    tint = 0xc0ba10,    
-    growTime = 300,
-    plantSize = 2,
-}
+rttr:AddMapObject{ name = "PapyrusDeposit", title = "Papyrusvorkommen", sizes = 2, look = "Granite1", tint = 0xc0ba10, growTime = 300, plantSize = 2 }
 
-rttr:AddMapObject{    name = "LimeDeposit",    title = "LimeDeposit",    sizes = 8,              look = "Granite1",    tint = 0x009e1b,    }
+rttr:AddMapObject{ name = "LimeDeposit", title = "LimeDeposit", sizes = 8, look = "Granite1", tint = 0x009e1b }
 
-rttr:AddMapObject{    name = "PeatDeposit",    title = "PeatDeposit",    sizes = 8,              look = "Granite1",    tint = 0x000000}
+rttr:AddMapObject{ name = "PeatDeposit", title = "PeatDeposit", sizes = 8, look = "Granite1", tint = 0x000000 }
 
-rttr:AddMapObject{    name = "ObsidianDeposit",    title = "ObsidianDeposit",    sizes = 16,       look = "Granite1",    tint = 0x4433ff  } -- bitt alles nur in eine Zeile schreiben
+rttr:AddMapObject{ name = "ObsidianDeposit", title = "ObsidianDeposit", sizes = 16, look = "Granite1", tint = 0x4433ff } -- bitt alles nur in eine Zeile schreiben
 
-rttr:AddMapObject{    name = "TinDeposit",    title = "TinDeposit",    sizes = 16,              look = "Granite2",    tint = 0x00a9cf   }
+rttr:AddMapObject{ name = "TinDeposit", title = "TinDeposit", sizes = 16, look = "Granite2", tint = 0x00a9cf }
 
-rttr:AddMapObject{    name = "CopperDeposit",    title = "CopperDeposit",    sizes = 16,           look = "Granite2",    tint = 0xffae00    }
+rttr:AddMapObject{ name = "CopperDeposit", title = "CopperDeposit", sizes = 16, look = "Granite2", tint = 0xffae00 }
 
-rttr:AddMapObject{    name = "IronDeposit",    title = "IronDeposit",    sizes = 6,           look = "Granite2",    tint = 0xfc0303 }
+rttr:AddMapObject{ name = "IronDeposit", title = "IronDeposit", sizes = 6, look = "Granite2", tint = 0xfc0303 }
 
-rttr:AddMapObject{    name = "AsphaltLake",    title = "AsphaltLake",    sizes = 16,           look = "Granite2",    tint = 0x111111    }
+rttr:AddMapObject{ name = "AsphaltLake", title = "AsphaltLake", sizes = 16, look = "Granite2", tint = 0x111111 }
 
 rttr:AddMapObject{ name = "ReedDeposit", title = "ReedDeposit", sizes = 3, look = "Granite1", tint = 0x1133ff, growTime = 300, plantSize = 3}
 
@@ -84,23 +70,8 @@ umsortieren. Es sind höchstens 24 Erze möglich.
 Ohne Zivilisationsmodus gibt es diese Erze im Spiel nicht (sie werden beim Laden der Karte weggelassen).
 ]]
 
-rttr:AddOre{
-    name = "Copper",
-    title = "Kupfer",
-    look = "Iron",
-    tint = 0xC01080,
-}
+rttr:AddOre{ name = "Copper", title = "Kupfer", look = "Iron", tint = 0xC01080 }
 
-rttr:AddOre{
-    name = "Lime",
-    title = "Lime",
-    look = "Granite",
-    tint = 0x009e1b,
-}
+rttr:AddOre{ name = "Lime", title = "Lime", look = "Granite", tint = 0x009e1b }
 
-rttr:AddOre{
-    name = "Tin",
-    title = "Tin",
-    look = "Granite",
-    tint = 0x00a9cf,
-}
+rttr:AddOre{ name = "Tin", title = "Tin", look = "Granite", tint = 0x00a9cf }
