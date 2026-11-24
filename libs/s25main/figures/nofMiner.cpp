@@ -93,13 +93,6 @@ bool nofMiner::StartWorking()
     return DigResource() && nofWorkman::StartWorking();
 }
 
-helpers::OptionalEnum<GoodType> nofMiner::ProduceExtraWare(const GoodType firstWare)
-{
-    if(!DigResource())
-        return std::nullopt;
-    return firstWare;
-}
-
 ResourceType nofMiner::GetRequiredResType() const
 {
     switch(workplace->GetBuildingType())

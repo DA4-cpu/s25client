@@ -65,8 +65,8 @@ protected:
     /// step (ProduceExtraWare) and the byproducts of all of them
     void ProducedWare();
     /// A further product of the current work step (output ratio above 1). Default: the same ware again. Workers
-    /// choosing their product choose again, miners and collectors take one more unit of their resource. Nothing: no
-    /// further ware (e.g. the resource is used up)
+    /// choosing their product choose again. Mines and harvesters take no further unit of their resource: it loses
+    /// exactly one unit per work step, whatever the output ratio (Nutzer, 2026-11-24). Nothing: no further ware
     virtual helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) { return firstWare; }
 
     /// wird von abgeleiteten Klassen aufgerufen, wenn sie die Ware an der Fahne vorm Gebäude ablegen wollen (oder auch

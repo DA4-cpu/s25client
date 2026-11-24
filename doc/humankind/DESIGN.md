@@ -286,9 +286,10 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   ohne Fang, Bauer beim Säen) zählen nicht.
 - 0 Waren: Der Arbeiter trägt nichts hinaus (draußen: er kommt mit leeren Händen zurück). Mehr als 1: weitere Waren
   über `ProduceExtraWare` (Standard dieselbe Ware). Schlosserei, Kupferwerkstatt (`outputChoice`), Waffenschmiede
-  (Schwert/Schild abwechselnd) und Tempel wählen jede Ware neu. Abbau je Ware: Minen (auch Lua-Minen) und Brunnen eine
-  Einheit, Steinmetz ein Stück des Steinhaufens, Sammler und Plantagen ein Stück des Objekts, Fischer ein Fisch; ist
-  nichts mehr da, gibt es weniger Waren. Holzfäller, Bauer, Jäger usw.: alle Waren aus demselben Baum, Feld, Tier.
+  (Schwert/Schild abwechselnd) und Tempel wählen jede Ware neu. Abbau: je Arbeitsschritt genau 1 Einheit des
+  Vorkommens, egal wie viele Waren herauskommen (Nutzer, 2026-11-24; vorher 1 Einheit je Ware): Minen (auch Lua-Minen)
+  und Brunnen eine Einheit, Steinmetz ein Stück des Steinhaufens, Sammler und Plantagen ein Stück des Objekts, Fischer
+  ein Fisch. Holzfäller, Bauer, Jäger usw.: alle Waren aus demselben Baum, Feld, Tier.
 - Alle Waren eines Schritts samt Nebenprodukten liegen in `carryList_` (Spielstand) und werden zusammen an die Fahne
   gelegt, mehr als 8 nacheinander (`GetNumWaresToPutNow`); bis 8 wartet der Arbeiter wie bisher, bis für alle Platz ist.
 - Gebäudefenster: „Ertrag xN“ unter dem Tempo (wenn nicht 1 oder das Gebäude Werkzeugplätze hat).

@@ -43,9 +43,10 @@ rttr:SetBuildingTools{...}: Werkzeuge der eingebauten Gebäude
 
 rttr:SetBuildingOutputRatio{...}: Waren pro Arbeitsschritt der eingebauten Gebäude ohne Werkzeug (Standard 1), 0 bis 8,
   z.B. rttr:SetBuildingOutputRatio{ Woodcutter = 1, Quarry = 1.5 }. Bedeutung wie outputRatio in workshops.lua
-  (dort für die Werkstätten). Gilt auch ohne Werkzeugreform. Ein Holzfäller mit 2 bringt 2 Holz je Baum, ein Steinmetz
-  oder eine Mine nimmt je Ware ein Stück Stein bzw. eine Einheit Erz, ein Fischer je Fisch einen Fisch aus dem Wasser. Das braucht man nicht mehr
-  wenn die Gebäude alle in workshops.lua stehen
+  (dort für die Werkstätten). Gilt auch ohne Werkzeugreform. Ein Holzfäller mit 2 bringt 2 Holz je Baum. Minen und
+  Abbauer nehmen je Arbeitsschritt genau 1 Einheit ihres Vorkommens, egal wie viele Waren herauskommen: Ein Steinmetz
+  mit 2 nimmt 1 Stück vom Steinhaufen und bringt 2 Steine, ein Fischer mit 2 fängt 1 Fisch und bringt 2. Das braucht
+  man nicht mehr, wenn die Gebäude alle in workshops.lua stehen
 
 rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nur noch n Prozent seiner Haltbarkeit
   hat. Es wartet im Gebäude, bis das alte kaputt ist.

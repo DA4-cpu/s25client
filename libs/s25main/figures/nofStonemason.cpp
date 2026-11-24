@@ -51,13 +51,6 @@ void nofStonemason::WorkFinished()
     ware = GoodType::Stones;
 }
 
-helpers::OptionalEnum<GoodType> nofStonemason::ProduceExtraWare(const GoodType firstWare)
-{
-    if(!HewStone())
-        return std::nullopt;
-    return firstWare;
-}
-
 bool nofStonemason::HewStone()
 {
     auto* granite = world->GetSpecObj<noGranite>(pos);

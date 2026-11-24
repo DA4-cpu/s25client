@@ -136,16 +136,7 @@ helpers::OptionalEnum<GoodType> nofCustomWorker::ProduceExtraWare(const GoodType
         case civ::ProductChoice::Knowledge: return ChooseKnowledgeProduct(*building);
         case civ::ProductChoice::None: break;
     }
-    const ResourceType ore = GetMineResource();
-    if(ore != ResourceType::Nothing)
-    {
-        // Mine: one more unit of the ore per ware
-        const MapPoint resPt = FindPointWithResource(ore);
-        if(!resPt.isValid())
-            return std::nullopt;
-        if(!world->GetGGS().isEnabled(AddonId::INEXHAUSTIBLE_MINES))
-            world->ReduceResource(resPt);
-    }
+    // Mine: the ore lost one unit for the whole work step (StartWorking), not one per ware
     return firstWare;
 }
 

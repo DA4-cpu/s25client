@@ -36,9 +36,9 @@ rttr:AddWorkshop{...}:
               eine ganze erreicht ist. Die Eingänge werden in jedem Schritt verbraucht. 
               Die Werkzeuge in Gebrauch zählen ihr outputRatio aus tools.lua dazu (0.5 + Werkzeug 1 = 1.5), höchstens
               8 insgesamt. Ist die Summe 0, arbeitet die Werkstatt nicht.
-              Mehrere Waren je Schritt: Bei mehreren Produkten wird jede einzeln gewählt, Minen und Sammler nehmen je Ware
-              eine Einheit ihres Erzes bzw. Objekts (ist nichts mehr da, gibt es weniger Waren), Nebenprodukte
-              (byproducts.lua) gibt es je Ware. Der Arbeiter legt alle zusammen an die Fahne, mehr als 8 nacheinander.
+              Mehrere Waren je Schritt: Bei mehreren Produkten wird jede einzeln gewählt, Nebenprodukte
+              (byproducts.lua) gibt es je Ware. Minen, Sammler und Plantagen nehmen je Arbeitsschritt genau 1 Einheit
+              ihres Erzes bzw. Objekts, egal wie viele Waren herauskommen. Der Arbeiter legt alle zusammen an die Fahne, mehr als 8 nacheinander.
               Eingebaute Gebäude: rttr:SetBuildingOutputRatio in tools.lua.
   outputChoice optional, nur "knowledge": Die Produkte (mehrere) werden nach dem Regler "Wissen" im Fenster
               "Verteilung" gewählt (z.B. geritzte Knochen für LWP, IWP und MWP). Jedes Produkt braucht knowledge in
@@ -76,7 +76,7 @@ rttr:AddWorkshop{...}:
               Eigene Bilder fürs Pflanzen: Arbeiter_Pflanzen_<n> (siehe data/RTTR/assets/civ/LIESMICH.txt).
   mine        optional: macht die Werkstatt zur Mine für ein Erz aus mapobjects.lua (rttr:AddOre):
               mine = { resource = "Copper" }. Nur mit size = "mine". Der Arbeiter baut wie in den eingebauten Minen
-              pro Produkt eine Einheit des Erzes im Umkreis von 2 Knoten ab. Ist nichts mehr da, kommt die Meldung
+              je Arbeitsschritt eine Einheit des Erzes im Umkreis von 2 Knoten ab. Ist nichts mehr da, kommt die Meldung
               "Diese Mine ist erschöpft". Eingänge wie bei den eingebauten Minen, z.B.
               inputs = { "Fish", "Meat", "Bread" }, consume = "any".
   warehouse   optional: macht das Gebäude zum Lager statt zur Werkstatt:

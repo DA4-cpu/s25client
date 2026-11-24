@@ -172,13 +172,6 @@ unsigned short nofCustomPlanter::GetCarryID() const
     return CARRY_ID_CARRIER_OFFSET + static_cast<unsigned short>(ware ? *ware : GetBuildingDesc().product);
 }
 
-helpers::OptionalEnum<GoodType> nofCustomPlanter::ProduceExtraWare(const GoodType firstWare)
-{
-    if(!harvest_ || !HarvestPiece())
-        return std::nullopt;
-    return firstWare;
-}
-
 bool nofCustomPlanter::HarvestPiece()
 {
     auto* deposit = world->GetSpecObj<noDeposit>(pos);

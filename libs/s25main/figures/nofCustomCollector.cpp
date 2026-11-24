@@ -77,13 +77,6 @@ void nofCustomCollector::WorkFinished()
     ware = GetBuildingDesc().product;
 }
 
-helpers::OptionalEnum<GoodType> nofCustomCollector::ProduceExtraWare(const GoodType firstWare)
-{
-    if(!CollectPiece())
-        return std::nullopt;
-    return firstWare;
-}
-
 bool nofCustomCollector::CollectPiece()
 {
     auto* deposit = world->GetSpecObj<noDeposit>(pos);

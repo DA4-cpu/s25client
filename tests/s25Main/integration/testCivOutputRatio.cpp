@@ -284,21 +284,21 @@ BOOST_FIXTURE_TEST_CASE(BuiltinBuildingWithRatio, RatioFixture)
     BOOST_TEST(inInventory(GoodType::Boards) == numBoards + 2u * numWood);
 }
 
-BOOST_FIXTURE_TEST_CASE(StonemasonTakesAPiecePerStone, RatioFixture)
+BOOST_FIXTURE_TEST_CASE(StonemasonTakesAPiecePerWorkStep, RatioFixture)
 {
     WorldDescription desc = makeDesc(100);
     desc.buildingOutputRatios = {{"Quarry", 200}};
     init(desc);
     hq().AddToInventory(GoodCounts::make(GoodType::PickAxe, 1), true);
-    // A pile with 5 stones (state 4): 2 + 2 + 1, then it is gone
+    // A pile with 5 pieces (state 4): every work step takes exactly 1 piece and yields 2 stones (Nutzer, 2026-11-24)
     const MapPoint pilePos = world.MakeMapPoint(hqPos + Position(8, 0));
     world.DestroyNO(pilePos, false);
     world.SetNO(pilePos, new noGranite(GraniteType::One, 4));
     const unsigned numStones = inInventory(GoodType::Stones);
     placeConnectedBuilding(BuildingType::Quarry, Position(6, 2));
-    RTTR_EXEC_TILL(20000, world.GetNO(pilePos)->GetType() != NodalObjectType::Granite);
+    RTTR_EXEC_TILL(30000, world.GetNO(pilePos)->GetType() != NodalObjectType::Granite);
     RTTR_SKIP_GFS(1000);
-    BOOST_TEST(inInventory(GoodType::Stones) == numStones + 5u);
+    BOOST_TEST(inInventory(GoodType::Stones) == numStones + 10u);
 }
 
 BOOST_FIXTURE_TEST_CASE(SerializeOutputRatio, RatioFixture)

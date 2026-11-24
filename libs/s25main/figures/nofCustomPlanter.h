@@ -28,8 +28,6 @@ class nofCustomPlanter : public nofFarmhand
     void WalkingStarted() override;
     void WorkStarted() override {}
     void WorkFinished() override;
-    /// Civilization mode, output ratio above 1: one more piece of the harvested object per ware
-    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
     /// Harvest a piece of the grown object at the current position (it disappears after the last one). False if there
     /// is none
     bool HarvestPiece();
