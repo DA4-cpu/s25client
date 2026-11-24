@@ -49,7 +49,7 @@ inline std::vector<GamePlayer> CreatePlayers(const std::vector<PlayerInfo>& play
     std::vector<GamePlayer> players;
     players.reserve(playerInfos.size());
     for(unsigned i = 0; i < playerInfos.size(); ++i)
-        players.push_back(GamePlayer(i, playerInfos[i], world));
+        players.emplace_back(i, playerInfos[i], world); // In place: a player is too big for the stack
     return players;
 }
 

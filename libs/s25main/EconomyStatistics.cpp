@@ -248,7 +248,7 @@ void EconomyStatistics::Serialize(SerializedGameData& sgd) const
         for(const auto& [key, value] : counts)
         {
             sgd.PushEnum<uint8_t>(key.first);
-            sgd.PushEnum<uint8_t>(key.second);
+            sgd.PushEnum<uint16_t>(key.second);
             sgd.PushUnsignedShort(value);
         }
     };
@@ -270,7 +270,7 @@ void EconomyStatistics::Serialize(SerializedGameData& sgd) const
                 if(!gained[good][source])
                     continue;
                 sgd.PushEnum<uint8_t>(EntryKind::Gained);
-                sgd.PushEnum<uint8_t>(good);
+                sgd.PushEnum<uint16_t>(good);
                 sgd.PushEnum<uint8_t>(source);
                 pushValue(gained[good][source]);
             }
@@ -279,7 +279,7 @@ void EconomyStatistics::Serialize(SerializedGameData& sgd) const
                 if(!used[good][use])
                     continue;
                 sgd.PushEnum<uint8_t>(EntryKind::Used);
-                sgd.PushEnum<uint8_t>(good);
+                sgd.PushEnum<uint16_t>(good);
                 sgd.PushEnum<uint8_t>(use);
                 pushValue(used[good][use]);
             }

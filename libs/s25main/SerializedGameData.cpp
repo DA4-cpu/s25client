@@ -133,7 +133,11 @@
 /// 30: Civilization mode: distribution of all wares (Gesamtverteilung) of the players instead of own regulators,
 ///     finish GF and worker GF of buildings, buildings gone in the balance length
 /// 31: GFs the buildings of a type stood stopped per minute in the economy statistic
-static const unsigned currentGameDataVersion = 31;
+/// 32: Civilization mode: 512 slots for wares (wares saved with 2 bytes), 128 slots for buildings and jobs.
+///     Older game data cannot be loaded anymore
+static const unsigned currentGameDataVersion = 32;
+/// Oldest game data that can still be loaded (wares were saved with 1 byte before)
+static const unsigned minGameDataVersion = 32;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)
@@ -254,6 +258,11 @@ void SerializedGameData::Prepare(bool reading)
         if(versionIDRead != versionID)
             throw Error("Invalid file format!");
         gameDataVersion = PopUnsignedInt();
+        if(gameDataVersion < minGameDataVersion)
+        {
+            throw Error(helpers::format("Game data version %1% is too old, at least version %2% is required",
+                                        gameDataVersion, minGameDataVersion));
+        }
     } else
     {
         Clear();

@@ -1868,7 +1868,7 @@ void GamePlayer::SuggestPact(const unsigned char targetPlayerId, const PactType 
     {
         pacts[targetPlayerId][pt].duration = duration;
         pacts[targetPlayerId][pt].start = world.GetEvMgr().GetCurrentGF();
-        GamePlayer targetPlayer = world.GetPlayer(targetPlayerId);
+        GamePlayer& targetPlayer = world.GetPlayer(targetPlayerId);
         if(targetPlayer.isHuman())
             targetPlayer.SendPostMessage(std::make_unique<DiplomacyPostQuestion>(
               world.GetEvMgr().GetCurrentGF(), pt, pacts[targetPlayerId][pt].start, *this, duration));

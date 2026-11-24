@@ -38,8 +38,8 @@ nofCustomWorker::nofCustomWorker(SerializedGameData& sgd, const unsigned obj_id)
 void nofCustomWorker::Serialize(SerializedGameData& sgd) const
 {
     nofWorkman::Serialize(sgd);
-    sgd.PushOptionalEnum<uint8_t>(consumedInput_);
-    sgd.PushOptionalEnum<uint8_t>(nextProduct_);
+    sgd.PushOptionalEnum<uint16_t>(consumedInput_);
+    sgd.PushOptionalEnum<uint16_t>(nextProduct_);
 }
 
 const civ::CustomBuilding* nofCustomWorker::GetBuildingDesc() const

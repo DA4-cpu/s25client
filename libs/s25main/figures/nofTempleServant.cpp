@@ -28,7 +28,7 @@ nofTempleServant::nofTempleServant(SerializedGameData& sgd, const unsigned obj_i
 void nofTempleServant::Serialize(SerializedGameData& sgd) const
 {
     nofWorkman::Serialize(sgd);
-    sgd.PushEnum<uint8_t>(currentProduction);
+    sgd.PushEnum<uint16_t>(currentProduction);
 }
 
 void nofTempleServant::DrawWorking(DrawPoint drawPt)

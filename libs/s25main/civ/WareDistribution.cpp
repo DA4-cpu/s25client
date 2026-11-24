@@ -22,6 +22,7 @@
 #include "world/GameWorld.h"
 #include "gameData/BuildingProperties.h"
 #include <algorithm>
+#include <memory>
 
 namespace civ {
 
@@ -74,7 +75,9 @@ void WareDistribution::Update(const GameWorldBase& world, const unsigned playerI
 {
     const GamePlayer& player = world.GetPlayer(playerId);
     const DistributionData& data = world.GetDistributionData();
-    EconomyForecast forecast(data.graph);
+    // On the heap: the forecast has a table per ware slot (too big for the stack)
+    const auto forecastPtr = std::make_unique<EconomyForecast>(data.graph);
+    EconomyForecast& forecast = *forecastPtr;
     const EconomySnapshot snapshot = takeEconomySnapshot(player);
     // What only the AI knows counts fully, as in its planner (Nutzer, 2026-11-21)
     EconomyForecast::Extra extra;
@@ -99,7 +102,7 @@ void WareDistribution::Update(const GameWorldBase& world, const unsigned playerI
     };
     helpers::EnumArray<Amount, GoodType> numbers{};
     helpers::EnumArray<Amount, GoodType> counts{};
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : getActiveContent().GetGoods())
     {
         if(good == GoodType::Nothing)
             continue;
@@ -189,9 +192,9 @@ void WareDistribution::Serialize(SerializedGameData& sgd) const
     sgd.PushUnsignedInt(static_cast<uint32_t>(planned_.size()));
     for(const PlannedDemand& demand : planned_)
     {
-        sgd.PushUnsignedChar(static_cast<uint8_t>(demand.wares.size()));
+        sgd.PushVarSize(static_cast<unsigned>(demand.wares.size()));
         for(const GoodType good : demand.wares)
-            helpers::pushEnum<uint8_t>(sgd, good);
+            helpers::pushEnum<uint16_t>(sgd, good);
         sgd.PushUnsignedShort(demand.amount);
     }
 }
@@ -215,7 +218,7 @@ void WareDistribution::Deserialize(SerializedGameData& sgd)
     planned_.resize(sgd.PopUnsignedInt());
     for(PlannedDemand& demand : planned_)
     {
-        demand.wares.resize(sgd.PopUnsignedChar());
+        demand.wares.resize(sgd.PopVarSize());
         for(GoodType& good : demand.wares)
             good = helpers::popEnum<GoodType>(sgd);
         demand.amount = sgd.PopUnsignedShort();

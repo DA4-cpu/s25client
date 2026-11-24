@@ -16,7 +16,9 @@ unsigned Deserializer::getCurrentVersion()
     // 2: Add leather addon --> 3 new values in distribution, 1 new value in transport order and transport order default
     // values changed, 3 new values in custom build order, 3 new jobs/wares in setAllInventory settings
     // 3: Civilization mode: slots for wares/buildings/jobs defined in lua (build order, setAllInventory settings)
-    return 3;
+    // 4: Civilization mode: 512 slots for wares (wares with 2 bytes), 128 slots for buildings and jobs. Older game
+    //    commands cannot be read anymore (see Replay::LoadHeader)
+    return 4;
 }
 
 GameCommandPtr GameCommand::Deserialize(Deserializer& ser)

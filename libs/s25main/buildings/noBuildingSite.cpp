@@ -137,7 +137,7 @@ void noBuildingSite::Serialize(SerializedGameData& sgd) const
     {
         sgd.PushUnsignedInt(static_cast<unsigned>(material.delivered.size()));
         for(const GoodType good : material.delivered)
-            helpers::pushEnum<uint8_t>(sgd, good);
+            helpers::pushEnum<uint16_t>(sgd, good);
         sgd.PushUnsignedChar(material.used);
         sgd.PushObjectContainer(material.ordered, true);
     }

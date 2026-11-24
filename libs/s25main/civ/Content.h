@@ -8,6 +8,7 @@
 #include "civ/Looks.h"
 #include "civ/MapCodes.h"
 #include "helpers/EnumArray.h"
+#include "helpers/EnumRange.h"
 #include "gameTypes/BuildingQuality.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/BuildingTypes.h"
@@ -192,6 +193,18 @@ public:
     const CustomBuilding* GetBuilding(BuildingType bld) const;
     const CustomWorker* GetWorker(Job job) const;
     unsigned GetNumWares() const { return static_cast<unsigned>(wares_.size()); }
+    /// Number of wares that exist: the built-in ones and the slots defined in lua. They are the first values of
+    /// GoodType (GoodType(0) ... GoodType(GetNumGoods() - 1)), all slots behind them are unused. Loops over the wares
+    /// use it to skip the unused slots
+    unsigned GetNumGoods() const { return NUM_BUILTIN_GOODS + GetNumWares(); }
+    /// The wares that exist for a range-based loop: for(const GoodType good : content.GetGoods())
+    struct Goods
+    {
+        unsigned num;
+        helpers::EnumRange<GoodType>::iterator begin() const { return helpers::EnumRange<GoodType>::iterator(0); }
+        helpers::EnumRange<GoodType>::iterator end() const { return helpers::EnumRange<GoodType>::iterator(num); }
+    };
+    Goods GetGoods() const { return {GetNumGoods()}; }
     unsigned GetNumBuildings() const { return static_cast<unsigned>(buildings_.size()); }
     /// Objects on the map that can be collected, in order of definition
     const std::vector<CustomMapObject>& GetMapObjects() const { return mapObjects_; }

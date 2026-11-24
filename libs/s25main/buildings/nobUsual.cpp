@@ -149,7 +149,7 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
         sgd.PushUnsignedInt(static_cast<unsigned>(libraryMedia_.size()));
         for(const auto& entry : libraryMedia_)
         {
-            helpers::pushEnum<uint8_t>(sgd, entry.first);
+            helpers::pushEnum<uint16_t>(sgd, entry.first);
             sgd.PushUnsignedInt(entry.second);
         }
         sgd.PushObjectContainer(libraryOrderedMedia_, true);
@@ -164,9 +164,9 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
             return good == GoodType::Nothing ? helpers::OptionalEnum<GoodType>() :
                                                helpers::OptionalEnum<GoodType>(good);
         };
-        sgd.PushOptionalEnum<uint8_t>(toOptional(slot.tool));
+        sgd.PushOptionalEnum<uint16_t>(toOptional(slot.tool));
         sgd.PushUnsignedShort(slot.stepsLeft);
-        sgd.PushOptionalEnum<uint8_t>(toOptional(slot.spare));
+        sgd.PushOptionalEnum<uint16_t>(toOptional(slot.spare));
         sgd.PushObject(slot.ordered, true);
     }
     sgd.PushEvent(ordertool_ev);

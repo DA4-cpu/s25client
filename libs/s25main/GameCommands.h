@@ -493,7 +493,7 @@ public:
         Coords::Serialize(ser);
 
         ser.PushBool(holds_alternative<Job>(what));
-        visit([&ser](auto type) { helpers::pushEnum<uint8_t>(ser, type); }, what);
+        visit([&ser](auto type) { helpers::pushEnum<std::underlying_type_t<decltype(type)>>(ser, type); }, what);
         ser.PushUnsignedChar(static_cast<uint8_t>(state));
     }
 
@@ -693,7 +693,7 @@ public:
         ser.PushUnsignedShort(static_cast<uint16_t>(settings.size()));
         for(const auto& [good, setting] : settings)
         {
-            helpers::pushEnum<uint8_t>(ser, good);
+            helpers::pushEnum<uint16_t>(ser, good);
             ser.PushBool(setting.autoValue);
             ser.PushUnsignedShort(setting.manualValue);
             ser.PushBool(setting.autoPause);
@@ -736,7 +736,7 @@ public:
     void Serialize(Serializer& ser) const override
     {
         GameCommand::Serialize(ser);
-        helpers::pushEnum<uint8_t>(ser, good);
+        helpers::pushEnum<uint16_t>(ser, good);
         ser.PushSignedShort(change);
     }
 };
@@ -762,9 +762,9 @@ public:
         ser.PushUnsignedShort(static_cast<uint16_t>(planned.size()));
         for(const civ::PlannedDemand& demand : planned)
         {
-            ser.PushUnsignedChar(static_cast<uint8_t>(demand.wares.size()));
+            ser.PushUnsignedShort(static_cast<uint16_t>(demand.wares.size()));
             for(const GoodType good : demand.wares)
-                helpers::pushEnum<uint8_t>(ser, good);
+                helpers::pushEnum<uint16_t>(ser, good);
             ser.PushUnsignedShort(demand.amount);
         }
     }
@@ -775,7 +775,7 @@ private:
         std::vector<civ::PlannedDemand> result(ser.PopUnsignedShort());
         for(civ::PlannedDemand& demand : result)
         {
-            demand.wares.resize(ser.PopUnsignedChar());
+            demand.wares.resize(ser.PopUnsignedShort());
             for(GoodType& good : demand.wares)
                 good = helpers::popEnum<GoodType>(ser);
             demand.amount = ser.PopUnsignedShort();
@@ -1080,7 +1080,7 @@ public:
         Coords::Serialize(ser);
 
         ser.PushBool(holds_alternative<Job>(what));
-        visit([&ser](auto type) { helpers::pushEnum<uint8_t>(ser, type); }, what);
+        visit([&ser](auto type) { helpers::pushEnum<std::underlying_type_t<decltype(type)>>(ser, type); }, what);
         ser.PushUnsignedInt(count);
     }
 

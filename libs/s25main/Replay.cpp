@@ -232,6 +232,14 @@ bool Replay::LoadHeader(const boost::filesystem::path& filepath)
                               gc::Deserializer::getCurrentVersion(), gcVersion_);
             return false;
         }
+        // Wares were saved with 1 byte before GC version 4 (civilization mode: 512 ware slots)
+        if(gcVersion_ < 4)
+        {
+            lastErrorMsg =
+              helpers::format(_("Cannot play replay created with an older GC version (Current: %1%, Replay: %2%)"),
+                              gc::Deserializer::getCurrentVersion(), gcVersion_);
+            return false;
+        }
 
         if(mapType_ == MapType::Savegame)
         {

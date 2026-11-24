@@ -118,7 +118,7 @@ void PlayerResearch::Serialize(SerializedGameData& sgd, const TechTree& techTree
         sgd.PushUnsignedInt(static_cast<unsigned>(tech.cost.size()));
         for(unsigned i = 0; i < tech.cost.size(); ++i)
         {
-            helpers::pushEnum<uint8_t>(sgd, tech.cost[i].good);
+            helpers::pushEnum<uint16_t>(sgd, tech.cost[i].good);
             sgd.PushUnsignedInt(entry.second.paid.at(i));
         }
     }

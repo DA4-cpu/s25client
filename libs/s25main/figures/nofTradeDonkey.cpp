@@ -41,7 +41,7 @@ void nofTradeDonkey::Serialize(SerializedGameData& sgd) const
     noFigure::Serialize(sgd);
 
     sgd.PushObject(successor, true);
-    sgd.PushOptionalEnum<uint8_t>(gt);
+    sgd.PushOptionalEnum<uint16_t>(gt);
     helpers::pushContainer(sgd, next_dirs);
 }
 

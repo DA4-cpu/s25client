@@ -35,7 +35,7 @@ Eingängen einer Werkstatt) ist ein einzelner Tag "Bretter" oder eine Liste { "B
 Waren, die alle genannten Tags haben.
 
 WICHTIG für Spielstände: Neue Waren immer hinten anfügen. Bestehende Waren nicht löschen, umbenennen oder umsortieren,
-sonst passen alte Spielstände nicht mehr. Es sind höchstens 64 neue Waren möglich. Das Warenlimit muss dringend aufgehobenoder auf über  500 erhöht werden
+sonst passen alte Spielstände nicht mehr. Es sind höchstens 512 neue Waren möglich.
 
 Beispiel (auskommentiert, nur zur Erklärung des Formats):
 

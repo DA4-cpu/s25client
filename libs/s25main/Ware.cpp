@@ -54,7 +54,7 @@ void Ware::Serialize(SerializedGameData& sgd) const
     sgd.PushEnum<uint8_t>(next_dir);
     sgd.PushEnum<uint8_t>(state);
     sgd.PushObject(location);
-    sgd.PushEnum<uint8_t>(type);
+    sgd.PushEnum<uint16_t>(type);
     sgd.PushObject(goal);
     helpers::pushPoint(sgd, next_harbor);
 }

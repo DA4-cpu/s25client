@@ -285,7 +285,7 @@ EconomyPlanner::EconomyPlanner(AIJH::AIPlayerJH& aijh, const CivAI& civAI)
                 hasUse_[good] = true;
         }
     }
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : civ::getActiveContent().GetGoods())
     {
         if(IsTool(good))
             hasUse_[good] = true;
@@ -402,7 +402,7 @@ unsigned EconomyPlanner::GetGroupIdx(std::vector<GoodType> wares, const bool dem
 void EconomyPlanner::RegisterGroups()
 {
     // Every ware alone (shown in the log, used for its own consumers)
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : civ::getActiveContent().GetGoods())
     {
         if(good != GoodType::Nothing)
             singleGroup_[good] = GetGroupIdx({good}, false);
@@ -436,7 +436,7 @@ void EconomyPlanner::RegisterGroups()
             GetGroupIdx(wares, true);
     }
     helpers::EnumArray<std::vector<GoodType>, Tool> toolKinds;
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : civ::getActiveContent().GetGoods())
     {
         if(good == GoodType::Nothing)
             continue;
@@ -463,6 +463,10 @@ void EconomyPlanner::RegisterGroups()
 
 const WareStatus& EconomyPlanner::GetWareStatus(const GoodType good) const
 {
+    // Unused ware slots have no group
+    static const WareStatus unusedSlot{};
+    if(!civ::getActiveContent().IsUsed(good))
+        return unusedSlot;
     return groups_[singleGroup_[good]].status;
 }
 
@@ -2897,7 +2901,7 @@ unsigned EconomyPlanner::GetToolStock(const GoodType tool) const
     if(!kind)
         return snapshot_.inWarehouses[tool];
     unsigned result = 0;
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : civ::getActiveContent().GetGoods())
     {
         if(good != GoodType::Nothing && snapshot_.inWarehouses[good] > 0 && getToolOf(good) == kind)
             result += snapshot_.inWarehouses[good];

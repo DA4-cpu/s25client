@@ -302,6 +302,34 @@ BOOST_AUTO_TEST_CASE(RenamedBuiltinWare)
     }
 }
 
+BOOST_AUTO_TEST_CASE(AllSlotsCanBeUsed)
+{
+    BOOST_TEST(NUM_CUSTOM_GOODS == 512u);
+    BOOST_TEST(NUM_CUSTOM_BUILDINGS == 128u);
+    BOOST_TEST(NUM_CUSTOM_JOBS == 128u);
+    WorldDescription desc;
+    for(unsigned i = 0; i < NUM_CUSTOM_GOODS; ++i)
+        desc.wares.push_back(makeWare("Ware" + std::to_string(i)));
+    for(unsigned i = 0; i < NUM_CUSTOM_BUILDINGS; ++i)
+        desc.workshops.push_back(
+          makeWorkshop("Shop" + std::to_string(i), {{"Ware0"}}, {"Ware" + std::to_string(i + 1)}));
+    {
+        const civ::Content content(desc);
+        BOOST_TEST(content.GetNumWares() == NUM_CUSTOM_GOODS);
+        BOOST_TEST(content.GetNumBuildings() == NUM_CUSTOM_BUILDINGS);
+        BOOST_TEST(content.IsUsed(getCustomGood(NUM_CUSTOM_GOODS - 1u)));
+        BOOST_TEST(content.IsUsed(getCustomBuilding(NUM_CUSTOM_BUILDINGS - 1u)));
+        BOOST_TEST(content.IsUsed(getCustomJob(NUM_CUSTOM_JOBS - 1u)));
+        BOOST_TEST((content.FindGood("Ware511") == GoodType::CustomLast));
+    }
+    WorldDescription tooManyWares = desc;
+    tooManyWares.wares.push_back(makeWare("OneTooMany"));
+    BOOST_CHECK_THROW(civ::Content{tooManyWares}, GameDataError);
+    WorldDescription tooManyShops = desc;
+    tooManyShops.workshops.push_back(makeWorkshop("OneTooMany", {{"Ware0"}}, {"Ware1"}));
+    BOOST_CHECK_THROW(civ::Content{tooManyShops}, GameDataError);
+}
+
 BOOST_AUTO_TEST_CASE(WaresGetSlotsAndTags)
 {
     WorldDescription desc = makeSimpleDesc();
@@ -1055,6 +1083,53 @@ BOOST_FIXTURE_TEST_CASE(SerializeCustomContent, ContentWorldFixture)
         world.Unload();
         BOOST_CHECK_THROW(sgd3.ReadSnapshot(*game, lgs), SerializedGameData::Error);
     }
+}
+
+namespace {
+/// 300 wares before Raw and Product: both get slots above 255 (wares are saved with 2 bytes)
+WorldDescription makeHighSlotDesc()
+{
+    WorldDescription desc;
+    for(unsigned i = 0; i < 300; ++i)
+        desc.wares.push_back(makeWare("Filler" + std::to_string(i)));
+    desc.wares.push_back(makeWare("Raw", "RawKind"));
+    desc.wares.push_back(makeWare("Product", "", {}, "Boards"));
+    desc.workshops.push_back(makeWorkshop("Shop", {{"Raw"}}, {"Product"}));
+    return desc;
+}
+struct HighSlotWorldFixture : public ContentWorldFixture
+{
+    HighSlotWorldFixture() : ContentWorldFixture(makeHighSlotDesc()) {}
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(WaresInHighSlotsAreSaved, HighSlotWorldFixture)
+{
+    const GoodType raw = getCustomGood(300), product = getCustomGood(301);
+    BOOST_TEST(rttr::enum_cast(raw) > 255u);
+    hq().AddToInventory(GoodCounts::make(raw, 6), true);
+    placeConnectedBuilding(BuildingType::Custom0);
+    // Saved while wares are in the building, on the roads and carried by the worker
+    RTTR_EXEC_TILL(8000, countInHQ(product) >= 1u);
+    const unsigned rawBefore = world.GetPlayer(0).GetInventory()[raw];
+    const unsigned productBefore = world.GetPlayer(0).GetInventory()[product];
+    const unsigned rawInHQ = countInHQ(raw), productInHQ = countInHQ(product);
+
+    SerializedGameData sgd;
+    sgd.MakeSnapshot(*game);
+    MockLocalGameState lgs;
+    em.Clear();
+    world.Unload();
+    sgd.ReadSnapshot(*game, lgs);
+    civ::startGame(world);
+
+    BOOST_TEST(world.GetPlayer(0).GetInventory()[raw] == rawBefore);
+    BOOST_TEST(world.GetPlayer(0).GetInventory()[product] == productBefore);
+    BOOST_TEST(countInHQ(raw) == rawInHQ);
+    BOOST_TEST(countInHQ(product) == productInHQ);
+    // All 6 are made after loading
+    RTTR_EXEC_TILL(20000, countInHQ(product) >= 6u);
+    BOOST_TEST(world.GetPlayer(0).GetInventory()[raw] == 0u);
 }
 
 namespace {

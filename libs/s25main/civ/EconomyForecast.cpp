@@ -413,7 +413,7 @@ void EconomyForecast::ComputeFlows(const GamePlayer& player, const EconomySnapsh
     const auto perLength = [&](const Amount count) {
         return count * AMOUNT_UNIT * length * gfsPerMinute / measuredGFs_;
     };
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : getActiveContent().GetGoods())
     {
         if(good == GoodType::Nothing)
             continue;
@@ -530,7 +530,7 @@ void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySna
         if(ware->type != GoodType::Nothing)
             ++onTheWay[ware->type];
     }
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : getActiveContent().GetGoods())
     {
         ForecastStatus status;
         if(good != GoodType::Nothing)
@@ -595,7 +595,7 @@ void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySna
         addEntry(demand.wares, demand.purpose == WareUse::Construction ? constructionPart(amount) : amount, Part::Open,
                  false);
     }
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : getActiveContent().GetGoods())
     {
         if(good != GoodType::Nothing)
             addEntry({good}, consumption_[good], Part::Consumption, false);
@@ -618,7 +618,7 @@ void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySna
                  entry.byOrder);
     // The tools of a kind kept in stock are asked for too (so they are made before they are missing)
     helpers::EnumArray<std::vector<GoodType>, Tool> toolKinds;
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : getActiveContent().GetGoods())
     {
         if(good == GoodType::Nothing)
             continue;
@@ -691,7 +691,7 @@ void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySna
     missing_.clear();
     available_ = {};
     availableCount_ = {};
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : getActiveContent().GetGoods())
     {
         if(good == GoodType::Nothing)
             continue;
@@ -717,7 +717,7 @@ void EconomyForecast::ComputeStatuses(const GamePlayer& player, const EconomySna
       [&](const Entry&, const GoodType good, const Amount amount) { givenCount_[good] += amount; },
       [&](const Entry& entry, const Amount amount) { missingCount_[entry.wares] += amount; });
 
-    for(const auto good : helpers::enumRange<GoodType>())
+    for(const auto good : getActiveContent().GetGoods())
     {
         if(good != GoodType::Nothing)
             wares_[good] = GetGroup({good});

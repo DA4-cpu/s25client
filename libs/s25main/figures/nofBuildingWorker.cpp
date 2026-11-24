@@ -39,15 +39,15 @@ void nofBuildingWorker::Serialize(SerializedGameData& sgd) const
     if(fs != FigureState::GoHome && fs != FigureState::Wander)
     {
         sgd.PushObject(workplace);
-        sgd.PushOptionalEnum<uint8_t>(ware);
+        sgd.PushOptionalEnum<uint16_t>(ware);
         sgd.PushBool(was_sounding);
     }
     sgd.PushUnsignedInt(static_cast<unsigned>(carriedTools_.size()));
     for(const GoodType tool : carriedTools_)
-        helpers::pushEnum<uint8_t>(sgd, tool);
+        helpers::pushEnum<uint16_t>(sgd, tool);
     sgd.PushUnsignedInt(static_cast<unsigned>(carryList_.size()));
     for(const GoodType good : carryList_)
-        helpers::pushEnum<uint8_t>(sgd, good);
+        helpers::pushEnum<uint16_t>(sgd, good);
 }
 
 void nofBuildingWorker::TakeTools(std::vector<GoodType> tools)

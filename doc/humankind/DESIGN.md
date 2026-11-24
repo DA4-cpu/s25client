@@ -223,8 +223,9 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
 ### Prinzip
 
 - Die Enums `GoodType`, `BuildingType` und `Job` haben **freie Plätze** (Slots) hinter den eingebauten Werten:
-  64 Waren (`GoodType::Custom0` …), 32 Gebäude (`BuildingType::Custom0` …) und 32 Berufe (`Job::Custom0` …, einer pro
-  Werkstatt). Lua belegt sie in der Reihenfolge der Definition. Unbenutzte Plätze sind überall ausgeblendet.
+  512 Waren (`GoodType::Custom0` …), 128 Gebäude (`BuildingType::Custom0` …) und 128 Berufe (`Job::Custom0` …, einer
+  pro Werkstatt), seit 2026-11-24 (vorher 64/32/32). Lua belegt sie in der Reihenfolge der Definition. Unbenutzte Plätze
+  sind überall ausgeblendet.
 - `civ::Content` (`libs/s25main/civ/Content.*`) löst die Lua-Definitionen auf. Der `TechTree` besitzt den Content; im
   laufenden Spiel ist er „aktiv“ (`civ::getActiveContent()`), damit globale Tabellen ohne Zugriff auf die Welt die
   neuen Einträge kennen: `WARE_NAMES`, `BUILDING_NAMES`, `BUILDING_COSTS`, `BUILDING_SIZE`, `BLD_WORK_DESC`,
@@ -1877,6 +1878,41 @@ Antworten im Dokument „S2 Modding – Offene Fragen zu den Lua-Notizen“ (Cla
   weiter `GoodType::Wood` ab). Code: `BuiltinWareDesc`, `parseBuiltinWare` (`CivContentDesc.*`),
   `WorldDescription::builtinWares`, `GameDataLoader::SetWare`, `Content::GetBuiltinName` und `builtinNames_`,
   `WARE_NAMES` zeigt den neuen Namen. Kein neuer Spielstand nötig (gespeichert wird der Warentyp, nicht der Name).
+
+## Notizen aus den Lua-Dateien, Schritt 2: Warengrenze (Stand 2026-11-24)
+
+Punkt A1 der Notizensammlung (wares.lua „Das Warenlimit muss dringend aufgehoben oder auf über 500 erhöht werden“,
+Antwort des Nutzers F-1: 512 Plätze, mehr später durch eine Zahl im Code).
+
+- **Plätze:** `GoodType` hat 2 Byte (`uint16_t`) und 512 freie Plätze (`CustomLast = Custom0 + 511`, Werte 40–551,
+  `Nothing` = 552). Werkstätten (`BuildingType`) und Berufe (`Job`) haben je 128 freie Plätze (Werte 40–167 bzw.
+  38–165) und bleiben 1 Byte groß. Mehr Plätze: nur `CustomLast` ändern (bei Waren bis 65 494 freie Plätze möglich,
+  bei Werkstätten und Berufen höchstens 215 bzw. 217, sonst muss auch dort der Typ 2 Byte bekommen). Jeder Platz kostet
+  auch leer Speicher und Rechenzeit (Tabellen je Ware, Schleifen über alle Waren), deshalb nicht unnötig groß wählen.
+- **Speichern und Netzwerk:** Jede Ware wird mit 2 Byte geschrieben (`helpers::pushEnum<uint16_t>`, gelesen mit
+  `popEnum<GoodType>`, das den Typ des Enums nimmt). Die Liste der Waren einer geplanten Anfrage (`SetPlannedDemand`,
+  `WareDistribution::planned_`) hat ihre Länge jetzt mit 2 Byte bzw. variabler Länge statt 1 Byte, damit eine
+  Tag-Gruppe mehr als 255 Waren haben kann.
+- **Versionen:** Spielstand-Daten 32 (`SerializedGameData.cpp`), ältere Spielstände laden nicht mehr (Fehlermeldung
+  „Game data version … is too old“, Projektregel: keine Kompatibilität mit alten Spielständen). Spielbefehle Version 4
+  (`GameCommand.cpp`), ältere Replays werden abgelehnt (`Replay::LoadHeader`), weil ihre Waren 1 Byte haben.
+- **Fenster:** Lager, Warenübersicht (`iwWares`, `iwBaseWarehouse`) und Gesamtverteilung (`iwWareDistribution`)
+  hatten schon Seiten, die mit der Zahl der benutzten Waren wachsen; leere Plätze werden nicht gezeigt. Das Baumenü
+  (`iwAction`) zeigt alle freigeschalteten Gebäude einer Größe untereinander (5 je Zeile); bei sehr vielen Werkstätten
+  einer Größe wird es entsprechend hoch.
+- **Rechenzeit:** Schleifen über alle Waren, die oft laufen (Prognose `civ::EconomyForecast`, Wirtschaftsplaner,
+  Gesamtverteilung, `takeEconomySnapshot`), laufen nur über die vorhandenen Waren: `civ::Content::GetGoods()` liefert
+  `GoodType(0)` bis `GoodType(GetNumGoods() - 1)`, die eingebauten Waren und die belegten Plätze (Lua belegt die Plätze
+  lückenlos ab `Custom0`). `Content::GetToolTypeOf` baut die Namen der eingebauten Werkzeuge nur einmal.
+  `EconomyPlanner::GetWareStatus` liefert für unbenutzte Plätze einen leeren Stand (sie haben keine Gruppe mehr). Ohne
+  diese Änderungen dauerte ein KI-Testspiel (512 × 512, 4 KI, 3 h) rund 20 % länger; mit ihnen gleich lang wie mit 64
+  Plätzen.
+- **Stapelspeicher:** Tabellen je Ware sind 5-mal so groß. Unter Windows hat das Hauptprogramm 1 MB Stapelspeicher.
+  Deshalb liegt die Prognose in `WareDistribution::Update` auf dem Heap, `GamePlayer::SuggestPact` kopiert den
+  Zielspieler nicht mehr (das kopierte den ganzen Spieler, rund 180 KB) und `CreatePlayers` baut die Spieler direkt im
+  Vektor.
+- **Tests:** `CivContentSuite/AllSlotsCanBeUsed` (512 Waren und 128 Werkstätten laden, eine mehr ist ein Ladefehler),
+  `CivContentSuite/WaresInHighSlotsAreSaved` (Waren auf Plätzen über 255 überstehen Speichern und Laden).
 
 ## Gesamtverteilung (Stand 2026-11-21)
 

@@ -806,9 +806,18 @@ std::optional<Tool> Content::GetToolTypeOf(const GoodType good) const
         if(TOOL_TO_GOOD[tool] == good)
             return tool;
     }
+    if(tags_[good].empty())
+        return result;
+    // Identifiers of the built-in tools (the original ones, they are no custom wares), built only once
+    static const helpers::EnumArray<std::string, Tool> toolIds = [] {
+        helpers::EnumArray<std::string, Tool> ids;
+        for(const auto tool : helpers::enumRange<Tool>())
+            ids[tool] = getIdentifier(TOOL_TO_GOOD[tool]);
+        return ids;
+    }();
     for(const auto tool : helpers::enumRange<Tool>())
     {
-        if(helpers::contains(tags_[good], getIdentifier(TOOL_TO_GOOD[tool])))
+        if(helpers::contains(tags_[good], toolIds[tool]))
         {
             if(result)
                 return std::nullopt;

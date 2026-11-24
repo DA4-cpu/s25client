@@ -65,7 +65,7 @@ nofMetalworker::nofMetalworker(SerializedGameData& sgd, const unsigned obj_id) :
 void nofMetalworker::Serialize(SerializedGameData& sgd) const
 {
     nofWorkman::Serialize(sgd);
-    sgd.PushOptionalEnum<uint8_t>(nextProducedTool);
+    sgd.PushOptionalEnum<uint16_t>(nextProducedTool);
 }
 
 void nofMetalworker::DrawWorking(DrawPoint drawPt)

@@ -10,7 +10,7 @@
 #include <string>
 
 // Warentypen
-enum class GoodType : uint8_t
+enum class GoodType : uint16_t
 {
     /*  0 */ Beer,           // Bier
     /*  1 */ Tongs,          // Zange
@@ -54,8 +54,8 @@ enum class GoodType : uint8_t
     /* 39 */ Armor,
     // Wares defined in lua by the civilization mode (see civ/Content.h). Unused unless defined.
     /* 40 */ Custom0,
-    /* 103 */ CustomLast = Custom0 + 63,
-    /* 104 */ Nothing // Nothing. Is not counted as a good. TODO: Remove
+    /* 551 */ CustomLast = Custom0 + 511,
+    /* 552 */ Nothing // Nothing. Is not counted as a good. TODO: Remove
 };
 constexpr auto maxEnumValue(GoodType)
 {

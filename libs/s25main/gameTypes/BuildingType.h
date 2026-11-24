@@ -49,8 +49,8 @@ enum class BuildingType : uint8_t
     DonkeyBreeder,  // 38
     HarborBuilding, // 39
     // Buildings defined in lua by the civilization mode (see civ/Content.h). Unused unless defined.
-    Custom0,                   // 40
-    CustomLast = Custom0 + 31, // 71
+    Custom0,                    // 40
+    CustomLast = Custom0 + 127, // 167
 };
 
 constexpr auto maxEnumValue(BuildingType)

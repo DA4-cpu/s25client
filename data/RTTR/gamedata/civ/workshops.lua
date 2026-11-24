@@ -109,7 +109,7 @@ Freischalten: In techtree.lua unter unlocks = { buildings = { "Name" } } eintrag
 Technologie freigeschaltet, ist sie von Anfang an baubar.
 
 WICHTIG für Spielstände: Neue Werkstätten immer hinten anfügen, bestehende nicht löschen, umbenennen oder umsortieren.
-Es sind höchstens 32 Werkstätten möglich. 
+Es sind höchstens 128 Werkstätten möglich.
 
 Beispiel (auskommentiert, nur zur Erklärung des Formats, braucht die Beispielwaren aus wares.lua):
 

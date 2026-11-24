@@ -259,7 +259,7 @@ EconomySnapshot takeEconomySnapshot(const GamePlayer& player)
         unlimited |= warehouse->GetCapacity() == 0;
         snapshot.storageCapacity += warehouse->GetCapacity();
         snapshot.storageLoad += warehouse->GetLoad();
-        for(const auto good : helpers::enumRange<GoodType>())
+        for(const auto good : civ::getActiveContent().GetGoods())
             snapshot.inWarehouses[good] += warehouse->GetNumRealWares(good);
         for(const auto job : helpers::enumRange<Job>())
             snapshot.inWarehousesPeople[job] += warehouse->GetNumRealFigures(job);

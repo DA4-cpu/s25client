@@ -50,8 +50,8 @@ enum class Job : uint8_t
     Tanner,            // 36
     LeatherWorker,     // 37
     // Workers of buildings defined in lua by the civilization mode (see civ/Content.h). Unused unless defined.
-    Custom0,                   // 38
-    CustomLast = Custom0 + 31, // 69
+    Custom0,                    // 38
+    CustomLast = Custom0 + 127, // 165
 };
 
 constexpr auto maxEnumValue(Job)

@@ -15,7 +15,7 @@ class RoadSegment;
 class noRoadNode;
 class glArchivItem_Bob;
 enum class Job : uint8_t;
-enum class GoodType : uint8_t;
+enum class GoodType : uint16_t;
 
 enum class FigureState : uint8_t
 {
