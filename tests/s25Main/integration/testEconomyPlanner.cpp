@@ -87,7 +87,7 @@ WorldDescription makeDesc(const std::vector<std::string>& expanding = {},
     pit.output = {"Loam"};
     desc.workshops.push_back(pit);
     WorkshopDesc kiln = makeWorkshop("Kiln");
-    kiln.inputs = {{"Loam"}};
+    kiln.inputs = {InputDesc{{"Loam"}}};
     kiln.output = {"Clay"};
     desc.workshops.push_back(kiln);
     TechnologyDesc tech;
@@ -706,7 +706,7 @@ BOOST_FIXTURE_TEST_CASE(NoOrdersForInputsOfABuildingThatCannotWork, PlannerFixtu
     desc.wares.push_back(makeWare("Sand"));
     desc.wares.push_back(makeWare("Glass"));
     WorkshopDesc glassworks = makeWorkshop("Glassworks");
-    glassworks.inputs = {{"Loam"}, {"Sand"}};
+    glassworks.inputs = {InputDesc{{"Loam"}}, InputDesc{{"Sand"}}};
     glassworks.output = {"Glass"};
     desc.workshops.push_back(glassworks);
     TechnologyDesc tech;
@@ -742,7 +742,7 @@ WorldDescription makeBrickworksDesc()
     WorldDescription desc = makeDesc({"Brickworks"});
     desc.wares.push_back(makeWare("Brick"));
     WorkshopDesc brickworks = makeWorkshop("Brickworks");
-    brickworks.inputs = {{"Loam"}};
+    brickworks.inputs = {InputDesc{{"Loam"}}};
     brickworks.output = {"Brick"};
     brickworks.workTime = 200;
     desc.workshops.push_back(brickworks);
@@ -775,7 +775,8 @@ BOOST_FIXTURE_TEST_CASE(MissingInputIsKeptForTheOrderAbove, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(NoInputIsKeptForAnOrderThatCannotBeBuilt, PlannerFixture)
 {
-    // No loam can be made: the kiln cannot be built, it keeps no loam (otherwise it would block the brickworks for good)
+    // No loam can be made: the kiln cannot be built, it keeps no loam (otherwise it would block the brickworks for
+    // good)
     startGame(makeBrickworksDesc());
     hq().AddToInventory(GoodCounts::make(LOAM, 8), true);
     startAI();
@@ -1178,11 +1179,13 @@ BOOST_FIXTURE_TEST_CASE(GroupsOfWaresAConsumerTakes, PlannerFixture)
     // takes; the group has the stock of both
     WorldDescription desc = makeDesc();
     desc.wares.push_back(makeWare("Sand"));
+    desc.wares.back().kind = {"Aggregate"};
     desc.wares.push_back(makeWare("Gravel"));
+    desc.wares.back().kind = {"Aggregate"};
     desc.wares.push_back(makeWare("Concrete"));
     WorkshopDesc mixer = makeWorkshop("Mixer");
-    mixer.inputs = {{"Sand"}, {"Gravel"}};
-    mixer.consumeEach = false;
+    // One input for both
+    mixer.inputs = {InputDesc{{"Aggregate"}}};
     mixer.output = {"Concrete"};
     desc.workshops.push_back(mixer);
     startGame(desc);
@@ -1204,8 +1207,8 @@ BOOST_FIXTURE_TEST_CASE(GroupsOfWaresAConsumerTakes, PlannerFixture)
 BOOST_FIXTURE_TEST_CASE(NoOrdersForConstructionMaterial, PlannerFixture)
 {
     // The pit (loam) and the mixer (mortar) lack boards, none are in stock. No orders are made for their construction
-    // material (Nutzer, 2026-11-17): they wait for it, their costs are planned, the boards are short, one needed sawmill
-    // is there for the shortage
+    // material (Nutzer, 2026-11-17): they wait for it, their costs are planned, the boards are short, one needed
+    // sawmill is there for the shortage
     WorldDescription desc = makeDesc({}, {{"Loam", 5}, {"Mortar", 5}});
     desc.wares.push_back(makeWare("Mortar"));
     WorkshopDesc mixer = makeWorkshop("Mixer");
@@ -1648,8 +1651,8 @@ BOOST_FIXTURE_TEST_CASE(HarvestersShareTheUnitsOfTheirSource, PlannerFixture)
 
 BOOST_FIXTURE_TEST_CASE(NoHarvesterWhereItsWorkerCannotWalk, PlannerFixture)
 {
-    // One deposit, surrounded by stone piles: in reach, but its worker cannot walk to it (like nofFarmhand: a path of at
-    // most 20). No pit is placed for it
+    // One deposit, surrounded by stone piles: in reach, but its worker cannot walk to it (like nofFarmhand: a path of
+    // at most 20). No pit is placed for it
     startGame(makeDesc(), 40);
     const Position center(4, 4);
     placeObject(center, [](MapPoint) { return new noDeposit(0, 1); });
@@ -1680,7 +1683,8 @@ BOOST_FIXTURE_TEST_CASE(ClearingWoodcutterWithFewTreesGetsTheForester, PlannerFi
     {
         const MapPoint pt = world.MakeMapPoint(hqPos + offset);
         if(world.GetBQ(pt, curPlayer) >= BuildingQuality::Hut
-           && std::none_of(places.begin(), places.end(), [&](MapPoint other) { return world.CalcDistance(pt, other) < 4; }))
+           && std::none_of(places.begin(), places.end(),
+                           [&](MapPoint other) { return world.CalcDistance(pt, other) < 4; }))
             places.push_back(pt);
     }
     BOOST_TEST_REQUIRE(places.size() >= 2u);

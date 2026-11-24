@@ -81,7 +81,7 @@ WorkshopDesc makeWorkshop(const std::string& name, const std::string& input, std
     desc.look = "Metalworks";
     desc.worker.title = name + "Worker";
     desc.worker.look = "Metalworker";
-    desc.inputs = {{input}};
+    desc.inputs = {InputDesc{{input}}};
     desc.outputs = std::move(outputs);
     desc.workTime = 2;
     return desc;

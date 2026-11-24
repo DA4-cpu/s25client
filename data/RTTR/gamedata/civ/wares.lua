@@ -46,6 +46,9 @@ rttr:AddWare{ name = "ExampleProduct", title = "Beispiel-Produkt", look = "Board
 rttr:SetWare{ Wood = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
 rttr:SetWare{ Boards = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
 rttr:SetWare{ Stones = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
+rttr:SetWare{ Fish = { kind = { "Food" } } }
+rttr:SetWare{ Meat = { kind = { "Food" } } }
+rttr:SetWare{ Bread = { kind = { "Food" } } }
 
 
 rttr:AddWare{ name = "Loam", title = "Lehm", properties = { "muddy" }, look = "Leather", transport = "Boards" }

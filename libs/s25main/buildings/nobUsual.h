@@ -38,6 +38,17 @@ public:
         /// Tool on its way to the building or nullptr
         Ware* ordered = nullptr;
     };
+    /// Wares of an input (see InputSlot in BldWorkDescription::inputs)
+    struct InputStock
+    {
+        /// Wares in the building per ware of the input (same order as InputSlot::wares)
+        std::vector<uint8_t> counts;
+        /// Wares on their way to this input
+        std::list<Ware*> ordered;
+        /// Hundredths of a ware used in advance: a work step needing a part of a ware takes a whole one, the rest
+        /// counts for the next steps (amount 0.5: 1 ware in step 1, none in step 2)
+        uint16_t prepaid = 0;
+    };
 
 protected:
     /// Der Typ, der hier arbeitet
@@ -46,12 +57,12 @@ protected:
     unsigned short productivity;
     /// Produktion eingestellt? (letzteres nur visuell, um Netzwerk-Latenzen zu verstecken)
     bool disableProduction, disableProductionVirtual;
-    /// Warentyp, den er zuletzt bestellt hatte (bei >1 Waren)
+    /// Input (or library: knowledge medium) ordered last by the order event
     unsigned char lastOrderedWare;
-    /// Rohstoffe, die zur Produktion benötigt werden
-    std::array<uint8_t, 3> numWares;
-    /// Bestellte Waren
-    std::vector<std::list<Ware*>> orderedWares;
+    /// Wares of the inputs (same order as BldWorkDescription::inputs)
+    std::vector<InputStock> inputs_;
+    /// Input a ware is ordered for right now (not serialized), -1: none
+    int orderingInput_ = -1;
     /// Bestell-Ware-Event
     const GameEvent* orderware_ev;
     /// Rechne-Produktivität-aus-Event
@@ -64,8 +75,8 @@ protected:
     unsigned sinceNotWorking;
     /// Did we notify the player that we are out of resources?
     bool outOfRessourcesMsgSent;
-    /// Ware consumed by the last call to ConsumeWares (first one if several). Not serialized, read right after
-    /// consuming
+    /// Ware consumed last from the first input (built-in mines: the ware consumed last). Decides the product of a
+    /// workshop with inheritProperties
     helpers::OptionalEnum<GoodType> lastConsumedWare_;
     /// Civilization mode, library: stored knowledge media (count per ware) and ordered media
     std::map<GoodType, unsigned> libraryMedia_;
@@ -123,13 +134,17 @@ public:
     /// Wird vom Arbeiter aufgerufen, wenn er nicht (mehr) zur Arbeit kommen kann
     void WorkerLost();
 
-    /// Gibt den Warenbestand (eingehende Waren - Rohstoffe) zurück
-    unsigned char GetNumWares(unsigned id) const { return numWares[id]; }
-    /// Prüft, ob Waren für einen Arbeitsschritt vorhanden sind
+    /// Number of wares in the building of the input (all its wares together)
+    unsigned GetNumWares(unsigned input) const;
+    /// Wares in the building of the input, per ware of the input (same order as InputSlot::wares)
+    const std::vector<uint8_t>& GetInputCounts(unsigned input) const { return inputs_[input].counts; }
+    /// Number of wares the next work step takes from the input
+    unsigned GetNumNeededForStep(unsigned input) const;
+    /// True if the wares for a work step are there
     bool WaresAvailable();
-    /// Verbraucht Waren
+    /// Use the wares of a work step
     void ConsumeWares();
-    /// Ware consumed by the last call to ConsumeWares (first one if several) or nothing if nothing was consumed
+    /// Ware consumed last from the first input (built-in mines: the ware consumed last), nothing if none yet
     helpers::OptionalEnum<GoodType> GetLastConsumedWare() const { return lastConsumedWare_; }
 
     /// Berechnet Punktewertung für Ware type
@@ -141,7 +156,7 @@ public:
     /// Bestellte Waren
     bool AreThereAnyOrderedWares() const;
     /// Number of wares of the input on the way to the building
-    unsigned GetNumOrderedWares(unsigned id) const { return static_cast<unsigned>(orderedWares[id].size()); }
+    unsigned GetNumOrderedWares(unsigned input) const { return static_cast<unsigned>(inputs_[input].ordered.size()); }
 
     /// Civilization mode: True if this is a library (workshop from lua storing knowledge media)
     bool IsLibrary() const;
@@ -217,4 +232,10 @@ private:
     void OrderTools();
     /// Tool reform: Start the event which orders tools if there are tools and it is not running
     void StartToolOrderEvent();
+    /// Order one ware for the input from the next warehouse having any of its wares
+    Ware* OrderInput(unsigned input);
+    /// Input a ware of this type goes to: the first one taking it with space left, -1 if none
+    int FindInputFor(GoodType good) const;
+    /// Wares of the input in the building and on their way
+    unsigned GetNumStoredAndOrdered(unsigned input) const;
 };

@@ -20,11 +20,20 @@ rttr:AddWorkshop{...}:
               werden. Welche Werkzeuge in der Werkstatt liegen, steht unter tools.
               Eigene Bilder für Gebäude und Arbeiter: Ordner data/RTTR/assets/civ/<name>/,
               siehe data/RTTR/assets/civ/LIESMICH.txt
-  inputs      optional: bis zu 3 Eingänge, jeder eine Tag-Abfrage, z.B. { "Bones" } oder { { "Bretter", "Nadelholz" } }
-              Hier sollte es noch für jeden Eingang ein  InputRatio geben also zB. {{Tags = "Bones", inputRatio = 0.5 (oder 3)}} bei 0.5 
-              wird nur die Hälfte der jedweiligen Inputware gebraucht und bei 3 werden 3 Inputwaren benötigt 
-  consume     optional: "each" (Standard): von jedem Eingang 1 Ware pro Produkt, jeder Eingang muss genau eine Ware
-              treffen. "any": 1 Ware des Eingangs mit dem größten Vorrat (wie bei den Minen), höchstens 3 Waren insgesamt.
+  inputs      optional: bis zu 10 Eingänge. Jeder Eingang ist ein Platz für alle Waren einer Tag-Abfrage, auch gemischt:
+              inputs = { "Wood", { tags = "Food", amount = 1, storage = 6 }, { tags = { "Bretter", "Nadelholz" } } }
+              Kurzform: eine Tag-Abfrage ("Wood" oder { "Bretter", "Nadelholz" }) = ein Platz mit amount 1.
+              tags     Tag-Abfrage: jede Ware mit allen diesen Tags kann geliefert werden (z.B. "Food": Fisch, Fleisch,
+                       Brot, Honig)
+              amount   optional (Standard 1): Waren je Arbeitsschritt, auch Kommazahlen. 2 = 2 Waren je Schritt, 0.5 = 1
+                       Ware jeden 2. Schritt (der Schritt, der eine Ware anbricht, nimmt sie ganz, der Rest zählt für die
+                       nächsten Schritte), 1.5 = abwechselnd 2 und 1. Der Verbrauch hängt nur vom Arbeitsschritt ab, nicht
+                       davon, wie viele Waren herauskommen.
+              storage  optional (Standard: storage der Werkstatt): Plätze dieses Eingangs
+              Ein Arbeitsschritt beginnt erst, wenn jeder Eingang die Waren für diesen Schritt hat. Aus einem gemischten
+              Platz wird die Ware genommen, von der am meisten dort liegt (gleich viele: die zuerst definierte).
+              Bestellt wird jede passende Ware aus dem nächsten Lager, das eine davon hat. Eine Ware, die zu mehreren
+              Eingängen passt, kommt in den ersten, der noch Platz hat.
   output      Tag-Abfrage der hergestellten Ware. Sie darf mehrere Waren treffen (mehrere Produkte), z.B.
               output = "GeritzterKnochen" für alle geritzten Knochen.
   outputs     optional statt output: Liste der Produkte, jeder Eintrag eine Tag-Abfrage, die genau eine Ware trifft:
@@ -46,10 +55,10 @@ rttr:AddWorkshop{...}:
               Ohne outputChoice: Hat die Werkstatt mehrere Produkte, steuert sie die Gesamtverteilung (Fenster
               "Gesamtverteilung"): Bei jedem Arbeitsschritt wählt sie gewichtet nach den Werten ihrer Produkte, Bestelltes
               zuerst.
-  inheritProperties  optional (Standard false): Das Produkt hat dieselben Eigenschaften wie die verbrauchte Ware
-              (z.B. Nadelholz -> Nadelholzbretter). Zu jeder möglichen Eingangsware muss es genau ein passendes Produkt
-              geben.
-  storage     optional (Standard 6): Lagerplätze je Eingang
+  inheritProperties  optional (Standard false): Das Produkt hat dieselben Eigenschaften wie die Ware, die zuletzt aus dem
+              ersten Eingang verbraucht wurde (z.B. Nadelholz -> Nadelholzbretter). Zu jeder Ware des ersten Eingangs
+              muss es genau ein passendes Produkt geben.
+  storage     optional (Standard 6): Lagerplätze je Eingang (ein Eingang kann sein eigenes storage haben, siehe inputs)
   library     optional: macht die Werkstatt zur Bibliothek, z.B. library = { capacity = 20 }.
               Eine Bibliothek bestellt alle Wissensmedien (Waren mit knowledge in wares.lua) per Träger, bis capacity
               erreicht ist, und stellt nichts her. Darin zählen die WP der Medien voll (in Lagern nur halb). Wird sie
@@ -66,7 +75,7 @@ rttr:AddWorkshop{...}:
               Gepflanzt wird nur dort, wo das Objekt auch natürlich wächst (Regeln in world/mapgen.lua, aber ohne die
               Zonen), auf freien Plätzen ohne Straße und nicht direkt neben Gebäuden, Feldern und anderen Objekten
               (damit Wege frei bleiben). Fahnen dürfen daneben stehen wie bei Steinen.
-              Jedes Pflanzen verbraucht die Eingänge (inputs, consume wie oben), z.B. inputs = { "Water" } zum Gießen.
+              Jedes Pflanzen verbraucht die Eingänge (inputs wie oben), z.B. inputs = { "Water" } zum Gießen.
               Ohne inputs braucht er dafür nichts.
               Mit output erntet er außerdem selbst wie der Bauer: ausgewachsene Objekte dieser Art im Umkreis (auch
               natürlich gewachsene), eine Ware pro Gang; Ernten geht vor Pflanzen. Ohne output pflanzt er nur (wie der
@@ -77,8 +86,8 @@ rttr:AddWorkshop{...}:
   mine        optional: macht die Werkstatt zur Mine für ein Erz aus mapobjects.lua (rttr:AddOre):
               mine = { resource = "Copper" }. Nur mit size = "mine". Der Arbeiter baut wie in den eingebauten Minen
               je Arbeitsschritt eine Einheit des Erzes im Umkreis von 2 Knoten ab. Ist nichts mehr da, kommt die Meldung
-              "Diese Mine ist erschöpft". Eingänge wie bei den eingebauten Minen, z.B.
-              inputs = { "Fish", "Meat", "Bread" }, consume = "any".
+              "Diese Mine ist erschöpft". Eingänge wie bei jeder Werkstatt, z.B. Nahrung:
+              inputs = { { tags = "Food", storage = 6 } }.
   warehouse   optional: macht das Gebäude zum Lager statt zur Werkstatt:
               warehouse = { wares = { "Wood", "Stones", "Lehm" }, capacity = 100 }.
               wares = die Waren, die es aufnimmt (Tag-Abfragen wie bei inputs), capacity = Höchstzahl aller Waren
@@ -290,9 +299,7 @@ rttr:AddWorkshop{
     cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Rope = 1 },
     look = "IronMine",
     worker = { title = "Miner", look = "Miner" },
-    inputs = { "Fish", "Meat", "Bread" },
-    consume = "any",
-    storage = 2,
+    inputs = { { tags = "Food", storage = 6 } },
     mine = { resource = "Copper" },
     output = "CopperOre",
     outputRatio = 0.5,
@@ -311,8 +318,7 @@ rttr:AddWorkshop{
     look = "GraniteMine",
     worker = { title = "Miner", look = "Miner" }, -- es sollte nicht für jedes Gebäude ein neuer Job erstellt werden, sondern auch vorhandene 
     -- Jobs  wie zB. Miner übernommen werden können
-    inputs = { "Fish", "Meat", "Bread" }, -- hier soll eigentlich noch Wood hinzu und man sollte immer 1 Wood benötigen, aber nur eines der drei Nahrungen
-    consume = "any",
+    inputs = { "Wood", { tags = "Food", storage = 6 } },
     storage = 2,
     mine = { resource = "Tin" },
     output = "TinOre",
@@ -332,8 +338,7 @@ rttr:AddWorkshop{
     look = "GraniteMine",
     worker = { title = "Miner", look = "Miner" }, -- es sollte nicht für jedes Gebäude ein neuer Job erstellt werden, sondern auch vorhandene 
     -- Jobs  wie zB. Miner übernommen werden können
-    inputs = { "Fish", "Meat", "Bread" }, -- hier soll eigentlich noch Wood hinzu und man sollte immer 1 Wood benötigen, aber nur eines der drei Nahrungen
-    consume = "any",
+    inputs = { "Wood", { tags = "Food", storage = 6 } },
     storage = 2,
     mine = { resource = "Lime" },
     output = "Lime",
@@ -375,8 +380,7 @@ rttr:AddWorkshop{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 3 },
     look = "Winery",
     worker = { title = "Spinner", look = "Farmer" },
-    inputs = { "Thatch", "PapyrusPlant" }, --eigentlich soll hier nur "Fiber" hin, aber geht noch nicht, da es mehr als 3 Waren mit Fibre als Tag gibt
-    consume = "any",
+    inputs = { { tags = "Fibers" } },
     output = "Rope",
     outputRatio = 0.8,
     workTime = 6,
@@ -440,7 +444,7 @@ rttr:AddWorkshop{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 2  },
     look = "Skinner",
     worker = { title = "AdobeProducer", look = "Metalworker" },
-    inputs = { "Loam", "Thatch" }, -- eigentlich "Fiber" anstatt "Thatch"
+    inputs = { "Loam", { tags = "Fibers" } },
     outputs = { "Adobe" },
     workTime = 35,
     knowledge = { IWP = 2 },
@@ -495,7 +499,6 @@ rttr:AddWorkshop{
     look = "Woodcutter",
     worker = { title = "Woodcutter", look = "Woodcutter" },
     inputs = { "Wood" }, 
-    consume = "any",
     outputs = { "Firewood" },
     outputRatio = 2,
     tools = { baseSpeed = 0, tools = { "Axe" } },
@@ -556,7 +559,6 @@ rttr:AddWorkshop{
     look = "Sawmill",
     worker = { title = "Copperworker", look = "Metalworker" },
     inputs = { "Holzstamm"},
-    consume = "any",
     output = { "Boards" },
     tools = { baseSpeed = 0, tools = { "Scythe" } },
     workTime = 120,

@@ -43,10 +43,9 @@ nobUsual::nobUsual(BuildingType type, MapPoint pos, unsigned char player, Nation
       sinceNotWorking(isWorkingMarker), outOfRessourcesMsgSent(false), ordertool_ev(nullptr), stepSpeed_(100),
       is_working(false)
 {
-    std::fill(numWares.begin(), numWares.end(), 0);
     toolSlots_.resize(GetToolsDesc().slots.size());
-
-    orderedWares.resize(BLD_WORK_DESC[bldType_].waresNeeded.size());
+    for(const InputSlot& slot : BLD_WORK_DESC[bldType_].inputs)
+        inputs_.push_back(InputStock{std::vector<uint8_t>(slot.wares.size(), 0), {}, 0});
 
     // Tür aufmachen,bis Gebäude besetzt ist
     OpenDoor();
@@ -66,12 +65,22 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
       numGfNotWorking(sgd.PopUnsignedShort()), sinceNotWorking(sgd.PopUnsignedInt()),
       outOfRessourcesMsgSent(sgd.PopBool()), ordertool_ev(nullptr), stepSpeed_(100), is_working(sgd.PopBool())
 {
-    helpers::popContainer(sgd, numWares);
-
-    orderedWares.resize(BLD_WORK_DESC[bldType_].waresNeeded.size());
-
-    for(std::list<Ware*>& orderedWare : orderedWares)
-        sgd.PopObjectContainer(orderedWare, GO_Type::Ware);
+    const auto& slots = BLD_WORK_DESC[bldType_].inputs;
+    if(sgd.PopUnsignedChar() != slots.size())
+        throw SerializedGameData::Error("Inputs of a building in the savegame do not fit the lua files");
+    for(const InputSlot& slot : slots)
+    {
+        InputStock input;
+        if(sgd.PopUnsignedChar() != slot.wares.size())
+            throw SerializedGameData::Error("Inputs of a building in the savegame do not fit the lua files");
+        input.counts.resize(slot.wares.size());
+        for(uint8_t& count : input.counts)
+            count = sgd.PopUnsignedChar();
+        sgd.PopObjectContainer(input.ordered, GO_Type::Ware);
+        input.prepaid = sgd.PopUnsignedShort();
+        inputs_.push_back(std::move(input));
+    }
+    lastConsumedWare_ = sgd.PopOptionalEnum<GoodType>();
     helpers::popContainer(sgd, lastProductivities);
 
     // Civilization mode: library
@@ -136,9 +145,16 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
     sgd.PushBool(outOfRessourcesMsgSent);
     sgd.PushBool(is_working);
 
-    helpers::pushContainer(sgd, numWares);
-    for(const std::list<Ware*>& orderedWare : orderedWares)
-        sgd.PushObjectContainer(orderedWare, true);
+    sgd.PushUnsignedChar(static_cast<uint8_t>(inputs_.size()));
+    for(const InputStock& input : inputs_)
+    {
+        sgd.PushUnsignedChar(static_cast<uint8_t>(input.counts.size()));
+        for(const uint8_t count : input.counts)
+            sgd.PushUnsignedChar(count);
+        sgd.PushObjectContainer(input.ordered, true);
+        sgd.PushUnsignedShort(input.prepaid);
+    }
+    sgd.PushOptionalEnum<uint16_t>(lastConsumedWare_);
     helpers::pushContainer(sgd, lastProductivities);
 
     // Civilization mode: library
@@ -203,11 +219,11 @@ void nobUsual::DestroyBuilding()
         world->GetPlayer(player).JobNotWanted(this);
 
     // Bestellte Waren Bescheid sagen
-    for(std::list<Ware*>& orderedWare : orderedWares)
+    for(InputStock& input : inputs_)
     {
-        for(Ware* ware : orderedWare)
+        for(Ware* ware : input.ordered)
             WareNotNeeded(ware);
-        orderedWare.clear();
+        input.ordered.clear();
     }
     for(Ware* ware : libraryOrderedMedia_)
         WareNotNeeded(ware);
@@ -226,11 +242,11 @@ void nobUsual::DestroyBuilding()
     GetEvMgr().RemoveEvent(productivity_ev);
 
     // Inventur entsprechend verringern wegen den Waren, die vernichtetet werden
-    for(unsigned i = 0; i < BLD_WORK_DESC[bldType_].waresNeeded.size(); ++i)
+    const auto& slots = BLD_WORK_DESC[bldType_].inputs;
+    for(unsigned i = 0; i < slots.size(); ++i)
     {
-        const GoodType ware = BLD_WORK_DESC[bldType_].waresNeeded[i];
-        RTTR_Assert(ware != GoodType::Nothing);
-        world->GetPlayer(player).DecreaseInventoryWare(ware, numWares[i], WareUse::Lost);
+        for(unsigned w = 0; w < slots[i].wares.size(); ++w)
+            world->GetPlayer(player).DecreaseInventoryWare(slots[i].wares[w], inputs_[i].counts[w], WareUse::Lost);
     }
     // Media in a library are lost with the building (and so are their knowledge points)
     for(const auto& entry : libraryMedia_)
@@ -389,19 +405,13 @@ void nobUsual::HandleEvent(const unsigned id)
         if(!IsProductionStopped())
         {
             const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
-            RTTR_Assert(lastOrderedWare < workDesc.waresNeeded.size());
-            // How many wares can we have of each type?
-            unsigned wareSpaces = workDesc.numSpacesPerWare;
-
-            if(numWares[lastOrderedWare] + orderedWares[lastOrderedWare].size() < wareSpaces)
-            {
-                Ware* w = world->GetPlayer(player).OrderWare(workDesc.waresNeeded[lastOrderedWare], *this);
-                if(w)
-                    RTTR_Assert(helpers::contains(orderedWares[lastOrderedWare], w));
-            }
+            RTTR_Assert(lastOrderedWare < workDesc.inputs.size());
+            // One ware for the next input, if it has space left
+            if(GetNumStoredAndOrdered(lastOrderedWare) < workDesc.inputs[lastOrderedWare].storage)
+                OrderInput(lastOrderedWare);
 
             ++lastOrderedWare;
-            if(lastOrderedWare >= workDesc.waresNeeded.size())
+            if(lastOrderedWare >= workDesc.inputs.size())
                 lastOrderedWare = 0;
         }
 
@@ -443,17 +453,18 @@ void nobUsual::AddWare(std::unique_ptr<Ware> ware)
         return;
     }
 
-    // Gucken, um was für einen Warentyp es sich handelt und dann dort hinzufügen
-    const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
-    for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
+    // Into the input it was ordered for
+    const auto& slots = BLD_WORK_DESC[bldType_].inputs;
+    for(unsigned i = 0; i < inputs_.size(); ++i)
     {
-        if(ware->type == workDesc.waresNeeded[i])
-        {
-            ++numWares[i];
-            RTTR_Assert(helpers::contains(orderedWares[i], ware.get()));
-            orderedWares[i].remove(ware.get());
-            break;
-        }
+        if(!helpers::contains(inputs_[i].ordered, ware.get()))
+            continue;
+        const auto it = std::find(slots[i].wares.begin(), slots[i].wares.end(), ware->type);
+        RTTR_Assert(it != slots[i].wares.end());
+        if(it != slots[i].wares.end())
+            ++inputs_[i].counts[static_cast<unsigned>(it - slots[i].wares.begin())];
+        inputs_[i].ordered.remove(ware.get());
+        break;
     }
 
     // Ware vernichten
@@ -492,16 +503,15 @@ void nobUsual::WareLost(Ware& ware)
     }
 
     // Ware konnte nicht kommen --> raus damit
-    const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
-    for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
+    for(InputStock& input : inputs_)
     {
-        if(ware.type == workDesc.waresNeeded[i])
+        if(helpers::contains(input.ordered, &ware))
         {
-            RTTR_Assert(helpers::contains(orderedWares[i], &ware));
-            orderedWares[i].remove(&ware);
-            break;
+            input.ordered.remove(&ware);
+            return;
         }
     }
+    RTTR_Assert(false);
 }
 
 void nobUsual::GotWorker(Job /*job*/, noFigure& worker)
@@ -509,7 +519,7 @@ void nobUsual::GotWorker(Job /*job*/, noFigure& worker)
     this->worker = checkedCast<nofBuildingWorker*>(&worker);
     StartToolOrderEvent();
 
-    if(!BLD_WORK_DESC[bldType_].waresNeeded.empty() || IsLibrary())
+    if(!BLD_WORK_DESC[bldType_].inputs.empty() || IsLibrary())
         // erste Ware bestellen
         HandleEvent(0);
 }
@@ -537,26 +547,42 @@ void nobUsual::WorkerLost()
     world->GetPlayer(player).AddJobWanted(BLD_WORK_DESC[bldType_].job.value(), this);
 }
 
+unsigned nobUsual::GetNumWares(const unsigned input) const
+{
+    return std::accumulate(inputs_[input].counts.begin(), inputs_[input].counts.end(), 0u);
+}
+
+unsigned nobUsual::GetNumStoredAndOrdered(const unsigned input) const
+{
+    return GetNumWares(input) + static_cast<unsigned>(inputs_[input].ordered.size());
+}
+
+unsigned nobUsual::GetNumNeededForStep(const unsigned input) const
+{
+    const unsigned amount = BLD_WORK_DESC[bldType_].inputs[input].amount;
+    const unsigned prepaid = inputs_[input].prepaid;
+    // A part of a ware counts as a whole one (it is taken now, the rest counts for the next steps)
+    return amount > prepaid ? (amount - prepaid + 99u) / 100u : 0u;
+}
+
 bool nobUsual::WaresAvailable()
 {
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
     if(workDesc.useOneWareEach)
     {
-        // Any ware not there -> false, else true
-        for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
+        // Every input has the wares of a step
+        for(unsigned i = 0; i < inputs_.size(); ++i)
         {
-            RTTR_Assert(workDesc.waresNeeded[i] != GoodType::Nothing);
-            if(numWares[i] == 0)
+            if(GetNumWares(i) < GetNumNeededForStep(i))
                 return false;
         }
         return true;
     } else
     {
-        // Any ware there -> true else false
-        for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
+        // Built-in mines: any ware there
+        for(unsigned i = 0; i < inputs_.size(); ++i)
         {
-            RTTR_Assert(workDesc.waresNeeded[i] != GoodType::Nothing);
-            if(numWares[i] != 0)
+            if(GetNumWares(i) != 0)
                 return true;
         }
         return false;
@@ -566,51 +592,86 @@ bool nobUsual::WaresAvailable()
 void nobUsual::ConsumeWares()
 {
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
-    unsigned numWaresNeeded = workDesc.waresNeeded.size();
-    lastConsumedWare_.reset();
-    if(numWaresNeeded == 0)
+    if(inputs_.empty())
         return;
 
-    // Set to first ware (default)
-    unsigned wareIdxToUse = 0;
+    GamePlayer& owner = world->GetPlayer(player);
+    // One ware of the input: the ware the input has most of, equal: the one first in the list of the input
+    const auto takeOne = [&](const unsigned i) {
+        InputStock& input = inputs_[i];
+        unsigned best = 0;
+        for(unsigned w = 1; w < input.counts.size(); ++w)
+        {
+            if(input.counts[w] > input.counts[best])
+                best = w;
+        }
+        RTTR_Assert(input.counts[best] != 0);
+        --input.counts[best];
+        const GoodType good = workDesc.inputs[i].wares[best];
+        owner.DecreaseInventoryWare(good, 1, WareUse::Production);
+        owner.CountUsedBy(GetBuildingType(), good);
+        return good;
+    };
+    // Try to get wares from the warehouses: below the wares of one more step (at least 2 wares), as many as a step
+    // takes
+    const auto refill = [&](const unsigned i) {
+        const unsigned perStep = std::max(1u, (workDesc.inputs[i].amount + 99u) / 100u);
+        if(GetNumWares(i) >= perStep + 1u)
+            return;
+        for(unsigned n = 0; n < perStep && GetNumStoredAndOrdered(i) < workDesc.inputs[i].storage; ++n)
+            OrderInput(i);
+    };
+
     if(!workDesc.useOneWareEach)
     {
-        // Use only 1 ware -> Get the one with the most in store
-        unsigned numBestWare = 0;
-        for(unsigned i = 0; i < numWaresNeeded; ++i)
+        // Built-in mines: 1 ware of the input with the most wares
+        unsigned best = 0, numBest = 0;
+        for(unsigned i = 0; i < inputs_.size(); ++i)
         {
-            if(numWares[i] > numBestWare)
+            if(GetNumWares(i) > numBest)
             {
-                wareIdxToUse = i;
-                numBestWare = numWares[i];
+                best = i;
+                numBest = GetNumWares(i);
             }
         }
-        // And tell that we only consume 1
-        numWaresNeeded = 1;
+        lastConsumedWare_ = takeOne(best);
+        refill(best);
+        return;
     }
 
-    GamePlayer& owner = world->GetPlayer(player);
-    for(unsigned i = 0; i < numWaresNeeded; i++)
+    for(unsigned i = 0; i < inputs_.size(); ++i)
     {
-        RTTR_Assert(numWares[wareIdxToUse] != 0);
-        // Bestand verringern
-        --numWares[wareIdxToUse];
-        if(!lastConsumedWare_)
-            lastConsumedWare_ = workDesc.waresNeeded[wareIdxToUse];
-        // Inventur entsprechend verringern
-        owner.DecreaseInventoryWare(workDesc.waresNeeded[wareIdxToUse], 1, WareUse::Production);
-        owner.CountUsedBy(GetBuildingType(), workDesc.waresNeeded[wareIdxToUse]);
-
-        // try to get ware from warehouses
-        if(numWares[wareIdxToUse] < 2)
+        const unsigned needed = GetNumNeededForStep(i);
+        for(unsigned n = 0; n < needed; ++n)
         {
-            Ware* w = world->GetPlayer(player).OrderWare(workDesc.waresNeeded[wareIdxToUse], *this);
-            if(w)
-                RTTR_Assert(helpers::contains(orderedWares[wareIdxToUse], w));
+            const GoodType good = takeOne(i);
+            if(i == 0)
+                lastConsumedWare_ = good;
         }
-        // Set to value of next iteration. Note: It might have been not 0 for useOneWareEach == false
-        wareIdxToUse = i + 1;
+        // What was taken beyond this step counts for the next ones
+        inputs_[i].prepaid = static_cast<uint16_t>(inputs_[i].prepaid + needed * 100u - workDesc.inputs[i].amount);
+        refill(i);
     }
+}
+
+Ware* nobUsual::OrderInput(const unsigned input)
+{
+    orderingInput_ = static_cast<int>(input);
+    Ware* ware = world->GetPlayer(player).OrderWare(BLD_WORK_DESC[bldType_].inputs[input].wares, *this);
+    orderingInput_ = -1;
+    RTTR_Assert(!ware || helpers::contains(inputs_[input].ordered, ware));
+    return ware;
+}
+
+int nobUsual::FindInputFor(const GoodType good) const
+{
+    const auto& slots = BLD_WORK_DESC[bldType_].inputs;
+    for(unsigned i = 0; i < slots.size(); ++i)
+    {
+        if(helpers::contains(slots[i].wares, good) && GetNumStoredAndOrdered(i) < slots[i].storage)
+            return static_cast<int>(i);
+    }
+    return -1;
 }
 
 unsigned nobUsual::CalcDistributionPoints(const GoodType type)
@@ -631,30 +692,19 @@ unsigned nobUsual::CalcDistributionPoints(const GoodType type)
         return 10000 - numMedia * 30;
     }
 
-    const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
-    // Warentyp ermitteln
-    unsigned id;
-    for(id = 0; id < workDesc.waresNeeded.size(); ++id)
-    {
-        if(workDesc.waresNeeded[id] == type)
-            break;
-    }
-
-    // Don't need this ware
-    if(id == workDesc.waresNeeded.size())
+    // The input taking this ware (the first one with space left). None: enough, don't request more
+    const int id = FindInputFor(type);
+    if(id < 0)
         return 0;
-
-    // Got enough? -> Don't request more
-    if(numWares[id] + orderedWares[id].size() == workDesc.numSpacesPerWare)
-        return 0;
+    const unsigned stored = GetNumStoredAndOrdered(static_cast<unsigned>(id));
 
     // 10000 as base points then subtract some
     // Note: Subtracted points must be at most this.
     unsigned points = 10000;
 
     // Every ware we have or is on the way reduces rating
-    // Note: maxValue is numSpacesPerWare * 30 which is <= 60*30=1800 (< 10000 base value)
-    points -= (numWares[id] + orderedWares[id].size()) * 30;
+    // Note: maxValue is storage * 30 which is <= 255*30=7650 (< 10000 base value)
+    points -= stored * 30;
 
     RTTR_Assert(points <= 10000);
 
@@ -677,23 +727,20 @@ void nobUsual::TakeWare(Ware* ware)
         return;
     }
 
-    // Ware in die Bestellliste aufnehmen
-    const BldWorkDescription& workDesc = BLD_WORK_DESC[bldType_];
-    for(unsigned char i = 0; i < workDesc.waresNeeded.size(); ++i)
+    // Ware in die Bestellliste aufnehmen: the input ordering it, otherwise the input taking it
+    const int id = orderingInput_ >= 0 ? orderingInput_ : FindInputFor(ware->type);
+    RTTR_Assert(id >= 0);
+    if(id >= 0)
     {
-        if(ware->type == workDesc.waresNeeded[i])
-        {
-            RTTR_Assert(!helpers::contains(orderedWares[i], ware));
-            orderedWares[i].push_back(ware);
-            return;
-        }
+        RTTR_Assert(!helpers::contains(inputs_[id].ordered, ware));
+        inputs_[id].ordered.push_back(ware);
     }
 }
 
 bool nobUsual::AreThereAnyOrderedWares() const
 {
     return !libraryOrderedMedia_.empty()
-           || helpers::contains_if(orderedWares, [](const auto& wareList) { return !wareList.empty(); })
+           || helpers::contains_if(inputs_, [](const InputStock& input) { return !input.ordered.empty(); })
            || helpers::contains_if(toolSlots_, [](const ToolSlot& slot) { return slot.ordered != nullptr; });
 }
 

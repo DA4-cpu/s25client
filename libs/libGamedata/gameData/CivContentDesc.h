@@ -148,6 +148,16 @@ struct OreDesc
     explicit OreDesc(const kaguya::LuaTable& luaData);
 };
 
+/// An input of a workshop (rttr:AddWorkshop, inputs): a place for every ware matching the tag query, also mixed
+struct InputDesc
+{
+    TagQuery tags;
+    /// Wares used per work step in hundredths (100 = 1 per step, 50 = 1 every 2nd step)
+    unsigned amount = 100;
+    /// Places of the input. 0: storage of the workshop
+    unsigned storage = 0;
+};
+
 /// Simple production building of the civilization mode as read from lua (rttr:AddWorkshop):
 /// Takes input wares and produces an output ware or collects map objects (like the quarry)
 struct WorkshopDesc
@@ -162,10 +172,8 @@ struct WorkshopDesc
     /// Identifier of an existing building whose graphics are used (placeholder)
     std::string look;
     WorkerDesc worker;
-    /// Inputs, each a tag query
-    std::vector<TagQuery> inputs;
-    /// True: one ware of each input per product. False: one ware of the input with the most wares (like mines)
-    bool consumeEach = true;
+    /// Inputs. A work step needs and uses the amount of every input
+    std::vector<InputDesc> inputs;
     /// Tag query of the product
     TagQuery output;
     /// Alternative to output: List of products, each a tag query that must match exactly one ware
@@ -253,3 +261,5 @@ constexpr unsigned MAX_COST_ENTRIES = 4;
 constexpr unsigned MAX_TOTAL_COST = 31;
 /// Maximum number of entries in outputs of a workshop
 constexpr unsigned MAX_WORKSHOP_OUTPUTS = 16;
+/// Maximum number of inputs of a workshop (rows in the building window)
+constexpr unsigned MAX_WORKSHOP_INPUTS = 10;

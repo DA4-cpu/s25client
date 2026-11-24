@@ -1924,6 +1924,51 @@ Antwort des Nutzers F-1: 512 Plätze, mehr später durch eine Zahl im Code).
   verbraucht den Tag „Bucket“ (ein Werkzeug) als Eingang, BitumenProducer hat `look = "Leatherworks"` (eingebaut heißt
   es „LeatherWorks“), und keine der drei steht im Technologiebaum.
 
+## Notizen aus den Lua-Dateien, Schritt 3: Eingänge als Plätze (A4, Stand 2026-11-24)
+
+Antworten des Nutzers (24.11.): höchstens 10 Eingänge (F-6), aus einem gemischten Platz die Ware, von der am meisten dort
+liegt (F-4 b), Menge je Arbeitsschritt (F-5 a), der Verbrauch hängt nur vom Arbeitsschritt ab und nie davon, wie viele
+Waren herauskommen; Minen-Nahrung ein Platz mit 6 Plätzen.
+
+- **Lua:** `inputs = { "Wood", { tags = "Food", amount = 1, storage = 6 }, { tags = { "Bretter", "Nadelholz" } } }`.
+  Jeder Eintrag ist ein Platz für alle Waren der Tag-Abfrage, auch gemischt. Kurzform (Text oder Liste) = `amount` 1.
+  `amount` 0,01 bis 99 Waren je Arbeitsschritt, `storage` 1 bis 99 Plätze (Standard: `storage` der Werkstatt, Standard
+  6). Mehr als 10 Einträge, `amount` über `storage` und das alte Feld `consume` sind Ladefehler. Code: `InputDesc`
+  (`CivContentDesc.h`, `parseInput`), `MAX_WORKSHOP_INPUTS`.
+- **Daten:** `InputSlot` (`BuildingTypes.h`: Waren, `amount` in Hundertsteln, `storage`) in
+  `BldWorkDescription::inputs`. Eingebaute Gebäude bekommen je Ware aus `waresNeeded` einen Platz
+  (`BuildingWorkDescTable::operator[]`). `useOneWareEach = false` gibt es nur noch für die eingebauten Minen (ein
+  Schritt braucht eine Ware in irgendeinem Platz und nimmt eine aus dem vollsten), Werkstätten haben immer `true`.
+- **Verbrauch (`nobUsual`):** Je Platz die Waren je Ware (`InputStock::counts`), die bestellten Waren und das im Voraus
+  Verbrauchte (`prepaid`, Hundertstel). Ein Schritt braucht je Platz ⌈(amount − prepaid) / 100⌉ Waren (mindestens 0) und
+  beginnt erst, wenn jeder Platz sie hat. Danach `prepaid = prepaid + genommen · 100 − amount`. Beispiele: 0,5 → 1, 0, 1,
+  0 …; 1,5 → 2, 1, 2, 1 …; 2 → 2 je Schritt. Aus einem gemischten Platz wird Stück für Stück die Ware mit den meisten
+  Stücken genommen, bei Gleichstand die zuerst definierte. `lastConsumedWare_` ist die zuletzt aus dem ersten Platz
+  verbrauchte Ware (Spielstand); sie bestimmt das Produkt bei `inheritProperties` (Zu jeder Ware des ersten Platzes muss
+  es genau ein Produkt geben).
+- **Bestellung:** Wie bisher alle 210 GF eine Ware für den nächsten Platz (reihum), dazu nach dem Verbrauch: hat der
+  Platz weniger als (Waren eines Schritts + 1), werden so viele Waren bestellt, wie ein Schritt braucht (mindestens 1),
+  solange Platz ist. Bestellt wird mit `GamePlayer::OrderWare(Warenliste)`: das nächste Lager mit einer der Waren, dort
+  die erste der Liste, die es hat. Eine Ware ohne Bestellung (vom Hersteller verteilt) kommt in den ersten Platz, der sie
+  nimmt und noch Platz hat (`FindInputFor`); ebenso `CalcDistributionPoints`. Seit diesem Schritt wird nie über
+  `storage` hinaus bestellt (vorher konnte nach dem Verbrauch eine Ware zu viel kommen).
+- **KI:** `Recipe::inputs` ist eine Liste von `RecipeInput` (Waren, `amount`), `Recipe::inputWares` alle Waren. Ein
+  Platz mit einer Ware wird wie bisher ein einzelner Eingang behandelt, ein Platz mit mehreren Waren wie bisher „einer
+  davon“ (Gruppe). `EconomyPlanner::InputSlotSuffices`, Prognose: Nennverbrauch je Ware = Schritte × amount, bei
+  mehreren Waren durch ihre Zahl geteilt; stehende Gebäude verbrauchen Schritte × amount.
+- **Fenster:** eine Zeile je Platz mit bis zu 8 Feldern (vorhandene Waren nacheinander, leere Felder mit der ersten
+  Ware), darunter „Anzahl/storage“, bei `amount` ≠ 1 dazu „(0.5 je Schritt)“. Ab 4 Plätzen wird das Fenster je Platz
+  29 Pixel höher. Die eingebauten Minen behalten ihre Anzeige 3 × 2.
+- **Spielstand:** Version 33, ältere werden abgelehnt.
+- **Daten des Nutzers:** Fisch, Fleisch und Brot haben den Tag „Food“ (`rttr:SetWare`, Honig hat ihn schon).
+  CopperMine `inputs = { { tags = "Food", storage = 6 } }`; TinMine und LimeMine `inputs = { "Wood", { tags = "Food",
+  storage = 6 } }` (Holz mit `storage = 2`, laut Notiz „immer 1 Wood, aber nur eines der drei Nahrungen“); SpinningMill
+  `{ { tags = "Fibers" } }`; AdobeProducer `{ "Loam", { tags = "Fibers" } }`. Die erfüllten Notizen sind entfernt. Die
+  ObsidianWorkshop bekommt „adhesive“ noch nicht, laut Notiz erst, wenn Klebstoffe auf der Karte gesammelt werden.
+- **Prüfung:** Vor der Umstellung der Lua-Daten gab der Umbau (Plätze in `nobUsual`, KI, Fenster, mit den alten Daten)
+  in den KI-Testspielen (512, 4 KI, 3 h, Kartenzufall 5 und 9) Zeile für Zeile dieselbe Ausgabe. Tests
+  `CivInputsSuite` (Lua, Menge 0,5 / 1,5 / 2, gemischter Platz, alle Plätze nötig, Spielstand).
+
 ## Gesamtverteilung (Stand 2026-11-21)
 
 Entscheidungen des Nutzers vom 18. bis 21.11.2026 (Chats „Werkzeug-Prüfung für Gebäude“ und „Gesamtverteilung“).

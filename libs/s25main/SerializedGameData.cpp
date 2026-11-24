@@ -135,9 +135,10 @@
 /// 31: GFs the buildings of a type stood stopped per minute in the economy statistic
 /// 32: Civilization mode: 512 slots for wares (wares saved with 2 bytes), 128 slots for buildings and jobs.
 ///     Older game data cannot be loaded anymore
-static const unsigned currentGameDataVersion = 32;
-/// Oldest game data that can still be loaded (wares were saved with 1 byte before)
-static const unsigned minGameDataVersion = 32;
+/// 33: Inputs of buildings as input slots (wares per ware of the slot, wares used in advance), last consumed ware
+static const unsigned currentGameDataVersion = 33;
+/// Oldest game data that can still be loaded (inputs of buildings changed in 33, wares had 1 byte before 32)
+static const unsigned minGameDataVersion = 33;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

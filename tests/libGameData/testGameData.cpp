@@ -246,7 +246,8 @@ rttr:SetWare{ Stones = { kind = { "Wall", "Roof" } }, Wood = { name = "PineLog",
 rttr:AddWorkshop{ name = "Shop", title = "Werkstatt", description = "Desc", size = "medium",
                   cost = { Boards = 2, Stones = 1 }, look = "Sawmill",
                   worker = { title = "Arbeiter", look = "Carpenter" },
-                  inputs = { "Raw", { "Bretter", "Nadelholz" } }, consume = "any", output = "Product",
+                  inputs = { "Raw", { "Bretter", "Nadelholz" }, { tags = "RawKind", amount = 2.5, storage = 3 } },
+                  output = "Product",
                   inheritProperties = true, storage = 4, workTime = 20, waitTime = 5 }
 rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = { "Product" }, workTime = 1,
                   worker = { look = "Helper" } }
@@ -288,10 +289,14 @@ rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = 
     BOOST_TEST(shop.look == "Sawmill");
     BOOST_TEST(shop.worker.title == "Arbeiter");
     BOOST_TEST(shop.worker.look == "Carpenter");
-    BOOST_TEST_REQUIRE(shop.inputs.size() == 2u);
-    BOOST_TEST((shop.inputs[0] == TagQuery{"Raw"}));
-    BOOST_TEST((shop.inputs[1] == TagQuery{"Bretter", "Nadelholz"}));
-    BOOST_TEST(!shop.consumeEach);
+    BOOST_TEST_REQUIRE(shop.inputs.size() == 3u);
+    BOOST_TEST((shop.inputs[0].tags == TagQuery{"Raw"}));
+    BOOST_TEST(shop.inputs[0].amount == 100u);
+    BOOST_TEST(shop.inputs[0].storage == 0u);
+    BOOST_TEST((shop.inputs[1].tags == TagQuery{"Bretter", "Nadelholz"}));
+    BOOST_TEST((shop.inputs[2].tags == TagQuery{"RawKind"}));
+    BOOST_TEST(shop.inputs[2].amount == 250u);
+    BOOST_TEST(shop.inputs[2].storage == 3u);
     BOOST_TEST((shop.output == TagQuery{"Product"}));
     BOOST_TEST(shop.inheritProperties);
     BOOST_TEST(shop.storage == 4u);
@@ -299,7 +304,6 @@ rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = 
     BOOST_TEST(shop.waitTime == 5u);
     const WorkshopDesc& shop2 = desc.workshops[1];
     BOOST_TEST(shop2.inputs.empty());
-    BOOST_TEST(shop2.consumeEach);
     BOOST_TEST(shop2.worker.title == "Shop2");
     BOOST_TEST(shop2.storage == 6u);
 }
@@ -350,11 +354,11 @@ rttr:SetWare{ Boards = { kind = "B" } })");
       R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1 })");
     expectLoadFailure(
       R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1,
-                      inputs = { "A", "B", "C", "D" }, )"
+                      inputs = { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K" }, )"
       + worker + " }");
     expectLoadFailure(
       R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1,
-                      consume = "all", )"
+                      consume = "any", )"
       + worker + " }");
     expectLoadFailure(
       R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = { 1 }, workTime = 1, )" + worker

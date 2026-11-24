@@ -56,12 +56,22 @@ struct Source
 };
 
 /// How a building makes wares, read from the game data (built-in buildings and workshops from lua)
+/// One input of a recipe: any of its wares (one ware: exactly that one), `amount` per work step
+struct RecipeInput
+{
+    std::vector<GoodType> wares;
+    /// Wares per work step in hundredths (50: one every 2nd step)
+    unsigned amount = 100;
+};
+
 struct Recipe
 {
     BuildingType building;
-    /// Input wares. consumeEach: one of each per product, otherwise one of any of them
-    std::vector<GoodType> inputs;
-    bool consumeEach = true;
+    /// Inputs, one per input of the building (InputSlot). A work step needs the wares of every one of them. Built-in
+    /// mines: one input with all their foods (a step needs any of them)
+    std::vector<RecipeInput> inputs;
+    /// All wares of the inputs
+    std::vector<GoodType> inputWares;
     /// Products. Several: the building chooses one per product (e.g. the metalworks)
     std::vector<GoodType> outputs;
     /// Byproducts (byproducts.lua), how many per product and the technology each needs (-1: none)

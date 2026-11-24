@@ -32,6 +32,7 @@ namespace civai {
 
 class CivAI;
 struct Recipe;
+struct RecipeInput;
 struct Renewer;
 struct Source;
 
@@ -282,8 +283,8 @@ public:
     /// of it in its reach, each node shared with the other harvesters of the source reaching it (Nutzer, 2026-11-18,
     /// for all sources). None of them reaching its nodes: 1 unit suffices
     static constexpr unsigned UNITS_PER_HARVESTER = 28;
-    /// A clearing woodcutter with fewer than this many trees in its reach becomes one for good when a needed forester is
-    /// in the list: it gets that forester (Nutzer, 2026-11-18)
+    /// A clearing woodcutter with fewer than this many trees in its reach becomes one for good when a needed forester
+    /// is in the list: it gets that forester (Nutzer, 2026-11-18)
     static constexpr unsigned CLEARING_UPGRADE_BELOW = 7;
     static constexpr unsigned TOOLS_IN_STOCK = civ::TOOLS_IN_STOCK;
     /// Building material factor (Nutzer, 2026-11-21): in the evaluation of shortages all construction costs (open ones
@@ -560,7 +561,10 @@ private:
     /// True if the input suffices for one more consumer of the recipe: it is in surplus, or its forecast stays at 0
     /// or above with what the new building uses in one balance length (measured value per building)
     bool InputSuffices(GoodType input, const Recipe& consumer) const;
-    /// The inputs of the recipe suffice for one more building (all of them, or one of them for "any of")
+    /// The input of the recipe suffices for one more building: its ware (InputSuffices), or with several wares their
+    /// group. True if it has the given ware (the building is for it)
+    bool InputSlotSuffices(const RecipeInput& input, const Recipe& recipe, GoodType given = GoodType::Nothing) const;
+    /// All inputs of the recipe suffice for one more building (InputSlotSuffices)
     bool InputsSuffice(const Recipe& recipe, GoodType given = GoodType::Nothing) const;
     Diagnosis Diagnose(const nobUsual& building, const Recipe& recipe, std::vector<GoodType>& missingInputs) const;
     /// Measured per building of the type and minute in the last balance length (all buildings of the type, also those

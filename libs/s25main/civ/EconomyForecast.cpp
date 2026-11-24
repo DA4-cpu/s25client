@@ -55,6 +55,11 @@ namespace {
         const unsigned start = std::max(from, windowStart);
         return to > start ? to - start : 0u;
     }
+    /// What `steps` work steps take of the input (its amount per step)
+    Amount amountOf(const Amount steps, const civai::RecipeInput& input)
+    {
+        return steps * static_cast<Amount>(input.amount) / 100;
+    }
 } // namespace
 
 bool needsFields(const BuildingType bld)
@@ -144,15 +149,21 @@ Diagnosis diagnose(const GamePlayer& player, const nobUsual& building, const civ
     if(worker && worker->GetState() == nofBuildingWorker::State::WaitingForWaresOrProductionStopped)
     {
         const BldWorkDescription& workDesc = BLD_WORK_DESC[building.GetBuildingType()];
+        // Inputs without the wares of a step (built-in mines: without any ware)
         bool anyThere = false;
-        for(unsigned i = 0; i < workDesc.waresNeeded.size(); ++i)
+        for(unsigned i = 0; i < workDesc.inputs.size(); ++i)
         {
-            if(workDesc.waresNeeded[i] == GoodType::Nothing)
-                continue;
-            if(building.GetNumWares(i) == 0)
-                missingInputs.push_back(workDesc.waresNeeded[i]);
-            else
+            const unsigned have = building.GetNumWares(i);
+            if(have != 0)
                 anyThere = true;
+            if(workDesc.useOneWareEach ? have < building.GetNumNeededForStep(i) : have == 0)
+            {
+                for(const GoodType good : workDesc.inputs[i].wares)
+                {
+                    if(good != GoodType::Nothing)
+                        missingInputs.push_back(good);
+                }
+            }
         }
         const bool canWork = workDesc.useOneWareEach ? missingInputs.empty() : anyThere;
         if(!canWork && !missingInputs.empty())
@@ -370,16 +381,20 @@ Amount EconomyForecast::UsedPerBuilding(const BuildingType bld, const GoodType g
         const Amount used = player_->GetEconomyStatistics().GetUsedBy(bld, good, BALANCE_MINUTES, gf_);
         return used * AMOUNT_UNIT * gfsPerMinute / runningGFs;
     }
-    // By the work time: one of each input per work step, or one of them ("any of")
+    // By the work time: the amount of each input per work step, an input with several wares shared out among them
     const auto& recipes = graph_.GetRecipes();
     for(unsigned i = 0; i < recipes.size(); ++i)
     {
         const civai::Recipe& recipe = recipes[i];
         if(recipe.building != bld)
             continue;
-        if(!helpers::contains(recipe.inputs, good))
-            return 0;
-        return recipe.consumeEach ? nominalSteps_[i] : nominalSteps_[i] / static_cast<Amount>(recipe.inputs.size());
+        Amount used = 0;
+        for(const civai::RecipeInput& input : recipe.inputs)
+        {
+            if(helpers::contains(input.wares, good))
+                used += amountOf(nominalSteps_[i], input) / static_cast<Amount>(input.wares.size());
+        }
+        return used;
     }
     return 0;
 }
@@ -491,27 +506,32 @@ void EconomyForecast::ComputeFlows(const GamePlayer& player, const EconomySnapsh
                       coming * ProducedPerBuilding(recipe.building, recipe.byproducts[i]) * length / AMOUNT_UNIT;
                 }
             }
-            if(recipe.consumeEach)
+            for(const civai::RecipeInput& input : recipe.inputs)
             {
-                for(const GoodType good : recipe.inputs)
+                if(input.wares.size() == 1u)
+                {
+                    const GoodType good = input.wares.front();
                     consumption_[good] += coming * UsedPerBuilding(recipe.building, good) * length / AMOUNT_UNIT;
-            } else if(!recipe.inputs.empty())
-            {
-                Amount used = 0;
-                for(const GoodType good : recipe.inputs)
-                    used += UsedPerBuilding(recipe.building, good);
-                groupConsumption_.emplace_back(sorted(recipe.inputs), coming * used * length / AMOUNT_UNIT);
+                } else
+                {
+                    // Any of the wares of the input
+                    Amount used = 0;
+                    for(const GoodType good : input.wares)
+                        used += UsedPerBuilding(recipe.building, good);
+                    groupConsumption_.emplace_back(sorted(input.wares), coming * used * length / AMOUNT_UNIT);
+                }
             }
         }
         if(standing > 0)
         {
             const Amount steps = nominalSteps_[idx] * standing * length / AMOUNT_UNIT;
-            if(recipe.consumeEach)
+            for(const civai::RecipeInput& input : recipe.inputs)
             {
-                for(const GoodType good : recipe.inputs)
-                    consumption_[good] += steps;
-            } else if(!recipe.inputs.empty())
-                groupConsumption_.emplace_back(sorted(recipe.inputs), steps);
+                if(input.wares.size() == 1u)
+                    consumption_[input.wares.front()] += amountOf(steps, input);
+                else
+                    groupConsumption_.emplace_back(sorted(input.wares), amountOf(steps, input));
+            }
         }
     }
 }

@@ -31,11 +31,42 @@
 const unsigned IODAT_BOAT_ID = 219;
 const unsigned IODAT_SHIP_ID = 218;
 
+namespace {
+/// Height of a row of an input
+constexpr int INPUT_ROW_HEIGHT = 29;
+/// Inputs fitting into the window of the default size
+constexpr unsigned NUM_INPUTS_IN_DEFAULT_SIZE = 3;
+/// At most this many places of an input are shown (the text shows all)
+constexpr unsigned MAX_SHOWN_PLACES = 8;
+
+/// The window is higher for buildings with more than 3 inputs (civilization mode)
+Extent getExtent(const nobUsual& building, Extent extent)
+{
+    const auto& inputs = BLD_WORK_DESC[building.GetBuildingType()].inputs;
+    if(inputs.size() > NUM_INPUTS_IN_DEFAULT_SIZE)
+        extent.y +=
+          static_cast<unsigned>(INPUT_ROW_HEIGHT) * static_cast<unsigned>(inputs.size() - NUM_INPUTS_IN_DEFAULT_SIZE);
+    return extent;
+}
+
+/// Amount per work step for the window: "0.5", "2"
+std::string formatAmount(const unsigned hundredths)
+{
+    std::string result = std::to_string(hundredths / 100u);
+    if(hundredths % 100u != 0)
+        result += "." + std::to_string((hundredths % 100u) / 10u)
+                  + ((hundredths % 10u) ? std::to_string(hundredths % 10u) : "");
+    return result;
+}
+} // namespace
+
 iwBuilding::iwBuilding(GameWorldView& gwv, GameCommandFactory& gcFactory, nobUsual* const building, Extent extent)
-    : IngameWindow(CGI_BUILDING + MapBase::CreateGUIID(building->GetPos()), IngameWindow::posAtMouse, extent,
-                   _(BUILDING_NAMES[building->GetBuildingType()]), LOADER.GetImageN("resource", 41)),
+    : IngameWindow(CGI_BUILDING + MapBase::CreateGUIID(building->GetPos()), IngameWindow::posAtMouse,
+                   getExtent(*building, extent), _(BUILDING_NAMES[building->GetBuildingType()]),
+                   LOADER.GetImageN("resource", 41)),
       gwv(gwv), gcFactory(gcFactory), building(building)
 {
+    extent = getExtent(*building, extent);
     // Arbeitersymbol
     AddImage(0, DrawPoint(28, 39), LOADER.GetMapTexture(2298));
 
@@ -110,18 +141,19 @@ void iwBuilding::Msg_PaintAfter()
 {
     IngameWindow::Msg_PaintAfter();
     const auto& bldWorkDesk = BLD_WORK_DESC[building->GetBuildingType()];
-    if(BuildingProperties::IsMine(building->GetBuildingType()))
+    if(!bldWorkDesk.useOneWareEach)
     {
         // Bei Bergwerken sieht die Nahrungsanzeige ein wenig anders aus (3x 2)
 
         // "Schwarzer Rahmen"
         DrawRectangle(Rect(GetDrawPos() + DrawPoint(40, 60), Extent(144, 24)), 0x80000000);
         DrawPoint curPos = GetDrawPos() + DrawPoint(52, 72);
-        for(unsigned char i = 0; i < bldWorkDesk.waresNeeded.size(); ++i)
+        for(unsigned i = 0; i < bldWorkDesk.inputs.size(); ++i)
         {
-            for(unsigned char z = 0; z < bldWorkDesk.numSpacesPerWare; ++z)
+            const InputSlot& slot = bldWorkDesk.inputs[i];
+            for(unsigned z = 0; z < slot.storage; ++z)
             {
-                LOADER.GetWareTex(bldWorkDesk.waresNeeded[i])
+                LOADER.GetWareTex(slot.wares.front())
                   ->DrawFull(curPos, (z < building->GetNumWares(i) ? 0xFFFFFFFF : 0xFF404040));
                 curPos.x += 24;
             }
@@ -152,26 +184,36 @@ void iwBuilding::Msg_PaintAfter()
     } else
     {
         DrawPoint curPos = GetDrawPos() + DrawPoint(GetSize().x / 2, 60);
-        for(unsigned char i = 0; i < bldWorkDesk.waresNeeded.size(); ++i)
+        for(unsigned i = 0; i < bldWorkDesk.inputs.size(); ++i)
         {
-            const unsigned wares_count = bldWorkDesk.numSpacesPerWare;
+            const InputSlot& slot = bldWorkDesk.inputs[i];
+            const unsigned wares_count = slot.storage;
+            const unsigned numShown = std::min(wares_count, MAX_SHOWN_PLACES);
 
             // "Schwarzer Rahmen"
-            DrawPoint waresPos = curPos - DrawPoint(24 * wares_count / 2, 0);
-            DrawRectangle(Rect(waresPos, Extent(24 * wares_count, 24)), 0x80000000);
+            DrawPoint waresPos = curPos - DrawPoint(24 * numShown / 2, 0);
+            DrawRectangle(Rect(waresPos, Extent(24 * numShown, 24)), 0x80000000);
             waresPos += DrawPoint(12, 12);
 
-            for(unsigned char z = 0; z < wares_count; ++z)
+            // The wares there (several kinds: one after the other), then the empty places with the first ware
+            std::vector<GoodType> shown;
+            const std::vector<uint8_t>& counts = building->GetInputCounts(i);
+            for(unsigned w = 0; w < counts.size(); ++w)
+                shown.insert(shown.end(), counts[w], slot.wares[w]);
+            for(unsigned z = 0; z < numShown; ++z)
             {
-                LOADER.GetWareTex(bldWorkDesk.waresNeeded[i])
-                  ->DrawFull(waresPos, (z < building->GetNumWares(i) ? COLOR_WHITE : 0xFF404040));
+                const bool there = z < shown.size();
+                LOADER.GetWareTex(there ? shown[z] : slot.wares.front())
+                  ->DrawFull(waresPos, there ? COLOR_WHITE : 0xFF404040);
                 waresPos.x += 24;
             }
 
             std::stringstream text;
-            text << (unsigned)building->GetNumWares(i) << "/" << wares_count;
+            text << building->GetNumWares(i) << "/" << wares_count;
+            if(slot.amount != 100)
+                text << "  (" << formatAmount(slot.amount) << " " << _("je Schritt") << ")";
             NormalFont->Draw(curPos + DrawPoint(0, 12), text.str(), FontStyle::CENTER | FontStyle::VCENTER);
-            curPos.y += 29;
+            curPos.y += INPUT_ROW_HEIGHT;
         }
     }
     DrawTools();
@@ -219,8 +261,9 @@ void iwBuilding::DrawTools()
             const unsigned durability = info ? std::max(1u, info->durability) : 1u;
             const unsigned left = std::min<unsigned>(slot.stepsLeft, durability);
             const unsigned width = std::max(1u, boxSize.x * left / durability);
-            const unsigned color =
-              (left * 2 >= durability) ? 0xFF00C000 : (left * 5 >= durability) ? 0xFFE0C000 : 0xFFE00000;
+            const unsigned color = (left * 2 >= durability) ? 0xFF00C000 :
+                                   (left * 5 >= durability) ? 0xFFE0C000 :
+                                                              0xFFE00000;
             DrawRectangle(Rect(boxPos + DrawPoint(0, boxSize.y), Extent(boxSize.x, 3)), 0xFF000000);
             DrawRectangle(Rect(boxPos + DrawPoint(0, boxSize.y), Extent(width, 3)), color);
         }

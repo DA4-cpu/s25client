@@ -64,6 +64,9 @@ WareDesc makeWare(const std::string& name, const std::string& look = "Stones")
 WorldDescription makeDesc(unsigned plantRadius = 3)
 {
     WorldDescription desc;
+    // The food of the mine: one input with the tag "Food"
+    for(const char* food : {"Fish", "Meat", "Bread"})
+        desc.builtinWares[food] = BuiltinWareDesc{"", {"Food"}, {}};
     desc.wares.push_back(makeWare("CopperOre", "IronOre"));
     desc.wares.push_back(makeWare("PapyrusPlant", "Grain"));
     OreDesc copper;
@@ -89,8 +92,7 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     mine.look = "IronMine";
     mine.worker.title = "Bergmann";
     mine.worker.look = "Miner";
-    mine.inputs = {{"Fish"}, {"Meat"}, {"Bread"}};
-    mine.consumeEach = false;
+    mine.inputs = {InputDesc{{"Food"}}};
     mine.storage = 2;
     mine.mineResource = "Copper";
     mine.output = {"CopperOre"};
@@ -106,7 +108,7 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     plantation.look = "Farm";
     plantation.worker.title = "Papyrusbauer";
     plantation.worker.look = "Farmer";
-    plantation.inputs = {{"Water"}};
+    plantation.inputs = {InputDesc{{"Water"}}};
     plantation.plantObject = "Papyrus";
     plantation.plantRadius = plantRadius;
     plantation.output = {"PapyrusPlant"};
@@ -219,14 +221,15 @@ BOOST_AUTO_TEST_CASE(MapCodesOfObjectsAndOres)
 BOOST_AUTO_TEST_CASE(OresMinesAndPlantationsFromLua)
 {
     const std::string base = R"(
+rttr:SetWare{ Fish = { kind = { "Food" } }, Meat = { kind = { "Food" } }, Bread = { kind = { "Food" } } }
 rttr:AddWare{ name = "CopperOre", title = "Kupfererz", look = "IronOre", transport = "IronOre" }
 rttr:AddWare{ name = "PapyrusPlant", title = "Papyruspflanze", look = "Grain", transport = "Grain" }
 rttr:AddMapObject{ name = "PapyrusDeposit", title = "Papyrus", sizes = 8, look = "Granite1", growTime = 240,
     plantSize = 4 }
 rttr:AddOre{ name = "Copper", title = "Kupfer", look = "Iron", tint = 0xC07040 }
 rttr:AddWorkshop{ name = "CopperMine", title = "Kupfermine", size = "mine", cost = { Boards = 4 }, look = "IronMine",
-    worker = { title = "Bergmann", look = "Miner" }, inputs = { "Fish", "Meat", "Bread" },
-    consume = "any", mine = { resource = "Copper" }, output = "CopperOre", workTime = 28, waitTime = 29,
+    worker = { title = "Bergmann", look = "Miner" }, inputs = { { tags = "Food", storage = 6 } },
+    mine = { resource = "Copper" }, output = "CopperOre", workTime = 28, waitTime = 29,
     knowledge = { IWP = 2 } }
 rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small", cost = { Boards = 2 },
     look = "Farm", worker = { title = "Bauer", look = "Farmer" }, inputs = { "Water" },
@@ -260,7 +263,11 @@ rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small"
         BOOST_TEST(mine.IsMine());
         BOOST_TEST((mine.mineResource == COPPER));
         BOOST_TEST((mine.size == BuildingQuality::Mine));
-        BOOST_TEST(!mine.workDesc.useOneWareEach);
+        // One input for the food: fish, meat and bread, 6 places
+        BOOST_TEST_REQUIRE(mine.workDesc.inputs.size() == 1u);
+        BOOST_TEST(
+          (mine.workDesc.inputs[0].wares == std::vector<GoodType>{GoodType::Fish, GoodType::Bread, GoodType::Meat}));
+        BOOST_TEST(mine.workDesc.inputs[0].storage == 6u);
         const civ::CustomBuilding& plantation = *content.GetBuilding(PLANTATION);
         BOOST_TEST(plantation.IsPlanter());
         BOOST_TEST(plantation.HarvestsPlants());

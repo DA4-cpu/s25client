@@ -212,9 +212,9 @@ namespace {
                 const Resource resources = world.GetNode(pt).resources;
                 return resources.getType() == static_cast<ResourceType>(source.index) ? resources.getAmount() : 0u;
             }
-            case SourceKind::Fish: return world.GetNode(pt).resources.has(ResourceType::Fish) ?
-                                            world.GetNode(pt).resources.getAmount() :
-                                            0u;
+            case SourceKind::Fish:
+                return world.GetNode(pt).resources.has(ResourceType::Fish) ? world.GetNode(pt).resources.getAmount() :
+                                                                             0u;
             case SourceKind::None:
             case SourceKind::Water:
             case SourceKind::Animals:
@@ -265,7 +265,7 @@ EconomyPlanner::EconomyPlanner(AIJH::AIPlayerJH& aijh, const CivAI& civAI)
     {
         const Recipe& recipe = recipes[i];
         managed_[recipe.building] = true;
-        for(const GoodType input : recipe.inputs)
+        for(const GoodType input : recipe.inputWares)
         {
             consumers_[input].push_back(i);
             hasUse_[input] = true;
@@ -407,16 +407,12 @@ void EconomyPlanner::RegisterGroups()
         if(good != GoodType::Nothing)
             singleGroup_[good] = GetGroupIdx({good}, false);
     }
-    // What the consumers take: inputs (each one, or all of them for "any of"), construction costs, tools of a slot and
-    // of a kind, soldier equipment, the wares of the military buildings, research costs, knowledge media
+    // What the consumers take: inputs (each one with all its wares), construction costs, tools of a slot and of a
+    // kind, soldier equipment, the wares of the military buildings, research costs, knowledge media
     for(const Recipe& recipe : civAI_.GetGraph().GetRecipes())
     {
-        if(recipe.consumeEach)
-        {
-            for(const GoodType input : recipe.inputs)
-                GetGroupIdx({input}, true);
-        } else if(!recipe.inputs.empty())
-            GetGroupIdx(recipe.inputs, true);
+        for(const RecipeInput& input : recipe.inputs)
+            GetGroupIdx(input.wares, true);
     }
     for(const auto bld : helpers::enumRange<BuildingType>())
     {
@@ -922,23 +918,24 @@ double EconomyPlanner::GetMultiProductUnmet(const Recipe& recipe, const std::vec
     return std::max(0., needed - capacity) / length;
 }
 
+bool EconomyPlanner::InputSlotSuffices(const RecipeInput& input, const Recipe& recipe, const GoodType given) const
+{
+    if(helpers::contains(input.wares, given))
+        return true;
+    if(input.wares.size() == 1u)
+        return InputSuffices(input.wares.front(), recipe);
+    // Several wares: the group of all of them
+    const WareGroup* group = FindGroup(input.wares);
+    double used = 0;
+    for(const GoodType good : input.wares)
+        used += UsedPerBuilding(recipe.building, good);
+    return group && statusSuffices(group->status, used);
+}
+
 bool EconomyPlanner::InputsSuffice(const Recipe& recipe, const GoodType given) const
 {
-    if(recipe.inputs.empty())
-        return true;
-    if(recipe.consumeEach)
-    {
-        return std::all_of(recipe.inputs.begin(), recipe.inputs.end(),
-                           [&](const GoodType input) { return input == given || InputSuffices(input, recipe); });
-    }
-    // Any of the inputs: the group of all of them
-    if(helpers::contains(recipe.inputs, given))
-        return true;
-    const WareGroup* group = FindGroup(recipe.inputs);
-    double used = 0;
-    for(const GoodType input : recipe.inputs)
-        used += UsedPerBuilding(recipe.building, input);
-    return group && statusSuffices(group->status, used);
+    return std::all_of(recipe.inputs.begin(), recipe.inputs.end(),
+                       [&](const RecipeInput& input) { return InputSlotSuffices(input, recipe, given); });
 }
 
 unsigned EconomyPlanner::GetBuildingLimit() const
@@ -1084,36 +1081,39 @@ EconomyPlanner::WayCheck EconomyPlanner::CheckWay(const unsigned recipeIdx, cons
         }
         return {true, ways.front().numNew};
     };
-    for(const GoodType input : recipe.inputs)
+    for(const GoodType input : recipe.inputWares)
     {
         if(input != given && GetWareStatus(input).state == SupplyState::Surplus)
             result.usesSurplus = true;
     }
-    if(recipe.consumeEach)
+    for(const RecipeInput& input : recipe.inputs)
     {
-        for(const GoodType input : recipe.inputs)
+        if(input.wares.size() == 1u)
         {
-            const auto [possible, numNew] = inputCost(input);
+            const auto [possible, numNew] = inputCost(input.wares.front());
             if(!possible)
                 result.blocked = true;
             result.numNew += numNew;
-        }
-    } else if(!recipe.inputs.empty() && !InputsSuffice(recipe, given))
-    {
-        // Any of the inputs: the cheapest
-        unsigned best = std::numeric_limits<unsigned>::max();
-        for(const GoodType input : recipe.inputs)
+        } else if(!InputSlotSuffices(input, recipe, given))
         {
-            const auto [possible, numNew] = inputCost(input);
-            if(possible)
-                best = std::min(best, numNew);
-        }
-        if(best == std::numeric_limits<unsigned>::max())
-            result.blocked = true;
-        else
-        {
-            result.numNew += best;
-            result.missingInputs.clear();
+            // Several wares: the cheapest
+            const std::size_t numMissingBefore = result.missingInputs.size();
+            const std::string reasonBefore = inputReason;
+            unsigned best = std::numeric_limits<unsigned>::max();
+            for(const GoodType good : input.wares)
+            {
+                const auto [possible, numNew] = inputCost(good);
+                if(possible)
+                    best = std::min(best, numNew);
+            }
+            if(best == std::numeric_limits<unsigned>::max())
+                result.blocked = true;
+            else
+            {
+                result.numNew += best;
+                result.missingInputs.resize(numMissingBefore);
+                inputReason = reasonBefore;
+            }
         }
     }
     if(result.blocked)
@@ -1200,8 +1200,8 @@ const EconomyPlanner::SourceInfo& EconomyPlanner::GetSourceInfo(const MapPoint p
     const GameWorldBase& world = player_.GetGameWorld();
     info.gf = std::max(1u, currentGF_);
     info.inReach = recipe.reach > 0 ? MapProfile::CountSourceNodes(world, pt, recipe.reach, recipe.source) : 0u;
-    info.nearby = recipe.reach >= 2 ? MapProfile::CountSourceNodes(world, pt, recipe.reach / 2, recipe.source) :
-                                      info.inReach;
+    info.nearby =
+      recipe.reach >= 2 ? MapProfile::CountSourceNodes(world, pt, recipe.reach / 2, recipe.source) : info.inReach;
     info.fields = NeedsFields(bld) ? CountFieldNodes(bld, pt, placed) : 0u;
     return info;
 }
@@ -1415,14 +1415,16 @@ double EconomyPlanner::GetExpandingScore(const Order& order) const
     const Recipe* recipe = FindRecipe(order.building);
     if(!recipe || recipe->inputs.empty())
         return output;
+    // The forecast of its inputs: per input, of its group if it has several wares
     double input = 0;
-    if(recipe->consumeEach)
+    for(const RecipeInput& slot : recipe->inputs)
     {
-        for(const GoodType good : recipe->inputs)
-            input += GetWareStatus(good).forecast;
-        input /= recipe->inputs.size();
-    } else if(const WareGroup* group = FindGroup(recipe->inputs))
-        input = group->status.forecast;
+        if(slot.wares.size() == 1u)
+            input += GetWareStatus(slot.wares.front()).forecast;
+        else if(const WareGroup* group = FindGroup(slot.wares))
+            input += group->status.forecast;
+    }
+    input /= recipe->inputs.size();
     // Weak product: up. Much of its inputs: up (it uses them). Few of its inputs: down (it would take them away)
     return (output - input) / 2;
 }
@@ -1669,10 +1671,12 @@ bool EconomyPlanner::IsCauseValid(const Order& order)
             if(!parent || parent->state == OrderState::Placed)
                 return false;
             const Recipe* recipe = FindRecipe(parent->building);
-            if(!recipe || !helpers::contains(recipe->inputs, order.forWare))
+            if(!recipe || !helpers::contains(recipe->inputWares, order.forWare))
                 return false;
-            // This input does not suffice (any of: none of them suffices)
-            return recipe->consumeEach ? !InputSuffices(order.forWare, *recipe) : !InputsSuffice(*recipe);
+            // The input with this ware does not suffice (several wares: none of them suffices, their group)
+            return std::any_of(recipe->inputs.begin(), recipe->inputs.end(), [&](const RecipeInput& input) {
+                return helpers::contains(input.wares, order.forWare) && !InputSlotSuffices(input, *recipe);
+            });
         }
         case OrderCause::Territory: return IsTerritoryNeeded(order);
         case OrderCause::Soldiers: return soldiers_.state == SupplyState::Shortage;
@@ -1821,7 +1825,8 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
         if(blocked)
         {
             const Recipe* recipe = FindRecipe(blocked->building);
-            if(recipe && helpers::contains(recipe->inputs, good) && !helpers::contains(blocked->inputsMissing, good))
+            if(recipe && helpers::contains(recipe->inputWares, good)
+               && !helpers::contains(blocked->inputsMissing, good))
                 blocked->inputsMissing.push_back(good);
         } else if(!need.parent && !ways.empty())
         {
@@ -1986,10 +1991,8 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
     // Not more orders waiting than builders could build them (natural limit: more would only wait and plan their
     // construction costs). Counted over all needs: the needed orders waiting to be built (not placed, not blocked) and
     // the builders free for them. One order per need comes anyway (it shows what is missing)
-    const unsigned numWaiting =
-      static_cast<unsigned>(std::count_if(orders_.begin(), orders_.end(), [&](const Order& o) {
-          return o.kind == OrderKind::Needed && IsPlanned(o);
-      }));
+    const unsigned numWaiting = static_cast<unsigned>(std::count_if(
+      orders_.begin(), orders_.end(), [&](const Order& o) { return o.kind == OrderKind::Needed && IsPlanned(o); }));
     const unsigned builders = GetAvailableBuilders();
     const unsigned room =
       std::max(builders > numWaiting ? builders - numWaiting : 0u, (own.empty() && others.empty()) ? 1u : 0u);
@@ -2004,8 +2007,9 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
                  && o.forWare == good;
       }));
     const unsigned ofType = CountOrders(recipe.building) - std::min(replaceable, CountOrders(recipe.building));
-    const unsigned maxOwn = static_cast<unsigned>(own.size()) - ownOfType
-                            + (MAX_ORDERS_PER_TYPE > ofType - ownOfType ? MAX_ORDERS_PER_TYPE - (ofType - ownOfType) : 0u);
+    const unsigned maxOwn =
+      static_cast<unsigned>(own.size()) - ownOfType
+      + (MAX_ORDERS_PER_TYPE > ofType - ownOfType ? MAX_ORDERS_PER_TYPE - (ofType - ownOfType) : 0u);
     if(wanted > maxOwn)
     {
         wanted = maxOwn;
@@ -2013,8 +2017,8 @@ void EconomyPlanner::ResolveShortage(const GoodType good, const Need& need)
                       + buildingName(recipe.building) + ")");
     }
     // Its inputs do not suffice, or the forecast of its tools or helpers does not allow one more: one waits (orders for
-    // the inputs, makers for the tools and a warehouse for helpers come for it), more once they are there. A building of
-    // the type standing still for an input, a tool or a worker counts as the one waiting
+    // the inputs, makers for the tools and a warehouse for helpers come for it), more once they are there. A building
+    // of the type standing still for an input, a tool or a worker counts as the one waiting
     std::string cannotWork;
     if(!InputsSuffice(recipe) || !CanWorkWhenBuilt(recipe.building, &cannotWork))
     {
@@ -2286,11 +2290,11 @@ void EconomyPlanner::AddRenewalOrders()
 
 void EconomyPlanner::UpgradeClearingWoodcutters()
 {
-    // Nutzer, 2026-11-18: a clearing woodcutter with fewer than CLEARING_UPGRADE_BELOW trees in its reach becomes one for
-    // good when a needed forester is in the list, and gets that forester. The woodcutter the forester was for waits for
-    // the next one. A forester for a woodcutter without a place (it would be placed beside it): the upgraded woodcutter
-    // is that woodcutter, the order goes. Of several clearing woodcutters the nearest to the woodcutter the forester was
-    // for (without one: the nearest to a warehouse)
+    // Nutzer, 2026-11-18: a clearing woodcutter with fewer than CLEARING_UPGRADE_BELOW trees in its reach becomes one
+    // for good when a needed forester is in the list, and gets that forester. The woodcutter the forester was for waits
+    // for the next one. A forester for a woodcutter without a place (it would be placed beside it): the upgraded
+    // woodcutter is that woodcutter, the order goes. Of several clearing woodcutters the nearest to the woodcutter the
+    // forester was for (without one: the nearest to a warehouse)
     const Recipe* woodcutter = FindRecipe(BuildingType::Woodcutter);
     const Renewer* renewer = woodcutter ? FindRenewer(woodcutter->source) : nullptr;
     if(!woodcutter || woodcutter->reach == 0 || !renewer)
@@ -2329,11 +2333,12 @@ void EconomyPlanner::UpgradeClearingWoodcutters()
         if(!forester)
             continue;
         const MapPoint origin = forester->near;
-        const auto best = std::min_element(candidates.begin(), candidates.end(), [&](const MapPoint lhs, const MapPoint rhs) {
-            if(origin.isValid())
-                return world.CalcDistance(lhs, origin) < world.CalcDistance(rhs, origin);
-            return distanceToWarehouse(lhs) < distanceToWarehouse(rhs);
-        });
+        const auto best =
+          std::min_element(candidates.begin(), candidates.end(), [&](const MapPoint lhs, const MapPoint rhs) {
+              if(origin.isValid())
+                  return world.CalcDistance(lhs, origin) < world.CalcDistance(rhs, origin);
+              return distanceToWarehouse(lhs) < distanceToWarehouse(rhs);
+          });
         const MapPoint pos = *best;
         candidates.erase(best);
         aijh_.GetInterface().SetClearingWoodcutter(pos, false);
@@ -2516,22 +2521,34 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
     // Inputs (the surplus a consumer is for suffices by definition)
     if(const Recipe* recipe = FindRecipe(bld))
     {
-        // Inputs kept for an order above: this one must wait (any of: only if all of them are kept)
+        // Inputs kept for an order above: this one must wait (an input with several wares: only if all of them are
+        // kept)
         std::vector<const Order*> keptFor;
         std::vector<GoodType> keptWares;
-        for(const GoodType input : recipe->inputs)
+        for(const RecipeInput& input : recipe->inputs)
         {
-            if(input == order->usesWare)
-                continue;
-            const auto kept = keptInputs_.find(input);
-            if(kept != keptInputs_.end() && kept->second != id)
+            std::vector<const Order*> keptForHere;
+            std::vector<GoodType> keptHere;
+            for(const GoodType good : input.wares)
             {
-                keptWares.push_back(input);
-                keptFor.push_back(Find(kept->second));
+                if(good == order->usesWare)
+                    continue;
+                const auto kept = keptInputs_.find(good);
+                if(kept != keptInputs_.end() && kept->second != id)
+                {
+                    keptHere.push_back(good);
+                    keptForHere.push_back(Find(kept->second));
+                }
+            }
+            const bool blocks =
+              input.wares.size() == 1u ? !keptHere.empty() : !keptHere.empty() && keptHere.size() == input.wares.size();
+            if(blocks)
+            {
+                keptWares.insert(keptWares.end(), keptHere.begin(), keptHere.end());
+                keptFor.insert(keptFor.end(), keptForHere.begin(), keptForHere.end());
             }
         }
-        const bool blockedByKept =
-          recipe->consumeEach ? !keptWares.empty() : !keptWares.empty() && keptWares.size() == recipe->inputs.size();
+        const bool blockedByKept = !keptWares.empty();
         if(blockedByKept)
         {
             const std::string reason = wareName(keptWares.front()) + " vorbehalten für "
@@ -2563,25 +2580,33 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
             }
             return false;
         };
-        std::vector<GoodType> missing;
-        for(const GoodType input : recipe->inputs)
+        // Inputs that do not suffice. An input with several wares: its group does not suffice, then none of them does
+        // (each one alone may look enough, the building would use all of them together)
+        std::vector<GoodType> missing, missingNames;
+        std::vector<std::vector<GoodType>> missingGroups;
+        for(const RecipeInput& input : recipe->inputs)
         {
-            if(input == order->usesWare || InputSuffices(input, *recipe))
-                continue;
-            missing.push_back(input);
-        }
-        const bool suffices = InputsSuffice(*recipe, order->usesWare);
-        // Any of the inputs: the group does not suffice, then none of them does (each one alone may look enough, the
-        // building would use all of them together)
-        if(!suffices && !recipe->consumeEach)
-        {
-            missing.clear();
-            for(const GoodType input : recipe->inputs)
+            if(input.wares.size() == 1u)
             {
-                if(input != order->usesWare)
-                    missing.push_back(input);
+                const GoodType good = input.wares.front();
+                if(good == order->usesWare || InputSuffices(good, *recipe))
+                    continue;
+                missing.push_back(good);
+                missingNames.push_back(good);
+            } else if(!InputSlotSuffices(input, *recipe, order->usesWare))
+            {
+                std::vector<GoodType> wares;
+                for(const GoodType good : input.wares)
+                {
+                    if(good != order->usesWare)
+                        wares.push_back(good);
+                }
+                missing.insert(missing.end(), wares.begin(), wares.end());
+                missingNames.insert(missingNames.end(), input.wares.begin(), input.wares.end());
+                missingGroups.push_back(std::move(wares));
             }
         }
+        const bool suffices = InputsSuffice(*recipe, order->usesWare);
         if(!suffices)
         {
             for(const GoodType input : missing)
@@ -2596,8 +2621,6 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
             return;
         }
         order->inputsMissing = suffices ? std::vector<GoodType>() : missing;
-        // Any of the inputs: none of them suffices (the group)
-        const std::vector<GoodType>& missingNames = recipe->consumeEach ? missing : recipe->inputs;
         if(suffices)
         {
             // Not the reason anymore: free for the orders below
@@ -2605,29 +2628,32 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
                 it = it->second == id ? keptInputs_.erase(it) : std::next(it);
         } else
         {
-
             // Every missing input must be possible, otherwise the building cannot work: then no orders for the
             // others (no well for a brewery that gets no grain)
             std::string noWay;
-            if(recipe->consumeEach)
+            for(const RecipeInput& input : recipe->inputs)
             {
-                for(const GoodType input : missing)
+                if(input.wares.size() != 1u || !helpers::contains(missing, input.wares.front()))
+                    continue;
+                const GoodType good = input.wares.front();
+                const std::vector<WayCheck> ways = RankProducers(good, false, 0);
+                if(ways.empty() || ways.front().blocked)
                 {
-                    const std::vector<WayCheck> ways = RankProducers(input, false, 0);
-                    if(ways.empty() || ways.front().blocked)
-                    {
-                        noWay = "kein Weg zu " + wareName(input);
-                        if(!ways.empty())
-                            noWay += " (" + ways.front().reason + ")";
-                        if(!ways.empty() && ways.front().outside)
-                            AddTerritoryOrder(TerritoryNeed::Source, order->kind, 0, ways.front().outsideWare,
-                                              ways.front().outsideBuilding, ways.front().outsideSource);
-                        order = Find(id);
-                        break;
-                    }
+                    noWay = "kein Weg zu " + wareName(good);
+                    if(!ways.empty())
+                        noWay += " (" + ways.front().reason + ")";
+                    if(!ways.empty() && ways.front().outside)
+                        AddTerritoryOrder(TerritoryNeed::Source, order->kind, 0, ways.front().outsideWare,
+                                          ways.front().outsideBuilding, ways.front().outsideSource);
+                    order = Find(id);
+                    break;
                 }
-            } else if(ChooseWare(missing) == GoodType::Nothing)
-                noWay = "kein Weg zu " + wareNames(missing);
+            }
+            for(const std::vector<GoodType>& wares : missingGroups)
+            {
+                if(noWay.empty() && ChooseWare(wares) == GoodType::Nothing)
+                    noWay = "kein Weg zu " + wareNames(wares);
+            }
             if(!noWay.empty())
             {
                 // It cannot be built: it keeps none of its inputs
@@ -2653,8 +2679,15 @@ void EconomyPlanner::ProcessOrder(const unsigned id, unsigned& searchBudget)
                 order->reason = reason;
             } else
                 MoveToEnd(*order, reason, RetryCondition{});
-            const std::vector<GoodType> toResolve =
-              recipe->consumeEach ? missing : std::vector<GoodType>{ChooseWare(missing)};
+            // Every missing input with one ware, of an input with several wares the one chosen
+            std::vector<GoodType> toResolve;
+            for(const RecipeInput& input : recipe->inputs)
+            {
+                if(input.wares.size() == 1u && helpers::contains(missing, input.wares.front()))
+                    toResolve.push_back(input.wares.front());
+            }
+            for(const std::vector<GoodType>& wares : missingGroups)
+                toResolve.push_back(ChooseWare(wares));
             for(const GoodType input : toResolve)
             {
                 // Made for an order above already: a loop (the ware is needed to make itself)
@@ -2852,7 +2885,7 @@ std::string EconomyPlanner::CheckRules(const Order& order, RetryCondition& retry
     if(!toolsAndHelpers.empty())
     {
         retry = {toolsAndHelpers.rfind(HELPERS_MISSING, 0) == 0 ? RetryCondition::Kind::Helpers :
-                                                                   RetryCondition::Kind::Tool,
+                                                                  RetryCondition::Kind::Tool,
                  GetSituation()};
         return toolsAndHelpers;
     }
@@ -3158,8 +3191,7 @@ std::string EconomyPlanner::ExplainWare(const GoodType good, const unsigned dept
 {
     const WareStatus& status = GetWareStatus(good);
     std::ostringstream out;
-    out << wareName(good) << ": frei " << num(status.free) << ", Prognose "
-        << num(status.forecast);
+    out << wareName(good) << ": frei " << num(status.free) << ", Prognose " << num(status.forecast);
     const std::vector<WayCheck> ways = RankProducers(good, false, 0);
     if(ways.empty())
         return out.str() + ", kein Erzeuger";
@@ -3177,7 +3209,7 @@ std::string EconomyPlanner::ExplainWare(const GoodType good, const unsigned dept
         out << ", " << state.withoutWorker << " ohne Arbeiter";
     if(depth > 0)
     {
-        for(const GoodType input : recipe.inputs)
+        for(const GoodType input : recipe.inputWares)
         {
             if(!InputSuffices(input, recipe))
                 return out.str() + " -> " + ExplainWare(input, depth - 1);
@@ -3209,7 +3241,7 @@ std::vector<BuildingType> EconomyPlanner::GetChain(const GoodType good)
         const Recipe& recipe = recipes[ways.front().recipe];
         if(!helpers::contains(chain, recipe.building))
             chain.push_back(recipe.building);
-        for(const GoodType input : recipe.inputs)
+        for(const GoodType input : recipe.inputWares)
         {
             if(!InputSuffices(input, recipe))
                 todo.push_back(input);
@@ -3346,7 +3378,7 @@ MapPoint EconomyPlanner::GetPreferredPoint(const Order& order) const
                || other.cause == OrderCause::Soldiers))
         {
             const Recipe* recipe = FindRecipe(order.building);
-            if(recipe && helpers::contains(recipe->inputs, other.forWare))
+            if(recipe && helpers::contains(recipe->inputWares, other.forWare))
                 return other.placedAt;
         }
     }
@@ -3541,11 +3573,11 @@ std::vector<MapPoint> EconomyPlanner::GetPartners(const Recipe& recipe, const un
         if(other.building == recipe.building || helpers::contains(types, other.building))
             continue;
         const bool makesInput = std::any_of(other.outputs.begin(), other.outputs.end(), [&](const GoodType good) {
-            return helpers::contains(recipe.inputs, good);
+            return helpers::contains(recipe.inputWares, good);
         });
-        const bool usesProduct = std::any_of(other.inputs.begin(), other.inputs.end(), [&](const GoodType good) {
-            return helpers::contains(recipe.outputs, good);
-        });
+        const bool usesProduct =
+          std::any_of(other.inputWares.begin(), other.inputWares.end(),
+                      [&](const GoodType good) { return helpers::contains(recipe.outputs, good); });
         if(makesInput || usesProduct)
             types.push_back(other.building);
     }
@@ -4100,10 +4132,10 @@ std::string EconomyPlanner::GetReport() const
     out.setf(std::ios::fixed);
     out.precision(1);
     const auto writeStatus = [&out](const std::string& name, const WareStatus& status, const bool group) {
-        out << " " << name << " (Prognose " << num(status.forecast) << " = frei "
-            << num(status.free) << " + Herstellung " << status.forecastProduction << " - Verbrauch "
-            << status.forecastConsumption << "; Bestand " << status.stock << ", angefragt: offen "
-            << num(status.openDemand) << ", geplant " << num(status.planned);
+        out << " " << name << " (Prognose " << num(status.forecast) << " = frei " << num(status.free)
+            << " + Herstellung " << status.forecastProduction << " - Verbrauch " << status.forecastConsumption
+            << "; Bestand " << status.stock << ", angefragt: offen " << num(status.openDemand) << ", geplant "
+            << num(status.planned);
         if(group && status.missing > 1e-9)
             out << ", davon bekommt keine Ware " << num(status.missing);
         out << "; unterwegs zum Abnehmer " << status.inTransit;
@@ -4128,8 +4160,7 @@ std::string EconomyPlanner::GetReport() const
     for(const WareGroup& group : groups_)
     {
         if(group.demanded && group.status.state == SupplyState::Surplus)
-            out << " " << wareNames(group.wares) << " (Prognose " << num(group.status.forecast)
-                << ");";
+            out << " " << wareNames(group.wares) << " (Prognose " << num(group.status.forecast) << ");";
     }
     // Distribution of all wares (rule of the game): value 0..1000, number (forecast or number of wares), state
     if(civ::isDistributionActive(player_.GetGameWorld()))

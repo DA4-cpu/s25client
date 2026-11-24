@@ -85,7 +85,8 @@ WorkshopDesc makeWorkshop(const std::string& name, std::vector<TagQuery> inputs,
     desc.look = "Sawmill";
     desc.worker.title = name + "Worker";
     desc.worker.look = "Carpenter";
-    desc.inputs = std::move(inputs);
+    for(TagQuery& input : inputs)
+        desc.inputs.push_back(InputDesc{std::move(input)});
     desc.output = std::move(output);
     desc.workTime = 2;
     return desc;
@@ -110,7 +111,6 @@ WorldDescription makeInheritDesc()
     desc.wares.push_back(makeWare("LeafBoards", "Bretter", {"Laub"}, "Boards"));
     desc.wares.push_back(makeWare("NeedleBoards", "Bretter", {"Nadel"}, "Boards"));
     auto saw = makeWorkshop("Saw2", {{"Holz"}}, {"Bretter"});
-    saw.consumeEach = false;
     saw.inheritProperties = true;
     desc.workshops.push_back(saw);
     return desc;
@@ -370,8 +370,8 @@ BOOST_AUTO_TEST_CASE(WaresGetSlotsAndTags)
     BOOST_TEST(shopCost[1].amount == 1u);
     BOOST_TEST((shop->look == BuildingType::Sawmill));
     BOOST_TEST((shop->workDesc.job == Job::Custom0));
-    BOOST_TEST_REQUIRE(shop->workDesc.waresNeeded.size() == 1u);
-    BOOST_TEST((shop->workDesc.waresNeeded[0] == GoodType::Custom0));
+    BOOST_TEST_REQUIRE(shop->workDesc.inputs.size() == 1u);
+    BOOST_TEST((shop->workDesc.inputs[0].wares == std::vector<GoodType>{GoodType::Custom0}));
     BOOST_TEST((shop->GetProduct(std::nullopt) == getCustomGood(1)));
     BOOST_TEST((shop->GetProduct(GoodType::Custom0) == getCustomGood(1)));
     BOOST_TEST(shop->workGFs > 0u);
@@ -396,8 +396,10 @@ BOOST_AUTO_TEST_CASE(ProductsInheritProperties)
     const auto leafBoards = getCustomGood(2), needleBoards = getCustomGood(3);
     const civ::CustomBuilding* saw = content.GetBuilding(BuildingType::Custom0);
     BOOST_TEST_REQUIRE(saw);
-    BOOST_TEST(!saw->workDesc.useOneWareEach);
-    BOOST_TEST_REQUIRE(saw->workDesc.waresNeeded.size() == 2u);
+    BOOST_TEST(saw->workDesc.useOneWareEach);
+    // One input for both kinds of wood
+    BOOST_TEST_REQUIRE(saw->workDesc.inputs.size() == 1u);
+    BOOST_TEST((saw->workDesc.inputs[0].wares == std::vector<GoodType>{leafWood, needleWood}));
     BOOST_TEST((saw->GetProduct(leafWood) == leafBoards));
     BOOST_TEST((saw->GetProduct(needleWood) == needleBoards));
     // Exact name, kind and property queries
@@ -436,20 +438,13 @@ BOOST_AUTO_TEST_CASE(InvalidDefinitions)
     }
     {
         WorldDescription desc = makeSimpleDesc();
-        desc.workshops.front().inputs = {{"Unknown"}};
+        desc.workshops.front().inputs = {InputDesc{{"Unknown"}}};
         expectError(desc);
     }
     {
-        // consume each: Input must match exactly one ware
-        WorldDescription desc = makeInheritDesc();
-        desc.workshops.front().consumeEach = true;
-        expectError(desc);
-    }
-    {
-        // More than 3 different input wares
-        WorldDescription desc = makeInheritDesc();
-        desc.wares.push_back(makeWare("Wood3", "Holz", {"X"}));
-        desc.wares.push_back(makeWare("Wood4", "Holz", {"Y"}));
+        // More wares per work step than the input holds
+        WorldDescription desc = makeSimpleDesc();
+        desc.workshops.front().inputs = {InputDesc{{"Raw"}, 300, 2}};
         expectError(desc);
     }
     {
@@ -542,7 +537,7 @@ BOOST_AUTO_TEST_CASE(MapObjectsAndCollectors)
     BOOST_TEST(pit.collectObject == 0);
     BOOST_TEST(pit.collectRadius == 6u);
     BOOST_TEST((pit.product == GoodType::Custom0));
-    BOOST_TEST(pit.workDesc.waresNeeded.empty());
+    BOOST_TEST(pit.workDesc.inputs.empty());
     BOOST_TEST(!content.GetBuilding(BuildingType::Custom0)->IsLibrary());
     // Map objects are part of the signature: appending is fine, renaming not
     const auto signature = content.GetSignature();
@@ -893,7 +888,7 @@ BOOST_AUTO_TEST_CASE(KnowledgeMediaAndLibrary)
     const civ::CustomBuilding& library = *content.GetBuilding(getCustomBuilding(1));
     BOOST_TEST(library.IsLibrary());
     BOOST_TEST(library.libraryCapacity == 20u);
-    BOOST_TEST(library.workDesc.waresNeeded.empty());
+    BOOST_TEST(library.workDesc.inputs.empty());
     BOOST_TEST(!carver.IsLibrary());
     // Without lua setting: all equal
     BOOST_TEST(civ::Content(makeLibraryDesc()).GetDefaultKnowledgeDistribution()[civ::KnowledgeType::Military] == 5u);
@@ -1077,7 +1072,7 @@ BOOST_FIXTURE_TEST_CASE(SerializeCustomContent, ContentWorldFixture)
     {
         WorldDescription desc = makeSimpleDesc();
         std::swap(desc.wares[0], desc.wares[1]);
-        desc.workshops.front().inputs = {{"Raw"}};
+        desc.workshops.front().inputs = {InputDesc{{"Raw"}}};
         world.SetTechTree(std::make_unique<civ::TechTree>(desc));
         em.Clear();
         world.Unload();

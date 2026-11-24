@@ -108,7 +108,7 @@ bool nofCustomPlanter::CanPlantAt(const GameWorldBase& world, const MapPoint pt,
 
 bool nofCustomPlanter::HasWaresToPlant() const
 {
-    return GetBuildingDesc().workDesc.waresNeeded.empty() || workplace->WaresAvailable();
+    return GetBuildingDesc().workDesc.inputs.empty() || workplace->WaresAvailable();
 }
 
 bool nofCustomPlanter::AreWaresAvailable() const
@@ -139,7 +139,7 @@ nofFarmhand::PointQuality nofCustomPlanter::GetPointQuality(const MapPoint pt, c
 void nofCustomPlanter::WalkingStarted()
 {
     harvest_ = world->GetSpecObj<noDeposit>(dest) != nullptr;
-    if(!harvest_ && !GetBuildingDesc().workDesc.waresNeeded.empty())
+    if(!harvest_ && !GetBuildingDesc().workDesc.inputs.empty())
         workplace->ConsumeWares();
 }
 

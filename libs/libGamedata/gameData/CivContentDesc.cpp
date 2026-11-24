@@ -232,6 +232,44 @@ WareDesc::WareDesc(const kaguya::LuaTable& luaTable)
     luaData.checkUnused();
 }
 
+namespace {
+/// An entry of inputs: a tag query ("Bones", { "Bretter", "Nadelholz" }) or { tags = ..., amount = 0.5, storage = 6 }
+InputDesc parseInput(const kaguya::LuaRef& value, const std::string& context)
+{
+    InputDesc result;
+    if(value.type() != kaguya::LuaRef::TYPE_TABLE)
+    {
+        result.tags = parseTagQuery(value, context);
+        return result;
+    }
+    const auto table = value.get<kaguya::LuaTable>();
+    const kaguya::LuaRef tagsRef = table["tags"];
+    if(tagsRef.isNilref())
+    {
+        result.tags = parseTagQuery(value, context);
+        return result;
+    }
+    CheckedLuaTable data(table);
+    result.tags = parseTagQuery(*data.getOptional<kaguya::LuaRef>("tags"), context);
+    if(const auto amount = data.getOptional<double>("amount"))
+    {
+        if(!(*amount > 0) || *amount > 99)
+            throw GameDataError(context + ": amount must be above 0 and at most 99 (wares per work step)");
+        result.amount = static_cast<unsigned>(std::lround(*amount * 100));
+        if(result.amount == 0)
+            throw GameDataError(context + ": amount must be at least 0.01");
+    }
+    if(const auto storage = data.getOptional<unsigned>("storage"))
+    {
+        if(*storage == 0 || *storage > 99)
+            throw GameDataError(context + ": storage of an input must be in [1, 99]");
+        result.storage = *storage;
+    }
+    data.checkUnused();
+    return result;
+}
+} // namespace
+
 WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
 {
     CheckedLuaTable luaData(luaTable);
@@ -286,14 +324,19 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     if(const auto inputTable = luaData.getOptional<kaguya::LuaTable>("inputs"))
     {
         for(const kaguya::LuaRef& entry : inputTable->values())
-            inputs.push_back(parseTagQuery(entry, context + ", inputs"));
+            inputs.push_back(parseInput(entry, context + ", inputs"));
     }
-    if(inputs.size() > 3)
-        throw GameDataError(context + ": at most 3 inputs are possible");
-    const auto consume = luaData.getOrDefault("consume", std::string("each"));
-    if(consume != "each" && consume != "any")
-        throw GameDataError(context + ": consume must be \"each\" or \"any\"");
-    consumeEach = consume == "each";
+    if(inputs.size() > MAX_WORKSHOP_INPUTS)
+    {
+        throw GameDataError(context + ": at most " + std::to_string(MAX_WORKSHOP_INPUTS) + " inputs are possible");
+    }
+    if(luaData.getOptional<kaguya::LuaRef>("consume"))
+    {
+        throw GameDataError(
+          context
+          + ": consume does not exist anymore. An input taking any of several wares is one entry with "
+            "their common tag, e.g. inputs = { { tags = \"Food\" } }");
+    }
 
     if(auto libraryTable = luaData.getOptional<kaguya::LuaTable>("library"))
     {
@@ -448,7 +491,6 @@ OreDesc::OreDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context + ": tint must be a color like 0xB07040");
     luaData.checkUnused();
 }
-
 
 ByproductDesc::ByproductDesc(const kaguya::LuaTable& luaTable)
 {

@@ -76,7 +76,7 @@ WorldDescription makeDesc(bool lockPit = false)
     pit.output = {"Loam"};
     desc.workshops.push_back(pit);
     WorkshopDesc kiln = makeWorkshop("Kiln");
-    kiln.inputs = {{"Loam"}};
+    kiln.inputs = {InputDesc{{"Loam"}}};
     kiln.output = {"Clay"};
     desc.workshops.push_back(kiln);
     if(lockPit)
@@ -147,7 +147,7 @@ BOOST_FIXTURE_TEST_CASE(GraphFromGameData, CivAIFixture)
     // Built-in buildings
     const civai::Recipe* sawmill = findRecipe(BuildingType::Sawmill);
     BOOST_TEST_REQUIRE(sawmill);
-    BOOST_TEST((sawmill->inputs == std::vector<GoodType>{GoodType::Wood}));
+    BOOST_TEST((sawmill->inputWares == std::vector<GoodType>{GoodType::Wood}));
     BOOST_TEST((sawmill->outputs == std::vector<GoodType>{GoodType::Boards}));
     BOOST_TEST((sawmill->source.kind == civai::SourceKind::None));
     BOOST_TEST(sawmill->nominalStepsPerMinute > 0.);
@@ -177,7 +177,7 @@ BOOST_FIXTURE_TEST_CASE(GraphFromGameData, CivAIFixture)
     BOOST_TEST((pit->outputs == std::vector<GoodType>{LOAM}));
     const civai::Recipe* kiln = findRecipe(getCustomBuilding(1));
     BOOST_TEST_REQUIRE(kiln);
-    BOOST_TEST((kiln->inputs == std::vector<GoodType>{LOAM}));
+    BOOST_TEST((kiln->inputWares == std::vector<GoodType>{LOAM}));
     BOOST_TEST(ai->GetGraph().GetSourceName(pit->source) == "LoamDepositTitle");
 }
 

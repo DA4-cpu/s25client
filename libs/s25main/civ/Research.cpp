@@ -115,8 +115,11 @@ void startGame(GameWorld& world)
         {
             const BuildingType bld = getCustomBuilding(bldIdx);
             const CustomBuilding& building = *content.GetBuilding(bld);
-            for(const GoodType input : building.workDesc.waresNeeded)
-                player.AddWareClient(input, bld);
+            for(const InputSlot& input : building.workDesc.inputs)
+            {
+                for(const GoodType good : input.wares)
+                    player.AddWareClient(good, bld);
+            }
             if(building.IsLibrary())
             {
                 for(const GoodType medium : content.GetKnowledgeMedia())

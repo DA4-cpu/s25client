@@ -51,17 +51,6 @@ namespace {
         return lhs == rhs;
     }
 
-    WaresNeeded makeWaresNeeded(const std::vector<GoodType>& goods)
-    {
-        switch(goods.size())
-        {
-            case 0: return WaresNeeded();
-            case 1: return WaresNeeded(goods[0]);
-            case 2: return WaresNeeded(goods[0], goods[1]);
-            case 3: return WaresNeeded(goods[0], goods[1], goods[2]);
-            default: throw GameDataError("Too many input wares");
-        }
-    }
 } // namespace
 
 GoodType CustomBuilding::GetProduct(std::optional<GoodType> consumedInput) const
@@ -325,28 +314,22 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.mineResource = *ore;
         }
 
-        // Inputs
-        std::vector<GoodType> inputWares;
-        for(const TagQuery& input : wsDesc.inputs)
+        // Inputs: a place for all wares of the tag query each
+        for(const InputDesc& input : wsDesc.inputs)
         {
-            const std::vector<GoodType> matches = FindWares(input);
-            if(matches.empty())
-                throw GameDataError(context + ": input " + joinTags(input) + " matches no ware");
-            if(wsDesc.consumeEach && matches.size() != 1u)
+            InputSlot slot;
+            slot.wares = FindWares(input.tags);
+            if(slot.wares.empty())
+                throw GameDataError(context + ": input " + joinTags(input.tags) + " matches no ware");
+            slot.amount = static_cast<uint16_t>(input.amount);
+            slot.storage = static_cast<uint8_t>(input.storage != 0 ? input.storage : wsDesc.storage);
+            if(slot.amount > slot.storage * 100u)
             {
-                throw GameDataError(context + ": input " + joinTags(input) + " matches "
-                                    + std::to_string(matches.size())
-                                    + " wares. With consume = \"each\" every input must match exactly one ware "
-                                      "(use consume = \"any\" for alternatives)");
+                throw GameDataError(context + ": input " + joinTags(input.tags)
+                                    + " needs more wares per work step (amount) than it holds (storage)");
             }
-            for(const GoodType good : matches)
-            {
-                if(!helpers::contains(inputWares, good))
-                    inputWares.push_back(good);
-            }
+            bld.workDesc.inputs.push_back(std::move(slot));
         }
-        if(inputWares.size() > 3u)
-            throw GameDataError(context + ": the inputs match more than 3 different wares");
 
         // Output: Either all wares matching output or one ware per entry of outputs
         const bool hasOutput = !wsDesc.output.empty() || !wsDesc.outputs.empty();
@@ -386,9 +369,10 @@ Content::Content(const WorldDescription& desc) : Content()
             throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
         if(wsDesc.inheritProperties)
         {
-            if(inputWares.empty())
+            // The ware used from the first input decides the product
+            if(bld.workDesc.inputs.empty())
                 throw GameDataError(context + ": inheritProperties requires inputs");
-            for(const GoodType input : inputWares)
+            for(const GoodType input : bld.workDesc.inputs.front().wares)
             {
                 std::vector<GoodType> products;
                 for(const GoodType candidate : outputMatches)
@@ -463,9 +447,7 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.workDesc.producedWare = std::nullopt;
         else
             bld.workDesc.producedWare = bld.GetProduct(std::nullopt);
-        bld.workDesc.waresNeeded = makeWaresNeeded(inputWares);
-        bld.workDesc.numSpacesPerWare = static_cast<uint8_t>(wsDesc.storage);
-        bld.workDesc.useOneWareEach = wsDesc.consumeEach;
+        bld.workDesc.useOneWareEach = true;
         outputRatios_[getCustomBuilding(i)] = static_cast<uint16_t>(wsDesc.outputRatio);
         bld.workGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.workTime)));
         bld.waitGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.waitTime)));

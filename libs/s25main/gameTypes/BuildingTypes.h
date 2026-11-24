@@ -55,6 +55,18 @@ public:
     constexpr const GoodType* end() const { return elems_ + size_; }
 };
 
+/// One input of a building: a place for wares. Built-in buildings have one per ware they need, workshops of the
+/// civilization mode one per entry of their inputs (a tag query, any matching ware can be delivered, also mixed)
+struct InputSlot
+{
+    /// Wares that can be delivered to it, never empty
+    std::vector<GoodType> wares;
+    /// Wares used per work step in hundredths: 100 = 1 per step, 50 = 1 every 2nd step, 300 = 3 per step
+    uint16_t amount = 100;
+    /// How many wares it holds (in the building and on their way)
+    uint8_t storage = 6;
+};
+
 /// Describes the work the building does
 struct BldWorkDescription
 {
@@ -64,14 +76,16 @@ struct BldWorkDescription
     boost_variant2<GoodType, Job, std::nullopt_t> producedWare = std::nullopt;
     // Required for use in aggregate initialization
     // NOLINTBEGIN(readability-redundant-member-init)
-    /// Wares the building needs, if any
+    /// Built-in buildings: wares the building needs, if any (`inputs` is made from them)
     WaresNeeded waresNeeded = {};
     // NOLINTEND(readability-redundant-member-init)
-    /// How many wares of each type can be stored
+    /// Built-in buildings: how many wares of each type can be stored
     uint8_t numSpacesPerWare = 6;
-    /// True if one of each waresNeeded is used per production cycle
-    /// False if the ware type is used, that the building has the most of
+    /// True: a work step needs and uses the wares of every input (InputSlot::amount)
+    /// False (built-in mines): a work step needs a ware in any input and uses one of the input with the most wares
     bool useOneWareEach = true;
+    /// Inputs of the building (BLD_WORK_DESC fills them for built-in buildings from waresNeeded)
+    std::vector<InputSlot> inputs = {};
 };
 
 /// Smoke definition for buildings

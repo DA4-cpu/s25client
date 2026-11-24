@@ -363,8 +363,18 @@ BuildingQuality BuildingSizeTable::operator[](BuildingType bld) const
 const BldWorkDescription& BuildingWorkDescTable::operator[](BuildingType bld) const
 {
     static const BldWorkDescription noWork{};
+    // Built-in buildings: one input per ware they need
+    static const std::array<BldWorkDescription, NUM_BUILTIN_BUILDINGS> builtin = [] {
+        std::array<BldWorkDescription, NUM_BUILTIN_BUILDINGS> result = BUILTIN_BLD_WORK_DESC;
+        for(BldWorkDescription& desc : result)
+        {
+            for(const GoodType good : desc.waresNeeded)
+                desc.inputs.push_back(InputSlot{{good}, 100, desc.numSpacesPerWare});
+        }
+        return result;
+    }();
     if(!isCustomBuilding(bld))
-        return BUILTIN_BLD_WORK_DESC[static_cast<unsigned>(bld)];
+        return builtin[static_cast<unsigned>(bld)];
     const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
     return custom ? custom->workDesc : noWork;
 }

@@ -21,6 +21,24 @@
 namespace civai {
 
 namespace {
+    /// The inputs of a building for the AI: one per input slot. Built-in mines (any of their inputs): one with all
+    std::vector<RecipeInput> makeRecipeInputs(const BldWorkDescription& workDesc)
+    {
+        std::vector<RecipeInput> result;
+        if(!workDesc.useOneWareEach)
+        {
+            RecipeInput anyOf;
+            for(const InputSlot& slot : workDesc.inputs)
+                anyOf.wares.insert(anyOf.wares.end(), slot.wares.begin(), slot.wares.end());
+            if(!anyOf.wares.empty())
+                result.push_back(std::move(anyOf));
+            return result;
+        }
+        for(const InputSlot& slot : workDesc.inputs)
+            result.push_back(RecipeInput{slot.wares, slot.amount});
+        return result;
+    }
+
     /// What the built-in buildings take from the map. These buildings have their own figures in the code, so this is
     /// the only place where the AI knows them by name
     Source getBuiltinSource(const BuildingType bld)
@@ -105,8 +123,7 @@ void EconomyGraph::AddBuiltinRecipes(const GameWorldBase& world)
             continue;
         Recipe recipe;
         recipe.building = bld;
-        recipe.inputs.assign(workDesc.waresNeeded.begin(), workDesc.waresNeeded.end());
-        recipe.consumeEach = workDesc.useOneWareEach;
+        recipe.inputs = makeRecipeInputs(workDesc);
         recipe.outputs = getBuiltinOutputs(bld);
         recipe.source = getBuiltinSource(bld);
         const JobConst jobConst = JOB_CONSTS[*workDesc.job];
@@ -126,8 +143,7 @@ void EconomyGraph::AddCustomRecipes(const GameWorldBase& world)
             continue;
         Recipe recipe;
         recipe.building = bld;
-        recipe.inputs.assign(building.workDesc.waresNeeded.begin(), building.workDesc.waresNeeded.end());
-        recipe.consumeEach = building.workDesc.useOneWareEach;
+        recipe.inputs = makeRecipeInputs(building.workDesc);
         if(!building.productChoices.empty())
             recipe.outputs = building.productChoices;
         else if(!building.productByInput.empty())
@@ -168,7 +184,17 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
     // GoodType::Nothing is no ware (some buildings use it for "no product")
     const auto isNothing = [](const GoodType good) { return good == GoodType::Nothing; };
     helpers::erase_if(recipe.outputs, isNothing);
-    helpers::erase_if(recipe.inputs, isNothing);
+    for(RecipeInput& input : recipe.inputs)
+        helpers::erase_if(input.wares, isNothing);
+    helpers::erase_if(recipe.inputs, [](const RecipeInput& input) { return input.wares.empty(); });
+    for(const RecipeInput& input : recipe.inputs)
+    {
+        for(const GoodType good : input.wares)
+        {
+            if(!helpers::contains(recipe.inputWares, good))
+                recipe.inputWares.push_back(good);
+        }
+    }
     if(recipe.outputs.empty() && recipe.byproducts.empty())
         return; // Makes no wares (forester, donkey breeder ...)
     recipe.requiredTools = GetWorkTools(world.GetTechTree().GetContent(), recipe.building);

@@ -55,13 +55,10 @@ namespace {
                     continue;
                 if(sources.GetAmount(recipe.source) == 0)
                     continue;
-                if(recipe.consumeEach)
-                {
-                    if(!std::all_of(recipe.inputs.begin(), recipe.inputs.end(),
-                                    [&](const GoodType good) { return reachable[good]; }))
-                        continue;
-                } else if(!recipe.inputs.empty()
-                          && !helpers::contains_if(recipe.inputs, [&](const GoodType good) { return reachable[good]; }))
+                // Every input: any of its wares
+                if(!std::all_of(recipe.inputs.begin(), recipe.inputs.end(), [&](const RecipeInput& input) {
+                       return helpers::contains_if(input.wares, [&](const GoodType good) { return reachable[good]; });
+                   }))
                     continue;
                 if(!std::all_of(BUILDING_COSTS[recipe.building].begin(), BUILDING_COSTS[recipe.building].end(),
                                 [&](const CostEntry& entry) { return inStockOrReachable(entry.wares); }))
@@ -93,7 +90,10 @@ namespace {
         return reachable;
     }
 
-    std::string wareName(const GoodType good) { return WARE_NAMES[good]; }
+    std::string wareName(const GoodType good)
+    {
+        return WARE_NAMES[good];
+    }
 } // namespace
 
 helpers::EnumArray<WareAnalysis, GoodType> analyzeEconomy(const GameWorldBase& world, const unsigned playerId,
@@ -132,7 +132,7 @@ helpers::EnumArray<WareAnalysis, GoodType> analyzeEconomy(const GameWorldBase& w
                     reason = "fehlt " + graph.GetSourceName(recipe.source);
                 else
                 {
-                    for(const GoodType input : recipe.inputs)
+                    for(const GoodType input : recipe.inputWares)
                     {
                         if(!afterResearch[input])
                         {

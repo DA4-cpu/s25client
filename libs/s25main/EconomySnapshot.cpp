@@ -97,19 +97,21 @@ void addUsualBuilding(EconomySnapshot& snapshot, const nobUsual& building)
     const BldWorkDescription& workDesc = BLD_WORK_DESC[bld];
     if(!stopped && !building.IsLibrary())
     {
+        // Built-in mines (any of their inputs): one demand for all of them
         std::vector<GoodType> anyOf;
         unsigned anyOfMissing = 0;
-        for(unsigned i = 0; i < workDesc.waresNeeded.size(); ++i)
+        for(unsigned i = 0; i < workDesc.inputs.size(); ++i)
         {
+            const InputSlot& slot = workDesc.inputs[i];
             const unsigned have = building.GetNumWares(i) + building.GetNumOrderedWares(i);
-            const unsigned missing = workDesc.numSpacesPerWare > have ? workDesc.numSpacesPerWare - have : 0u;
+            const unsigned missing = slot.storage > have ? slot.storage - have : 0u;
             if(missing == 0)
                 continue;
             if(workDesc.useOneWareEach)
-                addDemand(snapshot, {workDesc.waresNeeded[i]}, missing, WareUse::Production);
+                addDemand(snapshot, slot.wares, missing, WareUse::Production);
             else
             {
-                anyOf.push_back(workDesc.waresNeeded[i]);
+                anyOf.insert(anyOf.end(), slot.wares.begin(), slot.wares.end());
                 anyOfMissing = std::max(anyOfMissing, missing);
             }
         }
@@ -142,12 +144,16 @@ void addUsualBuilding(EconomySnapshot& snapshot, const nobUsual& building)
         // Waiting for wares: which ones are missing
         std::vector<GoodType> missing;
         bool anyThere = false;
-        for(unsigned i = 0; i < workDesc.waresNeeded.size(); ++i)
+        for(unsigned i = 0; i < workDesc.inputs.size(); ++i)
         {
-            if(building.GetNumWares(i) == 0)
-                missing.push_back(workDesc.waresNeeded[i]);
-            else
+            const unsigned have = building.GetNumWares(i);
+            if(have != 0)
                 anyThere = true;
+            if(workDesc.useOneWareEach ? have < building.GetNumNeededForStep(i) : have == 0)
+            {
+                const auto& wares = workDesc.inputs[i].wares;
+                missing.insert(missing.end(), wares.begin(), wares.end());
+            }
         }
         const bool canWork = workDesc.useOneWareEach ? missing.empty() : anyThere;
         if(!canWork && !missing.empty())
