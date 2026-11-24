@@ -197,7 +197,12 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
     }
     if(recipe.outputs.empty() && recipe.byproducts.empty())
         return; // Makes no wares (forester, donkey breeder ...)
-    recipe.requiredTools = GetWorkTools(world.GetTechTree().GetContent(), recipe.building);
+    const civ::Content& content = world.GetTechTree().GetContent();
+    recipe.outputRatio = content.GetOutputRatio(recipe.building);
+    const civ::CustomBuilding* custom = content.GetBuilding(recipe.building);
+    for(const GoodType good : recipe.outputs)
+        recipe.outputSteps.push_back(custom ? custom->GetProductSteps(good) : 100u);
+    recipe.requiredTools = GetWorkTools(content, recipe.building);
     recipe.lockedAtStart = world.GetTechTree().IsLockedAtStart(recipe.building);
     recipe.reach = getReach(recipe.source, job);
     const double gfsPerMinute = static_cast<double>(duration_to_gfs(std::chrono::minutes(1)));

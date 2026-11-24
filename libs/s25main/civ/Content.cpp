@@ -68,6 +68,66 @@ GoodType CustomBuilding::GetProduct(std::optional<GoodType> consumedInput) const
     return productByInput.front().second;
 }
 
+unsigned CustomBuilding::GetProductSteps(const GoodType good) const
+{
+    for(const auto& entry : productSteps)
+    {
+        if(entry.first == good)
+            return entry.second;
+    }
+    return 100;
+}
+
+std::vector<GoodType> CustomBuilding::GetAllProducts() const
+{
+    if(!productChoices.empty())
+        return productChoices;
+    std::vector<GoodType> result;
+    for(const auto& entry : productByInput)
+    {
+        if(!helpers::contains(result, entry.second))
+            result.push_back(entry.second);
+    }
+    if(result.empty() && product != GoodType::Nothing)
+        result.push_back(product);
+    return result;
+}
+
+int ToolInfo::GetOutputBonus(const helpers::OptionalEnum<GoodType> product) const
+{
+    int result = outputRatio;
+    if(product)
+    {
+        for(const TagBonus& entry : outputRatioByTag)
+        {
+            if(std::binary_search(entry.wares.begin(), entry.wares.end(), *product))
+                result += entry.bonus;
+        }
+    }
+    return result;
+}
+
+int ToolInfo::GetInputBonus(const std::vector<GoodType>& inputWares) const
+{
+    int result = inputRatio;
+    for(const TagBonus& entry : inputRatioByTag)
+    {
+        if(!inputWares.empty() && std::all_of(inputWares.begin(), inputWares.end(), [&](const GoodType good) {
+               return std::binary_search(entry.wares.begin(), entry.wares.end(), good);
+           }))
+            result += entry.bonus;
+    }
+    return result;
+}
+
+int ToolInfo::GetBestOutputBonus() const
+{
+    int best = 0;
+    for(const TagBonus& entry : outputRatioByTag)
+        best = std::max(best, entry.bonus);
+    return outputRatio + best;
+}
+
 namespace {
     /// Jobs without a building of their own which are still recruited with their tool in the tool reform
     constexpr std::array<Job, 4> TOOL_RECRUITED_JOBS = {Job::Builder, Job::Planer, Job::Geologist, Job::Scout};
@@ -338,8 +398,9 @@ Content::Content(const WorldDescription& desc) : Content()
         if(!wsDesc.outputs.empty())
         {
             outputText = "outputs";
-            for(const TagQuery& query : wsDesc.outputs)
+            for(unsigned k = 0; k < wsDesc.outputs.size(); ++k)
             {
+                const TagQuery& query = wsDesc.outputs[k];
                 const std::vector<GoodType> matches = FindWares(query);
                 if(matches.size() != 1u)
                 {
@@ -352,6 +413,9 @@ Content::Content(const WorldDescription& desc) : Content()
                                         + "' is in outputs twice");
                 }
                 outputMatches.push_back(matches.front());
+                const unsigned steps = k < wsDesc.outputSteps.size() ? wsDesc.outputSteps[k] : 100u;
+                if(steps != 100u)
+                    bld.productSteps.emplace_back(matches.front(), steps);
             }
         } else if(!wsDesc.output.empty())
         {
@@ -448,6 +512,13 @@ Content::Content(const WorldDescription& desc) : Content()
         else
             bld.workDesc.producedWare = bld.GetProduct(std::nullopt);
         bld.workDesc.useOneWareEach = true;
+        const std::vector<GoodType> allProducts = bld.GetAllProducts();
+        if(!allProducts.empty())
+        {
+            bld.minProductSteps = bld.GetProductSteps(allProducts.front());
+            for(const GoodType good : allProducts)
+                bld.minProductSteps = std::min(bld.minProductSteps, bld.GetProductSteps(good));
+        }
         outputRatios_[getCustomBuilding(i)] = static_cast<uint16_t>(wsDesc.outputRatio);
         bld.workGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.workTime)));
         bld.waitGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.waitTime)));
@@ -545,6 +616,24 @@ Content::Content(const WorldDescription& desc) : Content()
         tool.durability = toolDesc.durability;
         tool.speed = toolDesc.speed;
         tool.outputRatio = toolDesc.outputRatio;
+        tool.inputRatio = toolDesc.inputRatio;
+        const auto resolveTagBonuses = [&](const std::vector<std::pair<std::string, int>>& byTag,
+                                           const std::string& field) {
+            std::vector<ToolInfo::TagBonus> result;
+            for(const auto& entry : byTag)
+            {
+                ToolInfo::TagBonus bonus;
+                bonus.wares = FindWares(TagQuery{entry.first});
+                if(bonus.wares.empty())
+                    throw GameDataError(context + ", " + field + ": no ware has the tag '" + entry.first + "'");
+                std::sort(bonus.wares.begin(), bonus.wares.end());
+                bonus.bonus = entry.second;
+                result.push_back(std::move(bonus));
+            }
+            return result;
+        };
+        tool.outputRatioByTag = resolveTagBonuses(toolDesc.outputRatioByTag, "outputRatio");
+        tool.inputRatioByTag = resolveTagBonuses(toolDesc.inputRatioByTag, "inputRatio");
         tools_[*good] = tool;
     }
     const auto resolveTools = [this](const BuildingToolsDesc& toolsDesc, const std::string& context) {

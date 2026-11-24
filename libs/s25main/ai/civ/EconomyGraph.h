@@ -74,6 +74,10 @@ struct Recipe
     std::vector<GoodType> inputWares;
     /// Products. Several: the building chooses one per product (e.g. the metalworks)
     std::vector<GoodType> outputs;
+    /// Work steps each product costs in hundredths (same order as outputs, 100 = 1 step)
+    std::vector<unsigned> outputSteps;
+    /// Output ratio of the building without tools in hundredths (work steps saved per work step)
+    unsigned outputRatio = 100;
     /// Byproducts (byproducts.lua), how many per product and the technology each needs (-1: none)
     std::vector<GoodType> byproducts;
     std::vector<unsigned> byproductAmounts;

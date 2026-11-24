@@ -18,16 +18,13 @@ struct CustomBuilding;
 /// Works inside the building: consumes the input wares and produces the ware of the workshop definition.
 class nofCustomWorker : public nofWorkman
 {
-    /// Input ware consumed for the current product (decides the product if properties are passed on)
-    helpers::OptionalEnum<GoodType> consumedInput_;
-    /// Several products (distribution of all wares): product chosen when starting to work
-    helpers::OptionalEnum<GoodType> nextProduct_;
-
     void DrawWorking(DrawPoint drawPt) override;
     unsigned short GetCarryID() const override;
+    /// The product being worked on (nobUsual::GetChosenProduct)
     helpers::OptionalEnum<GoodType> ProduceWare() override;
-    /// Civilization mode, output ratio above 1: each product is chosen on its own, a mine digs one more unit
-    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
+    /// The saved work steps of the building pay for the products: the product being worked on, then further products
+    /// while they suffice (the next product is chosen right away if they suffice for the cheapest product)
+    std::vector<GoodType> TakeProducts(GoodType firstWare) override;
     bool StartWorking() override;
     /// A librarian never "works": the library only stores media. A miner needs the ore in range, too
     bool AreWaresAvailable() const override;
@@ -35,6 +32,9 @@ class nofCustomWorker : public nofWorkman
     ResourceType GetMineResource() const;
     /// Definition of the workshop or nullptr
     const civ::CustomBuilding* GetBuildingDesc() const;
+    /// Next product to work on: by the distribution of all wares, by knowledge type or the one product (by the input
+    /// consumed last with inheritProperties). Only products the tools of the work step let yield a ware
+    GoodType ChooseProduct(const civ::CustomBuilding& building);
     /// outputChoice = "knowledge": Product weighted by the regulator "Wissen" of the owner
     GoodType ChooseKnowledgeProduct(const civ::CustomBuilding& building) const;
 

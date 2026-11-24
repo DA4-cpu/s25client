@@ -162,7 +162,8 @@ namespace {
         const civ::ToolInfo* info = civ::getActiveContent().GetTool(good);
         if(!info)
             return 0;
-        return (info->speed + info->outputRatio) * 1000u + std::min(info->durability, 999u);
+        const int bonus = std::max(0, static_cast<int>(info->speed) + info->GetBestOutputBonus());
+        return static_cast<unsigned>(bonus) * 1000u + std::min(info->durability, 999u);
     }
 
     std::vector<GoodType> sorted(std::vector<GoodType> wares)
@@ -222,12 +223,6 @@ namespace {
             case SourceKind::Plantable: return 0;
         }
         return 0;
-    }
-
-    /// Wares per minute one producer of the recipe makes of the ware by the work times of the game data
-    double nominalOutput(const Recipe& recipe)
-    {
-        return recipe.nominalStepsPerMinute / std::max<size_t>(1u, recipe.outputs.size());
     }
 
     const char* causeName(const OrderCause cause)

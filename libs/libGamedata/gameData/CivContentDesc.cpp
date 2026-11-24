@@ -199,6 +199,74 @@ ToolMaterialDesc::ToolMaterialDesc(const kaguya::LuaTable& luaTable)
     luaData.checkUnused();
 }
 
+namespace {
+/// A ratio of a tool: a number (for everything, returned) or a table tag -> number (byTag). In hundredths, at most
+/// maxValue in both directions
+int parseToolRatio(const kaguya::LuaRef& value, std::vector<std::pair<std::string, int>>& byTag,
+                   const unsigned maxValue, const std::string& context)
+{
+    const auto toHundredths = [&](const kaguya::LuaRef& number) {
+        if(number.type() != kaguya::LuaRef::TYPE_NUMBER)
+            throw GameDataError(context + ": expected a number or a table like { Coal = -0.25 }");
+        const double ratio = number.get<double>();
+        if(!(std::abs(ratio) <= maxValue))
+            throw GameDataError(context + ": must be in [-" + std::to_string(maxValue) + ", " + std::to_string(maxValue)
+                                + "]");
+        return static_cast<int>(std::lround(ratio * 100));
+    };
+    if(value.type() != kaguya::LuaRef::TYPE_TABLE)
+        return toHundredths(value);
+    const auto table = value.get<kaguya::LuaTable>();
+    for(const kaguya::LuaRef& key : table.keys())
+    {
+        if(key.type() != kaguya::LuaRef::TYPE_STRING || key.get<std::string>().empty())
+            throw GameDataError(context + ": every key must be a tag, e.g. { Coal = -0.25 }");
+        const std::string tag = key.get<std::string>();
+        byTag.emplace_back(tag, toHundredths(table[tag]));
+    }
+    // A lua table has no order
+    std::sort(byTag.begin(), byTag.end());
+    if(byTag.empty())
+        throw GameDataError(context + ": the table is empty");
+    return 0;
+}
+
+/// An entry of outputs: a tag query ("CopperSpear", { "Saw", "Copper" }) or { "CopperSword", steps = 1.5 }. Returns
+/// the work steps of the product in hundredths
+unsigned parseOutput(const kaguya::LuaRef& value, TagQuery& tags, const std::string& context)
+{
+    if(value.type() == kaguya::LuaRef::TYPE_TABLE)
+    {
+        const auto table = value.get<kaguya::LuaTable>();
+        const kaguya::LuaRef steps = table["steps"];
+        if(!steps.isNilref())
+        {
+            if(steps.type() != kaguya::LuaRef::TYPE_NUMBER || !(steps.get<double>() > 0) || steps.get<double>() > 99)
+                throw GameDataError(context + ": steps must be above 0 and at most 99 (work steps of the product)");
+            const auto result = static_cast<unsigned>(std::lround(steps.get<double>() * 100));
+            if(result == 0)
+                throw GameDataError(context + ": steps must be at least 0.01");
+            for(const kaguya::LuaRef& key : table.keys())
+            {
+                if(key.type() == kaguya::LuaRef::TYPE_STRING && key.get<std::string>() != "steps")
+                    throw GameDataError(context + ": unknown field '" + key.get<std::string>() + "'");
+            }
+            for(unsigned i = 1; !table[i].isNilref(); ++i)
+            {
+                if(table[i].type() != kaguya::LuaRef::TYPE_STRING || table[i].get<std::string>().empty())
+                    throw GameDataError(context + ": tag lists may only contain strings");
+                tags.push_back(table[i].get<std::string>());
+            }
+            if(tags.empty())
+                throw GameDataError(context + ": the product is missing, e.g. { \"CopperSword\", steps = 1.5 }");
+            return result;
+        }
+    }
+    tags = parseTagQuery(value, context);
+    return 100;
+}
+} // namespace
+
 ToolDesc::ToolDesc(const kaguya::LuaTable& luaTable)
 {
     CheckedLuaTable luaData(luaTable);
@@ -211,8 +279,10 @@ ToolDesc::ToolDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context + ": durability must be in [1, 60000] (work steps)");
     if(speed > 1000)
         throw GameDataError(context + ": speed must be in [0, 1000] (percent)");
-    if(const auto ratio = luaData.getOptional<double>("outputRatio"))
-        outputRatio = parseOutputRatio(*ratio, context);
+    if(const auto ratio = luaData.getOptional<kaguya::LuaRef>("outputRatio"))
+        outputRatio = parseToolRatio(*ratio, outputRatioByTag, MAX_OUTPUT_RATIO / 100, context + ", outputRatio");
+    if(const auto ratio = luaData.getOptional<kaguya::LuaRef>("inputRatio"))
+        inputRatio = parseToolRatio(*ratio, inputRatioByTag, 99, context + ", inputRatio");
     luaData.checkUnused();
 }
 
@@ -401,7 +471,11 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     else if(outputsTable)
     {
         for(const kaguya::LuaRef& entry : outputsTable->values())
-            outputs.push_back(parseTagQuery(entry, context + ", outputs"));
+        {
+            TagQuery tags;
+            outputSteps.push_back(parseOutput(entry, tags, context + ", outputs"));
+            outputs.push_back(std::move(tags));
+        }
         if(outputs.empty())
             throw GameDataError(context + ": outputs is empty");
         if(outputs.size() > MAX_WORKSHOP_OUTPUTS)

@@ -27,8 +27,20 @@ rttr:AddTool{...}: macht eine Ware (eingebaut oder aus wares.lua) zum Werkzeug
   material    Bezeichner des Materials
   durability  Haltbarkeit in Arbeitsschritten
   speed       Bonus auf das Arbeitstempo in Prozent
-  outputRatio optional (Standard 0): Bonus auf die Waren pro Arbeitsschritt des Gebäudes, z.B. 0.5 (siehe outputRatio
-              in workshops.lua). Zählt, solange das Werkzeug in Gebrauch ist.
+  outputRatio optional (Standard 0): Bonus auf die Waren pro Arbeitsschritt des Gebäudes (siehe outputRatio in
+              workshops.lua), -8 bis 8, auch negativ. Zählt, solange das Werkzeug in Gebrauch ist. Zwei Formen:
+              outputRatio = 0.5             +0.5 für alle Produkte des Gebäudes
+              outputRatio = { Sword = 0.5, Copper = -0.2 }   nur für die Produkte mit diesem Tag (ein Produkt mit
+                                            beiden Tags bekommt beides: +0.3)
+              Die Summe des Gebäudes bleibt zwischen 0 und 8.
+  inputRatio  optional (Standard 0): Änderung der Waren je Arbeitsschritt der Eingänge (amount in workshops.lua), -99
+              bis 99, auch Kommazahlen. Zwei Formen:
+              inputRatio = -0.2             0.2 Waren weniger je Schritt bei jedem Eingang
+              inputRatio = { Coal = -0.25 } nur bei den Eingängen, deren Waren alle diesen Tag haben (ein Eingang
+                                            { tags = "Food" } mit Fisch, Fleisch, Brot nur bei einem Tag, den alle drei
+                                            haben)
+              Ein Eingang braucht dann mindestens 0 (0 = er braucht nichts) und höchstens so viele, wie er Plätze hat.
+              Eingebaute Minen (mehrere Nahrungsplätze, eine beliebige Nahrung je Schritt) beachten inputRatio nicht.
   Der Werkzeugtyp ergibt sich aus den Tags der Ware: Eine neue Ware "CopperAxe" mit kind = "Axe" zählt überall als
   Axt, wo unten "Axe" steht.
 

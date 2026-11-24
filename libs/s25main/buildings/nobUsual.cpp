@@ -112,8 +112,11 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
     // Civilization mode: output ratio
     if(sgd.GetGameDataVersion() >= 24)
     {
-        stepOutputRatio_ = sgd.PopUnsignedShort();
+        stepTools_.resize(sgd.PopUnsignedChar());
+        for(GoodType& tool : stepTools_)
+            tool = helpers::popEnum<GoodType>(sgd);
         outputCredit_ = sgd.PopUnsignedShort();
+        chosenProduct_ = sgd.PopOptionalEnum<GoodType>();
     }
     if(sgd.GetGameDataVersion() >= 30)
     {
@@ -187,8 +190,11 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
     }
     sgd.PushEvent(ordertool_ev);
     sgd.PushUnsignedShort(stepSpeed_);
-    sgd.PushUnsignedShort(stepOutputRatio_);
+    sgd.PushUnsignedChar(static_cast<uint8_t>(stepTools_.size()));
+    for(const GoodType tool : stepTools_)
+        helpers::pushEnum<uint16_t>(sgd, tool);
     sgd.PushUnsignedShort(outputCredit_);
+    sgd.PushOptionalEnum<uint16_t>(chosenProduct_);
     sgd.PushUnsignedInt(finishedGF_);
     sgd.PushUnsignedInt(workerSinceGF_);
 }
@@ -557,12 +563,38 @@ unsigned nobUsual::GetNumStoredAndOrdered(const unsigned input) const
     return GetNumWares(input) + static_cast<unsigned>(inputs_[input].ordered.size());
 }
 
-unsigned nobUsual::GetNumNeededForStep(const unsigned input) const
+unsigned nobUsual::CalcInputAmount(const unsigned input, const std::vector<GoodType>& tools) const
 {
-    const unsigned amount = BLD_WORK_DESC[bldType_].inputs[input].amount;
+    const InputSlot& slot = BLD_WORK_DESC[bldType_].inputs[input];
+    if(tools.empty() || !civ::isEnabled(*world))
+        return slot.amount;
+    const civ::Content& content = civ::getActiveContent();
+    int amount = slot.amount;
+    for(const GoodType tool : tools)
+    {
+        if(const civ::ToolInfo* info = content.GetTool(tool))
+            amount += info->GetInputBonus(slot.wares);
+    }
+    // More than the input holds: the building could never work
+    return static_cast<unsigned>(std::clamp(amount, 0, slot.storage * 100));
+}
+
+unsigned nobUsual::GetInputAmount(const unsigned input) const
+{
+    return CalcInputAmount(input, GetToolsInUse());
+}
+
+unsigned nobUsual::CalcNumNeeded(const unsigned input, const std::vector<GoodType>& tools) const
+{
+    const unsigned amount = CalcInputAmount(input, tools);
     const unsigned prepaid = inputs_[input].prepaid;
     // A part of a ware counts as a whole one (it is taken now, the rest counts for the next steps)
     return amount > prepaid ? (amount - prepaid + 99u) / 100u : 0u;
+}
+
+unsigned nobUsual::GetNumNeededForStep(const unsigned input) const
+{
+    return CalcNumNeeded(input, GetToolsInUse());
 }
 
 bool nobUsual::WaresAvailable()
@@ -615,7 +647,7 @@ void nobUsual::ConsumeWares()
     // Try to get wares from the warehouses: below the wares of one more step (at least 2 wares), as many as a step
     // takes
     const auto refill = [&](const unsigned i) {
-        const unsigned perStep = std::max(1u, (workDesc.inputs[i].amount + 99u) / 100u);
+        const unsigned perStep = std::max(1u, (GetInputAmount(i) + 99u) / 100u);
         if(GetNumWares(i) >= perStep + 1u)
             return;
         for(unsigned n = 0; n < perStep && GetNumStoredAndOrdered(i) < workDesc.inputs[i].storage; ++n)
@@ -639,9 +671,11 @@ void nobUsual::ConsumeWares()
         return;
     }
 
+    // With the tools of the work step (BeginWorkStep)
     for(unsigned i = 0; i < inputs_.size(); ++i)
     {
-        const unsigned needed = GetNumNeededForStep(i);
+        const unsigned amount = CalcInputAmount(i, stepTools_);
+        const unsigned needed = std::min(CalcNumNeeded(i, stepTools_), GetNumWares(i));
         for(unsigned n = 0; n < needed; ++n)
         {
             const GoodType good = takeOne(i);
@@ -649,7 +683,8 @@ void nobUsual::ConsumeWares()
                 lastConsumedWare_ = good;
         }
         // What was taken beyond this step counts for the next ones
-        inputs_[i].prepaid = static_cast<uint16_t>(inputs_[i].prepaid + needed * 100u - workDesc.inputs[i].amount);
+        const unsigned paid = inputs_[i].prepaid + needed * 100u;
+        inputs_[i].prepaid = static_cast<uint16_t>(paid > amount ? paid - amount : 0u);
         refill(i);
     }
 }
@@ -764,32 +799,82 @@ unsigned nobUsual::GetWorkSpeed() const
     return speed;
 }
 
-unsigned nobUsual::GetOutputRatio() const
+std::vector<GoodType> nobUsual::GetToolsInUse() const
+{
+    std::vector<GoodType> result;
+    for(const ToolSlot& slot : toolSlots_)
+    {
+        if(slot.tool != GoodType::Nothing)
+            result.push_back(slot.tool);
+    }
+    return result;
+}
+
+unsigned nobUsual::CalcOutputRatio(const std::vector<GoodType>& tools,
+                                   const helpers::OptionalEnum<GoodType> product) const
 {
     if(!civ::isEnabled(*world))
         return 100;
     const civ::Content& content = civ::getActiveContent();
-    unsigned ratio = content.GetOutputRatio(bldType_);
-    for(const ToolSlot& slot : toolSlots_)
+    int ratio = static_cast<int>(content.GetOutputRatio(bldType_));
+    for(const GoodType tool : tools)
     {
-        if(const civ::ToolInfo* info = content.GetTool(slot.tool))
-            ratio += info->outputRatio;
+        if(const civ::ToolInfo* info = content.GetTool(tool))
+            ratio += info->GetOutputBonus(product);
     }
-    return std::min(ratio, MAX_OUTPUT_RATIO);
+    return static_cast<unsigned>(std::clamp(ratio, 0, static_cast<int>(MAX_OUTPUT_RATIO)));
 }
 
-unsigned nobUsual::TakeNumProducts()
+unsigned nobUsual::GetOutputRatio(const helpers::OptionalEnum<GoodType> product) const
 {
-    const unsigned total = outputCredit_ + stepOutputRatio_;
-    outputCredit_ = static_cast<uint16_t>(total % 100u);
-    return total / 100u;
+    return CalcOutputRatio(GetToolsInUse(), product);
+}
+
+unsigned nobUsual::GetStepOutputRatio(const helpers::OptionalEnum<GoodType> product) const
+{
+    return CalcOutputRatio(stepTools_, product);
+}
+
+unsigned nobUsual::TakeNumProducts(const GoodType product)
+{
+    const civ::CustomBuilding* desc = civ::isEnabled(*world) ? civ::getActiveContent().GetBuilding(bldType_) : nullptr;
+    const unsigned steps = desc ? desc->GetProductSteps(product) : 100u;
+    const unsigned total = outputCredit_ + GetStepOutputRatio(product);
+    outputCredit_ = static_cast<uint16_t>(total % steps);
+    return total / steps;
+}
+
+bool nobUsual::CanYieldProducts() const
+{
+    if(!civ::isEnabled(*world))
+        return true;
+    const civ::Content& content = civ::getActiveContent();
+    // Without bonuses of the tools for tags the ratio is the same for every product
+    const bool hasTagBonus = helpers::contains_if(stepTools_, [&](const GoodType tool) {
+        const civ::ToolInfo* info = content.GetTool(tool);
+        return info && !info->outputRatioByTag.empty();
+    });
+    if(!hasTagBonus)
+        return GetStepOutputRatio(std::nullopt) > 0;
+    // Workshops from lua: the product being worked on, or any of the products
+    std::vector<GoodType> products;
+    if(const civ::CustomBuilding* desc = content.GetBuilding(bldType_))
+        products = chosenProduct_ ? std::vector<GoodType>{*chosenProduct_} : desc->GetAllProducts();
+    else
+        products = civ::getBuildingProducts(*world, bldType_).products;
+    if(products.empty())
+        return GetStepOutputRatio(std::nullopt) > 0;
+    return helpers::contains_if(products, [&](const GoodType good) { return GetStepOutputRatio(good) > 0; });
 }
 
 bool nobUsual::BeginWorkStep()
 {
-    // Output ratio 0: The work would be in vain
-    stepOutputRatio_ = static_cast<uint16_t>(GetOutputRatio());
-    if(stepOutputRatio_ == 0)
+    stepTools_ = GetToolsInUse();
+    // The product being worked on yields nothing with these tools (negative bonus): choose anew
+    if(chosenProduct_ && GetStepOutputRatio(*chosenProduct_) == 0)
+        chosenProduct_.reset();
+    // Output ratio 0 for every product: The work would be in vain
+    if(!CanYieldProducts())
         return false;
     if(toolSlots_.empty())
     {

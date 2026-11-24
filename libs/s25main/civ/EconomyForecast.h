@@ -216,7 +216,9 @@ private:
     const civai::EconomyGraph& graph_;
     /// The player of the last computation (for the measured values per building)
     const GamePlayer* player_ = nullptr;
-    std::vector<Amount> nominalSteps_;
+    /// Per recipe by the work times of the game data: work steps and products (all together) per minute of one
+    /// building
+    std::vector<Amount> nominalSteps_, nominalProducts_;
     unsigned gf_ = 0;
     unsigned measuredGFs_ = 1, coveredGFs_ = 1, windowStart_ = 0;
     helpers::EnumArray<TypeMeasure, BuildingType> measures_;

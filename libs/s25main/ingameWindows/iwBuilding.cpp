@@ -210,8 +210,10 @@ void iwBuilding::Msg_PaintAfter()
 
             std::stringstream text;
             text << building->GetNumWares(i) << "/" << wares_count;
-            if(slot.amount != 100)
-                text << "  (" << formatAmount(slot.amount) << " " << _("je Schritt") << ")";
+            // With the change of the tools in use
+            const unsigned amount = building->GetInputAmount(i);
+            if(amount != 100)
+                text << "  (" << formatAmount(amount) << " " << _("je Schritt") << ")";
             NormalFont->Draw(curPos + DrawPoint(0, 12), text.str(), FontStyle::CENTER | FontStyle::VCENTER);
             curPos.y += INPUT_ROW_HEIGHT;
         }
@@ -225,7 +227,8 @@ void iwBuilding::DrawTools()
     // work speed (below the product), also the output ratio (wares per work step) unless it is 1 without tools
     const auto& slots = building->GetToolSlots();
     const DrawPoint speedPos = GetDrawPos() + DrawPoint(196, 66);
-    const unsigned ratio = building->GetOutputRatio();
+    // For the product being worked on (the tools may give a bonus for it), otherwise for every product
+    const unsigned ratio = building->GetOutputRatio(building->GetChosenProduct());
     if(ratio != 100 || !slots.empty())
     {
         const DrawPoint ratioPos = speedPos + DrawPoint(0, slots.empty() ? 0 : 24);

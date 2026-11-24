@@ -100,28 +100,38 @@ nofBuildingWorker::nofBuildingWorker(SerializedGameData& sgd, const unsigned obj
     }
 }
 
+std::vector<GoodType> nofBuildingWorker::TakeProducts(const GoodType firstWare)
+{
+    const unsigned numProducts = workplace->TakeNumProducts(firstWare);
+    std::vector<GoodType> products;
+    if(numProducts == 0)
+        return products;
+    products.push_back(firstWare);
+    for(unsigned i = 1; i < numProducts; ++i)
+    {
+        const auto extra = ProduceExtraWare(firstWare);
+        if(!extra)
+            break;
+        products.push_back(*extra);
+    }
+    return products;
+}
+
 void nofBuildingWorker::ProducedWare()
 {
     carryList_.clear();
     if(!ware || !workplace)
         return;
-    const unsigned numProducts = workplace->TakeNumProducts();
-    if(numProducts == 0)
+    const std::vector<GoodType> products = TakeProducts(*ware);
+    if(products.empty())
     {
-        // Only a fraction of a ware so far (output ratio below 1)
+        // The saved work steps do not suffice for a ware yet (output ratio below 1, product costing several steps)
         ware = std::nullopt;
         return;
     }
-    if(numProducts == 1 && civ::getByproducts(*world, player, workplace->GetBuildingType(), *ware).empty())
+    ware = products.front();
+    if(products.size() == 1u && civ::getByproducts(*world, player, workplace->GetBuildingType(), *ware).empty())
         return;
-    std::vector<GoodType> products{*ware};
-    for(unsigned i = 1; i < numProducts; ++i)
-    {
-        const auto extra = ProduceExtraWare(*ware);
-        if(!extra)
-            break;
-        products.push_back(*extra);
-    }
     // Every product with its byproducts
     for(const GoodType product : products)
     {

@@ -221,7 +221,8 @@ unsigned getToolQuality(const GoodType good)
     const ToolInfo* info = getActiveContent().GetTool(good);
     if(!info)
         return 0;
-    return (info->speed + info->outputRatio) * 1000u + std::min(info->durability, 999u);
+    const int bonus = std::max(0, static_cast<int>(info->speed) + info->GetBestOutputBonus());
+    return static_cast<unsigned>(bonus) * 1000u + std::min(info->durability, 999u);
 }
 
 GoodType getRecruitTool(const EconomySnapshot& snapshot, const BuildingType bld)
@@ -253,7 +254,22 @@ void addToolDemand(const EconomySnapshot& snapshot, std::vector<OpenDemand>& dem
 EconomyForecast::EconomyForecast(const civai::EconomyGraph& graph) : graph_(graph)
 {
     for(const civai::Recipe& recipe : graph_.GetRecipes())
-        nominalSteps_.push_back(static_cast<Amount>(std::llround(recipe.nominalStepsPerMinute * AMOUNT_UNIT)));
+    {
+        const auto steps = static_cast<Amount>(std::llround(recipe.nominalStepsPerMinute * AMOUNT_UNIT));
+        nominalSteps_.push_back(steps);
+        // Products per minute: each work step saves the output ratio, a product costs its work steps. The products
+        // chosen equally often
+        Amount products = steps * static_cast<Amount>(recipe.outputRatio) / 100;
+        if(!recipe.outputs.empty())
+        {
+            Amount sumSteps = 0;
+            for(const unsigned productSteps : recipe.outputSteps)
+                sumSteps += productSteps;
+            products = steps * static_cast<Amount>(recipe.outputRatio) * static_cast<Amount>(recipe.outputs.size())
+                       / std::max<Amount>(1, sumSteps);
+        }
+        nominalProducts_.push_back(products);
+    }
 }
 
 const civai::Recipe* EconomyForecast::FindRecipe(const BuildingType bld) const
@@ -359,11 +375,11 @@ Amount EconomyForecast::ProducedPerBuilding(const BuildingType bld, const GoodTy
         if(recipe.building != bld)
             continue;
         if(helpers::contains(recipe.outputs, good))
-            return nominalSteps_[i] / static_cast<Amount>(std::max<size_t>(1u, recipe.outputs.size()));
+            return nominalProducts_[i] / static_cast<Amount>(std::max<size_t>(1u, recipe.outputs.size()));
         for(unsigned j = 0; j < recipe.byproducts.size(); ++j)
         {
             if(recipe.byproducts[j] == good)
-                return nominalSteps_[i] * recipe.byproductAmounts[j];
+                return nominalProducts_[i] * recipe.byproductAmounts[j];
         }
         return 0;
     }
@@ -416,7 +432,8 @@ Amount EconomyForecast::OutputPerWorkingMinute(const BuildingType bld) const
         if(made > 0)
             return made * AMOUNT_UNIT * gfsPerMinute * 100 / static_cast<Amount>(measure.workingGFsPercent);
     }
-    return GetNominalSteps(bld);
+    const auto& recipes = graph_.GetRecipes();
+    return nominalProducts_[static_cast<size_t>(recipe - recipes.data())];
 }
 
 void EconomyForecast::ComputeFlows(const GamePlayer& player, const EconomySnapshot& snapshot, const Extra& extra)

@@ -136,9 +136,11 @@
 /// 32: Civilization mode: 512 slots for wares (wares saved with 2 bytes), 128 slots for buildings and jobs.
 ///     Older game data cannot be loaded anymore
 /// 33: Inputs of buildings as input slots (wares per ware of the slot, wares used in advance), last consumed ware
-static const unsigned currentGameDataVersion = 33;
-/// Oldest game data that can still be loaded (inputs of buildings changed in 33, wares had 1 byte before 32)
-static const unsigned minGameDataVersion = 33;
+/// 34: Work steps per product: saved work steps and the product being worked on in the building, tools of the work
+///     step instead of its output ratio; the custom worker keeps no product
+static const unsigned currentGameDataVersion = 34;
+/// Oldest game data that can still be loaded (buildings and custom workers changed in 34)
+static const unsigned minGameDataVersion = 34;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

@@ -78,8 +78,15 @@ struct ToolDesc
     unsigned durability = 0;
     /// Bonus to the work speed of the building in percent of the normal speed
     unsigned speed = 0;
-    /// Bonus to the output ratio of the building in hundredths (wares per work step), e.g. 50 = +0.5
-    unsigned outputRatio = 0;
+    /// Bonus to the output ratio of the building in hundredths (wares per work step), e.g. 50 = +0.5, for every
+    /// product. May be negative
+    int outputRatio = 0;
+    /// Bonus to the output ratio in hundredths only for the products with the tag (lua: outputRatio = { Sword = 0.5 })
+    std::vector<std::pair<std::string, int>> outputRatioByTag;
+    /// Change of the wares used per work step of every input in hundredths, e.g. -20 = 0.2 less. May be positive
+    int inputRatio = 0;
+    /// The same only for the inputs whose wares all have the tag (lua: inputRatio = { Coal = -0.25 })
+    std::vector<std::pair<std::string, int>> inputRatioByTag;
 
     ToolDesc() = default;
     explicit ToolDesc(const kaguya::LuaTable& luaData);
@@ -178,6 +185,8 @@ struct WorkshopDesc
     TagQuery output;
     /// Alternative to output: List of products, each a tag query that must match exactly one ware
     std::vector<TagQuery> outputs;
+    /// Work steps each product of outputs costs in hundredths (same order as outputs, 100 = 1 step)
+    std::vector<unsigned> outputSteps;
     /// True: the product gets the properties of the consumed input ware
     bool inheritProperties = false;
     /// "knowledge": the products (several) are chosen by their knowledge type (regulator "Wissen"). Empty: one product,

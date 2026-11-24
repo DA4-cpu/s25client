@@ -9,6 +9,7 @@
 #include "civ/MapCodes.h"
 #include "helpers/EnumArray.h"
 #include "helpers/EnumRange.h"
+#include "helpers/OptionalEnum.h"
 #include "gameTypes/BuildingQuality.h"
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/BuildingTypes.h"
@@ -103,6 +104,17 @@ struct CustomBuilding
 
     /// Product made from the given input ware (input may be empty, e.g. if nothing was consumed yet)
     GoodType GetProduct(std::optional<GoodType> consumedInput) const;
+    /// Work steps the product costs in hundredths (outputs = { { "CopperSword", steps = 1.5 } }: 150). Default 100
+    unsigned GetProductSteps(GoodType product) const;
+    /// All possible products (one per entry of outputs, per input with inheritProperties or the one product)
+    std::vector<GoodType> GetAllProducts() const;
+    /// Makes a product (not a library or a plantation that only plants)
+    bool HasProduct() const { return product != GoodType::Nothing || !productByInput.empty(); }
+
+    /// Work steps of the products of outputs which cost more or less than 1 step (hundredths)
+    std::vector<std::pair<GoodType, unsigned>> productSteps;
+    /// Lowest work steps of all products in hundredths
+    unsigned minProductSteps = 100;
 
     /// Product for each input ware if the properties of the input are passed on. Otherwise empty
     std::vector<std::pair<GoodType, GoodType>> productByInput;
@@ -159,8 +171,30 @@ struct ToolInfo
     unsigned durability = 0;
     /// Bonus to the work speed of the building in percent
     unsigned speed = 0;
-    /// Bonus to the output ratio of the building in hundredths (wares per work step)
-    unsigned outputRatio = 0;
+    /// Bonus of a tool for the wares with a tag (rttr:AddTool, outputRatio = { Sword = 0.5 })
+    struct TagBonus
+    {
+        /// All wares with the tag (sorted)
+        std::vector<GoodType> wares;
+        /// Bonus in hundredths, may be negative
+        int bonus = 0;
+    };
+    /// Bonus to the output ratio of the building in hundredths (wares per work step) for every product. May be negative
+    int outputRatio = 0;
+    /// Further bonus for the products with the tag
+    std::vector<TagBonus> outputRatioByTag;
+    /// Change of the wares used per work step of every input in hundredths (-20: 0.2 less). May be positive
+    int inputRatio = 0;
+    /// Further change for the inputs whose wares all have the tag
+    std::vector<TagBonus> inputRatioByTag;
+
+    /// Bonus to the output ratio when making the product (outputRatio and outputRatioByTag). Nothing: without the
+    /// bonuses for tags
+    int GetOutputBonus(helpers::OptionalEnum<GoodType> product) const;
+    /// Change of the wares per work step of an input with these wares (inputRatio and inputRatioByTag)
+    int GetInputBonus(const std::vector<GoodType>& inputWares) const;
+    /// Highest bonus to the output ratio for any product (for the quality of the tool)
+    int GetBestOutputBonus() const;
 };
 
 /// Tools used in a building
@@ -255,7 +289,6 @@ public:
 
     /// Construction costs of the building (in the order the builder uses them). Original costs unless set in lua
     const BuildingCosts& GetBuildingCost(BuildingType bld) const { return costs_[bld]; }
-
 
     /// Tool reform: True if tools are used in the buildings (tool materials are defined). Then workers of buildings
     /// are recruited without tools, the buildings order their tools, the tools wear out and set the work speed

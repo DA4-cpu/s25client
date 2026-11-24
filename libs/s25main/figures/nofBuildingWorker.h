@@ -61,9 +61,12 @@ protected:
     std::vector<GoodType> carryList_;
 
     /// To be called by derived classes right after a work step produced `ware` (or not). Civilization mode: Applies
-    /// the output ratio of the step. Clears `ware` if the step yields no ware yet, adds the further products of the
-    /// step (ProduceExtraWare) and the byproducts of all of them
+    /// the output ratio of the step (TakeProducts). Clears `ware` if the step yields no ware yet, otherwise `ware` is
+    /// the first product, and adds the further products of the step and the byproducts of all of them
     void ProducedWare();
+    /// Products of the work step which produced `firstWare` (output ratio, saved work steps). Empty: none yet.
+    /// Default: TakeNumProducts of the building, the further products by ProduceExtraWare
+    virtual std::vector<GoodType> TakeProducts(GoodType firstWare);
     /// A further product of the current work step (output ratio above 1). Default: the same ware again. Workers
     /// choosing their product choose again. Mines and harvesters take no further unit of their resource: it loses
     /// exactly one unit per work step, whatever the output ratio (Nutzer, 2026-11-24). Nothing: no further ware

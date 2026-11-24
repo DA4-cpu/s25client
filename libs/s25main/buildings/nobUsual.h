@@ -87,10 +87,25 @@ protected:
     const GameEvent* ordertool_ev;
     /// Tool reform: Work speed in percent of the current work step
     uint16_t stepSpeed_;
-    /// Civilization mode: Output ratio of the current work step in hundredths and the fraction of a ware left over
-    /// from the previous work steps (e.g. 50 after the first step with ratio 0.5)
-    uint16_t stepOutputRatio_ = 100;
+    /// Civilization mode: Tools in use when the current work step began (they count for the whole step, also if one
+    /// broke at its beginning)
+    std::vector<GoodType> stepTools_;
+    /// Civilization mode: Saved work steps in hundredths (output ratio of the past steps not yet spent on products).
+    /// Belongs to no product: the next product uses it, whichever it is (Nutzer, 2026-11-24)
     uint16_t outputCredit_ = 0;
+    /// Civilization mode, workshops from lua: Product being worked on. It stays chosen until the saved work steps
+    /// suffice for it (Nutzer, 2026-11-24). Nothing: chosen when the next work step starts
+    helpers::OptionalEnum<GoodType> chosenProduct_;
+    /// Tools in use (the tools of the tool slots)
+    std::vector<GoodType> GetToolsInUse() const;
+    /// Output ratio with these tools in use (GetOutputRatio)
+    unsigned CalcOutputRatio(const std::vector<GoodType>& tools, helpers::OptionalEnum<GoodType> product) const;
+    /// Wares per work step of the input with these tools in use (GetInputAmount)
+    unsigned CalcInputAmount(unsigned input, const std::vector<GoodType>& tools) const;
+    /// Number of wares a work step with these tools takes from the input
+    unsigned CalcNumNeeded(unsigned input, const std::vector<GoodType>& tools) const;
+    /// False if no product of the building yields a ware with the tools of the work step (output ratio 0)
+    bool CanYieldProducts() const;
     /// Tool reform: Slot a tool is ordered for right now (not serialized), -1: none
     int orderingToolSlot_ = -1;
     /// GF the building was finished and since which its worker is there (NO_GF: none). For the measured values per
@@ -140,6 +155,9 @@ public:
     const std::vector<uint8_t>& GetInputCounts(unsigned input) const { return inputs_[input].counts; }
     /// Number of wares the next work step takes from the input
     unsigned GetNumNeededForStep(unsigned input) const;
+    /// Wares per work step of the input in hundredths with the tools in use: amount of the input plus the change of
+    /// the tools (inputRatio), at least 0 and at most what the input holds
+    unsigned GetInputAmount(unsigned input) const;
     /// True if the wares for a work step are there
     bool WaresAvailable();
     /// Use the wares of a work step
@@ -178,12 +196,22 @@ public:
     bool BeginWorkStep();
     /// Duration of a part of the current work step at its work speed
     unsigned ScaleWorkDuration(unsigned gfs) const;
-    /// Civilization mode: Wares per work step in hundredths: ratio of the building plus the bonus of its tools in use,
-    /// at most MAX_OUTPUT_RATIO (8 wares). Always 100 outside the civilization mode
-    unsigned GetOutputRatio() const;
-    /// Called by the worker when the current work step produced a ware: Number of wares it yields according to the
-    /// output ratio of the step (0 if only a fraction is reached yet, the fraction is kept for the next steps)
-    unsigned TakeNumProducts();
+    /// Civilization mode: Wares per work step in hundredths: ratio of the building plus the bonus of its tools in use
+    /// (with their bonus for the product if given), at least 0 and at most MAX_OUTPUT_RATIO (8 wares). Always 100
+    /// outside the civilization mode
+    unsigned GetOutputRatio(helpers::OptionalEnum<GoodType> product = std::nullopt) const;
+    /// The same with the tools in use when the current work step began
+    unsigned GetStepOutputRatio(helpers::OptionalEnum<GoodType> product) const;
+    /// Called by the worker when the current work step produced the product (one product per step): Number of
+    /// products it yields according to the output ratio of the step and the work steps of the product (0 if they do
+    /// not suffice yet, the saved work steps are kept for the next steps)
+    unsigned TakeNumProducts(GoodType product);
+    /// Saved work steps in hundredths (outputCredit_)
+    unsigned GetOutputCredit() const { return outputCredit_; }
+    void SetOutputCredit(unsigned credit) { outputCredit_ = static_cast<uint16_t>(credit); }
+    /// Workshops from lua: product being worked on (chosenProduct_)
+    helpers::OptionalEnum<GoodType> GetChosenProduct() const { return chosenProduct_; }
+    void SetChosenProduct(helpers::OptionalEnum<GoodType> product) { chosenProduct_ = product; }
     /// Number of tools of this ware the building is missing (nothing in use or ordered)
     unsigned GetNumMissingTools(GoodType tool) const;
     /// Tool reform: True if a tool should be ordered for the slot (empty, or a replacement is due)

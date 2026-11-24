@@ -151,8 +151,8 @@ rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
     BOOST_TEST_REQUIRE(loadLua(base, desc));
     BOOST_TEST(desc.workshops[0].outputRatio == 125u);
     BOOST_TEST(desc.workshops[1].outputRatio == 100u);
-    BOOST_TEST(desc.tools[0].outputRatio == 50u);
-    BOOST_TEST(desc.tools[1].outputRatio == 0u);
+    BOOST_TEST(desc.tools[0].outputRatio == 50);
+    BOOST_TEST(desc.tools[1].outputRatio == 0);
     BOOST_TEST(desc.buildingOutputRatios.at("Woodcutter") == 200u);
     const civ::Content content(desc);
     BOOST_TEST(content.GetOutputRatio(SHOP) == 125u);
@@ -161,7 +161,7 @@ rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
     BOOST_TEST(content.GetOutputRatio(BuildingType::Quarry) == 25u);
     BOOST_TEST(content.GetOutputRatio(BuildingType::Sawmill) == 100u);
     BOOST_TEST_REQUIRE(content.GetTool(GoodType::Saw));
-    BOOST_TEST(content.GetTool(GoodType::Saw)->outputRatio == 50u);
+    BOOST_TEST(content.GetTool(GoodType::Saw)->outputRatio == 50);
 
     const auto replaced = [&base](const std::string& from, const std::string& to) {
         std::string result = base;

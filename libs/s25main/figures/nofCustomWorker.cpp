@@ -28,18 +28,11 @@ nofCustomWorker::nofCustomWorker(const Job job, const MapPoint pos, const unsign
     RTTR_Assert(isCustomJob(job));
 }
 
-nofCustomWorker::nofCustomWorker(SerializedGameData& sgd, const unsigned obj_id)
-    : nofWorkman(sgd, obj_id), consumedInput_(sgd.PopOptionalEnum<GoodType>())
-{
-    if(sgd.GetGameDataVersion() >= 23)
-        nextProduct_ = sgd.PopOptionalEnum<GoodType>();
-}
+nofCustomWorker::nofCustomWorker(SerializedGameData& sgd, const unsigned obj_id) : nofWorkman(sgd, obj_id) {}
 
 void nofCustomWorker::Serialize(SerializedGameData& sgd) const
 {
     nofWorkman::Serialize(sgd);
-    sgd.PushOptionalEnum<uint16_t>(consumedInput_);
-    sgd.PushOptionalEnum<uint16_t>(nextProduct_);
 }
 
 const civ::CustomBuilding* nofCustomWorker::GetBuildingDesc() const
@@ -50,19 +43,26 @@ const civ::CustomBuilding* nofCustomWorker::GetBuildingDesc() const
 GoodType nofCustomWorker::ChooseKnowledgeProduct(const civ::CustomBuilding& building) const
 {
     // Weighted by the regulator "Wissen" of the owner (synchronized game RNG, so all clients choose the same).
-    // If all weights of the possible products are 0, all are equally likely
+    // If all weights of the possible products are 0, all are equally likely. Products yielding no ware with the tools
+    // of the work step are not possible (unless none yields one)
+    std::vector<bool> possible;
+    for(const GoodType good : building.productChoices)
+        possible.push_back(workplace->GetStepOutputRatio(good) > 0);
+    if(std::none_of(possible.begin(), possible.end(), [](const bool value) { return value; }))
+        possible.assign(possible.size(), true);
     std::vector<unsigned> weights;
     const civ::PlayerResearch& research = world->GetPlayer(player).GetResearch();
     const auto distribution = research.GetKnowledgeDistribution(world->GetTechTree());
-    for(const civ::KnowledgeType type : building.productChoiceTypes)
-        weights.push_back(distribution[type]);
+    for(unsigned i = 0; i < building.productChoiceTypes.size(); ++i)
+        weights.push_back(possible[i] ? distribution[building.productChoiceTypes[i]] : 0u);
     unsigned totalWeight = 0;
     for(const unsigned weight : weights)
         totalWeight += weight;
     if(totalWeight == 0)
     {
-        std::fill(weights.begin(), weights.end(), 1u);
-        totalWeight = static_cast<unsigned>(weights.size());
+        for(unsigned i = 0; i < weights.size(); ++i)
+            weights[i] = possible[i] ? 1u : 0u;
+        totalWeight = static_cast<unsigned>(std::count(possible.begin(), possible.end(), true));
     }
     unsigned pick = RANDOM_RAND(totalWeight);
     for(unsigned i = 0; i < weights.size(); ++i)
@@ -102,12 +102,37 @@ bool nofCustomWorker::AreWaresAvailable() const
     return nofWorkman::AreWaresAvailable();
 }
 
+GoodType nofCustomWorker::ChooseProduct(const civ::CustomBuilding& building)
+{
+    switch(building.productChoice)
+    {
+        case civ::ProductChoice::Distribution:
+        {
+            std::vector<GoodType> candidates;
+            for(const GoodType good : building.productChoices)
+            {
+                if(workplace->GetStepOutputRatio(good) > 0)
+                    candidates.push_back(good);
+            }
+            if(candidates.empty())
+                candidates = building.productChoices;
+            return civ::chooseProduct(*world, player, candidates, GetObjId());
+        }
+        case civ::ProductChoice::Knowledge: return ChooseKnowledgeProduct(building);
+        case civ::ProductChoice::None: break;
+    }
+    const auto consumed = workplace->GetLastConsumedWare();
+    return building.GetProduct(consumed ? std::optional<GoodType>(*consumed) : std::nullopt);
+}
+
 bool nofCustomWorker::StartWorking()
 {
-    // Several products: chosen by the distribution of all wares when starting (orders are processed now)
     const civ::CustomBuilding* desc = GetBuildingDesc();
-    if(desc && desc->productChoice == civ::ProductChoice::Distribution)
-        nextProduct_ = civ::chooseProduct(*world, player, desc->productChoices, GetObjId());
+    const bool hasProduct = desc && desc->HasProduct();
+    // Several products: chosen when the work on a product starts (orders are processed now). It stays chosen until
+    // the saved work steps suffice for it (Nutzer, 2026-11-24)
+    if(hasProduct && desc->productChoice != civ::ProductChoice::None && !workplace->GetChosenProduct())
+        workplace->SetChosenProduct(ChooseProduct(*desc));
     const ResourceType ore = GetMineResource();
     if(ore != ResourceType::Nothing)
     {
@@ -120,44 +145,43 @@ bool nofCustomWorker::StartWorking()
     }
     if(!nofWorkman::StartWorking())
         return false;
-    consumedInput_ = workplace->GetLastConsumedWare();
+    // One product: with inheritProperties it is decided by the ware consumed for the first work step on it
+    if(hasProduct && desc->productChoice == civ::ProductChoice::None && !workplace->GetChosenProduct())
+        workplace->SetChosenProduct(ChooseProduct(*desc));
     return true;
-}
-
-helpers::OptionalEnum<GoodType> nofCustomWorker::ProduceExtraWare(const GoodType firstWare)
-{
-    const civ::CustomBuilding* building = GetBuildingDesc();
-    if(!building)
-        return std::nullopt;
-    switch(building->productChoice)
-    {
-        case civ::ProductChoice::Distribution:
-            return civ::chooseProduct(*world, player, building->productChoices, GetObjId());
-        case civ::ProductChoice::Knowledge: return ChooseKnowledgeProduct(*building);
-        case civ::ProductChoice::None: break;
-    }
-    // Mine: the ore lost one unit for the whole work step (StartWorking), not one per ware
-    return firstWare;
 }
 
 helpers::OptionalEnum<GoodType> nofCustomWorker::ProduceWare()
 {
     const civ::CustomBuilding* building = GetBuildingDesc();
-    if(!building)
+    if(!building || !building->HasProduct())
         return std::nullopt;
-    const auto consumedInput = consumedInput_;
-    consumedInput_.reset();
-    const auto nextProduct = nextProduct_;
-    nextProduct_.reset();
-    switch(building->productChoice)
+    if(const auto chosen = workplace->GetChosenProduct())
+        return chosen;
+    return ChooseProduct(*building);
+}
+
+std::vector<GoodType> nofCustomWorker::TakeProducts(const GoodType firstWare)
+{
+    const civ::CustomBuilding* building = GetBuildingDesc();
+    if(!building)
+        return nofWorkman::TakeProducts(firstWare);
+    // The saved work steps belong to no product: the rest left after a product is used for the next product,
+    // whichever it is (Nutzer, 2026-11-24)
+    unsigned credit = workplace->GetOutputCredit() + workplace->GetStepOutputRatio(firstWare);
+    std::vector<GoodType> products;
+    helpers::OptionalEnum<GoodType> product = firstWare;
+    while(product && credit >= building->GetProductSteps(*product))
     {
-        case civ::ProductChoice::None: break;
-        case civ::ProductChoice::Distribution:
-            // Chosen when starting to work
-            if(nextProduct && helpers::contains(building->productChoices, *nextProduct))
-                return nextProduct;
-            return building->productChoices.front();
-        case civ::ProductChoice::Knowledge: return ChooseKnowledgeProduct(*building);
+        credit -= building->GetProductSteps(*product);
+        products.push_back(*product);
+        // The next product: chosen now if the saved work steps suffice for the cheapest product, otherwise when the
+        // next work step starts
+        product.reset();
+        if(credit >= building->minProductSteps)
+            product = ChooseProduct(*building);
     }
-    return building->GetProduct(consumedInput ? std::optional<GoodType>(*consumedInput) : std::nullopt);
+    workplace->SetOutputCredit(credit);
+    workplace->SetChosenProduct(product);
+    return products;
 }
