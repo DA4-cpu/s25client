@@ -102,7 +102,7 @@ rttr:AddToolMaterial{ name = "Wood", title = "Wood" }
 rttr:AddTool{ ware = "Bow",      material = "Wood", durability = 100, speed = 100 } 
 rttr:AddTool{ ware = "Rollingpin",     material = "Wood", durability = 100, speed = 100 } 
 rttr:AddTool{ ware = "RodAndLine",        material = "Wood", durability = 100, speed = 100 } 
---rttr:AddTool{ ware = "WoodenHammer",        material = "Wood", durability = 50, speed = 50 } 
+rttr:AddTool{ ware = "WoodenHammer",        material = "Wood", durability = 50, speed = 50 } 
 rttr:AddTool{ ware = "WoodenSpindle",        material = "Wood", durability = 100, speed = 100 } 
 rttr:AddTool{ ware = "WoodenBucket",        material = "Wood", durability = 100, speed = 100 } 
 

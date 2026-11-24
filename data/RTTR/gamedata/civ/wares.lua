@@ -123,7 +123,7 @@ rttr:AddWare{name = "IronPlough", title = "Iron Plough", kind = "Plough", look =
 --rttr:AddWare{ name = "Bow", title = "Bow", kind = "Bow", look = "Bow", transport = "Bow"} 
 --rttr:AddWare{ name = "Rollingpin", title = "Rollingpin", kind = "Rollingpin", look = "Rollingpin", transport = "Rollingpin" } 
 --rttr:AddWare{ name = "RodAndLine", title = "RodAndLine", kind = "RodAndLine", look = "RodAndLine", transport = "RodAndLine" } 
--- rttr:AddWare{ name = "WoodenHammer", title = "WoodenHammer", kind = "Hammer", look = "Hammer", transport = "Hammer" } 
+rttr:AddWare{ name = "WoodenHammer", title = "WoodenHammer", kind = "Hammer", look = "Hammer", transport = "Hammer" } 
 rttr:AddWare{ name = "WoodenSpindle", title = "WoodenSpindle", kind = "Spindle", look = "Bow", transport = "Bow" } 
 rttr:AddWare{ name = "WoodenBucket", title = "WoodenBucket", kind = "Bucket", look = "Water", transport = "Water" } 
 
@@ -132,15 +132,13 @@ rttr:AddWare{ name = "Rope", title = "Rope", look = "Wood", transport = "Wood" }
 -- pflanzliche Waren
 rttr:AddWare{name = "PapyrusPlant", title = "Papyruspflanze", kind = "Fibers", look = "Grain", transport = "Grain"} -- bitte Waren nur in 1 Zeile schreiben
 rttr:AddWare{ name = "Thatch", title = "Thatch", kind = { "Fibers", "BasicRoofMaterial" }, look = "Grain", transport = "Grain"} 
---[[Warenlimit von 64 erreicht, deswegen werden diese Waren ausgeblendet
-
 rttr:AddWare{ name = "Reed", title = "Reed", kind = { "Fibers", "BasicRoofMaterial" }, look = "Grain", transport = "Grain"} 
 rttr:AddWare{ name = "Hemp", title = "Hemp", kind = "Fibers", look = "Grain", transport = "Grain"}
 rttr:AddWare{ name = "Flax", title = "Flax", kind = "Fibers", look = "Grain", transport = "Grain"}
 rttr:AddWare{ name = "LindenBast", title = "LindenBast", kind = "Fibers", look = "Grain", transport = "Grain"} -- soll als nebenprodukt des Holzfällers anfallen, aber nur wenn er gerade eine Linde gefällt hat
 rttr:AddWare{ name = "BirchBark", title = "BirchBark", kind = "Bark", look = "Wood", transport = "Wood"} -- soll als nebenprodukt des Holzfällers anfallen, aber nur wenn er gerade eine Birke gefällt hat
 
-rttr:AddWare{ name = "Beeswax", title = "Beeswax", kind = "Wax", look = "Coin", transport = "Coin"} -- soll von Bäumen mit Bienenstöcken gesammelt werden. Bäume haben eine gewisse Wahrscheinlichkeit mit einem Bienenstock zu spawnen. Allerdings unterliegen Bienenstöcken auch klimatischen Bedingungen und können nicht überall spawnen. Später soll ein Imker auch eigene Bienenstöcke "anbauen" können
+rttr:AddWare{ name = "Beeswax", title = "Beeswax", kind = "Wax", look = "Coins", transport = "Coins"} -- soll von Bäumen mit Bienenstöcken gesammelt werden. Bäume haben eine gewisse Wahrscheinlichkeit mit einem Bienenstock zu spawnen. Allerdings unterliegen Bienenstöcken auch klimatischen Bedingungen und können nicht überall spawnen. Später soll ein Imker auch eigene Bienenstöcke "anbauen" können
 rttr:AddWare{ name = "Honey", title = "Honey", kind = "Food", look = "Gold", transport = "Gold"} -- wie Beeswax
 
 -- Klebstoffe
@@ -152,7 +150,6 @@ rttr:AddWare{ name = "Bitumen", title = "Bitumen", kind ="adhesive", look = "Coa
 rttr:AddWare{ name = "Asphalt", title = "Asphalt", look = "Water", transport = "Water"}
 
 rttr:AddWare{ name = "Firewood", title = "Firewood", look = "Wood", transport = "Wood"}
-]]
 -- Baumaterial
 rttr:AddWare{ name = "Adobe", title = "Adobe", kind = "BasicBuildingMaterial", look = "Leather", transport = "Stones" }
 

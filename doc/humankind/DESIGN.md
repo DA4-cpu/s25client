@@ -1913,6 +1913,15 @@ Antwort des Nutzers F-1: 512 Plätze, mehr später durch eine Zahl im Code).
   Vektor.
 - **Tests:** `CivContentSuite/AllSlotsCanBeUsed` (512 Waren und 128 Werkstätten laden, eine mehr ist ein Ladefehler),
   `CivContentSuite/WaresInHighSlotsAreSaved` (Waren auf Plätzen über 255 überstehen Speichern und Laden).
+- **Freigeschaltete Waren (eigener Commit):** Die Waren, die der Nutzer wegen der Grenze auskommentiert hatte, sind
+  aktiv: Reed, Hemp, Flax, LindenBast, BirchBark, Beeswax, Honey, Resin, Pitch, Tar, Bitumen, Asphalt, Firewood
+  (wares.lua, „Warenlimit von 64 erreicht, deswegen werden diese Waren ausgeblendet“) und WoodenHammer (wares.lua,
+  Werkzeug in tools.lua, Produkt der WoodWorkshop laut Notiz „WoodenHammer erst wenn Warengesamtzahl erhöht wurde“).
+  Beeswax hatte `look = "Coin"`, der eingebaute Name ist „Coins“ (sonst Ladefehler). Außer WoodenHammer stellt noch
+  kein Gebäude diese Waren her. Weiter auskommentiert sind die Werkstätten AsphaltDrawer, BitumenProducer und
+  FirewoodSplitter (workshops.lua): AsphaltDrawer hat `worker.look = "AsphaltDrawer"` (kein eingebauter Beruf) und
+  verbraucht den Tag „Bucket“ (ein Werkzeug) als Eingang, BitumenProducer hat `look = "Leatherworks"` (eingebaut heißt
+  es „LeatherWorks“), und keine der drei steht im Technologiebaum.
 
 ## Gesamtverteilung (Stand 2026-11-21)
 

@@ -397,7 +397,7 @@ rttr:AddWorkshop{
     look = "Sawmill",
     worker = { title = "Metalworker", look = "Metalworker" },
     inputs = { "Wood", "Rope" }, 
-    outputs = { "Rollingpin", "RodAndLine", "Bow", "WoodenSpindle", "WoodenBucket"}, -- WoodenHammer erst wenn Warengesamtzahl erhöht wurde
+    outputs = { "Rollingpin", "RodAndLine", "Bow", "WoodenSpindle", "WoodenBucket", "WoodenHammer" },
     outputRatio = 0.6,
     tools = { baseSpeed = 25, tools = { "Saw" } },
     workTime = 35,
