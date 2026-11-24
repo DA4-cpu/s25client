@@ -216,6 +216,8 @@ public:
 
     /// All tags of the ware: Its identifier, kind and properties
     const std::vector<std::string>& GetTags(GoodType good) const { return tags_[good]; }
+    /// New identifier of a built-in ware (rttr:SetWare), also its displayed name. Empty: not renamed
+    const std::string& GetBuiltinName(GoodType good) const { return builtinNames_[good]; }
     /// Properties of the ware (part of the tags)
     const std::vector<std::string>& GetProperties(GoodType good) const { return properties_[good]; }
     /// True if the ware has all tags of the query
@@ -293,6 +295,8 @@ private:
     std::vector<CustomBuilding> buildings_;
     std::vector<CustomWorker> workers_;
     helpers::EnumArray<std::vector<std::string>, GoodType> tags_, properties_;
+    /// Built-in wares renamed by rttr:SetWare (empty: original identifier)
+    helpers::EnumArray<std::string, GoodType> builtinNames_;
     std::vector<GoodType> knowledgeMedia_;
     helpers::EnumArray<uint8_t, KnowledgeType> defaultKnowledgeDistribution_;
     std::vector<ToolMaterial> toolMaterials_;

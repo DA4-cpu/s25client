@@ -26,7 +26,7 @@ Holen wie unten (git pull origin humankind), dann bauen. Neue Dateien unter libs
 und libs/s25main/figures -> falls Visual Studio sie nicht findet: CMake neu konfigurieren.
 
 Neu:
-- data/RTTR/gamedata/civ/wares.lua:     rttr:AddWare{...} für neue Waren, rttr:SetWareTags{...} für Tags
+- data/RTTR/gamedata/civ/wares.lua:     rttr:AddWare{...} für neue Waren, rttr:SetWare{...} für Namen und Tags eingebauter Waren
 - data/RTTR/gamedata/civ/workshops.lua: rttr:AddWorkshop{...} für Werkstätten (Eingangswaren -> Produkt)
   Beide Dateien erklären alle Felder und enthalten ein auskommentiertes Beispiel zum Ausprobieren.
 - Tags: Name, Warenart (kind) und Eigenschaften (properties). Eingänge und Produkt einer Werkstatt sind Tag-Abfragen;

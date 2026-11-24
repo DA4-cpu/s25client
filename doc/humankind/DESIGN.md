@@ -345,7 +345,8 @@ Dateien: `data/RTTR/gamedata/civ/wares.lua` und `civ/workshops.lua` (dort ausfü
 ```lua
 rttr:AddWare{ name = "NeedleWood", title = "Nadelholz", kind = { "Holz", "Baumaterial" }, properties = { "Nadelholz" }, look = "Wood", transport = "Wood" }
 rttr:AddWare{ name = "NeedleBoards", title = "Nadelholzbretter", kind = "Bretter", properties = { "Nadelholz" }, look = "Boards", transport = "Boards" }
-rttr:SetWareTags{ Fish = { kind = { "Nahrung" } } }   -- Tags für eingebaute Waren
+rttr:SetWare{ Fish = { kind = { "Nahrung" } } }   -- Tags für eingebaute Waren
+rttr:SetWare{ Wood = { name = "PineLog", kind = { "Wood", "Softwood" } } }   -- eingebaute Ware umbenennen
 
 rttr:AddWorkshop{
     name = "Sawmill2", title = "Sägewerk", size = "medium", cost = { Boards = 2, Stones = 2 }, look = "Sawmill",
@@ -1842,8 +1843,8 @@ Sammlung aller Notizen und Antworten des Nutzers: Projektdokument `claude/notize
 Antworten im Dokument „S2 Modding – Offene Fragen zu den Lua-Notizen“ (Claude Docs). Umgesetzt in Schritt 1:
 
 - **`kind` als Liste (A2):** `kind = "Ore"` oder `kind = { "Fibers", "BasicRoofMaterial" }` in `rttr:AddWare` und
-  `rttr:SetWareTags`. `properties` bleibt unverändert (nur sie gibt `inheritProperties` weiter). Code:
-  `WareDesc::kind`, `WareTagsDesc::kind` als `std::vector<std::string>` (gelesen mit `parseTagQuery`),
+  `rttr:SetWare`. `properties` bleibt unverändert (nur sie gibt `inheritProperties` weiter). Code:
+  `WareDesc::kind`, `BuiltinWareDesc::kind` als `std::vector<std::string>` (gelesen mit `parseTagQuery`),
   `Content::SetTags`. Daten: „BasicRoofMaterial“ bei Holz, Brettern, Steinen und Thatch von `properties` nach `kind`
   (F-31), LoamBrick `kind = { "Stones", "BasicRoofMaterial" }` (F-25).
 - **`worker.tool` entfernt (C4):** Der Arbeiter einer Werkstatt hat kein Werkzeug mehr; das Feld `tool` ist ein
@@ -1866,7 +1867,16 @@ Antworten im Dokument „S2 Modding – Offene Fragen zu den Lua-Notizen“ (Cla
   „PLATZHALTER“-Markierungen mehr (Projektregel; in `world.lua` bleibt der Originalwert als „Original: …“ stehen,
   `platzhalterPakete` heißt `standardPakete`), Beschreibung der Technologie „Well“ (war der Text der
   Knochenschnitzerei), WP-Summen im Kopf von `techtree.lua`.
-- **Noch nicht umgesetzt:** A3 (eingebaute Waren umbenennen) wartet auf die Antwort zum Vorschlag `rttr:SetWare`.
+- **Eingebaute Waren ändern (A3, Antworten des Nutzers 2026-11-24):** `rttr:SetWare` ersetzt `rttr:SetWareTags`:
+  `rttr:SetWare{ Wood = { name = "PineLog", kind = { "Wood", "Softwood" }, properties = { ... } } }`, alle Felder
+  optional. `name` ist der neue Bezeichner und zugleich Anzeigename und Name-Tag (kein eigenes `title`). Danach heißt die
+  Ware in allen Lua-Dateien so (`Content::FindGood` findet sie nur noch unter dem neuen Namen); der alte Name trifft sie
+  nur noch als Tag, wenn er in `kind` steht. `look` und `transport` nennen weiter die Originalnamen (Originalgrafik,
+  Original-Transportpriorität); die Originalnamen bleiben deshalb für neue Waren gesperrt. Ein umbenanntes eingebautes
+  Werkzeug bleibt sein Werkzeugtyp (`Content::GetToolTypeOf`). Verhalten im Spiel unverändert (der Holzfäller legt
+  weiter `GoodType::Wood` ab). Code: `BuiltinWareDesc`, `parseBuiltinWare` (`CivContentDesc.*`),
+  `WorldDescription::builtinWares`, `GameDataLoader::SetWare`, `Content::GetBuiltinName` und `builtinNames_`,
+  `WARE_NAMES` zeigt den neuen Namen. Kein neuer Spielstand nötig (gespeichert wird der Warentyp, nicht der Name).
 
 ## Gesamtverteilung (Stand 2026-11-21)
 

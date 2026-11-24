@@ -60,7 +60,7 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("SetWarehouseCapacity", &GameDataLoader::SetWarehouseCapacity)
         .addFunction("SetFlagWorkLimit", &GameDataLoader::SetFlagWorkLimit)
         .addFunction("AddWare", &GameDataLoader::AddWare)
-        .addFunction("SetWareTags", &GameDataLoader::SetWareTags)
+        .addFunction("SetWare", &GameDataLoader::SetWare)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
         .addFunction("AddMapObject", &GameDataLoader::AddMapObject)
         .addFunction("AddOre", &GameDataLoader::AddOre)
@@ -150,21 +150,20 @@ void GameDataLoader::AddWare(const kaguya::LuaTable& data)
     worldDesc_.wares.emplace_back(data);
 }
 
-void GameDataLoader::SetWareTags(const kaguya::LuaTable& data)
+void GameDataLoader::SetWare(const kaguya::LuaTable& data)
 {
+    if(data.keys<std::string>().size() != data.keys<kaguya::LuaRef>().size())
+        throw GameDataError("rttr:SetWare expects a table like { Wood = { name = \"PineLog\", kind = { \"Wood\" } } }");
     for(const std::string& ware : data.keys<std::string>())
     {
         const kaguya::LuaRef value = data[ware];
         if(value.type() != kaguya::LuaRef::TYPE_TABLE)
-            throw GameDataError("Tags of ware '" + ware + "' must be a table like { kind = { \"Bretter\" } }");
-        CheckedLuaTable tagData(value.get<kaguya::LuaTable>());
-        WareTagsDesc tags;
-        if(const auto kindValue = tagData.getOptional<kaguya::LuaRef>("kind"))
-            tags.kind = parseTagQuery(*kindValue, "Tags of ware '" + ware + "', kind");
-        tags.properties = tagData.getOrDefault("properties", std::vector<std::string>());
-        tagData.checkUnused();
-        if(!worldDesc_.wareTags.emplace(ware, tags).second)
-            throw GameDataError("Tags of ware '" + ware + "' are defined twice");
+        {
+            throw GameDataError("Built-in ware '" + ware
+                                + "' (rttr:SetWare) must be a table like { name = \"PineLog\", kind = { \"Wood\" } }");
+        }
+        if(!worldDesc_.builtinWares.emplace(ware, parseBuiltinWare(value.get<kaguya::LuaTable>(), ware)).second)
+            throw GameDataError("Built-in ware '" + ware + "' (rttr:SetWare) is defined twice");
     }
 }
 

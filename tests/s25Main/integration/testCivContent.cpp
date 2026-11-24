@@ -239,7 +239,7 @@ BOOST_AUTO_TEST_CASE(KindListGivesEveryTag)
 {
     WorldDescription desc = makeSimpleDesc();
     desc.wares[1].kind = {"Wall", "Roof"};
-    desc.wareTags["Stones"] = WareTagsDesc{{"Wall", "Roof"}, {}};
+    desc.builtinWares["Stones"] = BuiltinWareDesc{"", {"Wall", "Roof"}, {}};
     const civ::Content content(desc);
     BOOST_TEST((content.GetTags(getCustomGood(1)) == std::vector<std::string>{"Product", "Wall", "Roof"}));
     // Kinds are no properties (those are only passed on by inheritProperties)
@@ -250,10 +250,62 @@ BOOST_AUTO_TEST_CASE(KindListGivesEveryTag)
     BOOST_TEST((content.FindWares({"Wall", "Roof"}) == expected));
 }
 
+BOOST_AUTO_TEST_CASE(RenamedBuiltinWare)
+{
+    // rttr:SetWare{ Wood = { name = "PineLog", kind = { "Wood", "Softwood" } }, Axe = { name = "IronAxe" } }
+    WorldDescription desc = makeSimpleDesc();
+    desc.builtinWares["Wood"] = BuiltinWareDesc{"PineLog", {"Wood", "Softwood"}, {}};
+    desc.builtinWares["Axe"] = BuiltinWareDesc{"IronAxe", {}, {}};
+    // look and transport still use the original identifiers
+    desc.wares[0].look = "Wood";
+    desc.wares[0].transport = "Wood";
+    {
+        const civ::Content content(desc);
+        BOOST_TEST(content.GetBuiltinName(GoodType::Wood) == "PineLog");
+        BOOST_TEST(content.GetBuiltinName(GoodType::Boards).empty());
+        BOOST_TEST((content.GetTags(GoodType::Wood) == std::vector<std::string>{"PineLog", "Wood", "Softwood"}));
+        BOOST_TEST((content.FindGood("PineLog") == GoodType::Wood));
+        // The old identifier only works as a tag
+        BOOST_TEST(!content.FindGood("Wood"));
+        BOOST_TEST((content.FindWares({"Wood"}) == std::vector<GoodType>{GoodType::Wood}));
+        BOOST_TEST((content.FindWares({"PineLog", "Softwood"}) == std::vector<GoodType>{GoodType::Wood}));
+        BOOST_TEST((content.GetWare(GoodType::Custom0)->look == GoodType::Wood));
+        // Without "Axe" in kind it is no longer found by the tag, but still the built-in axe
+        BOOST_TEST(content.FindWares({"Axe"}).empty());
+        BOOST_TEST((content.GetToolTypeOf(GoodType::Axe) == Tool::Axe));
+    }
+    {
+        // The new identifier is also the displayed name
+        ActiveContent active(desc);
+        BOOST_TEST(WARE_NAMES[GoodType::Wood] == "PineLog");
+        BOOST_TEST(WARE_NAMES[GoodType::Boards] == "Boards");
+    }
+    BOOST_TEST(WARE_NAMES[GoodType::Wood] == "Wood");
+
+    const auto expectError = [](const WorldDescription& invalid) {
+        BOOST_CHECK_THROW(civ::Content{invalid}, GameDataError);
+    };
+    for(const std::string& name : {"Boards", "Raw", "WaterEmpty"})
+    {
+        // Name of another built-in ware or of a new ware
+        WorldDescription invalid = makeSimpleDesc();
+        invalid.builtinWares["Wood"] = BuiltinWareDesc{name, {}, {}};
+        BOOST_TEST_INFO(name);
+        expectError(invalid);
+    }
+    {
+        // Two wares with the same new name
+        WorldDescription invalid = makeSimpleDesc();
+        invalid.builtinWares["Wood"] = BuiltinWareDesc{"Log", {}, {}};
+        invalid.builtinWares["Boards"] = BuiltinWareDesc{"Log", {}, {}};
+        expectError(invalid);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(WaresGetSlotsAndTags)
 {
     WorldDescription desc = makeSimpleDesc();
-    desc.wareTags["Boards"] = WareTagsDesc{{"Bretter"}, {"Nadel"}};
+    desc.builtinWares["Boards"] = BuiltinWareDesc{"", {"Bretter"}, {"Nadel"}};
     const civ::Content content(desc);
     BOOST_TEST_REQUIRE(content.GetNumWares() == 2u);
     const civ::CustomWare* raw = content.GetWare(GoodType::Custom0);
@@ -351,7 +403,7 @@ BOOST_AUTO_TEST_CASE(InvalidDefinitions)
     }
     {
         WorldDescription desc;
-        desc.wareTags["Raw"] = WareTagsDesc{{"Kind"}, {}}; // Only built-in wares
+        desc.builtinWares["Raw"] = BuiltinWareDesc{"", {"Kind"}, {}}; // Only built-in wares
         expectError(desc);
     }
     {

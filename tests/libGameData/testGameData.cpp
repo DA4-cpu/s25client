@@ -241,8 +241,8 @@ BOOST_AUTO_TEST_CASE(LoadWaresAndWorkshops)
 rttr:AddWare{ name = "Raw", title = "Rohstoff", kind = "RawKind", properties = { "A", "B" }, look = "Stones",
               transport = "Stones", knowledge = { LWP = 1 } }
 rttr:AddWare{ name = "Product", kind = { "KindA", "KindB" }, look = "Boards", transport = "Boards" }
-rttr:SetWareTags{ Boards = { kind = "Bretter", properties = { "Nadelholz" } } }
-rttr:SetWareTags{ Stones = { kind = { "Wall", "Roof" } } }
+rttr:SetWare{ Boards = { kind = "Bretter", properties = { "Nadelholz" } } }
+rttr:SetWare{ Stones = { kind = { "Wall", "Roof" } }, Wood = { name = "PineLog", kind = { "Wood" } } }
 rttr:AddWorkshop{ name = "Shop", title = "Werkstatt", description = "Desc", size = "medium",
                   cost = { Boards = 2, Stones = 1 }, look = "Sawmill",
                   worker = { title = "Arbeiter", look = "Carpenter" },
@@ -266,10 +266,12 @@ rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = 
     BOOST_TEST((raw.knowledge == KnowledgeValues{1, 0, 0}));
     BOOST_TEST(desc.wares[1].title == "Product"); // Default: name
     BOOST_TEST((desc.wares[1].kind == std::vector<std::string>{"KindA", "KindB"}));
-    BOOST_TEST((desc.wareTags.at("Stones").kind == std::vector<std::string>{"Wall", "Roof"}));
-    BOOST_TEST_REQUIRE(desc.wareTags.count("Boards") == 1u);
-    BOOST_TEST((desc.wareTags.at("Boards").kind == std::vector<std::string>{"Bretter"}));
-    BOOST_TEST((desc.wareTags.at("Boards").properties == std::vector<std::string>{"Nadelholz"}));
+    BOOST_TEST((desc.builtinWares.at("Stones").kind == std::vector<std::string>{"Wall", "Roof"}));
+    BOOST_TEST(desc.builtinWares.at("Stones").name.empty());
+    BOOST_TEST(desc.builtinWares.at("Wood").name == "PineLog");
+    BOOST_TEST_REQUIRE(desc.builtinWares.count("Boards") == 1u);
+    BOOST_TEST((desc.builtinWares.at("Boards").kind == std::vector<std::string>{"Bretter"}));
+    BOOST_TEST((desc.builtinWares.at("Boards").properties == std::vector<std::string>{"Nadelholz"}));
 
     BOOST_TEST_REQUIRE(desc.workshops.size() == 2u);
     const WorkshopDesc& shop = desc.workshops[0];
@@ -325,8 +327,13 @@ BOOST_AUTO_TEST_CASE(DetectInvalidWaresAndWorkshops)
     // Typo
     expectLoadFailure(R"(rttr:AddWare{ name = "Bones", look = "Stones", transport = "Stones", kinf = "X" })");
     // Tags must be tables
-    expectLoadFailure(R"(rttr:SetWareTags{ Boards = "Bretter" })");
-    expectLoadFailure(R"(rttr:SetWareTags{ Boards = { kind = { } } })");
+    expectLoadFailure(R"(rttr:SetWare{ Boards = "Bretter" })");
+    expectLoadFailure(R"(rttr:SetWare{ Boards = { kind = { } } })");
+    expectLoadFailure(R"(rttr:SetWare{ Boards = { name = "Kiefern bretter" } })");
+    expectLoadFailure(R"(rttr:SetWare{ Boards = { title = "Bretter" } })");
+    expectLoadFailure(R"(rttr:SetWare{ Boards = { kind = "A" } }
+rttr:SetWare{ Boards = { kind = "B" } })");
+    expectLoadFailure(R"(rttr:SetWareTags{ Boards = { kind = "Bretter" } })");
     expectLoadFailure(R"(rttr:AddWare{ name = "Bones", kind = { "A", 2 }, look = "Stones", transport = "Stones" })");
     // The worker has no tool any more (tools of a workshop: tools = { ... })
     expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards",

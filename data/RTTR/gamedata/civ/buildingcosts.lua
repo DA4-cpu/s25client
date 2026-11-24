@@ -19,7 +19,7 @@ Der Bauarbeiter verbaut die Einträge nacheinander. Die erste Hälfte des Baufor
 die Mauern.
 "Boards" und "Stones" sind die Bezeichner der eingebauten Bretter und Steine (zugleich ihre Tags). Neue Waren
 zählen dazu, wenn sie diesen Tag haben (z.B. kind = "Boards"), oder man gibt den eingebauten Waren mit
-rttr:SetWareTags (wares.lua) eine Warenart und fragt nach ihr.
+rttr:SetWare (wares.lua) eine Warenart und fragt nach ihr.
 Der Hafen kostet immer 4 Bretter und 6 Steine (Expeditionen bringen genau diese Waren mit) und steht deshalb nicht
 hier. Nicht genannte Gebäude behalten ihre bisherigen Kosten.
 Beim Abriss mit Rückerstattung (Addon) gibt es von jedem Eintrag die erste passende Ware zurück.

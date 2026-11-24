@@ -20,14 +20,19 @@ rttr:AddWare{...} definiert eine neue Ware:
   knowledge   optional: Wissenspunkte, wenn die Ware als Wissensmedium eingelagert ist, z.B. { LWP = 1 }
               (wird erst mit den Bibliotheken in Phase 2 ausgewertet)
 
-rttr:SetWareTags{...} gibt eingebauten Waren zusätzliche Tags, kind und properties wie bei rttr:AddWare:
-  rttr:SetWareTags{ Boards = { kind = { "Bretter", "BasicBuildingMaterial" }, properties = { "Nadelholz" } } }
+rttr:SetWare{...} ändert eingebaute Waren (alle Felder optional):
+  name        neuer Bezeichner, zugleich Anzeigename und Name-Tag. Nur A-Z, a-z, 0-9 und _. Danach heißt die Ware in
+              allen Lua-Dateien so; der alte Bezeichner trifft sie nur noch, wenn er als Tag in kind steht. Ausnahme:
+              look und transport nennen immer die Originalnamen (Originalgrafik, Original-Transportpriorität).
+  kind        Warenarten wie bei rttr:AddWare
+  properties  Eigenschafts-Tags wie bei rttr:AddWare
+  Beispiel: rttr:SetWare{ Wood = { name = "PineLog", kind = { "Wood", "Softwood", "BasicBuildingMaterial" } } }
+  Die Ware PineLog trägt dann die Tags PineLog, Wood, Softwood und BasicBuildingMaterial. Was sie im Spiel tut (der
+  Holzfäller legt sie ab, das Sägewerk sägt sie), bleibt gleich.
 
 Tags: Jede Ware hat ihren Bezeichner als Tag, dazu alle Tags aus kind und properties. Eine Tag-Abfrage (z.B. in den
 Eingängen einer Werkstatt) ist ein einzelner Tag "Bretter" oder eine Liste { "Bretter", "Nadelholz" }; passend sind alle
 Waren, die alle genannten Tags haben.
-
-Ich  möchte hier auch Tags von Waren, die bereits fest im Spiel integriert sind ändern können. 
 
 WICHTIG für Spielstände: Neue Waren immer hinten anfügen. Bestehende Waren nicht löschen, umbenennen oder umsortieren,
 sonst passen alte Spielstände nicht mehr. Es sind höchstens 64 neue Waren möglich. Das Warenlimit muss dringend aufgehobenoder auf über  500 erhöht werden
@@ -38,9 +43,9 @@ rttr:AddWare{ name = "ExampleRaw", title = "Beispiel-Rohstoff", kind = "Beispiel
 rttr:AddWare{ name = "ExampleProduct", title = "Beispiel-Produkt", look = "Boards", transport = "Boards" }
 ]]
 
-rttr:SetWareTags{ Wood = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
-rttr:SetWareTags{ Boards = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
-rttr:SetWareTags{ Stones = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
+rttr:SetWare{ Wood = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
+rttr:SetWare{ Boards = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
+rttr:SetWare{ Stones = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
 
 
 rttr:AddWare{ name = "Loam", title = "Lehm", properties = { "muddy" }, look = "Leather", transport = "Boards" }

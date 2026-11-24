@@ -45,6 +45,27 @@ std::vector<std::string> readTagList(CheckedLuaTable& luaData, const char* field
 }
 } // namespace
 
+BuiltinWareDesc parseBuiltinWare(const kaguya::LuaTable& luaTable, const std::string& ware)
+{
+    const std::string context = "Built-in ware '" + ware + "' (rttr:SetWare)";
+    CheckedLuaTable luaData(luaTable);
+    BuiltinWareDesc result;
+    if(const auto name = luaData.getOptional<std::string>("name"))
+    {
+        if(!isValidIdentifier(*name))
+        {
+            throw GameDataError(context + ": name '" + *name
+                                + "' may only contain letters A-Z, digits and underscores (no umlauts or spaces)");
+        }
+        result.name = *name;
+    }
+    if(const auto kindValue = luaData.getOptional<kaguya::LuaRef>("kind"))
+        result.kind = parseTagQuery(*kindValue, context + ", kind");
+    result.properties = readTagList(luaData, "properties", context);
+    luaData.checkUnused();
+    return result;
+}
+
 TagQuery parseTagQuery(const kaguya::LuaRef& value, const std::string& context)
 {
     TagQuery result;

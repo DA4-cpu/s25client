@@ -108,7 +108,28 @@ Content::Content(const WorldDescription& desc) : Content()
     // Wares
     if(desc.wares.size() > NUM_CUSTOM_GOODS)
         throw GameDataError("At most " + std::to_string(NUM_CUSTOM_GOODS) + " new wares can be defined");
+    // Built-in wares changed by rttr:SetWare: new identifier (also the displayed name and the name tag) and tags. The
+    // original identifiers stay reserved: look and transport of new wares refer to them
     std::set<std::string> wareNames;
+    for(const auto& entry : desc.builtinWares)
+    {
+        const std::string context = "Built-in ware '" + entry.first + "' (rttr:SetWare)";
+        const auto good = goodFromIdentifier(entry.first);
+        if(!good || !isUsableBuiltinGood(*good))
+            throw GameDataError(context + ": not a built-in ware (new wares get their tags in rttr:AddWare)");
+        const BuiltinWareDesc& wareDesc = entry.second;
+        if(!wareDesc.name.empty() && wareDesc.name != entry.first)
+        {
+            if(goodFromIdentifier(wareDesc.name) || wareDesc.name == "WaterEmpty"
+               || !wareNames.insert(wareDesc.name).second)
+            {
+                throw GameDataError(context + ": the name '" + wareDesc.name + "' is already the name of another ware");
+            }
+            builtinNames_[*good] = wareDesc.name;
+            tags_[*good] = {wareDesc.name};
+        }
+        SetTags(*good, wareDesc.kind, wareDesc.properties);
+    }
     for(unsigned i = 0; i < desc.wares.size(); ++i)
     {
         const WareDesc& wareDesc = desc.wares[i];
@@ -145,16 +166,6 @@ Content::Content(const WorldDescription& desc) : Content()
             defaultKnowledgeDistribution_[type] =
               static_cast<uint8_t>((*desc.knowledgeDistribution)[static_cast<unsigned>(type)]);
         }
-    }
-    for(const auto& entry : desc.wareTags)
-    {
-        const auto good = goodFromIdentifier(entry.first);
-        if(!good)
-        {
-            throw GameDataError("Tags for '" + entry.first
-                                + "': not a built-in ware (new wares get their tags in rttr:AddWare)");
-        }
-        SetTags(*good, entry.second.kind, entry.second.properties);
     }
 
     // Map objects
@@ -649,6 +660,8 @@ std::string Content::getIdentifierOf(GoodType good) const
 {
     if(const CustomWare* ware = GetWare(good))
         return ware->name;
+    if(!isCustomGood(good) && good != GoodType::Nothing && !builtinNames_[good].empty())
+        return builtinNames_[good];
     return getIdentifier(good);
 }
 
@@ -789,6 +802,12 @@ std::optional<Tool> Content::GetToolTypeOf(const GoodType good) const
     std::optional<Tool> result;
     for(const auto tool : helpers::enumRange<Tool>())
     {
+        // A built-in tool is always of its type, also when it was renamed (rttr:SetWare)
+        if(TOOL_TO_GOOD[tool] == good)
+            return tool;
+    }
+    for(const auto tool : helpers::enumRange<Tool>())
+    {
         if(helpers::contains(tags_[good], getIdentifier(TOOL_TO_GOOD[tool])))
         {
             if(result)
@@ -801,8 +820,18 @@ std::optional<Tool> Content::GetToolTypeOf(const GoodType good) const
 
 std::optional<GoodType> Content::FindGood(const std::string& identifier) const
 {
+    // Renamed built-in wares (rttr:SetWare) are only found by their new identifier
+    for(const auto good : helpers::enumRange<GoodType>())
+    {
+        if(!identifier.empty() && builtinNames_[good] == identifier)
+            return good;
+    }
     if(const auto good = goodFromIdentifier(identifier))
+    {
+        if(!builtinNames_[*good].empty())
+            return std::nullopt;
         return good;
+    }
     for(unsigned i = 0; i < wares_.size(); ++i)
     {
         if(wares_[i].name == identifier)

@@ -40,12 +40,20 @@ struct WareDesc
     explicit WareDesc(const kaguya::LuaTable& luaData);
 };
 
-/// Additional tags of a built-in ware (rttr:SetWareTags)
-struct WareTagsDesc
+/// Changes of a built-in ware (rttr:SetWare): new identifier and additional tags
+struct BuiltinWareDesc
 {
+    /// New identifier, also the displayed name and the name tag. Empty: unchanged
+    std::string name;
+    /// Kinds of ware ("Warenarten"), each also a tag
     std::vector<std::string> kind;
+    /// Properties ("Eigenschaften"), also tags
     std::vector<std::string> properties;
 };
+
+/// Read { name = "PineLog", kind = { ... }, properties = { ... } } of rttr:SetWare (all optional) for the built-in ware
+/// with the given identifier
+BuiltinWareDesc parseBuiltinWare(const kaguya::LuaTable& luaData, const std::string& ware);
 
 /// Material of tools (rttr:AddToolMaterial), e.g. iron
 struct ToolMaterialDesc

@@ -64,5 +64,9 @@ const std::string& WareNamesTable::operator[](GoodType good) const
     }
     if(good == GoodType::Nothing)
         return empty;
+    // Renamed by rttr:SetWare: the new identifier is also the displayed name
+    const std::string& renamed = civ::getActiveContent().GetBuiltinName(good);
+    if(!renamed.empty())
+        return renamed;
     return builtinWareNames[static_cast<unsigned>(good)];
 }
