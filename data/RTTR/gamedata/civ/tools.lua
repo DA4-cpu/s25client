@@ -42,23 +42,12 @@ rttr:AddTool{...}: macht eine Ware (eingebaut oder aus wares.lua) zum Werkzeug
               Ein Eingang braucht dann mindestens 0 (0 = er braucht nichts) und höchstens so viele, wie er Plätze hat.
               Eingebaute Minen (mehrere Nahrungsplätze, eine beliebige Nahrung je Schritt) beachten inputRatio nicht.
   Der Werkzeugtyp ergibt sich aus den Tags der Ware: Eine neue Ware "CopperAxe" mit kind = "Axe" zählt überall als
-  Axt, wo unten "Axe" steht.
+  Axt, wo in tools (workshops.lua) "Axe" steht.
 
-rttr:SetBuildingTools{...}: Werkzeuge der eingebauten Gebäude
-  baseSpeed   Arbeitstempo ohne Werkzeug in Prozent (Standard 0)
-  tools       Liste der Werkzeugtypen (Tag-Abfragen wie bei den Eingängen), höchstens 4. Von jedem Typ liegt höchstens
-              ein Werkzeug in Gebrauch im Gebäude, dazu höchstens ein Ersatz.
-  Nicht genannte Gebäude nutzen das bisherige Werkzeug ihres Arbeiters mit baseSpeed = 0; Gebäude, deren Arbeiter
-  kein Werkzeug hatte, arbeiten wie bisher (Tempo 100).
-  Werkstätten aus workshops.lua bekommen ihre Werkzeuge dort: tools = { baseSpeed = 0, tools = { "Saw" } }.
-  Ohne diese Angabe braucht eine Werkstatt kein Werkzeug und arbeitet mit Tempo 100.
-
-rttr:SetBuildingOutputRatio{...}: Waren pro Arbeitsschritt der eingebauten Gebäude ohne Werkzeug (Standard 1), 0 bis 8,
-  z.B. rttr:SetBuildingOutputRatio{ Woodcutter = 1, Quarry = 1.5 }. Bedeutung wie outputRatio in workshops.lua
-  (dort für die Werkstätten). Gilt auch ohne Werkzeugreform. Ein Holzfäller mit 2 bringt 2 Holz je Baum. Minen und
-  Abbauer nehmen je Arbeitsschritt genau 1 Einheit ihres Vorkommens, egal wie viele Waren herauskommen: Ein Steinmetz
-  mit 2 nimmt 1 Stück vom Steinhaufen und bringt 2 Steine, ein Fischer mit 2 fängt 1 Fisch und bringt 2. Das braucht
-  man nicht mehr, wenn die Gebäude alle in workshops.lua stehen
+Werkzeuge der Gebäude und ihr Tempo ohne Werkzeug: tools in workshops.lua, z.B.
+  tools = { baseSpeed = 25, tools = { "Axe" } } (rttr:SetBuilding für die eingebauten Gebäude, rttr:AddWorkshop für die
+  Werkstätten). baseSpeed = Arbeitstempo ohne Werkzeug in Prozent (Standard 0), tools = Werkzeugtypen als
+  Tag-Abfragen, höchstens 4. Waren pro Arbeitsschritt: outputRatio, ebenfalls in workshops.lua.
 
 rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nur noch n Prozent seiner Haltbarkeit
   hat. Es wartet im Gebäude, bis das alte kaputt ist.
@@ -120,40 +109,3 @@ rttr:AddTool{ ware = "WoodenSpindle",        material = "Wood", durability = 100
 rttr:AddTool{ ware = "WoodenBucket",        material = "Wood", durability = 100, speed = 100 } 
 
 rttr:SetToolReorder(10)
-
--- Alles, was man braucht, um neue Werkzeuge herzustellen (Holz, Bretter, Stein, Bergbau, Eisenschmelze, Schlosserei),
--- arbeitet auch ohne Werkzeug langsam weiter. Sonst gäbe es nach dem Bruch des letzten Werkzeugs nie wieder welche. Wenn 
--- die ingame Gebäude alle in workshops.lua stehen, braucht man diese Tabelle nicht mehr
-rttr:SetBuildingTools{
-    -- Holz und Stein
-    Woodcutter     = { baseSpeed = 25, tools = { "Axe" } },       -- Holzfäller
-    Forester       = { baseSpeed = 25, tools = { "Shovel" } },     -- Förster
-    Sawmill        = { baseSpeed = 25, tools = { "Saw" } },        -- Sägewerk
-    Quarry         = { baseSpeed = 25, tools = { "PickAxe" } },    -- Steinbruch
-
-    -- Nahrung und Landwirtschaft
-    Fishery        = { baseSpeed = 0, tools = { "RodAndLine" } }, -- Fischer
-    Hunter         = { baseSpeed = 0, tools = { "Bow" } },        -- Jäger
-    Farm           = { baseSpeed = 25, tools = { "Scythe" } },    -- Bauernhof
-    Bakery         = { baseSpeed = 0, tools = { "Rollingpin" } }, -- Bäcker
-    Slaughterhouse = { baseSpeed = 0, tools = { "Cleaver" } },    -- Fleischerei
-    Vineyard       = { baseSpeed = 0, tools = { "Shovel" } },     -- Weinberg
-
-    -- Bergbau und Metall
-    GraniteMine    = { baseSpeed = 25, tools = { "PickAxe" } },    -- Granitmine
-    CoalMine       = { baseSpeed = 25, tools = { "PickAxe" } },    -- Kohlemine
-    IronMine       = { baseSpeed = 25, tools = { "PickAxe" } },    -- Eisenmine
-    GoldMine       = { baseSpeed = 0, tools = { "PickAxe" } },    -- Goldmine
-    Charburner     = { baseSpeed = 25, tools = { "Shovel" } },     -- Köhler
-    Ironsmelter    = { baseSpeed = 25, tools = { "Crucible" } },   -- Eisenschmelze
-    Mint           = { baseSpeed = 0, tools = { "Crucible" } },   -- Münzprägerei
-    Armory         = { baseSpeed = 0, tools = { "Hammer" } },     -- Waffenschmiede
-    Metalworks     = { baseSpeed = 25, tools = { "Tongs" } },     -- Schlosserei
-    Shipyard       = { baseSpeed = 0, tools = { "Hammer" } },     -- Werft
-
-    -- Leder und Tempel
-    Skinner        = { baseSpeed = 0, tools = { "Cleaver" } },    -- Abdecker
-    Tannery        = { baseSpeed = 0, tools = { "Saw" } },        -- Gerberei
-    LeatherWorks   = { baseSpeed = 0, tools = { "Tongs" } },      -- Lederwerkstatt
-    Temple         = { baseSpeed = 0, tools = { "Crucible" } },   -- Tempel
-}

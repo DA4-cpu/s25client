@@ -3504,21 +3504,23 @@ MapPoint EconomyPlanner::SearchPlace(Order& order, unsigned& searchBudget, bool&
     if(renewal && order.building == BuildingType::Forester)
     {
         // A forester never where its reach overlaps that of a clearing woodcutter or a charburner (Nutzer)
-        const unsigned foresterReach = nofFarmhand::GetWorkRadius(Job::Forester);
+        const unsigned foresterReach = nofFarmhand::GetWorkRadius(BuildingType::Forester);
         std::vector<MapPoint> clearing = player_.GetClearingWoodcutters();
         clearing.insert(clearing.end(), clearingPending_.begin(), clearingPending_.end());
         for(const MapPoint pos : clearing)
         {
             if(IsClearingWoodcutter(pos))
-                avoid.emplace_back(pos, nofFarmhand::GetWorkRadius(Job::Woodcutter) + foresterReach);
+                avoid.emplace_back(pos, nofFarmhand::GetWorkRadius(BuildingType::Woodcutter) + foresterReach);
         }
         const BuildingRegister& buildings = player_.GetBuildingRegister();
         for(const nobUsual* charburner : buildings.GetBuildings(BuildingType::Charburner))
-            avoid.emplace_back(charburner->GetPos(), nofFarmhand::GetWorkRadius(Job::CharBurner) + foresterReach);
+            avoid.emplace_back(charburner->GetPos(),
+                               nofFarmhand::GetWorkRadius(BuildingType::Charburner) + foresterReach);
         for(const noBuildingSite* site : buildings.GetBuildingSites())
         {
             if(site->GetBuildingType() == BuildingType::Charburner)
-                avoid.emplace_back(site->GetPos(), nofFarmhand::GetWorkRadius(Job::CharBurner) + foresterReach);
+                avoid.emplace_back(site->GetPos(),
+                                   nofFarmhand::GetWorkRadius(BuildingType::Charburner) + foresterReach);
         }
     }
     while(searchBudget > 0)
@@ -3628,10 +3630,11 @@ bool EconomyPlanner::IsPlaceValid(const Order& order, const Recipe* recipe, cons
         }
         return false;
     };
-    const unsigned foresterReach = nofFarmhand::GetWorkRadius(Job::Forester);
+    const unsigned foresterReach = nofFarmhand::GetWorkRadius(BuildingType::Forester);
     if(order.clearing && recipe && FindRenewer(recipe->source) && nearForester(recipe->reach + foresterReach))
         return false;
-    if(bld == BuildingType::Charburner && nearForester(nofFarmhand::GetWorkRadius(Job::CharBurner) + foresterReach))
+    if(bld == BuildingType::Charburner
+       && nearForester(nofFarmhand::GetWorkRadius(BuildingType::Charburner) + foresterReach))
         return false;
     // Enough of its source in reach (not beside its renewer: it plants it)
     if(recipe && recipe->reach > 0 && !order.besideRenewer

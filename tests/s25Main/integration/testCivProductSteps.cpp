@@ -89,7 +89,7 @@ WorldDescription makeDesc(unsigned outputRatio, unsigned pikeSteps, unsigned sab
         shop.outputs.push_back({"Saber"});
         shop.outputSteps.push_back(saberSteps);
     }
-    shop.workTime = 2;
+    shop.workTime = 40;
     shop.outputRatio = outputRatio;
     if(tongs)
     {
@@ -199,9 +199,9 @@ rttr:AddTool{ ware = "Hammer", material = "Iron", durability = 100, speed = 100,
     inputRatio = { Coal = -0.25, Metal = 0.5 } }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "Metalworks",
     worker = { look = "Metalworker" }, inputs = { "Raw" }, outputs = { "Pike", { "Weapon", "Long", steps = 1.5 } },
-    workTime = 5 }
+    workTime = 100 }
 rttr:AddWorkshop{ name = "Smithy", size = "small", cost = { Boards = 2 }, look = "Metalworks",
-    worker = { look = "Metalworker" }, inputs = { "Raw" }, outputs = { { "Weapon", steps = 2 } }, workTime = 5 }
+    worker = { look = "Metalworker" }, inputs = { "Raw" }, outputs = { { "Weapon", steps = 2 } }, workTime = 100 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));

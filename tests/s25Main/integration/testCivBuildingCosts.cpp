@@ -35,7 +35,7 @@
 
 namespace bnw = boost::nowide;
 
-// Construction costs by tags (civilization mode): rttr:SetBuildingCost and cost in rttr:AddWorkshop
+// Construction costs by tags (civilization mode): cost in rttr:SetBuilding and rttr:AddWorkshop
 BOOST_AUTO_TEST_SUITE(CivBuildingCostsSuite)
 
 namespace {
@@ -107,12 +107,10 @@ BOOST_AUTO_TEST_CASE(CostsFromLua)
     const std::string base = R"(
 rttr:AddWare{ name = "LeafBoards", kind = "Bretter", properties = { "Laub" }, look = "Boards", transport = "Boards" }
 rttr:AddWare{ name = "NeedleBoards", kind = "Bretter", properties = { "Nadel" }, look = "Boards", transport = "Boards" }
-rttr:SetBuildingCost{
-    Woodcutter = { Stones = 1, Bretter = 2 },
-    Sawmill = { { tags = "Stones", amount = 1 }, { tags = { "Bretter", "Nadel" }, amount = 2 } },
-}
+rttr:SetBuilding{ name = "Woodcutter", cost = { Stones = 1, Bretter = 2 } }
+rttr:SetBuilding{ name = "Sawmill", cost = { { tags = "Stones", amount = 1 }, { tags = { "Bretter", "Nadel" }, amount = 2 } } }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { { tags = "Bretter", amount = 3 } }, look = "Sawmill",
-    worker = { look = "Carpenter" }, inputs = { "Stones" }, outputs = { "Boards" }, workTime = 5 }
+    worker = { look = "Carpenter" }, inputs = { "Stones" }, outputs = { "Boards" }, workTime = 100 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));
@@ -158,7 +156,8 @@ rttr:AddWorkshop{ name = "Shop", size = "small", cost = { { tags = "Bretter", am
          replaced("Stones = 1, Bretter = 2", "Stones = 1, { tags = \"Bretter\", amount = 1 }"),
          replaced("Stones = 1, Bretter = 2", ""),
          replaced("{ tags = \"Stones\", amount = 1 }", "{ tags = \"Stones\" }"),
-         replaced("amount = 3", "amount = 3, phase = 1"), replaced("Woodcutter = {", "Woodcutter = 2, Farm = {"),
+         replaced("amount = 3", "amount = 3, phase = 1"), replaced("cost = { Stones = 1, Bretter = 2 }", "cost = 2"),
+         base + "rttr:SetBuilding{ name = \"Woodcutter\", cost = { Boards = 1 } }",
          base + "rttr:SetBuildingCost{ Woodcutter = { Boards = 1 } }"})
     {
         WorldDescription invalidDesc;
@@ -166,9 +165,9 @@ rttr:AddWorkshop{ name = "Shop", size = "small", cost = { { tags = "Bretter", am
         BOOST_TEST(!loadLua(invalid, invalidDesc));
     }
     for(const std::string& invalid :
-        {replaced("Bretter = 2", "Planks = 2"), replaced("Woodcutter =", "HarborBuilding ="),
-         replaced("Woodcutter =", "Headquarters ="), replaced("Woodcutter =", "Shop ="),
-         replaced("Woodcutter =", "Wood =")})
+        {replaced("Bretter = 2", "Planks = 2"), replaced("\"Woodcutter\"", "\"HarborBuilding\""),
+         replaced("\"Woodcutter\"", "\"Headquarters\""), replaced("\"Woodcutter\"", "\"Shop\""),
+         replaced("\"Woodcutter\"", "\"Wood\"")})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(invalid);

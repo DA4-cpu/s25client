@@ -88,7 +88,7 @@ WorkshopDesc makeWorkshop(const std::string& name, std::vector<TagQuery> inputs,
     for(TagQuery& input : inputs)
         desc.inputs.push_back(InputDesc{std::move(input)});
     desc.outputs = {std::move(output)};
-    desc.workTime = 2;
+    desc.workTime = 40;
     return desc;
 }
 
@@ -196,7 +196,7 @@ WorldDescription makeCollectorDesc(unsigned radius = 6)
     pit.worker.look = "Planer";
     pit.collectObject = "Deposit";
     pit.collectRadius = radius;
-    pit.workTime = 1;
+    pit.workTime = 20;
     desc.workshops.push_back(pit);
     return desc;
 }
@@ -567,7 +567,7 @@ rttr:AddWare{ name = "Loam", title = "Lehm", look = "Stones", transport = "Stone
 rttr:AddMapObject{ name = "LoamDeposit", title = "Lehmvorkommen", sizes = 4, look = "Granite2", tint = 0xC08050 }
 rttr:AddWorkshop{ name = "LoamPit", title = "Lehmgrube", size = "small", cost = { Boards = 2 }, look = "Quarry",
     worker = { title = "Lehmstecher", look = "Planer" },
-    collect = { object = "LoamDeposit", radius = 8 }, outputs = { "Loam" }, workTime = 7, waitTime = 40 }
+    collect = { object = "LoamDeposit", radius = 8 }, outputs = { "Loam" }, workTime = 140, waitTime = 800 }
 )";
     const auto load = [](const std::string& content, WorldDescription& desc) {
         rttr::test::TmpFolder tmp;
@@ -615,7 +615,7 @@ rttr:AddWare{ name = "Loam", title = "Lehm", look = "Stones", transport = "Stone
 rttr:AddMapObject{ name = "LoamDeposit", title = "Lehmvorkommen", sizes = 4, look = "Granite2" }
 rttr:AddWorkshop{ name = "LoamPit", title = "Lehmgrube", size = "small", cost = { Boards = 2 }, look = "Quarry",
     worker = { title = "Lehmstecher", look = "Planer" },
-    collect = { object = "LoamDeposit", radius = 8 }, outputs = { "Loam" }, workTime = 7 AI_NEAR_BORDER }
+    collect = { object = "LoamDeposit", radius = 8 }, outputs = { "Loam" }, workTime = 140 AI_NEAR_BORDER }
 )";
     const auto load = [&base](const std::string& aiNearBorder, WorldDescription& desc) {
         std::string content = base;
@@ -827,7 +827,7 @@ rttr:AddWare{ name = "CarvedI", kind = "Carved", properties = { "IWP" }, look = 
               knowledge = { IWP = 1 } }
 rttr:AddWorkshop{ name = "Carver", size = "small", cost = { Boards = 2 }, look = "Hunter",
                   worker = { look = "Butcher" }, inputs = { "Bones" }, outputs = { "Carved" },
-                  outputChoice = "knowledge", workTime = 30 }
+                  outputChoice = "knowledge", workTime = 600 }
 rttr:AddTechnology{ name = "bones", title = "Bones", knowledge = { LWP = 1 }, unlocks = { buildings = { "Carver" } } }
 )";
     {
@@ -947,7 +947,7 @@ rttr:AddWorkshop{ name = "Library", size = "medium", cost = { Boards = 2 }, look
          wares + replaced("capacity = 20", "capacity = 20, typo = 1"),
          wares + replaced("library =", "inputs = { \"CarvedL\" }, library ="),
          wares + replaced("library =", "outputs = { \"CarvedL\" }, library ="),
-         wares + replaced("library =", "workTime = 10, library =")})
+         wares + replaced("library =", "workTime = 200, library =")})
     {
         WorldDescription desc;
         BOOST_TEST_INFO(invalid);

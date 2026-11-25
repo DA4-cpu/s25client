@@ -334,7 +334,11 @@ const BuildingWorkDescTable BLD_WORK_DESC{};
 const char* BuildingNamesTable::operator[](BuildingType bld) const
 {
     if(!isCustomBuilding(bld))
-        return builtinBuildingNames[static_cast<unsigned>(bld)];
+    {
+        // Name set in lua (rttr:SetBuilding)
+        const std::string& title = civ::getActiveContent().GetBuiltinTitle(bld);
+        return title.empty() ? builtinBuildingNames[static_cast<unsigned>(bld)] : title.c_str();
+    }
     const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
     return custom ? custom->title.c_str() : "";
 }
@@ -342,7 +346,10 @@ const char* BuildingNamesTable::operator[](BuildingType bld) const
 const char* BuildingHelpTable::operator[](BuildingType bld) const
 {
     if(!isCustomBuilding(bld))
-        return builtinBuildingHelp[static_cast<unsigned>(bld)];
+    {
+        const std::string& description = civ::getActiveContent().GetBuiltinDescription(bld);
+        return description.empty() ? builtinBuildingHelp[static_cast<unsigned>(bld)] : description.c_str();
+    }
     const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
     return custom ? custom->description.c_str() : "";
 }
@@ -355,7 +362,7 @@ const BuildingCosts& BuildingCostTable::operator[](BuildingType bld) const
 BuildingQuality BuildingSizeTable::operator[](BuildingType bld) const
 {
     if(!isCustomBuilding(bld))
-        return BUILTIN_BUILDING_SIZE[static_cast<unsigned>(bld)];
+        return civ::getActiveContent().GetBuiltinSize(bld);
     const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
     return custom ? custom->size : BuildingQuality::Nothing;
 }
@@ -363,18 +370,9 @@ BuildingQuality BuildingSizeTable::operator[](BuildingType bld) const
 const BldWorkDescription& BuildingWorkDescTable::operator[](BuildingType bld) const
 {
     static const BldWorkDescription noWork{};
-    // Built-in buildings: one input per ware they need
-    static const std::array<BldWorkDescription, NUM_BUILTIN_BUILDINGS> builtin = [] {
-        std::array<BldWorkDescription, NUM_BUILTIN_BUILDINGS> result = BUILTIN_BLD_WORK_DESC;
-        for(BldWorkDescription& desc : result)
-        {
-            for(const GoodType good : desc.waresNeeded)
-                desc.inputs.push_back(InputSlot{{good}, 100, desc.numSpacesPerWare});
-        }
-        return result;
-    }();
+    // Built-in buildings: one input per ware they need (civ::Content, with the storage of rttr:SetBuilding)
     if(!isCustomBuilding(bld))
-        return builtin[static_cast<unsigned>(bld)];
+        return civ::getActiveContent().GetBuiltinWorkDesc(bld);
     const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(bld);
     return custom ? custom->workDesc : noWork;
 }

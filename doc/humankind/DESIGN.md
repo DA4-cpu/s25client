@@ -70,6 +70,8 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-11-12 | **Baukosten nach Tags**: jede Ware kann Baumaterial sein. Auch die eingebauten Gebäude bekommen ihre Kosten aus Lua (`rttr:SetBuildingCost`). Kurzform `{ Boards = 2 }` und Langform `{ { tags = ..., amount = ... } }`. Verbaut wird **nur nach Reihenfolge** (erste Hälfte des Fortschritts = Gerüst). Die Baustelle bestellt aus dem **nächsten Lager mit irgendeiner passenden Ware**. |
 | 2026-11-25 | **Sparwert je Ware:** Jede Ware eines Gebäudes hat ihren eigenen Sparwert, zu Beginn jedes Arbeitsschritts wird neu gewählt, der Ertrag des Schritts kommt nur auf den Sparwert der gewählten Ware. Mehrere Stück in einem Schritt sind dieselbe Ware (ersetzt „jede Ware einzeln gewählt“ vom 2026-11-12). Kosten je Ware: `steps` an Einträgen von `outputs`. |
 | 2026-11-25 | **`output` entfällt**, `outputs` übernimmt seine Rolle: ein Eintrag darf mehrere Waren treffen (jede ist ein Produkt), auch für Sammler, Plantagen, Minen, `inheritProperties` und `outputChoice`. |
+| 2026-11-25 | **Militärgebäude in Lua (C5):** `military = { soldiers, radius, vision, coins, armor }` in `rttr:AddWorkshop`; die alte KI wählt ihre Rollen aus der nach Besatzung sortierten Liste aller Militärgebäude (Abschnitt „Schritt 4“). |
+| 2026-11-25 | **Eingebaute Gebäude aus Lua steuern (C1 Teil 1):** `rttr:SetBuilding{ name = ..., ... }` mit vollständigem Eintrag je eingebautem Gebäude in `workshops.lua`; Zeiten in Frames (auch Werkstätten), neues Feld `waitAfterTime`; ein Beruf ist in allen Gebäuden derselbe; die alten `SetBuilding…`-Funktionen, `buildingcosts.lua` und `knowledge.lua` entfallen (Abschnitt „Schritt 5“). |
 
 ## Zuordnung Humankind → Siedler
 
@@ -179,7 +181,7 @@ null. `ai-battle` zeigt die WP jedes Spielers als „verfügbar/gesamt“ an.
 | Regler „Wissen“ | `PlayerResearch::Get/SetKnowledgeDistribution`, `gc::SetKnowledgeDistribution`, `iwDistribution` (Reiter), `nofCustomWorker::ProduceWare` |
 | Eigene Regler, `outputChoice = "tools"` | `civ::Regulator`, `PlayerResearch::Get/SetRegulatorValues`, `gc::SetRegulatorValues`, `iwDistribution::AddRegulatorTab`, `nofCustomWorker::ChooseTool` / `ChooseWeightedProduct` |
 | Medien-WP, Bibliothek | `civ::calcTotalKnowledge` (`Knowledge.cpp`), `nobUsual` (Bibliotheks-Modus), `iwBuilding`, KI: `BuildingPlanner::UpdateCustomBuildingsWanted` |
-| Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua`, `knowledge.lua`, `distribution.lua`, `tools.lua`, `techtree.lua`, `byproducts.lua`) |
+| Inhalte | `data/RTTR/gamedata/civ/` (`wares.lua`, `workshops.lua` mit den Wissenspunkten aller Gebäude, `distribution.lua`, `tools.lua`, `techtree.lua`, `byproducts.lua`) |
 
 ## Wissenspunkte
 
@@ -199,6 +201,9 @@ null. `ai-battle` zeigt die WP jedes Spielers als „verfügbar/gesamt“ an.
 - Medien (Phase 2): zählen in Lagerhaus, Hauptquartier und Hafen 0,5-fach, in einer Bibliothek 1-fach.
 
 ### Datenformat
+
+Überholt (C1, 2026-11-25): Die WP stehen in `workshops.lua` (`knowledge` in `rttr:SetBuilding` bzw.
+`rttr:AddWorkshop`), `knowledge.lua` ist gelöscht. Früher:
 
 Datei: `data/RTTR/gamedata/civ/knowledge.lua`. Jede Zeile gibt die WP eines fertigen Gebäudes an; nicht genannte
 Gebäude und Arten zählen 0. Die Kosten einer Technologie stehen in `techtree.lua` unter `knowledge`.
@@ -283,7 +288,7 @@ Lua-Dateien, Schritt 3: Arbeitsschritte je Produkt und Werkzeug-Ratios“).
 (2026-11-25): Kosten je Produkt, Wahl des Produkts, Werkzeug-Bonus je Tag und negativ, Werkzeuge des Schritts.
 
 - Wert in Hundertsteln (`parseOutputRatio`, 0–800): Werkstatt `WorkshopDesc::outputRatio`, eingebautes Gebäude
-  `WorldDescription::buildingOutputRatios` (`rttr:SetBuildingOutputRatio`, nur eingebaute Gebäude mit Arbeiter),
+  `WorldDescription::buildingOutputRatios` (`rttr:SetBuildingOutputRatio`, seit C1 `outputRatio` in `rttr:SetBuilding`),
   Bonus des Werkzeugs `ToolDesc::outputRatio`. `Content::GetOutputRatio(BuildingType)` ist der Grundwert (Standard 100).
 - `nobUsual::GetOutputRatio` = Grundwert + Bonus aller Werkzeuge in Gebrauch, höchstens 800; außerhalb des
   Zivilisationsmodus immer 100. `BeginWorkStep` merkt sich den Wert des Schritts (vor der Abnutzung, wie das Tempo);
@@ -306,6 +311,8 @@ Lua-Dateien, Schritt 3: Arbeitsschritte je Produkt und Werkzeug-Ratios“).
 
 ### Baukosten nach Tags (Stand 2026-11-12)
 
+- Überholt (C1, 2026-11-25): Die Kosten der eingebauten Gebäude stehen als `cost` in `rttr:SetBuilding`
+  (`workshops.lua`), `buildingcosts.lua` ist gelöscht. Früher:
 - Lua: `rttr:SetBuildingCost{ Gebäude = Kosten }` in `buildingcosts.lua` (dort stehen die bisherigen Kosten aller
   eingebauten Gebäude), `cost` in `rttr:AddWorkshop` im selben Format. Kurzform `{ Boards = 2, Stones = 1 }` (ein Tag je
   Eintrag, alphabetisch, da Lua-Tabellen keine Reihenfolge haben), Langform
@@ -443,8 +450,8 @@ reißt sie ab, wenn nichts mehr da ist (wie Steinbrüche).
 
 ### Wissenspunkte in `rttr:AddWorkshop`
 
-`knowledge = { IWP = 2 }` in einer Werkstatt trägt die Punkte wie `rttr:SetBuildingKnowledge` ein. Steht dieselbe
-Werkstatt auch in `knowledge.lua`, ist das ein Fehler („defined twice“).
+`knowledge = { IWP = 2 }` in einer Werkstatt trägt die Punkte ein wie `knowledge` in `rttr:SetBuilding` bei den
+eingebauten Gebäuden (früher `rttr:SetBuildingKnowledge` in `knowledge.lua`, seit C1 entfernt).
 
 Spielstand-Version 21: 16-Bit-Ressourcen (Knoten, Schilder), Geologe mit Anzahl der Ressourcenarten, wachsende
 Objekte, `nofCustomPlanter` (GO_Type), Klima.
@@ -2116,6 +2123,113 @@ Rollen nach der sortierten Reihenfolge („Ok, sieht gut aus“).
 - **Tests:** `CivMilitarySuite` (Lua mit Standardwerten, Ladefehler, Reihenfolge und Suchweite, Rollen der alten KI,
   Land bis Radius 9, Sicht bis 14, Spielstand, Abriss).
 
+## Notizen aus den Lua-Dateien, Schritt 5: Eingebaute Gebäude aus Lua steuern (C1 Teil 1, Stand 2026-11-25)
+
+Punkt C1 der Notizensammlung (workshops.lua „alle Gebäude sollten hier als lua Werkstatt stehen oder zumindest von hier
+aus ansteuerbar sein“, knowledge.lua und tools.lua „braucht man nicht mehr, wenn die Gebäude alle in workshops.lua
+stehen“). Entscheidungen des Nutzers (25.11.):
+
+- Zeiten in **Frames** wie im Original (`JOB_CONSTS`), auch bei `rttr:AddWorkshop` (bisherige Sekunden × 20).
+- Neues Feld **`waitAfterTime`** (Frames; Standard wie im Original, bei Werkstätten 5).
+- Die Arbeitsweisen sind nicht fest: Später darf ein eingebautes Gebäude jede Arbeitsweise von `rttr:AddWorkshop`
+  bekommen (Steinbruch mit `collect = { object = "LoamDeposit" }`, Fischer, Jäger usw.). Das ist Teil 3.
+- „Der Beruf heißt Miner wie bei allen Minen“: Ein Beruf ist in allen Gebäuden derselbe; verschiedene `worker.title`
+  oder `worker.look` für denselben Beruf sind ein Ladefehler. Der Brunnen hat kein `worker` (Gehilfe).
+- Außen vor (Arbeitsweise, Eingänge und Produkte bleiben fest; nur cost, knowledge, tools, outputRatio, aiNearBorder):
+  Eselzucht, Werft, Katapult, Spähturm, Tempel. Dazu Hauptquartier (knowledge, Lagerkapazität) und Hafen (knowledge,
+  Lagerkapazität, aiNearBorder; Baukosten fest).
+- Die Addons für die Reichweite von Holzfäller, Förster und Steinmetz haben im Zivilisationsmodus keine Wirkung mehr.
+- Eingebaute Objekte (Bäume, Steinhaufen, Fische, Tiere, Getreidefelder, Weinreben, Kohlenmeiler) bleiben vorerst ihren
+  eigenen Gebäuden vorbehalten (Notiz unten, „Später: eingebaute Objekte für andere Gebäude“).
+- In workshops.lua steht für jedes eingebaute Gebäude ein vollständiger Eintrag mit den jetzigen Werten. Die alten
+  Funktionen `rttr:SetBuildingCost`, `rttr:SetBuildingKnowledge`, `rttr:SetBuildingTools`,
+  `rttr:SetBuildingOutputRatio` und `rttr:SetWarehouseCapacity` sind entfernt; ein Aufruf ist ein Ladefehler, der die
+  Ersetzung nennt. `buildingcosts.lua` und `knowledge.lua` sind gelöscht, die Listen in `tools.lua` und `storage.lua`
+  entfernt (`SetFlagWorkLimit` bleibt). Die Notiz G (Dämmung/Stabilität) steht jetzt in `wares.lua`.
+- Reihenfolge: Teil 1 (alle Werte außer Eingängen und Produkten, Frames, `waitAfterTime`, Datenumzug, gleiche
+  Testspiele), Teil 2 (inputs, outputs, steps, inheritProperties, outputChoice für eingebaute Gebäude), Teil 3
+  (Wechsel der Arbeitsweise).
+
+### Teil 1 (umgesetzt)
+
+- **Lua:** `rttr:SetBuilding{ name = "Woodcutter", ... }` (`GameDataLoader::SetBuilding`, `BuiltinBuildingDesc` in
+  `CivContentDesc.*`, `WorldDescription::builtinBuildings`). Jedes Gebäude höchstens einmal. Kosten, Wissenspunkte,
+  Werkzeuge, Ertrag und Lagerkapazität landen in den bisherigen Tabellen (`buildingCosts`, `buildingKnowledge`,
+  `buildingTools`, `buildingOutputRatios`, `warehouseCapacity`); die Prüfungen dort bleiben.
+- **Felder je Gebäude** (`Content::applyBuiltinBuildings`, ein nicht erlaubtes Feld ist ein Ladefehler):
+  - Hauptquartier: knowledge, warehouse. Hafen: knowledge, warehouse, aiNearBorder. Lagerhaus: title, description,
+    size, cost, look, knowledge, aiNearBorder, warehouse.
+  - Militärgebäude: title, description, size, cost, look (eines der vier), knowledge, military.
+  - Eselzucht, Werft, Katapult, Spähturm, Tempel: cost, knowledge, tools, outputRatio, aiNearBorder.
+  - Produktionsgebäude: title, description, size, cost, look, worker (nicht Brunnen), knowledge, tools, outputRatio,
+    storage (nur mit Eingängen), workTime (nicht Jäger), waitTime, waitAfterTime (nicht Sammler und Plantagen),
+    aiNearBorder; `collect = { radius }` bei Holzfäller, Steinbruch, Fischer, Jäger; `plant = { radius }` bei Förster,
+    Bauernhof, Weinberg, Köhler; `mine = { resource }` bei den vier Minen.
+  - Werte: `workTime` 1–65535, `waitTime` 1–65535, `waitAfterTime` 0–65535 (0 = 1 Frame), Radius 1–20, `storage` 1–99,
+    `warehouse.capacity` 1–100000, `size` "mine" genau bei Minen, `mine.resource` Granite/Coal/Iron/Gold oder ein Erz aus
+    `rttr:AddOre`.
+- **Spiel:**
+  - Namen: `BUILDING_NAMES`, `BUILDING_HELP_STRINGS` und `JOB_NAMES` nehmen title/description/worker.title; ein englischer
+    Originalname wird weiter übersetzt (die Texte laufen durch `_()`). Grafik: `civ::getLook` für Gebäude (auch
+    `Loader::getBuildingSprites`, Stopp-Schilder des Militärgebäudes) und Beruf.
+  - Größe: `BUILDING_SIZE` → `Content::GetBuiltinSize`.
+  - Zeiten: Alle Arbeiter lesen `Content::GetWorkTimes(Gebäude)` (`work`, `wait`, `waitAfter`) statt
+    `JOB_CONSTS[Beruf]` (nofWorkman, nofBuildingWorker, nofFarmhand, nofArmorer, nofSkinner, nofHunter). Die Zeiten
+    gelten je Gebäude, nicht je Beruf (die vier Minen können verschieden schnell sein). Werkstätten: `workGFs`,
+    `waitGFs`, `waitAfterGFs` direkt aus Lua.
+  - Radius: `nofFarmhand::GetWorkRadius(BuildingType)` = `Content::GetWorkRadius` (Werkstätten: collect/plant;
+    eingebaute im Zivilisationsmodus: `collect`/`plant` oder der Originalwert 6/6/8/7/2/2/3, ohne Addons), außerhalb
+    des Modus wie bisher nach Beruf und Addon. Benutzt vom Sammeln und Pflanzen, vom Förster (Felder des Bauernhofs
+    freihalten), Jäger (`HUNTER_RADIUS` 19 als Standard), Prognose und KI.
+  - Mine: `nofMiner::GetRequiredResType` = `Content::GetMineResource`. Das Produkt bleibt das der Mine (Teil 2).
+  - Lagerplätze: `storage` setzt `numSpacesPerWare` und die Plätze aller Eingänge.
+  - Militär: `Content::GetMilitaryValues` nimmt `military` und `look` der eingebauten Militärgebäude.
+- **KI:** `AIConstruction::IsAllowedNearBorder` = `Content::IsAINearBorder` (die Liste `BUILDINGS_NEAR_BORDER` ist
+  entfernt, ihr Inhalt ist der Standard). Alte KI: Platz einer eingebauten Mine nach ihrem Erz (`FindCustomMinePosition`
+  nimmt jetzt das Erz), Jagdgebiet nach dem Radius des Jägers, Holzfäller-Radius aus dem Inhalt. Planer: Rezept-Takt aus
+  `GetWorkTimes`, Reichweite nach Gebäude, Quelle der Minen nach ihrem Erz.
+- **Werkstätten:** Zeiten jetzt in Frames (workshops.lua umgerechnet × 20, gleiches Spiel). Sammler und Plantagen haben
+  kein `waitAfterTime` (Ladefehler).
+- **Prüfung:** Zwei Testspiele (Zufallskarte 512, 4 KI, 3 h, Seed 5 und 9) sind nach dem Filter Zeile für Zeile gleich
+  wie vor der Änderung. Tests: `CivBuiltinBuildingsSuite` (ausgelieferte Werte = Original, Werte aus Lua, Ladefehler,
+  Kohlemine baut Eisen ab), `GameData/LoadBuiltinBuildings`, `GameData/DetectInvalidBuiltinBuildings`; die Tests der
+  Kosten, Werkzeuge, Erträge, Lager und Wissenspunkte nutzen `rttr:SetBuilding`.
+
+### Später: eingebaute Objekte für andere Gebäude (Entscheidung 25.11.: zusammen mit F1–F4)
+
+Heute arbeitet jedes eingebaute Objekt nur mit seinem eigenen Gebäude. Ein Gebäude aus Lua (oder ein eingebautes mit
+anderer Arbeitsweise, Teil 3) kann diese Objekte nicht sammeln oder pflanzen. Grund und Bauplan:
+
+- **Wie es heute gebaut ist:** Der Beruf bestimmt die Arbeiterklasse (`JobFactory`): Holzfäller → `nofWoodcutter`
+  (sucht ausgewachsene Bäume `noTree`, fällt sie, legt Holz ab), Steinmetz → `nofStonemason` (Steinhaufen `noGranite`,
+  verkleinert sie), Fischer → `nofFisher` (Fisch als Bodenschatz im Wasser), Jäger → `nofHunter` (Tiere `noAnimal` sind
+  Figuren: anschleichen, schießen, zerlegen), Förster → `nofForester` (pflanzt Bäume je nach Boden), Bauer →
+  `nofFarmer` (Getreidefeld `noGrainfield`), Winzer → `nofWinegrower` (`noGrapefield`), Köhler → `nofCharburner`
+  (Meiler `noCharburnerPile` in mehreren Stufen mit Holz und Getreide). Jede Klasse hat ihre Animation und ihr Produkt
+  fest im Code.
+- **Was zum Öffnen nötig ist:**
+  1. Die eingebauten Objekte bekommen Namen für Lua, z. B. `"Tree"` (alle Bäume) und je Art `"Pine"`, `"Birch"`, `"Oak"`
+     usw., `"Granite"`, `"Fish"`, `"Animal"` (je Tierart), `"Grainfield"`, `"Grapefield"`, `"CharburnerPile"`.
+     Beispiel: `collect = { object = "Tree", radius = 6 }`, `plant = { object = "Birch", radius = 6 }`.
+  2. Die Arbeiterklasse wird nach Gebäude und Objekt gewählt, nicht nach dem Beruf (`JobFactory` bekommt das Gebäude):
+     Objekt „Tree“ → Fäll-Logik von `nofWoodcutter`, Objekt aus `mapobjects.lua` → `nofCustomCollector`.
+  3. Radius aus dem Gebäude (`Content::GetWorkRadius`, schon mit Teil 1 so).
+  4. Animation nach `worker.look` statt nach der Klasse (wie `getLookWorkAnimation` bei den Werkstätten).
+  5. Produkt aus `outputs` statt fest im Code (kommt mit Teil 2).
+  6. KI: Quelle nach Objekt statt nach Gebäudetyp (`EconomyGraph` `getBuiltinSource`, Platzsuche der alten KI mit
+     `AIResource::Wood`, `Stones`, `Fish` …).
+- **Zusammenhang mit F1–F4** (Notizensammlung, Abschnitt F):
+  - F1 Holzart je Baumart: Der Holzfäller legt die Holzware der gefällten Art ab. Braucht die Namen der Baumarten (1.)
+    und das Produkt je Art (`rttr:SetTreeWood{ Pine = "Softwood", ... }` oder ein Feld an der Baumart).
+  - F-19 neue Baumart (Linde): eine Baumart mit dem Aussehen (`look`) einer vorhandenen, eingefärbt wie die
+    Kartenobjekte. Braucht die Baumarten als Daten statt als feste Nummern.
+  - F3 Harz zapfen: ein Sammler, der Bäume nicht fällt, sondern zapft; der Baum merkt sich die letzte Ernte und ist nach
+    einer Nachfüllzeit wieder voll.
+  - F4 Bienenstöcke: ein Objekt an einem Baum (der Baum ist der Wirt, der Bienenstock der Gast). Fällt der Baum, ist der
+    Stock weg (Vorschlag F-22). Gesammelt wie F3.
+  - Alle vier setzen voraus, dass Bäume für Lua ansprechbar sind (1.) und dass die Arbeiterklasse nach Gebäude und
+    Objekt gewählt wird (2.).
+
 ## Gesamtverteilung (Stand 2026-11-21)
 
 Entscheidungen des Nutzers vom 18. bis 21.11.2026 (Chats „Werkzeug-Prüfung für Gebäude“ und „Gesamtverteilung“).
@@ -2244,7 +2358,8 @@ Spielstand 30), abgerissene Gebäude der Bilanzlänge (`GamePlayer::GetGoneBuild
 Entscheidungen des Nutzers (2026-11-14). Nur im Zivilisationsmodus; Einstellungen in
 `data/RTTR/gamedata/civ/storage.lua`. Tests: `CivStorageSuite`.
 
-- **Kapazität:** `rttr:SetWarehouseCapacity{ Headquarters = 500, HarborBuilding = 300, Storehouse = 200 }`.
+- **Kapazität:** `rttr:SetWarehouseCapacity{ Headquarters = 500, HarborBuilding = 300, Storehouse = 200 }` (seit C1,
+  2026-11-25: `warehouse = { capacity = N }` in `rttr:SetBuilding`, workshops.lua).
   - Gezählt werden nur Waren, keine Personen (`nobBaseWarehouse::GetLoad`).
   - Waren auf dem Weg zum Lager zählen schon mit.
   - Lager ohne Eintrag fassen beliebig viel.

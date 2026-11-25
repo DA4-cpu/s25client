@@ -1201,21 +1201,37 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
               FindBestPosition(around, AIResource::Borderland, BUILDING_SIZE[type], searchRadius, 1, borderReserve);
             break;
         case BuildingType::GoldMine:
-            foundPos =
-              FindBestPosition(around, AIResource::Gold, BuildingQuality::Mine, searchRadius, 1, borderReserve);
-            break;
         case BuildingType::CoalMine:
-            foundPos =
-              FindBestPosition(around, AIResource::Coal, BuildingQuality::Mine, searchRadius, 1, borderReserve);
-            break;
         case BuildingType::IronMine:
-            foundPos =
-              FindBestPosition(around, AIResource::Ironore, BuildingQuality::Mine, searchRadius, 1, borderReserve);
-            break;
         case BuildingType::GraniteMine:
-            foundPos =
-              FindBestPosition(around, AIResource::Granite, BuildingQuality::Mine, searchRadius, 1, borderReserve);
+        {
+            // By the ore of the mine (original or mine = { resource } of rttr:SetBuilding)
+            const ResourceType resource = civ::getActiveContent().GetMineResource(type);
+            switch(resource)
+            {
+                case ResourceType::Gold:
+                    foundPos =
+                      FindBestPosition(around, AIResource::Gold, BuildingQuality::Mine, searchRadius, 1, borderReserve);
+                    break;
+                case ResourceType::Coal:
+                    foundPos =
+                      FindBestPosition(around, AIResource::Coal, BuildingQuality::Mine, searchRadius, 1, borderReserve);
+                    break;
+                case ResourceType::Iron:
+                    foundPos = FindBestPosition(around, AIResource::Ironore, BuildingQuality::Mine, searchRadius, 1,
+                                                borderReserve);
+                    break;
+                case ResourceType::Granite:
+                    foundPos = FindBestPosition(around, AIResource::Granite, BuildingQuality::Mine, searchRadius, 1,
+                                                borderReserve);
+                    break;
+                default:
+                    // An ore of rttr:AddOre
+                    foundPos = FindCustomMinePosition(around, type, resource, searchRadius, borderReserve);
+                    break;
+            }
             break;
+        }
         case BuildingType::Fishery:
             foundPos = FindBestPosition(around, AIResource::Fish, BUILDING_SIZE[type], searchRadius, 1, borderReserve);
             if(foundPos.isValid() && !ValidFishInRange(foundPos))
@@ -1272,7 +1288,7 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
             else if(custom && custom->IsCollector())
                 foundPos = FindCollectorPosition(around, type, *custom, searchRadius, borderReserve);
             else if(custom && custom->IsMine())
-                foundPos = FindCustomMinePosition(around, type, *custom, searchRadius, borderReserve);
+                foundPos = FindCustomMinePosition(around, type, custom->mineResource, searchRadius, borderReserve);
             else if(custom && custom->IsPlanter())
                 foundPos = FindPlantationPosition(around, type, *custom, searchRadius, borderReserve);
             else
@@ -1316,9 +1332,8 @@ MapPoint AIPlayerJH::FindCollectorPosition(const MapPoint& around, BuildingType 
     return bestPos;
 }
 
-MapPoint AIPlayerJH::FindCustomMinePosition(const MapPoint& around, BuildingType type,
-                                            const civ::CustomBuilding& building, unsigned radius,
-                                            unsigned borderReserve) const
+MapPoint AIPlayerJH::FindCustomMinePosition(const MapPoint& around, BuildingType type, const ResourceType resource,
+                                            unsigned radius, unsigned borderReserve) const
 {
     // Most ore in range of the miner (like the resource maps for the built-in mines)
     MapPoint bestPos = MapPoint::Invalid();
@@ -1336,7 +1351,7 @@ MapPoint AIPlayerJH::FindCustomMinePosition(const MapPoint& around, BuildingType
         for(const MapPoint& pt : gwb.GetPointsInRadiusWithCenter(curPt, MINER_RADIUS))
         {
             const Resource res = gwb.GetNode(pt).resources;
-            if(res.getType() == building.mineResource)
+            if(res.getType() == resource)
                 amount += res.getAmount();
         }
         if(amount > bestAmount)
@@ -2051,7 +2066,7 @@ void AIPlayerJH::CheckResearch(const unsigned gf)
 void AIPlayerJH::AdjustKnowledgeDistribution()
 {
     // Civilization mode: Set the regulator "Wissen" (which knowledge medium workshops make) after what the current
-    // research still needs. Nothing researched or no knowledge points missing -> default from lua (knowledge.lua)
+    // research still needs. Nothing researched or no knowledge points missing -> default from lua (distribution.lua)
     if(!civ::isEnabled(gwb))
         return;
     const civ::TechTree& techTree = gwb.GetTechTree();
@@ -2600,7 +2615,9 @@ bool AIPlayerJH::AnimalsInRange(const MapPoint pt, unsigned min)
 {
     unsigned maxrange = 25;
     unsigned short fx, fy, lx, ly;
-    const unsigned short SQUARE_SIZE = 19;
+    // Where the hunter looks for animals (civilization mode: collect = { radius } of rttr:SetBuilding)
+    const auto SQUARE_SIZE =
+      static_cast<unsigned short>(civ::getActiveContent().GetWorkRadius(BuildingType::Hunter).value_or(HUNTER_RADIUS));
     unsigned huntablecount = 0;
     if(pt.x > SQUARE_SIZE)
         fx = pt.x - SQUARE_SIZE;
@@ -3276,7 +3293,7 @@ MapPoint AIPlayerJH::FindForesterPosition(const MapPoint& woodcutterPos,
                                           const std::vector<std::pair<MapPoint, unsigned>>& avoid,
                                           const unsigned radius)
 {
-    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(Job::Woodcutter);
+    const unsigned woodcutterRadius = nofFarmhand::GetWorkRadius(BuildingType::Woodcutter);
     // In reach of the woodcutter, the best place to plant there. Rules of the old AI: enough space to plant, not at
     // the border. Not near clearing woodcutters and charburners
     return FindBestPositionWhere(

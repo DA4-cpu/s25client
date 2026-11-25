@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "civ/Content.h"
+#include "addons/AddonForesterReachRadius.h"
+#include "addons/AddonStonemasonReachRadius.h"
+#include "addons/AddonWoodcutterReachRadius.h"
 #include "civ/Identifiers.h"
 #include "helpers/EnumRange.h"
 #include "helpers/containerUtils.h"
@@ -17,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <map>
 #include <set>
 
 namespace civ {
@@ -55,6 +59,50 @@ namespace {
     /// The built-in military buildings in the order of the original tables (gameData/MilitaryConsts.h)
     constexpr std::array<BuildingType, NUM_MILITARY_BLDS> BUILTIN_MILITARY_BUILDINGS = {
       BuildingType::Barracks, BuildingType::Guardhouse, BuildingType::Watchtower, BuildingType::Fortress};
+    /// Built-in buildings the AI may build near a land border (besides the military buildings)
+    constexpr std::array<BuildingType, 9> BUILTIN_NEAR_BORDER = {
+      BuildingType::Woodcutter,  BuildingType::Quarry,         BuildingType::Fishery,
+      BuildingType::GoldMine,    BuildingType::CoalMine,       BuildingType::IronMine,
+      BuildingType::GraniteMine, BuildingType::HarborBuilding, BuildingType::Catapult};
+    /// Built-in collectors (collect = { radius }) and plantations (plant = { radius })
+    constexpr std::array<BuildingType, 4> BUILTIN_COLLECTORS = {BuildingType::Woodcutter, BuildingType::Quarry,
+                                                                BuildingType::Fishery, BuildingType::Hunter};
+    constexpr std::array<BuildingType, 4> BUILTIN_PLANTATIONS = {BuildingType::Forester, BuildingType::Farm,
+                                                                 BuildingType::Vineyard, BuildingType::Charburner};
+    /// Built-in buildings whose way of working stays as it is for now (Nutzer 2026-11-25): only their construction
+    /// costs, knowledge points, tools, output ratio and aiNearBorder are set in lua
+    constexpr std::array<BuildingType, 5> KEPT_BUILDINGS = {BuildingType::DonkeyBreeder, BuildingType::Shipyard,
+                                                            BuildingType::Catapult, BuildingType::LookoutTower,
+                                                            BuildingType::Temple};
+
+    /// Radius of the built-in collectors and plantations in the civilization mode: the original values (the addons
+    /// for the reach have no effect there)
+    unsigned getOriginalWorkRadius(const BuildingType bld)
+    {
+        switch(bld)
+        {
+            case BuildingType::Woodcutter: return woodcutterRadiusValues[0];
+            case BuildingType::Forester: return foresterRadiusValues[0];
+            case BuildingType::Quarry: return stonemasonRadiusValues[0];
+            case BuildingType::Fishery: return FISHER_RADIUS;
+            case BuildingType::Hunter: return HUNTER_RADIUS;
+            case BuildingType::Farm: return FARMER_RADIUS;
+            case BuildingType::Vineyard: return WINEGROWER_RADIUS;
+            case BuildingType::Charburner: return CHARBURNER_RADIUS;
+            default: return 0;
+        }
+    }
+
+    BuildingQuality sizeFromName(const std::string& size)
+    {
+        if(size == "small")
+            return BuildingQuality::Hut;
+        if(size == "medium")
+            return BuildingQuality::House;
+        if(size == "mine")
+            return BuildingQuality::Mine;
+        return BuildingQuality::Castle;
+    }
 
 } // namespace
 
@@ -154,6 +202,7 @@ Content::Content()
         if(!isCustomBuilding(bld))
             costs_[bld] = makeBuiltinCost(bld);
     }
+    initBuiltinBuildings();
     initMilitary();
 }
 
@@ -535,13 +584,15 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.workDesc.producedWare = bld.GetProduct(std::nullopt);
         bld.workDesc.useOneWareEach = true;
         outputRatios_[getCustomBuilding(i)] = static_cast<uint16_t>(wsDesc.outputRatio);
-        bld.workGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.workTime)));
-        bld.waitGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.waitTime)));
+        bld.workGFs = wsDesc.workTime;
+        bld.waitGFs = wsDesc.waitTime;
+        bld.waitAfterGFs = wsDesc.waitAfterTime;
 
         buildings_.push_back(std::move(bld));
         workers_.push_back(std::move(worker));
     }
 
+    applyBuiltinBuildings(desc);
     initMilitary();
 
     // Construction costs of built-in buildings: boards and stones unless set in lua. The tags "Boards" and "Stones"
@@ -799,13 +850,315 @@ MilitaryValues Content::GetMilitaryValues(const BuildingType bld, const Nation n
         return MilitaryValues{};
     const auto idx = static_cast<unsigned>(itBuiltin - BUILTIN_MILITARY_BUILDINGS.begin());
     MilitaryValues values;
-    values.soldiers = static_cast<unsigned>(NUM_TROOPS[nation][idx]);
-    values.radius = MILITARY_RADIUS[idx];
-    values.vision = MILITARY_RADIUS[idx] + VISUALRANGE_MILITARY;
-    values.coins = static_cast<unsigned>(NUM_GOLDS[nation][idx]);
-    values.armor = static_cast<unsigned>(NUM_ARMOR[nation][idx]);
-    values.look = idx;
+    if(const auto& military = builtin_[static_cast<unsigned>(bld)].military)
+        values = *military;
+    else
+    {
+        values.soldiers = static_cast<unsigned>(NUM_TROOPS[nation][idx]);
+        values.radius = MILITARY_RADIUS[idx];
+        values.vision = MILITARY_RADIUS[idx] + VISUALRANGE_MILITARY;
+        values.coins = static_cast<unsigned>(NUM_GOLDS[nation][idx]);
+        values.armor = static_cast<unsigned>(NUM_ARMOR[nation][idx]);
+    }
+    // Graphics and flags of the look (another built-in military building if set)
+    const auto itLook = helpers::find(BUILTIN_MILITARY_BUILDINGS, GetBuiltinLook(bld));
+    values.look = itLook != BUILTIN_MILITARY_BUILDINGS.end() ?
+                    static_cast<unsigned>(itLook - BUILTIN_MILITARY_BUILDINGS.begin()) :
+                    idx;
     return values;
+}
+
+void Content::initBuiltinBuildings()
+{
+    for(unsigned i = 0; i < NUM_BUILTIN_BUILDINGS; ++i)
+    {
+        const auto bld = static_cast<BuildingType>(i);
+        BuiltinBuilding& building = builtin_[i];
+        building.size = BUILTIN_BUILDING_SIZE[i];
+        building.look = bld;
+        // One input per ware the building needs
+        building.workDesc = BUILTIN_BLD_WORK_DESC[i];
+        for(const GoodType good : building.workDesc.waresNeeded)
+            building.workDesc.inputs.push_back(InputSlot{{good}, 100, building.workDesc.numSpacesPerWare});
+        if(building.workDesc.job)
+        {
+            const JobConst jobConst = JOB_CONSTS[*building.workDesc.job];
+            building.times = WorkTimes{jobConst.work_length, jobConst.wait1_length, jobConst.wait2_length};
+        }
+        building.aiNearBorder = helpers::contains(BUILTIN_NEAR_BORDER, bld);
+    }
+    builtin_[static_cast<unsigned>(BuildingType::GraniteMine)].mineResource = ResourceType::Granite;
+    builtin_[static_cast<unsigned>(BuildingType::CoalMine)].mineResource = ResourceType::Coal;
+    builtin_[static_cast<unsigned>(BuildingType::IronMine)].mineResource = ResourceType::Iron;
+    builtin_[static_cast<unsigned>(BuildingType::GoldMine)].mineResource = ResourceType::Gold;
+    for(unsigned i = 0; i < NUM_BUILTIN_JOBS; ++i)
+        builtinJobLooks_[i] = static_cast<Job>(i);
+}
+
+void Content::applyBuiltinBuildings(const WorldDescription& desc)
+{
+    // Civilization mode: the collectors and plantations use their original radius (also if not set in lua)
+    for(const BuildingType bld : BUILTIN_COLLECTORS)
+        builtin_[static_cast<unsigned>(bld)].workRadius = getOriginalWorkRadius(bld);
+    for(const BuildingType bld : BUILTIN_PLANTATIONS)
+        builtin_[static_cast<unsigned>(bld)].workRadius = getOriginalWorkRadius(bld);
+
+    // Name and graphics set for a job: job -> (title, look, building that set it)
+    struct JobSetting
+    {
+        std::optional<std::string> title, look;
+        std::string building;
+    };
+    std::map<Job, JobSetting> jobSettings;
+    for(const BuiltinBuildingDesc& bldDesc : desc.builtinBuildings)
+    {
+        const std::string context = "Building '" + bldDesc.name + "' (rttr:SetBuilding)";
+        const auto bld = buildingFromIdentifier(bldDesc.name, true);
+        if(!bld || isCustomBuilding(*bld) || !BuildingProperties::IsValid(*bld))
+            throw GameDataError(context + ": not a built-in building (workshops are defined with rttr:AddWorkshop)");
+        BuiltinBuilding& building = builtin_[static_cast<unsigned>(*bld)];
+        const bool isMilitary = helpers::contains(BUILTIN_MILITARY_BUILDINGS, *bld);
+        const bool isMine = building.mineResource != ResourceType::Nothing;
+
+        // Fields the building may have
+        std::vector<std::string> allowed;
+        std::string kind;
+        if(*bld == BuildingType::Headquarters)
+        {
+            allowed = {"knowledge", "warehouse"};
+            kind = "the headquarters";
+        } else if(*bld == BuildingType::HarborBuilding)
+        {
+            allowed = {"knowledge", "warehouse", "aiNearBorder"};
+            kind = "the harbor";
+        } else if(*bld == BuildingType::Storehouse)
+        {
+            allowed = {"title", "description", "size", "cost", "look", "knowledge", "aiNearBorder", "warehouse"};
+            kind = "a warehouse";
+        } else if(isMilitary)
+        {
+            allowed = {"title", "description", "size", "cost", "look", "knowledge", "military"};
+            kind = "a military building";
+        } else if(helpers::contains(KEPT_BUILDINGS, *bld))
+        {
+            allowed = {"cost", "knowledge", "tools", "outputRatio", "aiNearBorder"};
+            kind = "a building whose way of working stays as it is for now";
+        } else
+        {
+            allowed = {"title",     "description", "size",        "cost",     "look",
+                       "knowledge", "tools",       "outputRatio", "waitTime", "aiNearBorder"};
+            if(*bld != BuildingType::Well) // its worker is the helper
+                allowed.push_back("worker");
+            // The hunter has no work time of his own (his work is the hunt: walking, shooting, skinning)
+            if(*bld != BuildingType::Hunter)
+                allowed.push_back("workTime");
+            // Only workers who make their wares in the building wait after a work step (not collectors and
+            // plantations, they go out again after waitTime)
+            const bool isCollector = helpers::contains(BUILTIN_COLLECTORS, *bld);
+            const bool isPlantation = helpers::contains(BUILTIN_PLANTATIONS, *bld);
+            if(!isCollector && !isPlantation)
+                allowed.push_back("waitAfterTime");
+            // Places only for the wares of inputs
+            if(!building.workDesc.inputs.empty())
+                allowed.push_back("storage");
+            if(isCollector)
+                allowed.push_back("collect");
+            if(isPlantation)
+                allowed.push_back("plant");
+            if(isMine)
+                allowed.push_back("mine");
+            kind = "this building";
+        }
+        for(const std::string& field : bldDesc.fields)
+        {
+            if(!helpers::contains(allowed, field))
+                throw GameDataError(context + ": " + kind + " has no '" + field + "'");
+        }
+
+        if(bldDesc.title)
+            building.title = *bldDesc.title;
+        if(bldDesc.description)
+            building.description = *bldDesc.description;
+        if(bldDesc.size)
+        {
+            const BuildingQuality size = sizeFromName(*bldDesc.size);
+            if((size == BuildingQuality::Mine) != isMine)
+                throw GameDataError(
+                  context + (isMine ? ": a mine needs size = \"mine\"" : ": only a mine has size = \"mine\""));
+            building.size = size;
+        }
+        if(bldDesc.look)
+        {
+            const auto look = buildingFromIdentifier(*bldDesc.look);
+            if(!look || isCustomBuilding(*look))
+                throw GameDataError(context + ": look must be a built-in building, not '" + *bldDesc.look + "'");
+            if(isMilitary && !helpers::contains(BUILTIN_MILITARY_BUILDINGS, *look))
+            {
+                throw GameDataError(context
+                                    + ": the look of a military building must be a built-in military building "
+                                      "(Barracks, Guardhouse, Watchtower or Fortress), not '"
+                                    + *bldDesc.look + "'");
+            }
+            building.look = *look;
+        }
+        if(bldDesc.workerTitle || bldDesc.workerLook)
+        {
+            const Job job = *building.workDesc.job;
+            JobSetting& setting = jobSettings[job];
+            const auto differs = [](const std::optional<std::string>& lhs, const std::optional<std::string>& rhs) {
+                return lhs && rhs && *lhs != *rhs;
+            };
+            if(differs(setting.title, bldDesc.workerTitle) || differs(setting.look, bldDesc.workerLook))
+            {
+                throw GameDataError(context + ": the worker (job '" + getIdentifier(job)
+                                    + "') has another title or look at '" + setting.building
+                                    + "'. A job is the same in all buildings that use it");
+            }
+            if(bldDesc.workerTitle)
+            {
+                setting.title = bldDesc.workerTitle;
+                builtinJobTitles_[static_cast<unsigned>(job)] = *bldDesc.workerTitle;
+            }
+            if(bldDesc.workerLook)
+            {
+                const auto look = jobFromIdentifier(*bldDesc.workerLook);
+                if(!look || isCustomJob(*look))
+                {
+                    throw GameDataError(context
+                                        + ": the look of the worker must be a built-in job (e.g. \"Carpenter\"), not '"
+                                        + *bldDesc.workerLook + "'");
+                }
+                setting.look = bldDesc.workerLook;
+                builtinJobLooks_[static_cast<unsigned>(job)] = *look;
+            }
+            setting.building = bldDesc.name;
+        }
+        if(bldDesc.storage)
+        {
+            building.workDesc.numSpacesPerWare = static_cast<uint8_t>(*bldDesc.storage);
+            for(InputSlot& input : building.workDesc.inputs)
+                input.storage = static_cast<uint8_t>(*bldDesc.storage);
+        }
+        if(bldDesc.workTime)
+            building.times.work = *bldDesc.workTime;
+        if(bldDesc.waitTime)
+            building.times.wait = *bldDesc.waitTime;
+        if(bldDesc.waitAfterTime)
+            building.times.waitAfter = *bldDesc.waitAfterTime;
+        if(bldDesc.aiNearBorder)
+            building.aiNearBorder = *bldDesc.aiNearBorder;
+        if(bldDesc.collectRadius)
+            building.workRadius = *bldDesc.collectRadius;
+        if(bldDesc.plantRadius)
+            building.workRadius = *bldDesc.plantRadius;
+        if(bldDesc.mineResource)
+        {
+            const std::string& name = *bldDesc.mineResource;
+            if(name == "Granite")
+                building.mineResource = ResourceType::Granite;
+            else if(name == "Coal")
+                building.mineResource = ResourceType::Coal;
+            else if(name == "Iron")
+                building.mineResource = ResourceType::Iron;
+            else if(name == "Gold")
+                building.mineResource = ResourceType::Gold;
+            else if(const auto ore = FindOre(name))
+                building.mineResource = *ore;
+            else
+            {
+                throw GameDataError(context + ": mine resource '" + name
+                                    + "' is no ore (Granite, Coal, Iron, Gold or one of rttr:AddOre)");
+            }
+        }
+        if(bldDesc.military)
+        {
+            const MilitaryDesc& milDesc = *bldDesc.military;
+            MilitaryValues values;
+            values.soldiers = milDesc.soldiers;
+            values.radius = milDesc.radius;
+            values.vision = milDesc.vision.value_or(milDesc.radius + VISUALRANGE_MILITARY);
+            values.coins = milDesc.coins;
+            values.armor = milDesc.armor.value_or(milDesc.coins);
+            building.military = values;
+        }
+    }
+}
+
+const std::string& Content::GetBuiltinTitle(const BuildingType bld) const
+{
+    return builtin_[static_cast<unsigned>(bld)].title;
+}
+
+const std::string& Content::GetBuiltinDescription(const BuildingType bld) const
+{
+    return builtin_[static_cast<unsigned>(bld)].description;
+}
+
+BuildingQuality Content::GetBuiltinSize(const BuildingType bld) const
+{
+    return builtin_[static_cast<unsigned>(bld)].size;
+}
+
+BuildingType Content::GetBuiltinLook(const BuildingType bld) const
+{
+    return isCustomBuilding(bld) ? bld : builtin_[static_cast<unsigned>(bld)].look;
+}
+
+const BldWorkDescription& Content::GetBuiltinWorkDesc(const BuildingType bld) const
+{
+    return builtin_[static_cast<unsigned>(bld)].workDesc;
+}
+
+WorkTimes Content::GetWorkTimes(const BuildingType bld) const
+{
+    if(isCustomBuilding(bld))
+    {
+        const CustomBuilding* building = GetBuilding(bld);
+        if(!building)
+            return WorkTimes{};
+        return WorkTimes{std::max(building->workGFs, 1u), std::max(building->waitGFs, 1u), building->waitAfterGFs};
+    }
+    return builtin_[static_cast<unsigned>(bld)].times;
+}
+
+std::optional<unsigned> Content::GetWorkRadius(const BuildingType bld) const
+{
+    if(isCustomBuilding(bld))
+    {
+        const CustomBuilding* building = GetBuilding(bld);
+        if(!building || (!building->IsCollector() && !building->IsPlanter()))
+            return std::nullopt;
+        return std::max(building->collectRadius, building->plantRadius);
+    }
+    return builtin_[static_cast<unsigned>(bld)].workRadius;
+}
+
+ResourceType Content::GetMineResource(const BuildingType bld) const
+{
+    return isCustomBuilding(bld) ? ResourceType::Nothing : builtin_[static_cast<unsigned>(bld)].mineResource;
+}
+
+bool Content::IsAINearBorder(const BuildingType bld) const
+{
+    if(helpers::contains(BUILTIN_MILITARY_BUILDINGS, bld) || IsCustomMilitary(bld))
+        return true;
+    if(isCustomBuilding(bld))
+    {
+        const CustomBuilding* building = GetBuilding(bld);
+        return building && building->aiNearBorder;
+    }
+    return builtin_[static_cast<unsigned>(bld)].aiNearBorder;
+}
+
+const std::string& Content::GetBuiltinJobTitle(const Job job) const
+{
+    static const std::string empty;
+    return isCustomJob(job) ? empty : builtinJobTitles_[static_cast<unsigned>(job)];
+}
+
+Job Content::GetBuiltinJobLook(const Job job) const
+{
+    return isCustomJob(job) ? job : builtinJobLooks_[static_cast<unsigned>(job)];
 }
 
 void Content::initMilitary()
@@ -1125,7 +1478,7 @@ GoodType getLook(GoodType good)
 BuildingType getLook(BuildingType bld)
 {
     if(!isCustomBuilding(bld))
-        return bld;
+        return getActiveContent().GetBuiltinLook(bld);
     const CustomBuilding* building = getActiveContent().GetBuilding(bld);
     return building ? building->look : BuildingType::Woodcutter;
 }
@@ -1133,7 +1486,7 @@ BuildingType getLook(BuildingType bld)
 Job getLook(Job job)
 {
     if(!isCustomJob(job))
-        return job;
+        return getActiveContent().GetBuiltinJobLook(job);
     const CustomWorker* worker = getActiveContent().GetWorker(job);
     return worker ? worker->look : Job::Helper;
 }

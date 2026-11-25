@@ -181,6 +181,15 @@ struct MilitaryDesc
 };
 /// Highest value of soldiers, radius, vision, coins and armor of a military building (stored with 1 byte)
 constexpr unsigned MAX_MILITARY_VALUE = 255;
+/// Read military = { soldiers = 2, radius = 10, coins = 1 } (vision and armor optional)
+MilitaryDesc parseMilitary(const kaguya::LuaTable& luaData, const std::string& context);
+
+/// Frames a worker waits after the work before carrying out the product, unless set (waitAfterTime)
+constexpr unsigned DEFAULT_WAIT_AFTER_TIME = 5;
+/// Highest workTime, waitTime and waitAfterTime in frames
+constexpr unsigned MAX_WORK_FRAMES = 65535;
+/// Highest radius of a collector or a plantation in nodes
+constexpr unsigned MAX_WORK_RADIUS = 20;
 
 /// Simple production building of the civilization mode as read from lua (rttr:AddWorkshop):
 /// Takes input wares and produces an output ware or collects map objects (like the quarry)
@@ -220,8 +229,9 @@ struct WorkshopDesc
     std::optional<MilitaryDesc> military;
     /// Number of wares stored per input
     unsigned storage = 6;
-    /// Seconds of work per product and seconds of waiting before
-    unsigned workTime = 0, waitTime = 0;
+    /// Frames (game steps, 50 ms at normal speed) of work per work step, of waiting before the work and of waiting
+    /// after the work before the product is carried out (like the built-in buildings)
+    unsigned workTime = 0, waitTime = 0, waitAfterTime = DEFAULT_WAIT_AFTER_TIME;
     /// Collector: Identifier of the map object the worker collects (rttr:AddMapObject) instead of consuming inputs.
     /// Empty: normal workshop
     std::string collectObject;
@@ -245,6 +255,45 @@ struct WorkshopDesc
 
     WorkshopDesc() = default;
     explicit WorkshopDesc(const kaguya::LuaTable& luaData);
+};
+
+/// Built-in building changed in lua (rttr:SetBuilding{ name = "Sawmill", ... }). Every value not set keeps the one of
+/// the original game. Construction costs, knowledge points, tools, output ratio and the capacity of a warehouse are
+/// also put into the tables of WorldDescription (buildingCosts, buildingKnowledge, ...) by the loader
+struct BuiltinBuildingDesc
+{
+    /// Identifier of the built-in building, e.g. "Sawmill"
+    std::string name;
+    /// Names of all fields given in lua (the game checks which ones the building may have)
+    std::vector<std::string> fields;
+    std::optional<std::string> title, description;
+    /// "small", "medium", "large" or "mine"
+    std::optional<std::string> size;
+    std::optional<std::vector<CostDesc>> cost;
+    /// Identifier of a built-in building whose graphics are used
+    std::optional<std::string> look;
+    /// Name and graphics of the job of the worker (worker = { title = "...", look = "Carpenter" })
+    std::optional<std::string> workerTitle, workerLook;
+    std::optional<KnowledgeValues> knowledge;
+    std::optional<BuildingToolsDesc> tools;
+    /// Wares per work step in hundredths
+    std::optional<unsigned> outputRatio;
+    /// Wares stored per input
+    std::optional<unsigned> storage;
+    /// Frames of work, of waiting before the work and of waiting after the work
+    std::optional<unsigned> workTime, waitTime, waitAfterTime;
+    std::optional<bool> aiNearBorder;
+    /// Radius of a collector (collect = { radius = 8 }) or a plantation (plant = { radius = 6 }) in nodes
+    std::optional<unsigned> collectRadius, plantRadius;
+    /// Ore the mine digs (mine = { resource = "Coal" }): a built-in ore (Granite, Coal, Iron, Gold) or one of
+    /// rttr:AddOre
+    std::optional<std::string> mineResource;
+    std::optional<MilitaryDesc> military;
+    /// Warehouse: wares it holds at most (warehouse = { capacity = 400 })
+    std::optional<unsigned> warehouseCapacity;
+
+    BuiltinBuildingDesc() = default;
+    explicit BuiltinBuildingDesc(const kaguya::LuaTable& luaData);
 };
 
 /// Byproduct of a building as read from lua (rttr:AddByproduct):

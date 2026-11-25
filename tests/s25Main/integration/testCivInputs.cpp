@@ -78,7 +78,7 @@ WorldDescription makeDesc(std::vector<InputDesc> inputs, unsigned storage = 6)
     shop.inputs = std::move(inputs);
     shop.storage = storage;
     shop.outputs = {{"Product"}};
-    shop.workTime = 2;
+    shop.workTime = 40;
     desc.workshops.push_back(shop);
     return desc;
 }
@@ -148,7 +148,7 @@ rttr:AddWare{ name = "Fish2", kind = "Food2", look = "Fish", transport = "Fish" 
 rttr:AddWare{ name = "Meat2", kind = "Food2", look = "Meat", transport = "Meat" }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "Sawmill",
     worker = { look = "Carpenter" }, inputs = { "Raw", { tags = "Food2", amount = 0.5, storage = 4 } },
-    storage = 3, outputs = { "Product" }, workTime = 5 }
+    storage = 3, outputs = { "Product" }, workTime = 100 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));

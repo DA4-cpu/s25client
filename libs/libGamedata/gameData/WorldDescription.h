@@ -50,7 +50,7 @@ struct WorldDescription
     bool aiBuildingLimitSet = false;
     /// AI of the civilization mode: the storage counts as full at this percentage (rttr:SetAIStorageFull)
     unsigned aiStorageFullPercent = 90;
-    /// Civilization mode: wares a warehouse holds at most: building identifier -> number (rttr:SetWarehouseCapacity).
+    /// Civilization mode: wares a warehouse holds at most: building identifier -> number (warehouse = { capacity }).
     /// Warehouses not listed hold any number
     std::map<std::string, unsigned> warehouseCapacity;
     /// Civilization mode: a worker puts his product at the flag only if not more than this many wares lie there
@@ -66,16 +66,18 @@ struct WorldDescription
     std::vector<OreDesc> ores;
     /// Workshops (simple production buildings) of the civilization mode in order of definition
     std::vector<WorkshopDesc> workshops;
+    /// Built-in buildings changed in lua (rttr:SetBuilding) in order of definition, at most one entry each
+    std::vector<BuiltinBuildingDesc> builtinBuildings;
     /// Byproducts of buildings in the civilization mode in order of definition
     std::vector<ByproductDesc> byproducts;
     /// Tool reform (civilization mode): materials and tools in order of definition
     std::vector<ToolMaterialDesc> toolMaterials;
     std::vector<ToolDesc> tools;
-    /// Tools of built-in buildings: Building identifier -> tools
+    /// Tools of built-in buildings (rttr:SetBuilding, tools): Building identifier -> tools
     std::map<std::string, BuildingToolsDesc> buildingTools;
-    /// Construction costs of built-in buildings (rttr:SetBuildingCost): Building identifier -> costs
+    /// Construction costs of built-in buildings (rttr:SetBuilding, cost): Building identifier -> costs
     std::map<std::string, std::vector<CostDesc>> buildingCosts;
-    /// Output ratio of built-in buildings in hundredths (rttr:SetBuildingOutputRatio): Building identifier -> ratio
+    /// Output ratio of built-in buildings in hundredths (rttr:SetBuilding, outputRatio): Building identifier -> ratio
     std::map<std::string, unsigned> buildingOutputRatios;
     /// A replacement is ordered when a tool has at most this many percent of its durability left
     unsigned toolReorderPercent = 10;

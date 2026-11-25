@@ -340,6 +340,68 @@ InputDesc parseInput(const kaguya::LuaRef& value, const std::string& context)
 }
 } // namespace
 
+MilitaryDesc parseMilitary(const kaguya::LuaTable& luaTable, const std::string& context)
+{
+    CheckedLuaTable militaryData(luaTable);
+    const auto readValue = [&](const char* key, const unsigned minValue) -> std::optional<unsigned> {
+        const auto value = militaryData.getOptional<double>(key);
+        if(!value)
+            return std::nullopt;
+        if(*value != std::floor(*value) || *value < minValue || *value > MAX_MILITARY_VALUE)
+        {
+            throw GameDataError(context + ": military " + key + " must be a whole number in ["
+                                + std::to_string(minValue) + ", " + std::to_string(MAX_MILITARY_VALUE) + "]");
+        }
+        return static_cast<unsigned>(*value);
+    };
+    const auto readRequired = [&](const char* key, const unsigned minValue) {
+        const auto value = readValue(key, minValue);
+        if(!value)
+        {
+            throw GameDataError(context + ": military needs " + key
+                                + " (military = { soldiers = 2, radius = 10, coins = 1 })");
+        }
+        return *value;
+    };
+    MilitaryDesc mil;
+    mil.soldiers = readRequired("soldiers", 1);
+    mil.radius = readRequired("radius", 1);
+    mil.vision = readValue("vision", 1);
+    mil.coins = readRequired("coins", 0);
+    mil.armor = readValue("armor", 0);
+    militaryData.checkUnused();
+    return mil;
+}
+
+namespace {
+/// Read a number of frames (workTime, waitTime, waitAfterTime): a whole number in [minValue, MAX_WORK_FRAMES]
+std::optional<unsigned> readFrames(CheckedLuaTable& luaData, const char* key, const unsigned minValue,
+                                   const std::string& context)
+{
+    const auto value = luaData.getOptional<double>(key);
+    if(!value)
+        return std::nullopt;
+    if(*value != std::floor(*value) || *value < minValue || *value > MAX_WORK_FRAMES)
+    {
+        throw GameDataError(context + ": " + key + " must be a whole number of frames in [" + std::to_string(minValue)
+                            + ", " + std::to_string(MAX_WORK_FRAMES) + "] (1 frame = 50 ms at normal speed)");
+    }
+    return static_cast<unsigned>(*value);
+}
+
+/// Read { radius = 8 } of collect or plant of a built-in building
+unsigned readBuiltinRadius(const kaguya::LuaTable& luaTable, const std::string& context)
+{
+    CheckedLuaTable data(luaTable);
+    const auto radius = data.getOptional<double>("radius");
+    if(!radius || *radius != std::floor(*radius) || *radius < 1 || *radius > MAX_WORK_RADIUS)
+        throw GameDataError(context + ": radius must be a whole number in [1, " + std::to_string(MAX_WORK_RADIUS)
+                            + "] (nodes)");
+    data.checkUnused();
+    return static_cast<unsigned>(*radius);
+}
+} // namespace
+
 WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
 {
     CheckedLuaTable luaData(luaTable);
@@ -357,40 +419,12 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     if(auto militaryTable = luaData.getOptional<kaguya::LuaTable>("military"))
     {
         // A military building: soldiers hold the land around it, no worker, no production
-        CheckedLuaTable militaryData(*militaryTable);
-        const auto readValue = [&](const char* key, const unsigned minValue) -> std::optional<unsigned> {
-            const auto value = militaryData.getOptional<double>(key);
-            if(!value)
-                return std::nullopt;
-            if(*value != std::floor(*value) || *value < minValue || *value > MAX_MILITARY_VALUE)
-            {
-                throw GameDataError(context + ": military " + key + " must be a whole number in ["
-                                    + std::to_string(minValue) + ", " + std::to_string(MAX_MILITARY_VALUE) + "]");
-            }
-            return static_cast<unsigned>(*value);
-        };
-        const auto readRequired = [&](const char* key, const unsigned minValue) {
-            const auto value = readValue(key, minValue);
-            if(!value)
-            {
-                throw GameDataError(context + ": military needs " + key
-                                    + " (military = { soldiers = 2, radius = 10, coins = 1 })");
-            }
-            return *value;
-        };
-        MilitaryDesc mil;
-        mil.soldiers = readRequired("soldiers", 1);
-        mil.radius = readRequired("radius", 1);
-        mil.vision = readValue("vision", 1);
-        mil.coins = readRequired("coins", 0);
-        mil.armor = readValue("armor", 0);
-        militaryData.checkUnused();
-        military = mil;
+        military = parseMilitary(*militaryTable, context);
         if(size == "mine")
             throw GameDataError(context + ": a military building can not stand on a mine place (size = \"mine\")");
         for(const char* key : {"worker", "inputs", "consume", "library", "collect", "plant", "mine", "warehouse",
                                "output", "outputs", "inheritProperties", "outputChoice", "storage", "workTime",
-                               "waitTime", "tools", "outputRatio", "aiNearBorder"})
+                               "waitTime", "waitAfterTime", "tools", "outputRatio", "aiNearBorder"})
         {
             if(luaData.getOptional<kaguya::LuaRef>(key))
             {
@@ -421,7 +455,7 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
             throw GameDataError(context + ": a warehouse is no mine");
         for(const char* key :
             {"worker", "inputs", "consume", "library", "collect", "plant", "mine", "outputs", "inheritProperties",
-             "outputChoice", "storage", "workTime", "waitTime", "tools", "outputRatio"})
+             "outputChoice", "storage", "workTime", "waitTime", "waitAfterTime", "tools", "outputRatio"})
         {
             if(luaData.getOptional<kaguya::LuaRef>(key))
                 throw GameDataError(context + ": a warehouse has no '" + key + "' (it only stores wares)");
@@ -552,15 +586,23 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context + ": storage must be in [1, 99]");
     if(isLibrary)
     {
-        if(luaData.getOptional<unsigned>("workTime"))
-            throw GameDataError(context + ": a library has no workTime");
+        for(const char* key : {"workTime", "waitTime", "waitAfterTime"})
+        {
+            if(luaData.getOptional<kaguya::LuaRef>(key))
+                throw GameDataError(context + ": a library has no " + key);
+        }
     } else
     {
-        luaData.getOrThrow(workTime, "workTime");
-        if(workTime == 0)
-            throw GameDataError(context + ": workTime must be > 0");
+        const auto frames = readFrames(luaData, "workTime", 1, context);
+        if(!frames)
+            throw GameDataError(context + ": workTime is missing (frames of work per work step)");
+        workTime = *frames;
+        waitTime = readFrames(luaData, "waitTime", 0, context).value_or(0u);
+        waitAfterTime = readFrames(luaData, "waitAfterTime", 0, context).value_or(DEFAULT_WAIT_AFTER_TIME);
+        // Collectors and plantations go out again after waitTime, they do not wait after a work step
+        if((!collectObject.empty() || !plantObject.empty()) && luaData.getOptional<kaguya::LuaRef>("waitAfterTime"))
+            throw GameDataError(context + ": a collector or plantation has no waitAfterTime (only waitTime)");
     }
-    waitTime = luaData.getOrDefault("waitTime", 0u);
     aiNearBorder = luaData.getOrDefault("aiNearBorder", false);
     if(const auto toolsTable = luaData.getOptional<kaguya::LuaTable>("tools"))
         tools = parseBuildingTools(*toolsTable, context);
@@ -569,6 +611,74 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         if(isLibrary || outputs.empty())
             throw GameDataError(context + ": outputRatio needs a product (outputs)");
         outputRatio = parseOutputRatio(*ratio, context);
+    }
+    luaData.checkUnused();
+}
+
+BuiltinBuildingDesc::BuiltinBuildingDesc(const kaguya::LuaTable& luaTable)
+{
+    CheckedLuaTable luaData(luaTable);
+    luaData.getOrThrow(name, "name");
+    const std::string context = "Building '" + name + "' (rttr:SetBuilding)";
+    for(const std::string& key : luaTable.keys<std::string>())
+    {
+        if(key != "name")
+            fields.push_back(key);
+    }
+    title = luaData.getOptional<std::string>("title");
+    description = luaData.getOptional<std::string>("description");
+    size = luaData.getOptional<std::string>("size");
+    if(size && *size != "small" && *size != "medium" && *size != "large" && *size != "mine")
+        throw GameDataError(context + ": size must be \"small\", \"medium\", \"large\" or \"mine\"");
+    if(const auto costValue = luaData.getOptional<kaguya::LuaRef>("cost"))
+        cost = parseBuildingCost(*costValue, context + ", cost");
+    look = luaData.getOptional<std::string>("look");
+    if(auto workerTable = luaData.getOptional<kaguya::LuaTable>("worker"))
+    {
+        CheckedLuaTable workerData(*workerTable);
+        workerTitle = workerData.getOptional<std::string>("title");
+        workerLook = workerData.getOptional<std::string>("look");
+        workerData.checkUnused();
+        if(!workerTitle && !workerLook)
+            throw GameDataError(context
+                                + ": worker needs title or look (worker = { title = \"...\", look = \"Carpenter\" })");
+    }
+    if(const auto knowledgeTable = luaData.getOptional<kaguya::LuaTable>("knowledge"))
+        knowledge = parseKnowledge(*knowledgeTable, true, context + ", knowledge");
+    if(const auto toolsTable = luaData.getOptional<kaguya::LuaTable>("tools"))
+        tools = parseBuildingTools(*toolsTable, context);
+    if(const auto ratio = luaData.getOptional<double>("outputRatio"))
+        outputRatio = parseOutputRatio(*ratio, context);
+    if(const auto storageValue = luaData.getOptional<double>("storage"))
+    {
+        if(*storageValue != std::floor(*storageValue) || *storageValue < 1 || *storageValue > 99)
+            throw GameDataError(context + ": storage must be a whole number in [1, 99]");
+        storage = static_cast<unsigned>(*storageValue);
+    }
+    workTime = readFrames(luaData, "workTime", 1, context);
+    waitTime = readFrames(luaData, "waitTime", 1, context);
+    waitAfterTime = readFrames(luaData, "waitAfterTime", 0, context);
+    aiNearBorder = luaData.getOptional<bool>("aiNearBorder");
+    if(const auto collectTable = luaData.getOptional<kaguya::LuaTable>("collect"))
+        collectRadius = readBuiltinRadius(*collectTable, context + ", collect");
+    if(const auto plantTable = luaData.getOptional<kaguya::LuaTable>("plant"))
+        plantRadius = readBuiltinRadius(*plantTable, context + ", plant");
+    if(const auto mineTable = luaData.getOptional<kaguya::LuaTable>("mine"))
+    {
+        CheckedLuaTable mineData(*mineTable);
+        mineResource = mineData.getOrThrow<std::string>("resource");
+        mineData.checkUnused();
+    }
+    if(const auto militaryTable = luaData.getOptional<kaguya::LuaTable>("military"))
+        military = parseMilitary(*militaryTable, context);
+    if(const auto warehouseTable = luaData.getOptional<kaguya::LuaTable>("warehouse"))
+    {
+        CheckedLuaTable warehouseData(*warehouseTable);
+        const auto capacity = warehouseData.getOptional<double>("capacity");
+        if(!capacity || *capacity != std::floor(*capacity) || *capacity < 1 || *capacity > 100000)
+            throw GameDataError(context + ": warehouse capacity must be a whole number in [1, 100000]");
+        warehouseCapacity = static_cast<unsigned>(*capacity);
+        warehouseData.checkUnused();
     }
     luaData.checkUnused();
 }

@@ -63,7 +63,7 @@ WorkshopDesc makeWorkshop(const std::string& name)
     desc.look = "Quarry";
     desc.worker.title = name + "Worker";
     desc.worker.look = "Stonemason";
-    desc.workTime = 10;
+    desc.workTime = 200;
     return desc;
 }
 
@@ -744,7 +744,7 @@ WorldDescription makeBrickworksDesc()
     WorkshopDesc brickworks = makeWorkshop("Brickworks");
     brickworks.inputs = {InputDesc{{"Loam"}}};
     brickworks.outputs = {{"Brick"}};
-    brickworks.workTime = 200;
+    brickworks.workTime = 4000;
     desc.workshops.push_back(brickworks);
     TechnologyDesc tech;
     tech.name = "walls";

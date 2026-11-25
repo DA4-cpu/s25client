@@ -10,6 +10,7 @@
 #include "SerializedGameData.h"
 #include "SoundManager.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "network/GameClient.h"
 #include "notifications/BuildingNote.h"
 #include "ogl/glArchivItem_Bitmap_Player.h"
@@ -180,7 +181,8 @@ void nofSkinner::TryStartSkinning()
     // Tool reform: No skinning without the tools of the building
     if(workplace->IsProductionStopped() || workplace->GetWorkSpeed() == 0)
     {
-        current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].wait1_length, 1);
+        current_ev =
+          GetEvMgr().AddEvent(this, civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).wait, 1);
         workplace->StartNotWorking();
         return;
     }
@@ -221,7 +223,8 @@ void nofSkinner::TryStartSkinning()
             workplace->StopNotWorking();
         } else
         {
-            current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].wait1_length, 1);
+            current_ev =
+              GetEvMgr().AddEvent(this, civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).wait, 1);
             workplace->StartNotWorking();
         }
     }
@@ -234,7 +237,8 @@ void nofSkinner::TryToWork()
     else
     {
         state = State::Waiting1;
-        current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].wait1_length, 1);
+        current_ev =
+          GetEvMgr().AddEvent(this, civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).wait, 1);
         workplace->StartNotWorking();
     }
 }

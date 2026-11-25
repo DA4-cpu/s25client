@@ -5,6 +5,7 @@
 #pragma once
 
 #include "nofBuildingWorker.h"
+#include "gameTypes/BuildingType.h"
 class SerializedGameData;
 class nobUsual;
 
@@ -55,6 +56,9 @@ public:
     nofFarmhand(Job job, MapPoint pos, unsigned char player, nobUsual* workplace);
     nofFarmhand(SerializedGameData& sgd, unsigned obj_id);
 
+    /// Radius in which the worker of the building works (collectors and plantations)
+    static unsigned GetWorkRadius(BuildingType bld);
+    /// Original radius of the job (addons for the reach), for buildings outside the civilization mode
     static unsigned GetWorkRadius(Job job);
 
     void Serialize(SerializedGameData& sgd) const override;

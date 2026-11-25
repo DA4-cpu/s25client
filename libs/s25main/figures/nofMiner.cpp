@@ -8,6 +8,7 @@
 #include "SoundManager.h"
 #include "addons/const_addons.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "network/GameClient.h"
 #include "ogl/glArchivItem_Bitmap_Player.h"
 #include "world/GameWorld.h"
@@ -95,11 +96,6 @@ bool nofMiner::StartWorking()
 
 ResourceType nofMiner::GetRequiredResType() const
 {
-    switch(workplace->GetBuildingType())
-    {
-        case BuildingType::GoldMine: return ResourceType::Gold;
-        case BuildingType::IronMine: return ResourceType::Iron;
-        case BuildingType::CoalMine: return ResourceType::Coal;
-        default: return ResourceType::Granite;
-    }
+    // Original ore of the mine or mine = { resource = ... } of rttr:SetBuilding (civilization mode)
+    return civ::getActiveContent().GetMineResource(workplace->GetBuildingType());
 }

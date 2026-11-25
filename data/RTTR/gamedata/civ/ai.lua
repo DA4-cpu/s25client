@@ -13,7 +13,7 @@
 --   expandierender Auftrag löst nie ein Problem; ein benötigter ersetzt den gleichen expandierenden (gleiches Gebäude,
 --   gleiche Ware). Unabhängig von der Liste expandieren die Sammler von Vorkommen (Holzfäller, Steinbruch, Sammler aus
 --   workshops.lua), sobald genug Vorkommen im Gebiet sind (EconomyPlanner.h: CLEARING_MIN_TREES, MIN_DEPOSITS_IN_REACH).
---   Namen wie in buildingcosts.lua bzw. der Name der Werkstatt aus workshops.lua.
+--   Namen wie in workshops.lua (rttr:SetBuilding bzw. rttr:AddWorkshop).
 rttr:SetAIExpandingBuildings{
     -- Militär und Lager
     "Barracks", "Guardhouse", "Watchtower", "Fortress", "Storehouse", "HarborBuilding",
@@ -62,7 +62,7 @@ rttr:SetAIStartStockNoSurplus{ "BasicBuildingMaterial", "Fish", "Bread", "Meat" 
 rttr:SetAIBuildingLimit{ base = 5, perArea = 1, areaSize = 331 }
 
 -- rttr:SetAIStorageFull(Prozent)
---   Ab dieser Belegung aller Lager zusammen (siehe storage.lua) gilt das Lager für die KI als voll: Sie baut dann nur
+--   Ab dieser Belegung aller Lager zusammen (capacity in workshops.lua) gilt das Lager für die KI als voll: Sie baut dann nur
 --   noch benötigte Gebäude und bestellt ein weiteres Lagerhaus (das billigste erlaubte Lager, das alle Waren und
 --   Personen aufnimmt).
 rttr:SetAIStorageFull(90)

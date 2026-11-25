@@ -10,6 +10,7 @@
 #include "ai/aijh/AIResourceMap.h"
 #include "helpers/OptionalEnum.h"
 #include "gameTypes/MapCoordinates.h"
+#include "gameTypes/Resource.h"
 #include <boost/container/static_vector.hpp>
 #include <functional>
 #include <list>
@@ -158,8 +159,8 @@ public:
     MapPoint FindCollectorPosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
                                    unsigned radius, unsigned borderReserve) const;
     /// Position for a mine of the civilization mode with the most of its ore in range of the miner
-    MapPoint FindCustomMinePosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
-                                    unsigned radius, unsigned borderReserve) const;
+    MapPoint FindCustomMinePosition(const MapPoint& around, BuildingType type, ResourceType resource, unsigned radius,
+                                    unsigned borderReserve) const;
     /// Position for a plantation of the civilization mode with the most places to plant (and harvest) in its range
     MapPoint FindPlantationPosition(const MapPoint& around, BuildingType type, const civ::CustomBuilding& building,
                                     unsigned radius, unsigned borderReserve) const;

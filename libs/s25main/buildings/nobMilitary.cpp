@@ -251,18 +251,18 @@ void nobMilitary::Draw(DrawPoint drawPt)
         if(coinsDisabledVirtual)
         {
             LOADER.GetImageN("leather_bobs", leatheraddon::bobIndex[leatheraddon::BobType::StopCoinsXSignOverride])
-              ->DrawFull(drawPt + BUILDING_SIGN_CONSTS[nation][bldType_]);
+              ->DrawFull(drawPt + BUILDING_SIGN_CONSTS[nation][civ::getLook(bldType_)]);
         }
 
         if(!armorAllowedVirtual)
         {
             LOADER.GetImageN("leather_bobs", leatheraddon::bobIndex[leatheraddon::BobType::StopArmorXSign])
-              ->DrawFull(drawPt + BUILDING_ARMOR_SIGN_CONSTS[nation][bldType_]);
+              ->DrawFull(drawPt + BUILDING_ARMOR_SIGN_CONSTS[nation][civ::getLook(bldType_)]);
         }
     } else // Without leather addon use original graphic
     {
         if(coinsDisabledVirtual)
-            LOADER.GetMapTexture(46)->DrawFull(drawPt + BUILDING_SIGN_CONSTS[nation][bldType_]);
+            LOADER.GetMapTexture(46)->DrawFull(drawPt + BUILDING_SIGN_CONSTS[nation][civ::getLook(bldType_)]);
     }
 }
 
@@ -390,37 +390,28 @@ void nobMilitary::HandleEvent(const unsigned id)
 
 unsigned nobMilitary::GetMilitaryRadius() const
 {
-    if(isCustomBuilding(bldType_))
-        return civ::getActiveContent().GetMilitaryValues(bldType_).radius;
-    return MILITARY_RADIUS[size];
+    // Original tables or the values of lua (military = { ... } in rttr:AddWorkshop or rttr:SetBuilding)
+    return civ::getActiveContent().GetMilitaryValues(bldType_, nation).radius;
 }
 
 unsigned nobMilitary::GetVisualRange() const
 {
-    if(isCustomBuilding(bldType_))
-        return civ::getActiveContent().GetMilitaryValues(bldType_).vision;
-    return MILITARY_RADIUS[size] + VISUALRANGE_MILITARY;
+    return civ::getActiveContent().GetMilitaryValues(bldType_, nation).vision;
 }
 
 unsigned nobMilitary::GetMaxCoinCt() const
 {
-    if(isCustomBuilding(bldType_))
-        return civ::getActiveContent().GetMilitaryValues(bldType_).coins;
-    return NUM_GOLDS[nation][size];
+    return civ::getActiveContent().GetMilitaryValues(bldType_, nation).coins;
 }
 
 unsigned nobMilitary::GetMaxArmorCt() const
 {
-    if(isCustomBuilding(bldType_))
-        return civ::getActiveContent().GetMilitaryValues(bldType_).armor;
-    return NUM_ARMOR[nation][size];
+    return civ::getActiveContent().GetMilitaryValues(bldType_, nation).armor;
 }
 
 unsigned nobMilitary::GetMaxTroopsCt() const
 {
-    if(isCustomBuilding(bldType_))
-        return civ::getActiveContent().GetMilitaryValues(bldType_).soldiers;
-    return NUM_TROOPS[nation][size];
+    return civ::getActiveContent().GetMilitaryValues(bldType_, nation).soldiers;
 }
 
 void nobMilitary::LookForEnemyBuildings(const nobBaseMilitary* const exception)

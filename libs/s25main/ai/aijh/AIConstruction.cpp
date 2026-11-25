@@ -52,15 +52,10 @@ namespace {
       BuildingType::CoalMine, BuildingType::IronMine,   BuildingType::GoldMine,    BuildingType::Sawmill,
       BuildingType::Brewery};
     /// Near the border: Within this distance (in nodes) of a land border the AI only builds military buildings and the
-    /// buildings in BUILDINGS_NEAR_BORDER (civilization mode: also workshops with aiNearBorder = true in
-    /// workshops.lua), so the space stays free for the next military buildings. A border counts only if there is land
-    /// behind it within the same distance (see AIInterface::IsLandBorder)
+    /// buildings allowed there (civ::Content::IsAINearBorder: woodcutter, quarry, fishery, mines, harbor, catapult;
+    /// civilization mode: aiNearBorder in workshops.lua), so the space stays free for the next military buildings. A
+    /// border counts only if there is land behind it within the same distance (see AIInterface::IsLandBorder)
     constexpr unsigned BORDER_RESERVE_RADIUS = 4;
-    /// Buildings which may also be built near the border
-    constexpr std::array<BuildingType, 9> BUILDINGS_NEAR_BORDER = {
-      BuildingType::Woodcutter,  BuildingType::Quarry,         BuildingType::Fishery,
-      BuildingType::GoldMine,    BuildingType::CoalMine,       BuildingType::IronMine,
-      BuildingType::GraniteMine, BuildingType::HarborBuilding, BuildingType::Catapult};
 } // namespace
 
 AIConstruction::AIConstruction(AIPlayerJH& aijh)
@@ -224,10 +219,9 @@ bool AIConstruction::IsImportantBuilding(const BuildingType type)
 
 bool AIConstruction::IsAllowedNearBorder(const BuildingType type)
 {
-    if(BuildingProperties::IsMilitary(type) || helpers::contains(BUILDINGS_NEAR_BORDER, type))
-        return true;
-    const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(type);
-    return custom && custom->aiNearBorder;
+    // Military buildings, the built-in ones of the original list (civ::Content, civilization mode: aiNearBorder of
+    // rttr:SetBuilding) and workshops with aiNearBorder = true
+    return civ::getActiveContent().IsAINearBorder(type);
 }
 
 unsigned AIConstruction::GetBorderReserve(const BuildingType type)

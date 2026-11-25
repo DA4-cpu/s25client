@@ -123,7 +123,7 @@ BOOST_AUTO_TEST_CASE(InvalidMilitaryIsRefused)
     // Not allowed together with military
     for(const std::string& extra :
         {std::string(R"(, worker = { look = "Helper" })"), std::string(R"(, outputs = { "Boards" })"),
-         std::string(R"(, inputs = { "Wood" })"), std::string(", workTime = 5"), std::string(", waitTime = 5"),
+         std::string(R"(, inputs = { "Wood" })"), std::string(", workTime = 100"), std::string(", waitTime = 100"),
          std::string(", storage = 2"), std::string(", aiNearBorder = true"), std::string(", outputRatio = 1"),
          std::string(R"(, tools = { baseSpeed = 25 })"),
          std::string(R"(, warehouse = { wares = { "Boards" }, capacity = 5 })"),

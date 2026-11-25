@@ -17,6 +17,7 @@
 #include "gameTypes/JobTypes.h"
 #include "gameTypes/Nation.h"
 #include "gameTypes/Resource.h"
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -108,6 +109,13 @@ struct MilitaryValues
     unsigned look = 0;
 };
 
+/// Frames of the worker of a building: work per work step, waiting before the work and waiting after the work (before
+/// he carries out the product)
+struct WorkTimes
+{
+    unsigned work = 0, wait = 0, waitAfter = 0;
+};
+
 /// Workshop defined in lua (rttr:AddWorkshop)
 struct CustomBuilding
 {
@@ -117,8 +125,9 @@ struct CustomBuilding
     BuildingType look;
     /// What the building needs and produces (job is the custom worker slot)
     BldWorkDescription workDesc;
-    /// Work and wait duration per product in GFs
-    unsigned workGFs = 0, waitGFs = 0;
+    /// Frames of work per work step, of waiting before the work and of waiting after the work (workTime, waitTime,
+    /// waitAfterTime)
+    unsigned workGFs = 0, waitGFs = 0, waitAfterGFs = 5;
 
     /// Product made from the given input ware (input may be empty, e.g. if nothing was consumed yet)
     GoodType GetProduct(std::optional<GoodType> consumedInput) const;
@@ -335,6 +344,30 @@ public:
     bool IsCustomWarehouse(BuildingType bld) const;
     /// The building is a military building defined in lua (workshop with military = { ... })
     bool IsCustomMilitary(BuildingType bld) const;
+
+    /// Built-in buildings: values set with rttr:SetBuilding, otherwise the ones of the original game
+    /// Displayed name and help text. Empty: the original ones (translated)
+    const std::string& GetBuiltinTitle(BuildingType bld) const;
+    const std::string& GetBuiltinDescription(BuildingType bld) const;
+    BuildingQuality GetBuiltinSize(BuildingType bld) const;
+    /// Built-in building whose graphics the built-in building uses (look). Itself unless set
+    BuildingType GetBuiltinLook(BuildingType bld) const;
+    /// Worker, product and inputs (with the storage of rttr:SetBuilding)
+    const BldWorkDescription& GetBuiltinWorkDesc(BuildingType bld) const;
+    /// Frames of the worker of a building (built-in or workshop). Built-in ones: from the original job unless set
+    WorkTimes GetWorkTimes(BuildingType bld) const;
+    /// Radius of a collector or a plantation in nodes (workshop: collect or plant; built-in in the civilization mode:
+    /// rttr:SetBuilding or the original value, the addons for the reach have no effect there). Nothing: other building
+    /// or a built-in one outside the civilization mode (the original rules apply)
+    std::optional<unsigned> GetWorkRadius(BuildingType bld) const;
+    /// Ore a built-in mine digs (original or mine = { resource = ... }). Nothing for other buildings
+    ResourceType GetMineResource(BuildingType bld) const;
+    /// The AI may build the building near a land border (military buildings: always)
+    bool IsAINearBorder(BuildingType bld) const;
+    /// Name of a built-in job set with worker = { title = ... } in rttr:SetBuilding. Empty: the original one
+    const std::string& GetBuiltinJobTitle(Job job) const;
+    /// Graphics of a built-in job (worker = { look = ... } in rttr:SetBuilding). The job itself unless set
+    Job GetBuiltinJobLook(Job job) const;
     /// Values of a military building (built-in or defined in lua). The built-in tables are the same for every people
     MilitaryValues GetMilitaryValues(BuildingType bld, Nation nation = Nation::Romans) const;
     /// All military buildings of the game (built-in and defined in lua), sorted by soldiers, then radius, then order of
@@ -367,6 +400,10 @@ private:
     BuildingCosts resolveCost(const std::vector<CostDesc>& desc, const std::string& context) const;
     /// Sort the military buildings and set the search range (militaryBuildings_, militarySearchSquares_)
     void initMilitary();
+    /// Original values of the built-in buildings (builtin_)
+    void initBuiltinBuildings();
+    /// Values of rttr:SetBuilding (and the original radius of collectors and plantations in the civilization mode)
+    void applyBuiltinBuildings(const WorldDescription& desc);
 
     std::vector<CustomWare> wares_;
     std::vector<CustomMapObject> mapObjects_;
@@ -389,6 +426,24 @@ private:
     unsigned flagWorkLimit_ = 8;
     std::vector<BuildingType> militaryBuildings_;
     unsigned militarySearchSquares_ = 3;
+
+    /// Values of a built-in building
+    struct BuiltinBuilding
+    {
+        std::string title, description;
+        BuildingQuality size = BuildingQuality::Nothing;
+        BuildingType look = BuildingType::Headquarters;
+        BldWorkDescription workDesc;
+        WorkTimes times;
+        std::optional<unsigned> workRadius;
+        ResourceType mineResource = ResourceType::Nothing;
+        /// Military building with values of rttr:SetBuilding. Empty: the original tables
+        std::optional<MilitaryValues> military;
+        bool aiNearBorder = false;
+    };
+    std::array<BuiltinBuilding, NUM_BUILTIN_BUILDINGS> builtin_;
+    std::array<std::string, NUM_BUILTIN_JOBS> builtinJobTitles_;
+    std::array<Job, NUM_BUILTIN_JOBS> builtinJobLooks_{};
 };
 
 /// Content of the running game. Empty unless a game in the civilization mode is running.

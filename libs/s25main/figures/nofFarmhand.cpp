@@ -7,11 +7,13 @@
 #include "SerializedGameData.h"
 #include "SoundManager.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "figures/nofCustomCollector.h"
 #include "figures/nofCustomPlanter.h"
 #include "notifications/BuildingNote.h"
 #include "random/Random.h"
 #include "world/GameWorld.h"
+#include "gameData/BuildingConsts.h"
 #include "gameData/JobConsts.h"
 
 #include "GlobalGameSettings.h"
@@ -35,6 +37,16 @@ nofFarmhand::nofFarmhand(SerializedGameData& sgd, const unsigned obj_id)
     : nofBuildingWorker(sgd, obj_id), dest(sgd.PopMapPoint())
 {}
 
+unsigned nofFarmhand::GetWorkRadius(const BuildingType bld)
+{
+    // Workshops (collect/plant) and, in the civilization mode, the built-in buildings (rttr:SetBuilding or the
+    // original radius; the addons for the reach have no effect there)
+    if(const auto radius = civ::getActiveContent().GetWorkRadius(bld))
+        return *radius;
+    const auto& job = BLD_WORK_DESC[bld].job;
+    return job ? GetWorkRadius(*job) : 0u;
+}
+
 unsigned nofFarmhand::GetWorkRadius(const Job job)
 {
     // Collectors and plantations of workshops defined in lua (civilization mode)
@@ -44,9 +56,9 @@ unsigned nofFarmhand::GetWorkRadius(const Job job)
     {
         case Job::Carpenter: return 0;
         case Job::Hunter:
-        case Job::Farmer:
-        case Job::Winegrower: return 2;
-        case Job::CharBurner: return 3;
+        case Job::Farmer: return FARMER_RADIUS;
+        case Job::Winegrower: return WINEGROWER_RADIUS;
+        case Job::CharBurner: return CHARBURNER_RADIUS;
         case Job::Woodcutter:
         {
             const unsigned sel = world->GetGGS().getSelection(AddonId::WOODCUTTER_REACH_RADIUS);
@@ -57,7 +69,7 @@ unsigned nofFarmhand::GetWorkRadius(const Job job)
             const unsigned sel = world->GetGGS().getSelection(AddonId::FORESTER_REACH_RADIUS);
             return foresterRadiusValues[sel];
         }
-        case Job::Fisher: return 7;
+        case Job::Fisher: return FISHER_RADIUS;
         case Job::Stonemason:
         {
             const unsigned sel = world->GetGGS().getSelection(AddonId::STONEMASON_REACH_RADIUS);
@@ -101,7 +113,7 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
         {
             // Start working after the initial wait period
             // Work radius
-            const unsigned max_radius = GetWorkRadius(job_);
+            const unsigned max_radius = GetWorkRadius(workplace->GetBuildingType());
             // Number of additional radii in which points should be found
             // I.e. 0 => Don't search for points further away than ones already found
             const unsigned additionalRadiiToFind = [](Job job) {
@@ -204,7 +216,8 @@ void nofFarmhand::HandleDerivedEvent(const unsigned /*id*/)
                 }
 
                 // Try to find something later
-                current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].wait1_length, 1);
+                current_ev =
+                  GetEvMgr().AddEvent(this, civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).wait, 1);
                 workplace->StartNotWorking();
             }
         }
@@ -224,7 +237,8 @@ void nofFarmhand::WalkToWorkpoint()
     {
         // Arrived at target -> Start working
         state = State::Work;
-        current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].work_length, 1);
+        current_ev =
+          GetEvMgr().AddEvent(this, civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).work, 1);
         WorkStarted();
     } else
     {
@@ -278,7 +292,7 @@ void nofFarmhand::WalkHome()
 
 unsigned nofFarmhand::GetOutsideWorkLength() const
 {
-    return JOB_CONSTS[job_].work_length;
+    return civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).work;
 }
 
 void nofFarmhand::WorkAborted()

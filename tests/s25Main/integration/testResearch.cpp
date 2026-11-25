@@ -111,7 +111,7 @@ BOOST_AUTO_TEST_CASE(DefaultTechTreeIsValid)
         BOOST_TEST_INFO(techTree.get(i).name);
         BOOST_TEST(techTree.get(i).HasKnowledgeCost());
     }
-    // Knowledge points of buildings: only structural checks, the values are balancing (knowledge.lua)
+    // Knowledge points of buildings: only structural checks, the values are balancing (workshops.lua)
     BOOST_TEST(techTree.GetBuildingKnowledge(BuildingType::Catapult)[KnowledgeType::Military] < 0);
     // Every built-in building except the placeholder has some knowledge points
     for(unsigned i = 0; i < NUM_BUILTIN_BUILDINGS; ++i)

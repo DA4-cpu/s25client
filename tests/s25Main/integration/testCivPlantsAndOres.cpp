@@ -96,8 +96,8 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     mine.storage = 2;
     mine.mineResource = "Copper";
     mine.outputs = {{"CopperOre"}};
-    mine.workTime = 1;
-    mine.waitTime = 1;
+    mine.workTime = 20;
+    mine.waitTime = 20;
     desc.workshops.push_back(mine);
 
     WorkshopDesc plantation;
@@ -112,8 +112,8 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     plantation.plantObject = "Papyrus";
     plantation.plantRadius = plantRadius;
     plantation.outputs = {{"PapyrusPlant"}};
-    plantation.workTime = 1;
-    plantation.waitTime = 1;
+    plantation.workTime = 20;
+    plantation.waitTime = 20;
     desc.workshops.push_back(plantation);
     return desc;
 }
@@ -229,11 +229,11 @@ rttr:AddMapObject{ name = "PapyrusDeposit", title = "Papyrus", sizes = 8, look =
 rttr:AddOre{ name = "Copper", title = "Kupfer", look = "Iron", tint = 0xC07040 }
 rttr:AddWorkshop{ name = "CopperMine", title = "Kupfermine", size = "mine", cost = { Boards = 4 }, look = "IronMine",
     worker = { title = "Bergmann", look = "Miner" }, inputs = { { tags = "Food", storage = 6 } },
-    mine = { resource = "Copper" }, outputs = { "CopperOre" }, workTime = 28, waitTime = 29,
+    mine = { resource = "Copper" }, outputs = { "CopperOre" }, workTime = 560, waitTime = 580,
     knowledge = { IWP = 2 } }
 rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small", cost = { Boards = 2 },
     look = "Farm", worker = { title = "Bauer", look = "Farmer" }, inputs = { "Water" },
-    plant = { object = "PapyrusDeposit", radius = 4 }, outputs = { "PapyrusPlant" }, workTime = 6 }
+    plant = { object = "PapyrusDeposit", radius = 4 }, outputs = { "PapyrusPlant" }, workTime = 120 }
 )";
     {
         WorldDescription desc;
@@ -246,7 +246,7 @@ rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small"
         BOOST_TEST(desc.workshops[0].mineResource == "Copper");
         BOOST_TEST(desc.workshops[1].plantObject == "PapyrusDeposit");
         BOOST_TEST(desc.workshops[1].plantRadius == 4u);
-        // Knowledge of the workshop like rttr:SetBuildingKnowledge
+        // Knowledge of the workshop like knowledge of rttr:SetBuilding
         BOOST_TEST_REQUIRE(desc.buildingKnowledge.count("CopperMine") == 1u);
         BOOST_TEST(desc.buildingKnowledge.at("CopperMine")[1] == 2);
         const civ::TechTree techTree(desc);
@@ -308,7 +308,7 @@ rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small"
          replaced("plantSize = 4", "plantSize = 9"), replaced("growTime = 240,", ""),
          replaced("radius = 4", "radius = 0"),
          replaced("plant = {", "collect = { object = \"PapyrusDeposit\", radius = 2 }, plant = {"),
-         base + "\nrttr:SetBuildingKnowledge{ CopperMine = { IWP = 1 } }"})
+         base + "\nrttr:SetBuilding{ name = \"CopperMine\", knowledge = { IWP = 1 } }"})
     {
         WorldDescription desc;
         BOOST_TEST_INFO(invalid);

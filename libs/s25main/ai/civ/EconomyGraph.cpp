@@ -53,16 +53,18 @@ namespace {
             case BuildingType::Farm:
             case BuildingType::Vineyard:
             case BuildingType::Charburner: return {SourceKind::Land, 0};
-            case BuildingType::GraniteMine: return {SourceKind::Ore, static_cast<unsigned>(ResourceType::Granite)};
-            case BuildingType::CoalMine: return {SourceKind::Ore, static_cast<unsigned>(ResourceType::Coal)};
-            case BuildingType::IronMine: return {SourceKind::Ore, static_cast<unsigned>(ResourceType::Iron)};
-            case BuildingType::GoldMine: return {SourceKind::Ore, static_cast<unsigned>(ResourceType::Gold)};
+            // The ore of the mine (original or mine = { resource } of rttr:SetBuilding)
+            case BuildingType::GraniteMine:
+            case BuildingType::CoalMine:
+            case BuildingType::IronMine:
+            case BuildingType::GoldMine:
+                return {SourceKind::Ore, static_cast<unsigned>(civ::getActiveContent().GetMineResource(bld))};
             default: return {};
         }
     }
 
     /// Radius in which the worker takes the source, if it can be counted on the map around the building
-    unsigned getReach(const Source& source, const std::optional<Job> job)
+    unsigned getReach(const Source& source, const BuildingType bld)
     {
         switch(source.kind)
         {
@@ -70,7 +72,7 @@ namespace {
             case SourceKind::Trees:
             case SourceKind::StonePiles:
             case SourceKind::Fish:
-            case SourceKind::MapObject: return job ? nofFarmhand::GetWorkRadius(*job) : 0u;
+            case SourceKind::MapObject: return nofFarmhand::GetWorkRadius(bld);
             // Animals move, land and plants are counted by the work of the building itself, water is under the well
             case SourceKind::None:
             case SourceKind::Water:
@@ -126,9 +128,9 @@ void EconomyGraph::AddBuiltinRecipes(const GameWorldBase& world)
         recipe.inputs = makeRecipeInputs(workDesc);
         recipe.outputs = getBuiltinOutputs(bld);
         recipe.source = getBuiltinSource(bld);
-        const JobConst jobConst = JOB_CONSTS[*workDesc.job];
-        AddRecipe(world, std::move(recipe), jobConst.wait1_length + jobConst.work_length + jobConst.wait2_length,
-                  *workDesc.job);
+        // Frames of the worker (original or rttr:SetBuilding)
+        const civ::WorkTimes times = civ::getActiveContent().GetWorkTimes(bld);
+        AddRecipe(world, std::move(recipe), times.wait + times.work + times.waitAfter);
     }
 }
 
@@ -161,14 +163,11 @@ void EconomyGraph::AddCustomRecipes(const GameWorldBase& world)
             recipe.source = {SourceKind::Plantable, static_cast<unsigned>(building.plantObject)};
         else if(building.IsMine())
             recipe.source = {SourceKind::Ore, static_cast<unsigned>(building.mineResource)};
-        const std::optional<Job> job =
-          building.workDesc.job ? std::optional<Job>(*building.workDesc.job) : std::optional<Job>();
-        AddRecipe(world, std::move(recipe), building.workGFs + building.waitGFs, job);
+        AddRecipe(world, std::move(recipe), building.workGFs + building.waitGFs);
     }
 }
 
-void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const unsigned cycleGFs,
-                             const std::optional<Job> job)
+void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const unsigned cycleGFs)
 {
     // Buildings of disabled addons (wine, leather ...) do not exist in this game
     if(makeIsUnusedBuilding(world.GetGGS())(recipe.building))
@@ -204,7 +203,7 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
         recipe.outputSteps.push_back(custom ? custom->GetProductSteps(good) : 100u);
     recipe.requiredTools = GetWorkTools(content, recipe.building);
     recipe.lockedAtStart = world.GetTechTree().IsLockedAtStart(recipe.building);
-    recipe.reach = getReach(recipe.source, job);
+    recipe.reach = getReach(recipe.source, recipe.building);
     const double gfsPerMinute = static_cast<double>(duration_to_gfs(std::chrono::minutes(1)));
     recipe.nominalStepsPerMinute = gfsPerMinute / std::max(1u, cycleGFs);
 
@@ -226,7 +225,7 @@ void EconomyGraph::AddRenewers(const GameWorldBase& world)
     const auto isUnused = makeIsUnusedBuilding(world.GetGGS());
     if(!isUnused(BuildingType::Forester))
     {
-        const unsigned reach = nofFarmhand::GetWorkRadius(*BLD_WORK_DESC[BuildingType::Forester].job);
+        const unsigned reach = nofFarmhand::GetWorkRadius(BuildingType::Forester);
         renewers_.push_back({BuildingType::Forester, {SourceKind::Trees, 0}, reach});
     }
     const civ::Content& content = world.GetTechTree().GetContent();

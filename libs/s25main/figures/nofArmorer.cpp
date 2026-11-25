@@ -11,6 +11,7 @@
 #include "SoundManager.h"
 #include "addons/const_addons.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "civ/WareDistribution.h"
 #include "network/GameClient.h"
 #include "ogl/glArchivItem_Bitmap_Player.h"
@@ -88,7 +89,10 @@ void nofArmorer::HandleDerivedEvent(const unsigned /*id*/)
             } else
             {
                 // Nach 1. Warten wird gearbeitet
-                current_ev = GetEvMgr().AddEvent(this, workplace->ScaleWorkDuration(JOB_CONSTS[job_].work_length), 1);
+                current_ev = GetEvMgr().AddEvent(
+                  this,
+                  workplace->ScaleWorkDuration(civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).work),
+                  1);
                 state = State::Work;
                 workplace->is_working = true;
                 // LOG.write(("armorer handlewait1 - no consume wares %i \n",player);

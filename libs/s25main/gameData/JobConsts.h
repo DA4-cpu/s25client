@@ -59,6 +59,15 @@ extern const JobNamesTable JOB_NAMES;
 extern const JobConstsTable JOB_CONSTS;
 extern const JobSpriteConstsTable JOB_SPRITE_CONSTS;
 
+/// Radius in nodes of the built-in collectors and plantations whose reach no addon changes (civilization mode:
+/// rttr:SetBuilding collect/plant radius)
+constexpr unsigned FISHER_RADIUS = 7;
+constexpr unsigned FARMER_RADIUS = 2;
+constexpr unsigned WINEGROWER_RADIUS = 2;
+constexpr unsigned CHARBURNER_RADIUS = 3;
+/// The hunter looks for animals in a square of this half size around his house
+constexpr unsigned HUNTER_RADIUS = 19;
+
 /// Katapultmann-Wartezeit
 const unsigned CATAPULT_WAIT1_LENGTH = 1300; // eigenlich 310 - aber hochgestellt wegen zu schneller Warenverteilung
 

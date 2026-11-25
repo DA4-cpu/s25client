@@ -84,7 +84,7 @@ unsigned countFieldNodes(const GameWorld& world, const BuildingType bld, const M
     const CustomBuilding* custom = isCustomBuilding(bld) ? getActiveContent().GetBuilding(bld) : nullptr;
     if(bld == BuildingType::Farm)
     {
-        radius = nofFarmhand::GetWorkRadius(Job::Farmer);
+        radius = nofFarmhand::GetWorkRadius(BuildingType::Farm);
         isField = [&](const MapPoint node) {
             if(world.GetNO(node)->GetType() == NodalObjectType::Grainfield)
                 return true;

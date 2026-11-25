@@ -3,17 +3,124 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
 
 --[[
-Werkstätten im Zivilisationsmodus: einfache Gebäude, die Eingangswaren verbrauchen und eine Ware herstellen.
+Gebäude im Zivilisationsmodus.
 
-rttr:AddWorkshop{...}:
-  name        Bezeichner. Nur A-Z, a-z, 0-9 und _. Wird in techtree.lua (unlocks), knowledge.lua und in Spielständen
+  rttr:SetBuilding{...}  stellt ein eingebautes Gebäude ein (Holzfäller, Bauernhof, Militärgebäude, Hauptquartier ...).
+                         Die Einträge stehen unten im Abschnitt "Eingebaute Gebäude".
+  rttr:AddWorkshop{...}  definiert ein neues Gebäude: Werkstatt, Sammler, Plantage, Mine, Bibliothek, Lager oder
+                         Militärgebäude. Die Einträge stehen unten im Abschnitt "Werkstätten".
+Beide Funktionen verwenden dieselben Felder mit derselben Bedeutung (beschrieben bei rttr:AddWorkshop). Welche Felder
+ein eingebautes Gebäude hat, steht bei rttr:SetBuilding.
+Änderungen gelten ab dem nächsten Spielstart, Neukompilieren ist nicht nötig.
+
+Zeiten: workTime, waitTime und waitAfterTime zählen in Frames (Spielschritten) wie im Originalspiel. 1 Frame dauert
+bei normaler Geschwindigkeit 50 ms, 20 Frames sind 1 Sekunde (workTime = 600 sind 30 Sekunden). Höchstens 65535.
+Ablauf eines Arbeitsschritts:
+  Arbeiter, die im Gebäude arbeiten (Werkstätten, Minen, Sägewerk, Mühle, Brunnen ...):
+    waitTime: er wartet im Gebäude -> workTime: er arbeitet im Gebäude (dabei werden die Eingänge verbraucht) ->
+    waitAfterTime: er wartet noch (0 = 1 Frame) -> er trägt das Produkt zur Fahne.
+  Sammler und Plantagen (Holzfäller, Steinbruch, Fischer, Förster, Bauernhof, Weinberg, Köhler, Werkstätten mit
+  collect oder plant):
+    waitTime: er wartet im Gebäude -> er geht zum Objekt -> workTime: er arbeitet am Objekt -> er geht zurück und
+    trägt das Produkt zur Fahne. Sie haben kein waitAfterTime.
+  Jäger: waitTime, dann die Jagd (Gehen, Schießen und Zerlegen dauern immer gleich lang). Er hat kein workTime und
+  kein waitAfterTime.
+Das Arbeitstempo (Werkzeugreform, tools.lua) teilt die Zeiten: Tempo 50 = doppelt so lang, Tempo 200 = halb so lang.
+Die Arbeit am Objekt draußen dauert immer workTime (sie passt zu den Animationen); dafür ändert sich die Wartezeit
+davor so, dass waitTime + workTime zusammen im Tempo länger oder kürzer werden.
+
+===================================================================================================================
+rttr:SetBuilding{...}: stellt ein eingebautes Gebäude ein
+===================================================================================================================
+  name   Bezeichner des eingebauten Gebäudes (Liste unten).
+  Alle anderen Felder sind optional; was fehlt, bleibt wie im Originalspiel. Jedes Gebäude darf nur einmal vorkommen.
+  Ein Feld, das das Gebäude nicht hat, ist ein Ladefehler (mit Meldung beim Spielstart).
+  Die Einträge unten enthalten alle Werte, die zurzeit gelten (die Originalwerte, wo nichts geändert wurde).
+
+  Felder je Gebäude:
+    Hauptquartier (Headquarters): nur knowledge und warehouse.
+    Hafen (HarborBuilding): nur knowledge, warehouse und aiNearBorder. Der Hafen kostet immer 4 Bretter und 6 Steine
+      (Expeditionen bringen genau diese Waren mit), seine Baukosten sind deshalb nicht einstellbar.
+    Lagerhaus (Storehouse): title, description, size, cost, look, knowledge, aiNearBorder, warehouse.
+    Militärgebäude (Barracks, Guardhouse, Watchtower, Fortress): title, description, size, cost, look, knowledge,
+      military. look muss eines dieser vier sein.
+    Eselzucht (DonkeyBreeder), Werft (Shipyard), Katapult (Catapult), Spähturm (LookoutTower), Tempel (Temple):
+      nur cost, knowledge, tools, outputRatio, aiNearBorder. Ihre Arbeitsweise, Eingänge und Produkte bleiben vorerst
+      wie im Originalspiel.
+    Alle anderen (Produktionsgebäude): title, description, size, cost, look, worker, knowledge, tools, outputRatio,
+      storage, workTime, waitTime, waitAfterTime, aiNearBorder und je nach Gebäude collect, plant oder mine.
+      Ausnahmen: Der Brunnen (Well) hat kein worker (sein Arbeiter ist der Gehilfe). Der Jäger (Hunter) hat kein
+      workTime. Sammler und Plantagen haben kein waitAfterTime. storage haben nur Gebäude mit Eingängen.
+
+  Felder, die es nur hier gibt oder die hier anders sind:
+    worker     stellt den Beruf des Gebäudes ein: worker = { title = "Holzfäller", look = "Woodcutter" }.
+               title: Anzeigename des Berufs. look: Grafik, ein eingebauter Beruf (Bezeichner wie bei
+               rttr:AddWorkshop). Ein Beruf ist in allen Gebäuden derselbe: Alle vier Minen haben den Beruf Miner.
+               Geben zwei Gebäude desselben Berufs verschiedene title oder look an, ist das ein Ladefehler.
+    title      Ein englischer Originalname (z.B. "Woodcutter", "Granite mine") wird wie bisher in die Sprache des
+               Spiels übersetzt, jeder andere Name steht so da. Das gilt auch für worker.title ("Woodchopper").
+    description Ohne description bleibt der übersetzte Hilfetext des Originalspiels.
+    size       "small", "medium", "large" oder "mine". "mine" nur bei Minen, Minen nur mit "mine".
+    look       Grafik: ein eingebautes Gebäude. Ein Militärgebäude bekommt von look auch die Positionen der Fahnen.
+    collect    Holzfäller (Woodcutter), Steinbruch (Quarry), Fischer (Fishery), Jäger (Hunter): collect = { radius = N }
+               Umkreis in Knoten (1 bis 20), in dem der Arbeiter seine Bäume, Steine, Fische bzw. Tiere sucht.
+    plant      Förster (Forester), Bauernhof (Farm), Weinberg (Vineyard), Köhler (Charburner): plant = { radius = N }
+               Umkreis in Knoten (1 bis 20), in dem der Arbeiter pflanzt (Köhler: Meiler anlegt) und erntet.
+               Beim Bauernhof gilt der Umkreis auch für den Förster: Er pflanzt keine Bäume auf Plätze, die im
+               Umkreis eines eigenen Bauernhofs Felder werden können.
+    mine       Minen (GraniteMine, CoalMine, IronMine, GoldMine): mine = { resource = "Iron" }, das Erz, das die Mine
+               abbaut: "Granite", "Coal", "Iron", "Gold" oder ein Erz aus mapobjects.lua (rttr:AddOre). Das Produkt
+               bleibt vorerst das der Mine: Eine Kohlemine mit resource = "Iron" baut Eisenerz ab und bringt Kohle.
+    storage    Plätze je Eingang (Standard wie im Originalspiel: 6, Minen 2 je Nahrung, Abdecker 3).
+    outputRatio Standard 1. Bedeutung wie bei rttr:AddWorkshop. Ein Holzfäller mit 2 bringt 2 Holz je Baum. Minen und
+               Sammler nehmen je Arbeitsschritt genau 1 Einheit ihres Vorkommens, egal wie viele Waren herauskommen:
+               Ein Steinbruch mit 2 nimmt 1 Stück vom Steinhaufen und bringt 2 Steine, ein Fischer mit 2 fängt 1 Fisch
+               und bringt 2.
+    tools      wie bei rttr:AddWorkshop. Ohne tools braucht das Gebäude das Werkzeug, das sein Arbeiter im
+               Originalspiel hat (z.B. die Axt), mit baseSpeed = 0; hatte der Arbeiter keins (Mühle, Brunnen,
+               Brauerei ...), arbeitet es wie bisher mit Tempo 100.
+    aiNearBorder Standard wie im Originalspiel: true bei Holzfäller, Steinbruch, Fischer, Minen, Hafen und Katapult,
+               sonst false. Militärgebäude darf die KI immer an der Grenze bauen.
+    warehouse  nur Lager: warehouse = { capacity = N }, Höchstzahl aller Waren zusammen (1 bis 100000), Bedeutung
+               wie bei rttr:AddWorkshop. Ohne warehouse fasst das Lager beliebig viel. Die aufgenommenen Waren bleiben
+               wie im Originalspiel (alle Waren und Personen).
+  Im Zivilisationsmodus wirkungslos: die Addons für die Reichweite von Holzfäller, Förster und Steinmetz (dafür gibt es
+  collect und plant).
+  Noch nicht einstellbar: inputs, outputs, steps, inheritProperties und outputChoice der eingebauten Gebäude und eine
+  andere Arbeitsweise (z.B. ein Steinbruch, der Lehm sammelt). Das kommt in den nächsten Schritten.
+
+  Bezeichner der eingebauten Gebäude: Headquarters, Storehouse, HarborBuilding, Barracks, Guardhouse, Watchtower,
+  Fortress, LookoutTower, Catapult, Woodcutter, Forester, Sawmill, Quarry, GraniteMine, CoalMine, IronMine, GoldMine,
+  Charburner (Köhlerei-Addon), Fishery, Hunter, Well, Farm, Mill, Bakery, PigFarm, Slaughterhouse, Brewery,
+  DonkeyBreeder, Vineyard, Winery, Temple (Wein-Addon), Ironsmelter, Metalworks, Armory, Mint, Shipyard, Skinner,
+  Tannery, LeatherWorks (Leder-Addon).
+  Bezeichner der eingebauten Berufe (für worker.look): Helper, Woodcutter, Fisher, Forester, Carpenter, Stonemason,
+  Hunter, Farmer, Miller, Baker, Butcher, Miner, Brewer, PigBreeder, DonkeyBreeder, IronFounder, Minter, Metalworker,
+  Armorer, Builder, Planer, Geologist, Shipwright, Scout, CharBurner, Winegrower, Vintner, TempleServant, Skinner,
+  Tanner, LeatherWorker.
+
+===================================================================================================================
+rttr:AddWorkshop{...}: definiert ein neues Gebäude
+===================================================================================================================
+  name        Bezeichner. Nur A-Z, a-z, 0-9 und _. Wird in techtree.lua (unlocks), ai.lua und in Spielständen
               verwendet.
   title       Anzeigename
   description optional: Hilfetext
   size        "small", "medium", "large" oder "mine" (Minenplatz im Gebirge, nur zusammen mit mine)
-  cost        Baukosten wie in buildingcosts.lua: { Boards = 2, Stones = 1 } (je ein Tag, alphabetisch verbaut) oder
-              { { tags = { "Bretter", "Nadelholz" }, amount = 2 }, { tags = "Stones", amount = 1 } } (in dieser
-              Reihenfolge verbaut). Jede Ware mit allen Tags eines Eintrags kann geliefert werden.
+  cost        Baukosten (Pflicht), zwei Formen:
+              kurz: cost = { Boards = 2, Stones = 1 }: je Eintrag ein Tag und die Anzahl. Verbaut wird in
+                    alphabetischer Reihenfolge der Tags (Lua-Tabellen haben keine Reihenfolge).
+              lang: cost = { { tags = "Boards", amount = 2 }, { tags = { "Bretter", "Nadelholz" }, amount = 1 } }:
+                    verbaut wird in dieser Reihenfolge. tags ist eine Tag-Abfrage wie bei den Eingängen.
+              Jede Ware, die alle Tags eines Eintrags hat, kann dafür geliefert werden, auch gemischt (z.B. Laub- und
+              Nadelholzbretter für "Bretter"). Die Baustelle bestellt aus dem nächsten Lager, das irgendeine passende
+              Ware hat. Höchstens 4 Einträge und höchstens 31 Waren insgesamt je Gebäude.
+              Der Bauarbeiter verbaut die Einträge nacheinander. Die erste Hälfte des Baufortschritts zeigt das Gerüst,
+              die zweite die Mauern.
+              "Boards" und "Stones" sind die Bezeichner der eingebauten Bretter und Steine (zugleich ihre Tags). Neue
+              Waren zählen dazu, wenn sie diesen Tag haben (z.B. kind = "Boards"), oder man gibt den eingebauten Waren
+              mit rttr:SetWare (wares.lua) eine Warenart und fragt nach ihr.
+              Beim Abriss mit Rückerstattung (Addon) gibt es von jedem Eintrag die erste passende Ware zurück.
   look        Platzhaltergrafik: Das Gebäude sieht aus wie dieses eingebaute Gebäude (z.B. "Sawmill")
   worker      Arbeiter: { title = "...", look = "Carpenter" }
               look: Platzhaltergrafik (eingebauter Beruf). Jeder Helfer kann ohne Werkzeug Arbeiter einer Werkstatt
@@ -66,7 +173,7 @@ rttr:AddWorkshop{...}:
               Nebenprodukte (byproducts.lua) gibt es je Ware. Minen, Sammler und Plantagen nehmen je Arbeitsschritt
               genau 1 Einheit ihres Erzes bzw. Objekts, egal wie viele Waren herauskommen. Der Arbeiter legt alle
               zusammen an die Fahne, mehr als 8 nacheinander.
-              Eingebaute Gebäude: rttr:SetBuildingOutputRatio in tools.lua.
+              Eingebaute Gebäude: outputRatio in rttr:SetBuilding.
   outputChoice optional, nur "knowledge": Die Produkte (mehrere) werden nach dem Regler "Wissen" im Fenster
               "Verteilung" gewählt (z.B. geritzte Knochen für LWP, IWP und MWP). Jedes Produkt braucht knowledge in
               wares.lua (genau eine Art).
@@ -80,9 +187,9 @@ rttr:AddWorkshop{...}:
   library     optional: macht die Werkstatt zur Bibliothek, z.B. library = { capacity = 20 }.
               Eine Bibliothek bestellt alle Wissensmedien (Waren mit knowledge in wares.lua) per Träger, bis capacity
               erreicht ist, und stellt nichts her. Darin zählen die WP der Medien voll (in Lagern nur halb). Wird sie
-              zerstört, sind die Medien verloren. Ohne inputs, outputs und workTime.
+              zerstört, sind die Medien verloren. Ohne inputs, outputs, workTime, waitTime und waitAfterTime.
   collect     optional: macht die Werkstatt zum Sammler wie den Steinbruch. Der Arbeiter geht zu Objekten auf der Karte
-              (mapobjects.lua) im Umkreis radius, arbeitet dort workTime Sekunden und bringt sein Produkt (outputs) nach Hause:
+              (mapobjects.lua) im Umkreis radius, arbeitet dort workTime Frames und bringt sein Produkt (outputs) nach Hause:
               collect = { object = "LoamDeposit", radius = 8 }. Ohne inputs. Man sollte auch mehrere objects zum Collecten angeben können  
               Arbeitsanimation je nach worker.look: "Planer" gräbt mit der Schaufel, "Woodcutter" hackt,
               "Farmer" mäht mit der Sense, sonst klopft er wie der Steinmetz.
@@ -108,9 +215,14 @@ rttr:AddWorkshop{...}:
               inputs = { { tags = "Food", storage = 6 } }.
   warehouse   optional: macht das Gebäude zum Lager statt zur Werkstatt:
               warehouse = { wares = { "Wood", "Stones", "Lehm" }, capacity = 100 }.
-              wares = die Waren, die es aufnimmt (Tag-Abfragen wie bei inputs), capacity = Höchstzahl aller Waren
-              zusammen (siehe storage.lua). Es nimmt nur diese Waren auf und keine Personen, erzeugt keine Gehilfen
-              und hat keinen Arbeiter. Baustellen und Werkstätten holen ihre Waren auch von dort.
+              wares = die Waren, die es aufnimmt (Tag-Abfragen wie bei inputs). Es nimmt nur diese Waren auf und keine
+              Personen, erzeugt keine Gehilfen und hat keinen Arbeiter. Baustellen und Werkstätten holen ihre Waren
+              auch von dort.
+              capacity = so viele Waren fasst das Lager höchstens (nur Waren, keine Personen). Waren auf dem Weg zum
+              Lager zählen schon mit. Ist ein Lager voll, nimmt es keine Waren mehr an; sind alle voll, bleiben die
+              Waren an der Fahne ihres Gebäudes liegen, bis ein Abnehmer sie braucht oder wieder Platz ist. Was im
+              Lager selbst entsteht (Startvorrat, Werkzeuge zurückkehrender Arbeiter), wird immer eingelagert, auch
+              über die Grenze hinaus. Wann eine Fahne voll ist, steht in storage.lua (rttr:SetFlagWorkLimit).
               Ein Lager hat nur name, title, description, size, cost, look, knowledge und aiNearBorder; worker, inputs,
               outputs, workTime usw. sind nicht erlaubt. Die KI baut solche Lager noch nicht.
               Beispiel:
@@ -126,13 +238,14 @@ rttr:AddWorkshop{...}:
               vision    optional (Standard radius + 5): Sichtweite in Knoten, vom Gebäude aus gemessen (1 bis 255)
               coins     Plätze für Goldmünzen (0 bis 255; 0 = keine Beförderung in diesem Gebäude)
               armor     optional (Standard wie coins): Plätze für Rüstungen (0 bis 255)
-              Zum Vergleich die eingebauten (Soldaten/Radius/Sichtweite/Münzen/Rüstung): Barracks 2/10/15/1/1,
-              Guardhouse 3/12/17/2/2, Watchtower 6/14/19/4/4, Fortress 9/16/21/6/6.
+              Die Werte der eingebauten Militärgebäude stehen unten bei rttr:SetBuilding (Barracks, Guardhouse,
+              Watchtower, Fortress).
               look muss ein eingebautes Militärgebäude sein (Barracks, Guardhouse, Watchtower oder Fortress): davon
               kommen die Grafik und die Positionen der Fahnen. size "small", "medium" oder "large", nicht "mine".
               Ein Militärgebäude hat nur name, title, description, size, cost, look, knowledge und military; worker,
-              inputs, outputs, workTime, waitTime, storage, tools, outputRatio, library, collect, plant, mine,
-              warehouse und aiNearBorder sind nicht erlaubt (Militärgebäude darf die KI immer an der Grenze bauen).
+              inputs, outputs, workTime, waitTime, waitAfterTime, storage, tools, outputRatio, library, collect, plant,
+              mine, warehouse und aiNearBorder sind nicht erlaubt (Militärgebäude darf die KI immer an der Grenze
+              bauen).
               Im Baumenü steht es je nach size im passenden Reiter und ist nur dort wählbar, wo auch die eingebauten
               Militärgebäude erlaubt sind. Freischalten wie jede Werkstatt über unlocks in techtree.lua.
               KI: Alle Militärgebäude des Spiels (eingebaute und diese) sind nach soldiers sortiert, bei Gleichstand
@@ -148,18 +261,26 @@ rttr:AddWorkshop{...}:
                 Fortress (9). Die Palisade hat die Rolle der Wachstube. Eine Wachstube baut die alte KI dann nur noch,
                 wenn sie an einem Platz, um den fast nichts bebaubar ist, auf das nächstgrößere Gebäude (size)
                 umsteigt: das erste in der Reihenfolge, das größer ist (ai/aijh/Jobs.cpp).
-  workTime    Arbeitszeit pro Produkt in Sekunden (Sammler und Plantagen: pro Gang)
-  waitTime    optional: Wartezeit vor der Arbeit in Sekunden
-  knowledge   optional: Wissenspunkte des fertigen Gebäudes wie in knowledge.lua, z.B. knowledge = { IWP = 2 }.
-              Ein Gebäude darf nur an einer der beiden Stellen Wissenspunkte bekommen.
+  workTime    Arbeitszeit je Arbeitsschritt in Frames (Sammler und Plantagen: am Objekt), 1 bis 65535. Pflicht außer
+              bei Bibliothek, Lager und Militärgebäude. Ablauf siehe "Zeiten" oben.
+  waitTime    optional (Standard 0, gilt als 1): Wartezeit vor der Arbeit in Frames, 0 bis 65535.
+  waitAfterTime optional (Standard 5): Wartezeit nach der Arbeit in Frames, bevor der Arbeiter das Produkt
+              herausträgt, 0 bis 65535 (0 = 1 Frame). Nicht bei Sammlern und Plantagen.
+  knowledge   optional: Wissenspunkte (WP) des fertigen Gebäudes, z.B. knowledge = { LWP = 1, IWP = 2 }.
+              Arten: LWP = Landwirtschaft, IWP = Industrie, MWP = Militär. Fehlende Arten zählen 0, negative Werte sind
+              erlaubt (das Katapult hat MWP = -5). Jedes FERTIGE Gebäude bringt seinem Besitzer diese Punkte, solange
+              es steht (Baustellen zählen nicht). Gebäude ohne knowledge bringen keine WP.
+              Die WP-Kosten der Technologien stehen in techtree.lua unter "knowledge", die Startwerte des Reglers
+              "Wissen" in distribution.lua.
   tools       optional, nur mit der Werkzeugreform (tools.lua): Werkzeuge der Werkstatt und ihr Tempo ohne Werkzeug,
               z.B. tools = { baseSpeed = 25, tools = { "Scythe", "Plough" } }. baseSpeed in Prozent (Standard 0 = ohne
-              Werkzeug keine Arbeit), tools = Werkzeugtypen als Tag-Abfragen (höchstens 4).
+              Werkzeug keine Arbeit), tools = Werkzeugtypen als Tag-Abfragen (höchstens 4). Von jedem Typ liegt
+              höchstens ein Werkzeug in Gebrauch im Gebäude, dazu höchstens ein Ersatz.
               Ohne diese Angabe braucht die Werkstatt kein Werkzeug und arbeitet mit Tempo 100.
   aiNearBorder optional (Standard false): true erlaubt der KI, die Werkstatt in Grenznähe zu bauen (höchstens 4 Knoten
-              von einer Landgrenze entfernt). Sonst hält die KI diesen Platz für Militärgebäude frei, wie bei allen
-              eingebauten Gebäuden außer Holzfäller, Steinbruch, Fischer, Minen, Hafen und Katapult
-              (ai/aijh/AIConstruction.cpp, BORDER_RESERVE_RADIUS und BUILDINGS_NEAR_BORDER).
+              von einer Landgrenze entfernt). Sonst hält die KI diesen Platz für Militärgebäude frei
+              (ai/aijh/AIConstruction.cpp, BORDER_RESERVE_RADIUS). Die eingebauten Gebäude haben aiNearBorder in
+              rttr:SetBuilding.
 
 Man sollte hier auch die im Spiel integrierten Gebäude anpassen können bzw. alle Gebäude sollten hier als
 lua Werkstatt stehen oder zumdindest von hier aus ansteuerbar sein
@@ -181,9 +302,591 @@ rttr:AddWorkshop{
     worker = { title = "Beispiel-Arbeiter", look = "Carpenter" },
     inputs = { "ExampleRaw" },
     outputs = { "ExampleProduct" },
-    workTime = 20,
+    workTime = 400,
 }
 ]]
+
+-------------------------------------------------------------------------------------------------------------------
+-- Eingebaute Gebäude (rttr:SetBuilding)
+--
+-- Alles, was man braucht, um neue Werkzeuge herzustellen (Holz, Bretter, Stein, Bergbau, Eisenschmelze, Schlosserei),
+-- arbeitet auch ohne Werkzeug langsam weiter (baseSpeed = 25). Sonst gäbe es nach dem Bruch des letzten Werkzeugs nie
+-- wieder welche.
+-------------------------------------------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------------------------------------------
+-- Lager
+-------------------------------------------------------------------------------------------------------------------
+
+rttr:SetBuilding{
+    name = "Headquarters", -- Hauptquartier
+    knowledge = { LWP = 7, IWP = 7, MWP = 7 },
+    warehouse = { capacity = 700 },
+}
+
+rttr:SetBuilding{
+    name = "Storehouse", -- Lagerhaus
+    title = "Storehouse",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 7, BasicRoofMaterial = 7 },
+    look = "Storehouse",
+    aiNearBorder = false,
+    knowledge = { LWP = 1, IWP = 1, MWP = 1 },
+    warehouse = { capacity = 400 },
+}
+
+rttr:SetBuilding{
+    name = "HarborBuilding", -- Hafen
+    aiNearBorder = true,
+    knowledge = { LWP = 1, IWP = 1, MWP = 1 },
+    warehouse = { capacity = 500 },
+}
+
+-------------------------------------------------------------------------------------------------------------------
+-- Militär
+-------------------------------------------------------------------------------------------------------------------
+
+rttr:SetBuilding{
+    name = "Barracks", -- Baracke
+    title = "Barracks",
+    size = "small",
+    cost = { { tags = "BasicBuildingMaterial", amount = 4 }, { tags = "BasicRoofMaterial", amount = 2 } },
+    look = "Barracks",
+    knowledge = { MWP = 1 },
+    military = { soldiers = 2, radius = 10, vision = 15, coins = 1, armor = 1 },
+}
+
+rttr:SetBuilding{
+    name = "Guardhouse", -- Wachstube
+    title = "Guardhouse",
+    size = "small",
+    cost = { { tags = "BasicBuildingMaterial", amount = 6 }, { tags = "BasicRoofMaterial", amount = 3 } },
+    look = "Guardhouse",
+    knowledge = { MWP = 2 },
+    military = { soldiers = 3, radius = 12, vision = 17, coins = 2, armor = 2 },
+}
+
+rttr:SetBuilding{
+    name = "Watchtower", -- Wachturm
+    title = "Watchtower",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 4, Stones = 4, BasicRoofMaterial = 5 },
+    look = "Watchtower",
+    knowledge = { MWP = 3 },
+    military = { soldiers = 6, radius = 14, vision = 19, coins = 4, armor = 4 },
+}
+
+rttr:SetBuilding{
+    name = "Fortress", -- Festung
+    title = "Fortress",
+    size = "large",
+    cost = { BasicBuildingMaterial = 6, Stones = 8, BasicRoofMaterial = 6 },
+    look = "Fortress",
+    knowledge = { MWP = 4 },
+    military = { soldiers = 9, radius = 16, vision = 21, coins = 6, armor = 6 },
+}
+
+rttr:SetBuilding{
+    name = "LookoutTower", -- Spähturm
+    cost = { BasicBuildingMaterial = 5 },
+    aiNearBorder = false,
+    knowledge = { MWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "Catapult", -- Katapult
+    cost = { BasicBuildingMaterial = 5 },
+    aiNearBorder = true,
+    knowledge = { MWP = -5 },
+}
+
+-------------------------------------------------------------------------------------------------------------------
+-- Holz, Stein, Bergbau
+-------------------------------------------------------------------------------------------------------------------
+
+rttr:SetBuilding{
+    name = "Woodcutter", -- Holzfäller
+    title = "Woodcutter",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },
+    look = "Woodcutter",
+    worker = { title = "Woodchopper", look = "Woodcutter" },
+    collect = { radius = 6 },
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "Axe" } },
+    workTime = 148,
+    waitTime = 989,
+    aiNearBorder = true,
+    knowledge = { IWP = 2 },
+}
+
+rttr:SetBuilding{
+    name = "Forester", -- Förster
+    title = "Forester",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },
+    look = "Forester",
+    worker = { title = "Tree planter", look = "Forester" },
+    plant = { radius = 6 },
+    tools = { baseSpeed = 25, tools = { "Shovel" } },
+    workTime = 66,
+    waitTime = 704,
+    aiNearBorder = false,
+    knowledge = { LWP = 1, IWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "Sawmill", -- Sägewerk
+    title = "Sawmill",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 3 },
+    look = "Sawmill",
+    worker = { title = "Carpenter", look = "Carpenter" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "Saw" } },
+    workTime = 479,
+    waitTime = 600,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { IWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Quarry", -- Steinbruch
+    title = "Quarry",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },
+    look = "Quarry",
+    worker = { title = "Stonemason", look = "Stonemason" },
+    collect = { radius = 8 },
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    workTime = 129,
+    waitTime = 925,
+    aiNearBorder = true,
+    knowledge = { IWP = 2 },
+}
+
+rttr:SetBuilding{
+    name = "GraniteMine", -- Granitmine
+    title = "Granite mine",
+    size = "mine",
+    cost = { BasicBuildingMaterial = 4, Rope = 1 },
+    look = "GraniteMine",
+    worker = { title = "Miner", look = "Miner" },
+    mine = { resource = "Granite" },
+    storage = 2,
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    workTime = 583,
+    waitTime = 558,
+    waitAfterTime = 5,
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "CoalMine", -- Kohlemine
+    title = "Coal mine",
+    size = "mine",
+    cost = { BasicBuildingMaterial = 4, Rope = 1 },
+    look = "CoalMine",
+    worker = { title = "Miner", look = "Miner" },
+    mine = { resource = "Coal" },
+    storage = 2,
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    workTime = 583,
+    waitTime = 558,
+    waitAfterTime = 5,
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "IronMine", -- Eisenmine
+    title = "Iron mine",
+    size = "mine",
+    cost = { BasicBuildingMaterial = 4, Rope = 1 },
+    look = "IronMine",
+    worker = { title = "Miner", look = "Miner" },
+    mine = { resource = "Iron" },
+    storage = 2,
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "PickAxe" } },
+    workTime = 583,
+    waitTime = 558,
+    waitAfterTime = 5,
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "GoldMine", -- Goldmine
+    title = "Gold mine",
+    size = "mine",
+    cost = { BasicBuildingMaterial = 4, Rope = 1 },
+    look = "GoldMine",
+    worker = { title = "Miner", look = "Miner" },
+    mine = { resource = "Gold" },
+    storage = 2,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "PickAxe" } },
+    workTime = 583,
+    waitTime = 558,
+    waitAfterTime = 5,
+    aiNearBorder = true,
+    knowledge = { IWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "Charburner", -- Köhler (Köhlerei-Addon)
+    title = "Charburner",
+    size = "large",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 3 },
+    look = "Charburner",
+    worker = { title = "Charburner", look = "CharBurner" },
+    plant = { radius = 3 },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "Shovel" } },
+    workTime = 117,
+    waitTime = 806,
+    aiNearBorder = false,
+    knowledge = { IWP = 4 },
+}
+
+-------------------------------------------------------------------------------------------------------------------
+-- Nahrung und Landwirtschaft
+-------------------------------------------------------------------------------------------------------------------
+
+rttr:SetBuilding{
+    name = "Fishery", -- Fischer
+    title = "Fishery",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },
+    look = "Fishery",
+    worker = { title = "Fisher", look = "Fisher" },
+    collect = { radius = 7 },
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "RodAndLine" } },
+    workTime = 729,
+    waitTime = 625,
+    aiNearBorder = true,
+    knowledge = { LWP = 2 },
+}
+
+rttr:SetBuilding{
+    name = "Hunter", -- Jäger
+    title = "Hunter",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2 },
+    look = "Hunter",
+    worker = { title = "Huntsman", look = "Hunter" },
+    collect = { radius = 19 },
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Bow" } },
+    waitTime = 900,
+    aiNearBorder = false,
+    knowledge = { LWP = 2 },
+}
+
+rttr:SetBuilding{
+    name = "Well", -- Brunnen
+    title = "Well",
+    size = "small",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Rope = 1 },
+    look = "Well",
+    outputRatio = 1,
+    workTime = 385,
+    waitTime = 400,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { LWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "Farm", -- Bauernhof
+    title = "Farm",
+    size = "large",
+    cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 4 },
+    look = "Farm",
+    worker = { title = "Farmer", look = "Farmer" },
+    plant = { radius = 2 },
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "Scythe" } },
+    workTime = 117,
+    waitTime = 906,
+    aiNearBorder = false,
+    knowledge = { LWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Mill", -- Mühle
+    title = "Mill",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 2 },
+    look = "Mill",
+    worker = { title = "Miller", look = "Miller" },
+    storage = 6,
+    outputRatio = 1,
+    workTime = 470,
+    waitTime = 595,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { LWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Bakery", -- Bäcker
+    title = "Bakery",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Stones = 3 },
+    look = "Bakery",
+    worker = { title = "Baker", look = "Baker" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Rollingpin" } },
+    workTime = 470,
+    waitTime = 600,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { LWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "PigFarm", -- Schweinezucht
+    title = "Pig farm",
+    size = "large",
+    cost = { BasicBuildingMaterial = 8, BasicRoofMaterial = 5 },
+    look = "PigFarm",
+    worker = { title = "Pig breeder", look = "PigBreeder" },
+    storage = 6,
+    outputRatio = 1,
+    workTime = 390,
+    waitTime = 660,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { LWP = 4 },
+}
+
+rttr:SetBuilding{
+    name = "Slaughterhouse", -- Fleischerei
+    title = "Slaughterhouse",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 2 },
+    look = "Slaughterhouse",
+    worker = { title = "Butcher", look = "Butcher" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Cleaver" } },
+    workTime = 478,
+    waitTime = 600,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { LWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Brewery", -- Brauerei
+    title = "Brewery",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 5 },
+    look = "Brewery",
+    worker = { title = "Brewer", look = "Brewer" },
+    storage = 6,
+    outputRatio = 1,
+    workTime = 530,
+    waitTime = 500,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { LWP = 1, MWP = 1 },
+}
+
+rttr:SetBuilding{
+    name = "DonkeyBreeder", -- Eselzucht
+    cost = { BasicBuildingMaterial = 8, BasicRoofMaterial = 5 },
+    aiNearBorder = false,
+    knowledge = { LWP = 4 },
+}
+
+rttr:SetBuilding{
+    name = "Vineyard", -- Weinberg (Wein-Addon)
+    title = "Vineyard",
+    size = "large",
+    cost = { BasicBuildingMaterial = 3, BasicRoofMaterial = 2 },
+    look = "Vineyard",
+    worker = { title = "Winegrower", look = "Winegrower" },
+    plant = { radius = 2 },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Shovel" } },
+    workTime = 117,
+    waitTime = 906,
+    aiNearBorder = false,
+    knowledge = { LWP = 4 },
+}
+
+rttr:SetBuilding{
+    name = "Winery", -- Winzerei (Wein-Addon)
+    title = "Winery",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 3 },
+    look = "Winery",
+    worker = { title = "Vintner", look = "Vintner" },
+    storage = 6,
+    outputRatio = 1,
+    workTime = 470,
+    waitTime = 595,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { LWP = 3 },
+}
+
+-------------------------------------------------------------------------------------------------------------------
+-- Metall und Handwerk
+-------------------------------------------------------------------------------------------------------------------
+
+rttr:SetBuilding{
+    name = "Ironsmelter", -- Eisenschmelze
+    title = "Iron smelter",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4, Stones = 4 },
+    look = "Ironsmelter",
+    worker = { title = "Iron founder", look = "IronFounder" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "Crucible" } },
+    workTime = 950,
+    waitTime = 360,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { IWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Metalworks", -- Schlosserei
+    title = "Metalworks",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4, Stones = 2 },
+    look = "Metalworks",
+    worker = { title = "Metalworker", look = "Metalworker" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 25, tools = { "Tongs" } },
+    workTime = 850,
+    waitTime = 500,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { IWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Armory", -- Waffenschmiede
+    title = "Armory",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 5, Stones = 5 },
+    look = "Armory",
+    worker = { title = "Armorer", look = "Armorer" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Hammer" } },
+    workTime = 940,
+    waitTime = 570,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { IWP = 2 },
+}
+
+rttr:SetBuilding{
+    name = "Mint", -- Münzprägerei
+    title = "Mint",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 5, Stones = 5 },
+    look = "Mint",
+    worker = { title = "Minter", look = "Minter" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Crucible" } },
+    workTime = 1050,
+    waitTime = 370,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { IWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Shipyard", -- Werft
+    cost = { BasicBuildingMaterial = 7, BasicRoofMaterial = 6, Rope = 2 },
+    tools = { baseSpeed = 0, tools = { "Hammer" } },
+    aiNearBorder = false,
+    knowledge = { IWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Temple", -- Tempel (Wein-Addon)
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 6, Stones = 8, Rope = 2 },
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Crucible" } },
+    aiNearBorder = false,
+    knowledge = { IWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "Skinner", -- Abdecker (Leder-Addon)
+    title = "Skinner",
+    size = "small",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 1 },
+    look = "Skinner",
+    worker = { title = "Skinner", look = "Skinner" },
+    storage = 3,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Cleaver" } },
+    workTime = 470,
+    waitTime = 695,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { IWP = 2 },
+}
+
+rttr:SetBuilding{
+    name = "Tannery", -- Gerberei (Leder-Addon)
+    title = "Tannery",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4 },
+    look = "Tannery",
+    worker = { title = "Tanner", look = "Tanner" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Saw" } },
+    workTime = 470,
+    waitTime = 495,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { IWP = 3 },
+}
+
+rttr:SetBuilding{
+    name = "LeatherWorks", -- Lederei (Leder-Addon)
+    title = "Leatherworks",
+    size = "medium",
+    cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4 },
+    look = "LeatherWorks",
+    worker = { title = "Leatherworker", look = "LeatherWorker" },
+    storage = 6,
+    outputRatio = 1,
+    tools = { baseSpeed = 0, tools = { "Tongs" } },
+    workTime = 470,
+    waitTime = 695,
+    waitAfterTime = 5,
+    aiNearBorder = false,
+    knowledge = { MWP = 3 },
+}
+
+-------------------------------------------------------------------------------------------------------------------
+-- Werkstätten (rttr:AddWorkshop)
+-------------------------------------------------------------------------------------------------------------------
 
 rttr:AddWorkshop{
     name = "LoamProcessor",
@@ -195,7 +898,7 @@ rttr:AddWorkshop{
     inputs = { "Loam" },
     outputs = { "Clay" },
     outputRatio = 0.5,
-    workTime = 37,
+    workTime = 740,
 }
 
 -------------------------------------------------------------------------------
@@ -214,7 +917,7 @@ rttr:AddWorkshop{
     outputs = { "GeritzterKnochen" },
     outputChoice = "knowledge",
     tools = { baseSpeed = 0, tools = { "Cleaver" } },
-    workTime = 50,         
+    workTime = 1000,         
 }
 -------------------------------------------------------------------------------
 -- Bibliothek (Schritt 4c). Entschieden: mittelgroß, fasst 20 Medien, Arbeiter "Bibliothekar" ohne Werkzeug, erst ab
@@ -247,8 +950,8 @@ rttr:AddWorkshop{
     outputs = { "Loam" },
     outputRatio = 0.75,
     tools = { baseSpeed = 25, tools = { "Shovel" } },
-    workTime = 7,                    
-    waitTime = 27,                   
+    workTime = 140,                    
+    waitTime = 540,                   
     aiNearBorder = true,
     knowledge = { IWP = 1 },
 }
@@ -264,8 +967,8 @@ rttr:AddWorkshop{
     outputs = { "Coal" },
     outputRatio = 0.4,
     tools = { baseSpeed = 25, tools = { "Shovel", "Bucket" } },
-    workTime = 7,                    
-    waitTime = 20,                   
+    workTime = 140,                    
+    waitTime = 400,                   
     aiNearBorder = true,
     knowledge = { IWP = 1 },
 }
@@ -281,8 +984,8 @@ rttr:AddWorkshop{
     outputs = { "TinOre" },
     outputRatio = 0.6,
     tools = { baseSpeed = 0, tools = { "PickAxe", "Bucket" } },
-    workTime = 7,                    
-    waitTime = 27,                   
+    workTime = 140,                    
+    waitTime = 540,                   
     aiNearBorder = true,
     knowledge = { IWP = 1 },
 }
@@ -298,8 +1001,8 @@ rttr:AddWorkshop{
     outputs = { "CopperOre" },
     outputRatio = 0.5,
     tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
-    workTime = 7,                    
-    waitTime = 30,                   
+    workTime = 140,                    
+    waitTime = 600,                   
     aiNearBorder = true,
     knowledge = { IWP = 1 },
 }
@@ -315,8 +1018,8 @@ rttr:AddWorkshop{
     outputs = { "IronOre" },
     outputRatio = 0.7,
     tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
-    workTime = 7,                    
-    waitTime = 32,                   
+    workTime = 140,                    
+    waitTime = 640,                   
     aiNearBorder = true,
     knowledge = { IWP = 1 },
 }
@@ -332,8 +1035,8 @@ rttr:AddWorkshop{
     outputs = { "Obsidian" },
     outputRatio = 0.3,
     tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
-    workTime = 7,                    
-    waitTime = 27,                   
+    workTime = 140,                    
+    waitTime = 540,                   
     aiNearBorder = true,
     knowledge = { IWP = 1 },
 }
@@ -354,8 +1057,8 @@ rttr:AddWorkshop{
     outputs = { "CopperOre" },
     outputRatio = 0.5,
     tools = { baseSpeed = 25, tools = { "PickAxe" } },
-    workTime = 28,
-    waitTime = 15,
+    workTime = 560,
+    waitTime = 300,
     knowledge = { IWP = 1 },
     aiNearBorder = true,
 }
@@ -374,8 +1077,8 @@ rttr:AddWorkshop{
     outputs = { "TinOre" },
     outputRatio = 0.7,
     tools = { baseSpeed = 0, tools = { "PickAxe" } },
-    workTime = 28,
-    waitTime = 15,
+    workTime = 560,
+    waitTime = 300,
     knowledge = { IWP = 1 },
     aiNearBorder = true,
 }
@@ -394,8 +1097,8 @@ rttr:AddWorkshop{
     outputs = { "Lime" },
     outputRatio = 0.8,
     tools = { baseSpeed = 0, tools = { "PickAxe" } },
-    workTime = 28,
-    waitTime = 18,
+    workTime = 560,
+    waitTime = 360,
     knowledge = { IWP = 1 },
     aiNearBorder = true,
 }
@@ -418,8 +1121,8 @@ rttr:AddWorkshop{
     outputs = { "PapyrusPlant" },
     outputRatio = 0.5,
     tools = { baseSpeed = 0, tools = { "Scythe" } },
-    workTime = 6,
-    waitTime = 51,
+    workTime = 120,
+    waitTime = 1020,
     knowledge = { LWP = 2 },
 }
 
@@ -433,8 +1136,8 @@ rttr:AddWorkshop{
     inputs = { { tags = "Fibers" } },
     outputs = { "Rope" },
     outputRatio = 0.8,
-    workTime = 6,
-    waitTime = 30,
+    workTime = 120,
+    waitTime = 600,
     tools = { baseSpeed = 25, tools = { "Spindle" } },
     knowledge = { LWP = 1, IWP = 2 },
 }
@@ -454,7 +1157,7 @@ rttr:AddWorkshop{
     outputs = { "Rollingpin", "RodAndLine", "Bow", "WoodenSpindle", "WoodenBucket", "WoodenHammer" },
     outputRatio = 0.6,
     tools = { baseSpeed = 25, tools = { "Saw" } },
-    workTime = 35,
+    workTime = 700,
     knowledge = { IWP = 2 },
 }
 
@@ -468,7 +1171,7 @@ rttr:AddWorkshop{
     inputs = { "Obsidian", "Wood" }, -- "adhesive" ergänzen wenn diese endlich collectable auf der Map sind
     outputs = { "ObsidianAxe", "ObsidianSaw", "ObsidianScythe", "ObsidianCleaver", "ObsidianSword", "ObsidianSpear", "ObsidianArrow"}, -- eigentlich ObsidianSword auch für Rekrutierung nutzbar sein, aber das funktioniert noch nicht. 
     outputRatio = 0.8,
-    workTime = 30,
+    workTime = 600,
     knowledge = { IWP = 2 },
 }
 
@@ -483,7 +1186,7 @@ rttr:AddWorkshop{
     outputs = { "CopperTongs", "CopperHammer", "CopperAxe", "CopperSaw", "CopperPickAxe" },
     outputRatio = 0.5,
     tools = { baseSpeed = 25, tools = { "Tongs" } },
-    workTime = 30,
+    workTime = 600,
     knowledge = { IWP = 2 },
 }
 
@@ -496,7 +1199,7 @@ rttr:AddWorkshop{
     worker = { title = "AdobeProducer", look = "Metalworker" },
     inputs = { "Loam", { tags = "Fibers" } },
     outputs = { "Adobe" },
-    workTime = 35,
+    workTime = 700,
     knowledge = { IWP = 2 },
 }
 
@@ -509,7 +1212,7 @@ rttr:AddWorkshop{
     worker = { title = "Brickworker", look = "Metalworker" },
     inputs = { "Loam", "Coal" },
     outputs = { "LoamBrick" },
-    workTime = 50,
+    workTime = 1000,
     knowledge = { IWP = 3 },
 }
 --[[
@@ -523,7 +1226,7 @@ rttr:AddWorkshop{
     inputs = { "Bucket" }, 
     outputs = { "Asphalt" },
     outputRatio = 1,
-    workTime = 120,
+    workTime = 2400,
     knowledge = { IWP = 1 },
 }
 
@@ -537,7 +1240,7 @@ rttr:AddWorkshop{
     inputs = { "Asphalt", "Firewood" }, 
     outputs = { "Bitumen" },
     outputRatio = 0.5,
-    workTime = 120,
+    workTime = 2400,
     knowledge = { IWP = 3 },
 }
 
@@ -552,7 +1255,7 @@ rttr:AddWorkshop{
     outputs = { "Firewood" },
     outputRatio = 2,
     tools = { baseSpeed = 0, tools = { "Axe" } },
-    workTime = 40,
+    workTime = 800,
     knowledge = { LWP = 1, IWP = 1 },
 }]]
 
@@ -567,7 +1270,7 @@ rttr:AddWorkshop{
     outputs = { "BronzeIngot" },
     outputRatio = 0.5,
     tools = { baseSpeed = 25, tools = { "Crucible" } },
-    workTime = 50,
+    workTime = 1000,
     knowledge = { IWP = 3 },
 }
 
@@ -582,7 +1285,7 @@ rttr:AddWorkshop{
     outputs = { "BronzeSword", "BronzeShield" }, --  BronzeSword und BronzeShield kann noch nicht Verwendet werden. 
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Hammer" } },
-    workTime = 50,
+    workTime = 1000,
     knowledge = { IWP = 2, MWP = 2 },
 }
 
@@ -597,7 +1300,7 @@ rttr:AddWorkshop{
     outputs = { "BronzeTongs", "BronzeAxe", "BronzeSaw",  "BronzeHammer", "BronzePickAxe", "BronzeScythe", "BronzeShovel", "BronzeCrucible", "BronzeCleaver" }, 
     outputRatio = 0.8,
     tools = { baseSpeed = 25, tools = { "Tongs" } },
-    workTime = 45,
+    workTime = 900,
     knowledge = { IWP = 2, MWP = 2 },
 }
 --[[
@@ -611,5 +1314,5 @@ rttr:AddWorkshop{
     inputs = { "Holzstamm"},
     outputs = { "Boards" },
     tools = { baseSpeed = 0, tools = { "Scythe" } },
-    workTime = 120,
+    workTime = 2400,
 }]]

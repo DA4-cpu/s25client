@@ -83,7 +83,7 @@ WorkshopDesc makeWorkshop(const std::string& name, const std::string& input, std
     desc.worker.look = "Metalworker";
     desc.inputs = {InputDesc{{input}}};
     desc.outputs = std::move(outputs);
-    desc.workTime = 2;
+    desc.workTime = 40;
     return desc;
 }
 
@@ -158,9 +158,9 @@ rttr:AddWare{ name = "CopperAxe", kind = "Axe", look = "Axe", transport = "Axe" 
 rttr:AddWare{ name = "CopperSaw", kind = "Saw", properties = { "Copper" }, look = "Saw", transport = "Saw" }
 rttr:AddWorkshop{ name = "Copperworks", size = "medium", cost = { Boards = 2 }, look = "Metalworks",
     worker = { look = "Metalworker" }, inputs = { "IronOre", "Coal" },
-    outputs = { "CopperAxe", { "Saw", "Copper" }, "Bow" }, workTime = 120 }
+    outputs = { "CopperAxe", { "Saw", "Copper" }, "Bow" }, workTime = 2400 }
 rttr:AddWorkshop{ name = "Single", size = "small", cost = { Boards = 2 }, look = "Bakery",
-    worker = { look = "Baker" }, inputs = { "Stones" }, outputs = { "CopperAxe" }, workTime = 40 }
+    worker = { look = "Baker" }, inputs = { "Stones" }, outputs = { "CopperAxe" }, workTime = 800 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));
@@ -184,8 +184,8 @@ rttr:AddWorkshop{ name = "Single", size = "small", cost = { Boards = 2 }, look =
     };
     // Only "knowledge" is left as outputChoice, own regulators are gone
     for(const std::string& invalid :
-        {replaced("\"Bow\" }, workTime = 120", "\"Bow\" }, outputChoice = \"tools\", workTime = 120"),
-         replaced("\"Bow\" }, workTime = 120", "\"Bow\" }, outputChoice = \"Pottery\", workTime = 120"),
+        {replaced("\"Bow\" }, workTime = 2400", "\"Bow\" }, outputChoice = \"tools\", workTime = 2400"),
+         replaced("\"Bow\" }, workTime = 2400", "\"Bow\" }, outputChoice = \"Pottery\", workTime = 2400"),
          base + "rttr:AddRegulator{ name = \"Pottery\", entries = { { tags = \"Jug\" } } }"})
     {
         WorldDescription invalidDesc;

@@ -78,7 +78,11 @@ const std::string& JobNamesTable::operator[](Job job) const
 {
     static const std::string empty;
     if(!isCustomJob(job))
-        return builtinJobNames[static_cast<unsigned>(job)];
+    {
+        // Name set in lua (rttr:SetBuilding, worker = { title = ... })
+        const std::string& title = civ::getActiveContent().GetBuiltinJobTitle(job);
+        return title.empty() ? builtinJobNames[static_cast<unsigned>(job)] : title;
+    }
     const civ::CustomWorker* worker = civ::getActiveContent().GetWorker(job);
     return worker ? worker->title : empty;
 }
@@ -95,8 +99,8 @@ JobConst JobConstsTable::operator[](Job job) const
     RTTR_Assert(building);
     const auto toShort = [](unsigned gfs) { return static_cast<unsigned short>(std::min(gfs, 65535u)); };
     // Recruited from a helper without a tool
-    return JobConst{GoodType::Nothing, toShort(std::max(building->workGFs, 1u)),
-                    toShort(std::max(building->waitGFs, 1u)), 5};
+    const civ::WorkTimes times = content.GetWorkTimes(getCustomBuilding(getCustomJobIdx(job)));
+    return JobConst{GoodType::Nothing, toShort(times.work), toShort(times.wait), toShort(times.waitAfter)};
 }
 
 const JobSpriteData& JobSpriteConstsTable::operator[](Job job) const

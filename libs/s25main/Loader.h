@@ -180,10 +180,13 @@ public:
     helpers::MultiEnumArray<BuildingSprites, Nation, BuildingType> building_cache;
     BuildingSprites& getBuildingSprites(Nation nation, BuildingType bld)
     {
-        // Workshops of the civilization mode without own graphics look like a built-in building
+        // Workshops of the civilization mode without own graphics look like a built-in building, built-in buildings
+        // like the one of their look (rttr:SetBuilding)
         BuildingSprites& sprites = building_cache[nation][bld];
-        return (isCustomBuilding(bld) && sprites.building.empty()) ? building_cache[nation][civ::getLook(bld)] :
-                                                                     sprites;
+        const BuildingType look = civ::getLook(bld);
+        if(look != bld && (!isCustomBuilding(bld) || sprites.building.empty()))
+            return building_cache[nation][look];
+        return sprites;
     }
     /// Flags: Nation, Type, AnimationFrame
     helpers::MultiEnumArray<AnimationSprites, Nation, FlagType> flag_cache;

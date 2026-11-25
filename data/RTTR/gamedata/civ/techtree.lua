@@ -15,7 +15,7 @@ Felder von rttr:AddTechnology{...}:
               "mindestens eine davon": requires = { "storage", { "milling", "animal_husbandry" } } verlangt
               Vorratshaltung und dazu Mahlen und Backen oder Viehzucht.
   knowledge   Kosten in Wissenspunkten, z.B. { LWP = 4, IWP = 2 } (LWP Landwirtschaft, IWP Industrie, MWP Militär). Standardwert+Wissensmedienzusatz
-              Werden erst beim Abschluss abgebucht. Die WP der Gebäude stehen in knowledge.lua.
+              Werden erst beim Abschluss abgebucht. Die WP der Gebäude stehen in workshops.lua (knowledge).
   cost        Warenkosten, z.B. { Boards = 4, Stones = 2 }. Bezeichner wie im Enum GoodType:
               Beer Tongs Hammer Axe Saw PickAxe Shovel Crucible RodAndLine Scythe Water Cleaver Rollingpin Bow
               Boat Sword Iron Flour Fish Bread Shield Wood Boards Stones Grain Coins Gold IronOre Coal Meat Ham
@@ -41,7 +41,7 @@ Brunnen, Baracke, Wachstube, Spähturm.
 
 WP-Hinweis: Wissenspunkte werden nicht verbraucht, sondern "belegt". Um alle Technologien zu haben, braucht ein Spieler
 mindestens so viele Gesamt-WP wie die Summe aller WP-Kosten (Stand 2026-11-24: LWP 116, IWP 190, MWP 137 mit allen
-Addons). Zum Start bringt das Hauptquartier 7/7/7 (knowledge.lua).
+Addons). Zum Start bringt das Hauptquartier 7/7/7 (workshops.lua).
 ]]
 
 -------------------------------------------------------------------------------

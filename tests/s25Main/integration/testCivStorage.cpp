@@ -123,7 +123,8 @@ BOOST_AUTO_TEST_CASE(CapacityOfTheGameData)
 BOOST_AUTO_TEST_CASE(CapacityFromLua)
 {
     WorldDescription desc;
-    BOOST_TEST_REQUIRE(loadLua(R"(rttr:SetWarehouseCapacity{ Headquarters = 50, Storehouse = 20 }
+    BOOST_TEST_REQUIRE(loadLua(R"(rttr:SetBuilding{ name = "Headquarters", warehouse = { capacity = 50 } }
+rttr:SetBuilding{ name = "Storehouse", warehouse = { capacity = 20 } }
 rttr:SetFlagWorkLimit(6)
 rttr:SetAIStorageFull(80))",
                                desc));
@@ -134,11 +135,13 @@ rttr:SetAIStorageFull(80))",
     BOOST_TEST(techTree.GetContent().GetFlagWorkLimit() == 6u);
     BOOST_TEST(techTree.GetAIStorageFullPercent() == 80u);
     for(const std::string& invalid :
-        {std::string("rttr:SetWarehouseCapacity{ Headquarters = 0 }"),
-         std::string("rttr:SetWarehouseCapacity{ Headquarters = \"many\" }"),
-         std::string("rttr:SetWarehouseCapacity{ }"), std::string("rttr:SetWarehouseCapacity{ 5 }"),
-         std::string("rttr:SetFlagWorkLimit(0)"), std::string("rttr:SetFlagWorkLimit(9)"),
-         std::string("rttr:SetAIStorageFull(0)"), std::string("rttr:SetAIStorageFull(101)")})
+        {std::string("rttr:SetBuilding{ name = \"Headquarters\", warehouse = { capacity = 0 } }"),
+         std::string("rttr:SetBuilding{ name = \"Headquarters\", warehouse = { capacity = \"many\" } }"),
+         std::string("rttr:SetBuilding{ name = \"Headquarters\", warehouse = { } }"),
+         std::string("rttr:SetBuilding{ name = \"Headquarters\", warehouse = 5 }"),
+         std::string("rttr:SetWarehouseCapacity{ Headquarters = 50 }"), std::string("rttr:SetFlagWorkLimit(0)"),
+         std::string("rttr:SetFlagWorkLimit(9)"), std::string("rttr:SetAIStorageFull(0)"),
+         std::string("rttr:SetAIStorageFull(101)")})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(invalid);
@@ -146,7 +149,7 @@ rttr:SetAIStorageFull(80))",
     }
     // Only warehouses have a capacity
     WorldDescription noWarehouse;
-    BOOST_TEST_REQUIRE(loadLua("rttr:SetWarehouseCapacity{ Woodcutter = 5 }", noWarehouse));
+    BOOST_TEST_REQUIRE(loadLua("rttr:SetBuilding{ name = \"Woodcutter\", warehouse = { capacity = 5 } }", noWarehouse));
     BOOST_CHECK_THROW(civ::TechTree{noWarehouse}, GameDataError);
 }
 
@@ -238,7 +241,7 @@ BOOST_AUTO_TEST_CASE(WarehouseFromLua)
 
     for(const std::string& extra :
         {std::string(R"(, worker = { look = "Helper" })"), std::string(R"(, outputs = { "Boards" })"),
-         std::string(R"(, inputs = { "Wood" })"), std::string(", workTime = 5")})
+         std::string(R"(, inputs = { "Wood" })"), std::string(", workTime = 100")})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(extra);

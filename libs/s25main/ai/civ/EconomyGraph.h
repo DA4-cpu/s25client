@@ -129,7 +129,7 @@ public:
 private:
     void AddBuiltinRecipes(const GameWorldBase& world);
     void AddCustomRecipes(const GameWorldBase& world);
-    void AddRecipe(const GameWorldBase& world, Recipe recipe, unsigned cycleGFs, std::optional<Job> job);
+    void AddRecipe(const GameWorldBase& world, Recipe recipe, unsigned cycleGFs);
     void AddRenewers(const GameWorldBase& world);
 
     std::vector<Recipe> recipes_;

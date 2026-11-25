@@ -62,6 +62,7 @@ void GameDataLoader::Register(kaguya::State& state)
         .addFunction("AddWare", &GameDataLoader::AddWare)
         .addFunction("SetWare", &GameDataLoader::SetWare)
         .addFunction("AddWorkshop", &GameDataLoader::AddWorkshop)
+        .addFunction("SetBuilding", &GameDataLoader::SetBuilding)
         .addFunction("AddMapObject", &GameDataLoader::AddMapObject)
         .addFunction("AddOre", &GameDataLoader::AddOre)
         .addFunction("AddByproduct", &GameDataLoader::AddByproduct)
@@ -170,10 +171,34 @@ void GameDataLoader::SetWare(const kaguya::LuaTable& data)
 void GameDataLoader::AddWorkshop(const kaguya::LuaTable& data)
 {
     WorkshopDesc workshop(data);
-    // Knowledge points can also be given here instead of rttr:SetBuildingKnowledge
+    // Knowledge points of the workshop (built-in buildings: rttr:SetBuilding)
     if(workshop.knowledge && !worldDesc_.buildingKnowledge.emplace(workshop.name, *workshop.knowledge).second)
         throw GameDataError("Knowledge of building '" + workshop.name + "' is defined twice");
     worldDesc_.workshops.push_back(std::move(workshop));
+}
+
+void GameDataLoader::SetBuilding(const kaguya::LuaTable& data)
+{
+    BuiltinBuildingDesc building(data);
+    const std::string context = "Building '" + building.name + "' (rttr:SetBuilding)";
+    for(const BuiltinBuildingDesc& other : worldDesc_.builtinBuildings)
+    {
+        if(other.name == building.name)
+            throw GameDataError(context + " is set twice");
+    }
+    // Values that existed before rttr:SetBuilding keep their tables (checked by the game)
+    if(building.cost && !worldDesc_.buildingCosts.emplace(building.name, *building.cost).second)
+        throw GameDataError(context + ": construction costs are defined twice");
+    if(building.knowledge && !worldDesc_.buildingKnowledge.emplace(building.name, *building.knowledge).second)
+        throw GameDataError(context + ": knowledge points are defined twice");
+    if(building.tools && !worldDesc_.buildingTools.emplace(building.name, *building.tools).second)
+        throw GameDataError(context + ": tools are defined twice");
+    if(building.outputRatio && !worldDesc_.buildingOutputRatios.emplace(building.name, *building.outputRatio).second)
+        throw GameDataError(context + ": the output ratio is defined twice");
+    if(building.warehouseCapacity
+       && !worldDesc_.warehouseCapacity.emplace(building.name, *building.warehouseCapacity).second)
+        throw GameDataError(context + ": the warehouse capacity is defined twice");
+    worldDesc_.builtinBuildings.push_back(std::move(building));
 }
 
 void GameDataLoader::AddMapObject(const kaguya::LuaTable& data)
@@ -229,18 +254,11 @@ void GameDataLoader::AddTool(const kaguya::LuaTable& data)
     worldDesc_.tools.push_back(std::move(tool));
 }
 
-void GameDataLoader::SetBuildingTools(const kaguya::LuaTable& data)
+void GameDataLoader::SetBuildingTools(const kaguya::LuaTable& /*data*/)
 {
-    for(const std::string& building : data.keys<std::string>())
-    {
-        const kaguya::LuaRef value = data[building];
-        const std::string context = "Tools of building '" + building + "'";
-        if(value.type() != kaguya::LuaRef::TYPE_TABLE)
-            throw GameDataError(context + " must be a table like { baseSpeed = 0, tools = { \"Axe\" } }");
-        if(!worldDesc_.buildingTools.emplace(building, parseBuildingTools(value.get<kaguya::LuaTable>(), context))
-              .second)
-            throw GameDataError(context + " are defined twice");
-    }
+    throw GameDataError("rttr:SetBuildingTools does not exist anymore: tools are set in rttr:SetBuilding{ name = "
+                        "\"...\", tools = { baseSpeed = 25, tools = { \"Axe\" } } } "
+                        "(workshops.lua)");
 }
 
 void GameDataLoader::SetToolReorder(unsigned percent)
@@ -250,27 +268,18 @@ void GameDataLoader::SetToolReorder(unsigned percent)
     worldDesc_.toolReorderPercent = percent;
 }
 
-void GameDataLoader::SetBuildingCost(const kaguya::LuaTable& data)
+void GameDataLoader::SetBuildingCost(const kaguya::LuaTable& /*data*/)
 {
-    for(const std::string& building : data.keys<std::string>())
-    {
-        const std::string context = "Construction costs of building '" + building + "'";
-        if(!worldDesc_.buildingCosts.emplace(building, parseBuildingCost(data[building], context)).second)
-            throw GameDataError(context + " are defined twice");
-    }
+    throw GameDataError("rttr:SetBuildingCost does not exist anymore: construction costs are set in rttr:SetBuilding{ "
+                        "name = \"...\", cost = { ... } } "
+                        "(workshops.lua)");
 }
 
-void GameDataLoader::SetBuildingOutputRatio(const kaguya::LuaTable& data)
+void GameDataLoader::SetBuildingOutputRatio(const kaguya::LuaTable& /*data*/)
 {
-    for(const std::string& building : data.keys<std::string>())
-    {
-        const kaguya::LuaRef value = data[building];
-        const std::string context = "Output ratio of building '" + building + "'";
-        if(value.type() != kaguya::LuaRef::TYPE_NUMBER)
-            throw GameDataError(context + " must be a number like 1.5");
-        if(!worldDesc_.buildingOutputRatios.emplace(building, parseOutputRatio(value.get<double>(), context)).second)
-            throw GameDataError(context + " is defined twice");
-    }
+    throw GameDataError("rttr:SetBuildingOutputRatio does not exist anymore: output ratios are set in "
+                        "rttr:SetBuilding{ name = \"...\", outputRatio = 1.5 } "
+                        "(workshops.lua)");
 }
 
 void GameDataLoader::SetToolMaterialPriorities(const kaguya::LuaTable& data)
@@ -338,18 +347,11 @@ bool GameDataLoader::CheckMapGen()
     return true;
 }
 
-void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& data)
+void GameDataLoader::SetBuildingKnowledge(const kaguya::LuaTable& /*data*/)
 {
-    for(const std::string& building : data.keys<std::string>())
-    {
-        const kaguya::LuaRef value = data[building];
-        if(value.type() != kaguya::LuaRef::TYPE_TABLE)
-            throw GameDataError("Knowledge of building '" + building + "' must be a table like { LWP = 1 }");
-        const KnowledgeValues knowledge =
-          parseKnowledge(value.get<kaguya::LuaTable>(), true, "Knowledge of building '" + building + "'");
-        if(!worldDesc_.buildingKnowledge.emplace(building, knowledge).second)
-            throw GameDataError("Knowledge of building '" + building + "' is defined twice");
-    }
+    throw GameDataError("rttr:SetBuildingKnowledge does not exist anymore: knowledge points are set in "
+                        "rttr:SetBuilding{ name = \"...\", knowledge = { IWP = 2 } } "
+                        "(workshops.lua)");
 }
 
 namespace {
@@ -454,24 +456,11 @@ void GameDataLoader::SetAIStorageFull(const unsigned percent)
     worldDesc_.aiStorageFullPercent = percent;
 }
 
-void GameDataLoader::SetWarehouseCapacity(const kaguya::LuaTable& data)
+void GameDataLoader::SetWarehouseCapacity(const kaguya::LuaTable& /*data*/)
 {
-    const std::string context = "Capacity of the warehouses (rttr:SetWarehouseCapacity)";
-    const std::string example = "{ Headquarters = 500, Storehouse = 200 }";
-    const std::vector<std::string> keys = data.keys<std::string>();
-    if(keys.empty() || keys.size() != data.keys<kaguya::LuaRef>().size())
-        throw GameDataError(context + ": expected a table like " + example);
-    for(const std::string& building : keys)
-    {
-        const kaguya::LuaRef value = data[building];
-        if(value.type() != kaguya::LuaRef::TYPE_NUMBER)
-            throw GameDataError(context + ": the capacity of '" + building + "' is no number (" + example + ")");
-        const double number = value.get<double>();
-        if(number < 1 || number > 100000 || number != static_cast<double>(static_cast<unsigned>(number)))
-            throw GameDataError(context + ": the capacity of '" + building + "' must be a whole number in [1, 100000]");
-        if(!worldDesc_.warehouseCapacity.emplace(building, static_cast<unsigned>(number)).second)
-            throw GameDataError(context + ": '" + building + "' is defined twice");
-    }
+    throw GameDataError("rttr:SetWarehouseCapacity does not exist anymore: warehouse capacities are set in "
+                        "rttr:SetBuilding{ name = \"...\", warehouse = { capacity = 400 } } "
+                        "(workshops.lua)");
 }
 
 void GameDataLoader::SetFlagWorkLimit(const unsigned numWares)

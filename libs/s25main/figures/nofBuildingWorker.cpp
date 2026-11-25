@@ -289,7 +289,8 @@ void nofBuildingWorker::TryToWork()
         // Work outside the building keeps its duration (it fits to animations and objects like falling trees), so
         // the waiting time is changed for both
         const unsigned outsideWork = GetOutsideWorkLength();
-        const unsigned scaledLength = workplace->ScaleWorkDuration(JOB_CONSTS[job_].wait1_length + outsideWork);
+        const unsigned scaledLength = workplace->ScaleWorkDuration(
+          civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).wait + outsideWork);
         current_ev = GetEvMgr().AddEvent(this,
                                          (GetGOT() == GO_Type::NofCatapultman) ?
                                            CATAPULT_WAIT1_LENGTH :

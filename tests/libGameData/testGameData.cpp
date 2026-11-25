@@ -153,8 +153,9 @@ rttr:AddTechnology{ name = "b", title = "B", description = "Desc", era = 2, requ
                     exclusive = true, addon = "WINE", aiPriority = 5 }
 rttr:AddTechnology{ name = "x" }
 rttr:AddTechnology{ name = "c", requires = { "b", { "a", "x" } } }
-rttr:SetBuildingKnowledge{ Headquarters = { LWP = 5, IWP = 5, MWP = 5 }, Catapult = { MWP = -5 } }
-rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
+rttr:SetBuilding{ name = "Headquarters", knowledge = { LWP = 5, IWP = 5, MWP = 5 } }
+rttr:SetBuilding{ name = "Catapult", knowledge = { MWP = -5 } }
+rttr:SetBuilding{ name = "Woodcutter", knowledge = { IWP = 2 } }
 )";
     }
     WorldDescription desc;
@@ -224,12 +225,104 @@ rttr:AddTechnology{ name = "a" })");
     expectLoadFailure(R"(rttr:AddTechnology{ name = "a", knowledge = { XWP = 1 } })");
     // Negative knowledge costs
     expectLoadFailure(R"(rttr:AddTechnology{ name = "a", knowledge = { LWP = -1 } })");
-    // Building knowledge must be a table per building
-    expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = 2 })");
-    expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = { Iwp = 2 } })");
-    // Defined twice
-    expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } }
-rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 3 } })");
+    // Building knowledge must be a table
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", knowledge = 2 })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", knowledge = { Iwp = 2 } })");
+    // Building set twice
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", knowledge = { IWP = 2 } }
+rttr:SetBuilding{ name = "Woodcutter", knowledge = { IWP = 3 } })");
+    // The former functions name their replacement
+    expectLoadFailure(R"(rttr:SetBuildingKnowledge{ Woodcutter = { IWP = 2 } })");
+}
+
+BOOST_AUTO_TEST_CASE(LoadBuiltinBuildings)
+{
+    rttr::test::TmpFolder tmp;
+    {
+        bnw::ofstream file(tmp / "default.lua");
+        file << R"(
+rttr:SetBuilding{ name = "Woodcutter", title = "Holzfaeller", size = "medium", cost = { Boards = 3 },
+    look = "Sawmill", worker = { title = "Faeller", look = "Carpenter" }, collect = { radius = 9 },
+    outputRatio = 1.5, tools = { baseSpeed = 25, tools = { "Axe" } }, workTime = 100, waitTime = 200,
+    aiNearBorder = false, knowledge = { IWP = 2 } }
+rttr:SetBuilding{ name = "Sawmill", storage = 4, waitAfterTime = 0 }
+rttr:SetBuilding{ name = "IronMine", mine = { resource = "Gold" } }
+rttr:SetBuilding{ name = "Barracks", military = { soldiers = 4, radius = 9, coins = 0 } }
+rttr:SetBuilding{ name = "Storehouse", warehouse = { capacity = 300 } }
+)";
+    }
+    WorldDescription desc;
+    GameDataLoader loader(desc, tmp);
+    BOOST_TEST_REQUIRE(loader.Load());
+    BOOST_TEST_REQUIRE(desc.builtinBuildings.size() == 5u);
+    const BuiltinBuildingDesc& woodcutter = desc.builtinBuildings[0];
+    BOOST_TEST(woodcutter.name == "Woodcutter");
+    BOOST_TEST(*woodcutter.title == "Holzfaeller");
+    BOOST_TEST(*woodcutter.size == "medium");
+    BOOST_TEST(*woodcutter.look == "Sawmill");
+    BOOST_TEST(*woodcutter.workerTitle == "Faeller");
+    BOOST_TEST(*woodcutter.workerLook == "Carpenter");
+    BOOST_TEST(*woodcutter.collectRadius == 9u);
+    BOOST_TEST(!woodcutter.plantRadius);
+    BOOST_TEST(*woodcutter.workTime == 100u);
+    BOOST_TEST(*woodcutter.waitTime == 200u);
+    BOOST_TEST(!woodcutter.waitAfterTime);
+    BOOST_TEST(*woodcutter.aiNearBorder == false);
+    BOOST_TEST(woodcutter.fields.size() == 12u);
+    const BuiltinBuildingDesc& sawmill = desc.builtinBuildings[1];
+    BOOST_TEST(*sawmill.storage == 4u);
+    BOOST_TEST(*sawmill.waitAfterTime == 0u);
+    BOOST_TEST(!sawmill.title);
+    BOOST_TEST(*desc.builtinBuildings[2].mineResource == "Gold");
+    const MilitaryDesc& military = *desc.builtinBuildings[3].military;
+    BOOST_TEST(military.soldiers == 4u);
+    BOOST_TEST(military.radius == 9u);
+    BOOST_TEST(!military.vision);
+    BOOST_TEST(military.coins == 0u);
+    // Values of the former tables
+    BOOST_TEST((desc.buildingKnowledge.at("Woodcutter") == KnowledgeValues{0, 2, 0}));
+    BOOST_TEST(desc.buildingOutputRatios.at("Woodcutter") == 150u);
+    BOOST_TEST(desc.buildingTools.at("Woodcutter").baseSpeed == 25u);
+    BOOST_TEST(desc.buildingCosts.count("Woodcutter") == 1u);
+    BOOST_TEST(desc.warehouseCapacity.at("Storehouse") == 300u);
+}
+
+BOOST_AUTO_TEST_CASE(DetectInvalidBuiltinBuildings)
+{
+    const auto expectLoadFailure = [](const std::string& content) {
+        rttr::test::TmpFolder tmp;
+        {
+            bnw::ofstream file(tmp / "default.lua");
+            file << content;
+        }
+        WorldDescription desc;
+        GameDataLoader loader(desc, tmp);
+        rttr::test::LogAccessor logAcc;
+        BOOST_TEST_INFO(content);
+        BOOST_TEST(!loader.Load());
+    };
+    // Unknown field, invalid values
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", wokTime = 100 })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", size = "huge" })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", workTime = 0 })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", workTime = 1.5 })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", waitTime = 0 })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", waitTime = 65536 })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", collect = { radius = 21 } })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", collect = { radius = 0 } })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Woodcutter", worker = { } })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Sawmill", storage = 0 })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "IronMine", mine = { } })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Storehouse", warehouse = { capacity = 0 } })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Barracks", military = { soldiers = 0, radius = 9, coins = 1 } })");
+    // Set twice
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Mill", workTime = 100 }
+rttr:SetBuilding{ name = "Mill", waitTime = 100 })");
+    // The former functions name their replacement
+    expectLoadFailure(R"(rttr:SetBuildingCost{ Woodcutter = { Boards = 1 } })");
+    expectLoadFailure(R"(rttr:SetBuildingTools{ Woodcutter = { baseSpeed = 25 } })");
+    expectLoadFailure(R"(rttr:SetBuildingOutputRatio{ Woodcutter = 2 })");
+    expectLoadFailure(R"(rttr:SetWarehouseCapacity{ Storehouse = 100 })");
 }
 
 BOOST_AUTO_TEST_CASE(LoadWaresAndWorkshops)

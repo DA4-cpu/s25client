@@ -6,6 +6,7 @@
 #include "EventManager.h"
 #include "SoundManager.h"
 #include "buildings/nobUsual.h"
+#include "civ/Content.h"
 #include "world/GameWorld.h"
 #include "gameData/GameConsts.h"
 #include "gameData/JobConsts.h"
@@ -29,7 +30,8 @@ void nofWorkman::HandleDerivedEvent(const unsigned /*id*/)
 
 bool nofWorkman::StartWorking()
 {
-    current_ev = GetEvMgr().AddEvent(this, workplace->ScaleWorkDuration(JOB_CONSTS[job_].work_length), 1);
+    current_ev = GetEvMgr().AddEvent(
+      this, workplace->ScaleWorkDuration(civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).work), 1);
     state = State::Work;
     workplace->is_working = true;
     // Waren verbrauchen
@@ -73,8 +75,9 @@ void nofWorkman::HandleStateWork()
 {
     // Nach Arbeiten wird noch ein bisschen gewartet, bevor das Produkt herausgetragen wird
     // Bei 0 mind. 1 GF
-    current_ev = GetEvMgr().AddEvent(
-      this, JOB_CONSTS[job_].wait2_length ? workplace->ScaleWorkDuration(JOB_CONSTS[job_].wait2_length) : 1, 1);
+    // (waitAfterTime of rttr:SetBuilding / rttr:AddWorkshop in the civilization mode)
+    const unsigned waitAfter = civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).waitAfter;
+    current_ev = GetEvMgr().AddEvent(this, waitAfter ? workplace->ScaleWorkDuration(waitAfter) : 1, 1);
     state = State::Waiting2;
     // wir arbeiten nicht mehr
     workplace->is_working = false;

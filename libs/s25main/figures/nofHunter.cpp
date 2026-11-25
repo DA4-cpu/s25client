@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "nofHunter.h"
+#include "civ/Content.h"
 
 #include "EventManager.h"
 #include "GamePlayer.h"
@@ -132,7 +133,9 @@ void nofHunter::HandleDerivedEvent(unsigned /*id*/)
 void nofHunter::TryStartHunting()
 {
     // Find animals in a square around building (actually should be circle, but animals are moving anyway)
-    const int SQUARE_SIZE = 19;
+    // (civilization mode: collect = { radius } of rttr:SetBuilding)
+    const int SQUARE_SIZE =
+      static_cast<int>(civ::getActiveContent().GetWorkRadius(workplace->GetBuildingType()).value_or(HUNTER_RADIUS));
 
     // Liste mit den gefundenen Tieren
     std::vector<noAnimal*> available_animals;
@@ -187,7 +190,8 @@ void nofHunter::TryStartHunting()
     } else
     {
         // Weiter warten, vielleicht gibts ja später wieder mal was
-        current_ev = GetEvMgr().AddEvent(this, JOB_CONSTS[job_].wait1_length, 1);
+        current_ev =
+          GetEvMgr().AddEvent(this, civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).wait, 1);
         world->GetNotifications().publish(
           BuildingNote(BuildingNote::NoRessources, player, workplace->GetPos(), workplace->GetBuildingType()));
         workplace->StartNotWorking();

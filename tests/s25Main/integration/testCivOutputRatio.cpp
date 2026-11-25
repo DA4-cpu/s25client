@@ -31,7 +31,7 @@
 namespace bnw = boost::nowide;
 
 // Output ratio of buildings (wares per work step, civilization mode): rttr:AddWorkshop{ outputRatio },
-// rttr:AddTool{ outputRatio } and rttr:SetBuildingOutputRatio
+// rttr:AddTool{ outputRatio } and rttr:SetBuilding{ outputRatio }
 BOOST_AUTO_TEST_SUITE(CivOutputRatioSuite)
 
 namespace {
@@ -74,7 +74,7 @@ WorldDescription makeDesc(unsigned outputRatio, bool withByproduct = false)
     shop.worker.look = "Carpenter";
     shop.inputs = {InputDesc{{"Raw"}}};
     shop.outputs = {{"Product"}};
-    shop.workTime = 2;
+    shop.workTime = 40;
     shop.outputRatio = outputRatio;
     desc.workshops.push_back(shop);
     if(withByproduct)
@@ -141,11 +141,12 @@ rttr:AddTool{ ware = "Saw", material = "Iron", durability = 100, speed = 100, ou
 rttr:AddTool{ ware = "CopperSaw", material = "Iron", durability = 100, speed = 50 }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "Sawmill",
     worker = { look = "Carpenter" }, tools = { tools = { "Saw" } }, inputs = { "Raw" }, outputs = { "Product" },
-    workTime = 5,
+    workTime = 100,
     outputRatio = 1.25 }
 rttr:AddWorkshop{ name = "Plain", size = "small", cost = { Boards = 2 }, look = "Sawmill",
-    worker = { look = "Carpenter" }, inputs = { "Raw" }, outputs = { "Product" }, workTime = 5 }
-rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
+    worker = { look = "Carpenter" }, inputs = { "Raw" }, outputs = { "Product" }, workTime = 100 }
+rttr:SetBuilding{ name = "Woodcutter", outputRatio = 2 }
+rttr:SetBuilding{ name = "Quarry", outputRatio = 0.25 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));
@@ -172,7 +173,9 @@ rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
     for(const std::string& invalid :
         {replaced("outputRatio = 1.25", "outputRatio = 8.5"), replaced("outputRatio = 1.25", "outputRatio = -1"),
          replaced("outputRatio = 1.25", "outputRatio = \"much\""), replaced("outputRatio = 0.5 }", "outputRatio = 9 }"),
-         replaced("Quarry = 0.25", "Quarry = \"low\""), base + "rttr:SetBuildingOutputRatio{ Woodcutter = 1 }",
+         replaced("outputRatio = 0.25", "outputRatio = \"low\""),
+         base + "rttr:SetBuilding{ name = \"Woodcutter\", outputRatio = 1 }",
+         base + "rttr:SetBuildingOutputRatio{ Mill = 1 }",
          base
            + "rttr:AddWorkshop{ name = \"Lib\", size = \"small\", look = \"Sawmill\", worker = { "
              "look = \"Carpenter\" }, library = { capacity = 5 }, outputRatio = 2 }"})
@@ -181,10 +184,9 @@ rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
         BOOST_TEST_INFO(invalid);
         BOOST_TEST(!loadLua(invalid, invalidDesc));
     }
-    // Workshops get it in rttr:AddWorkshop, only built-in buildings with a worker here
-    for(const std::string& invalid :
-        {replaced("Quarry = 0.25", "Shop = 0.25"), replaced("Quarry = 0.25", "Barracks = 2"),
-         replaced("Quarry = 0.25", "Quary = 2")})
+    // Workshops get it in rttr:AddWorkshop, military buildings have none
+    for(const std::string& invalid : {replaced("\"Quarry\"", "\"Shop\""), replaced("\"Quarry\"", "\"Barracks\""),
+                                      replaced("\"Quarry\"", "\"Quary\"")})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(invalid);

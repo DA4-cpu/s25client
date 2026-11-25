@@ -43,6 +43,18 @@ rttr:AddWare{ name = "ExampleRaw", title = "Beispiel-Rohstoff", kind = "Beispiel
 rttr:AddWare{ name = "ExampleProduct", title = "Beispiel-Produkt", look = "Boards", transport = "Boards" }
 ]]
 
+--[[
+Notiz zu den Baumaterialien (aus der früheren buildingcosts.lua, die Baukosten stehen jetzt in workshops.lua):
+Gebäude sollen später je nach aus welchen Materialien erbaut worden sind Eigenschaften erhalten. So kann man bspw. eine Baracke aus Adobes oder aus Holz bauen,
+und diese können sich auch mischen. Für jedes Baumaterial müssen dafür Eigenschaften für Dämmung, 
+Stabilität (Wie viele Lebenspunkte erhält das Gebäude) in konkreten Werten angegeben werden: 
+Adobes: Dämmung = 40 (von 0-100 wobei 0 extrem schlecht und 100 sehr gut ist), Stabilität = 20 (ohne Obergrenze); Wood: Dämmung = 10, Stabilität = 50;
+Stones: D = 25, S = 90, Boards:  D = 20, Stabilität = 50; LoamBrick: D = 90; StoneBlock: D = 35, S = 120; Thatch: D = 40, S = 10; Reed = D = 40, S = 20;
+Wird die Baracke nun aus 2 Holz, 2 Adobes und 2 Thatch errichtet erhält sie für Dämmung den durchschnittlichen Wert aller verwendeten Baumaterialien und die Lebenspunkte 
+ist die Summe der Stabilität aller verwendeten Materialien: D = 30, S = 160. Die Bedeutung von D und S muss ich noch genau im Konzept festlegen. Nicht jedes
+Baumaterial hat diese Eigenschaften bspw. hat Rope keine Eigenschaften. Dieses Baumaterial zählt dann einfach nicht zur Rechnung dazu
+]]
+
 rttr:SetWare{ Wood = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
 rttr:SetWare{ Boards = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
 rttr:SetWare{ Stones = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }

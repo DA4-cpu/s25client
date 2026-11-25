@@ -142,15 +142,13 @@ rttr:AddTool{ ware = "CopperScythe", material = "Copper", durability = 40, speed
 rttr:AddTool{ ware = "Plough", material = "Iron", durability = 300, speed = 50 }
 rttr:AddTool{ ware = "Saw", material = "Iron", durability = 80, speed = 100 }
 rttr:SetToolReorder(20)
-rttr:SetBuildingTools{
-    Farm = { baseSpeed = 10, tools = { "Scythe", "Plough" } },
-    Mill = { baseSpeed = 70 },
-}
+rttr:SetBuilding{ name = "Farm", tools = { baseSpeed = 10, tools = { "Scythe", "Plough" } } }
+rttr:SetBuilding{ name = "Mill", tools = { baseSpeed = 70 } }
 rttr:AddWorkshop{ name = "Joinery", size = "small", cost = { Boards = 2 }, look = "Sawmill",
-    worker = { look = "Carpenter" }, inputs = { "Boards" }, outputs = { "Stones" }, workTime = 5,
+    worker = { look = "Carpenter" }, inputs = { "Boards" }, outputs = { "Stones" }, workTime = 100,
     tools = { tools = { "Saw" } } }
 rttr:AddWorkshop{ name = "Thresher", size = "small", cost = { Boards = 2 }, look = "Mill",
-    worker = { look = "Miller" }, inputs = { "Grain" }, outputs = { "Flour" }, workTime = 5,
+    worker = { look = "Miller" }, inputs = { "Grain" }, outputs = { "Flour" }, workTime = 100,
     tools = { baseSpeed = 20, tools = { "Plough" } } }
 )";
     WorldDescription desc;
@@ -227,13 +225,14 @@ rttr:AddWorkshop{ name = "Thresher", size = "small", cost = { Boards = 2 }, look
          replaced("title = \"Eisen\" }", "title = \"Eisen\", priority = 7 }"),
          base + "\nrttr:SetToolMaterialPriorities{ Copper = 2 }", replaced("durability = 100", "durability = 0"),
          replaced("speed = 60", "speed = 2000"), replaced("rttr:SetToolReorder(20)", "rttr:SetToolReorder(101)"),
-         replaced("Mill = { baseSpeed = 70 }", "Mill = { baseSpeed = 0 }"),
-         replaced("Mill = { baseSpeed = 70 }", "Mill = { speed = 70 }"),
+         replaced("tools = { baseSpeed = 70 }", "tools = { baseSpeed = 0 }"),
+         replaced("tools = { baseSpeed = 70 }", "tools = { speed = 70 }"),
          replaced("tools = { \"Scythe\", \"Plough\" }",
                   "tools = { \"Scythe\", \"Plough\", \"Saw\", \"Saw\", \"Saw\" }"),
          base + "\nrttr:AddToolMaterial{ name = \"Iron\" }",
          base + "\nrttr:AddTool{ ware = \"Saw\", material = \"Copper\", durability = 1, speed = 1 }",
-         base + "\nrttr:SetBuildingTools{ Farm = { baseSpeed = 50 } }"})
+         base + "\nrttr:SetBuilding{ name = \"Farm\", tools = { baseSpeed = 50 } }",
+         base + "\nrttr:SetBuildingTools{ Bakery = { baseSpeed = 50 } }"})
     {
         WorldDescription invalidDesc;
         BOOST_TEST_INFO(invalid);
@@ -244,8 +243,8 @@ rttr:AddWorkshop{ name = "Thresher", size = "small", cost = { Boards = 2 }, look
         {replaced("ware = \"Plough\"", "ware = \"Plow\""), replaced("material = \"Copper\"", "material = \"Bronze\""),
          replaced("tools = { \"Scythe\", \"Plough\" }", "tools = { \"Sickle\" }"),
          replaced("tools = { \"Scythe\", \"Plough\" }", "tools = { \"Scythe\", \"CopperScythe\" }"),
-         replaced("Mill = { baseSpeed = 70 }", "Barracks = { baseSpeed = 70 }"),
-         replaced("Mill = { baseSpeed = 70 }", "Joinery = { baseSpeed = 70 }"), replaced("Iron = 7", "Bronze = 7"),
+         replaced("name = \"Mill\"", "name = \"Barracks\""), replaced("name = \"Mill\"", "name = \"Joinery\""),
+         replaced("Iron = 7", "Bronze = 7"),
          replaced("rttr:AddToolMaterial{ name = \"Iron\", title = \"Eisen\" }\n"
                   "rttr:AddToolMaterial{ name = \"Copper\" }\n"
                   "rttr:SetToolMaterialPriorities{ Iron = 7 }",
