@@ -220,18 +220,9 @@ helpers::OptionalEnum<GoodType> nofMetalworker::ProduceWare()
     return nextProducedTool;
 }
 
-helpers::OptionalEnum<GoodType> nofMetalworker::ProduceExtraWare(GoodType /*firstWare*/)
-{
-    if(civ::isDistributionActive(*world))
-        return ChooseByDistribution();
-    helpers::OptionalEnum<GoodType> tool = GetOrderedTool();
-    if(!tool)
-        tool = GetRandomTool();
-    return tool;
-}
-
 GoodType nofMetalworker::ChooseByDistribution()
 {
     const auto& products = civ::getBuildingProducts(*world, BuildingType::Metalworks).products;
-    return civ::chooseProduct(*world, player, products, GetObjId());
+    return civ::chooseProduct(*world, player, products, GetObjId(),
+                              [this](const GoodType good) { return workplace->GetNumMadeInStep(good); });
 }

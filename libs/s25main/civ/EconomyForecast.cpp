@@ -257,16 +257,16 @@ EconomyForecast::EconomyForecast(const civai::EconomyGraph& graph) : graph_(grap
     {
         const auto steps = static_cast<Amount>(std::llround(recipe.nominalStepsPerMinute * AMOUNT_UNIT));
         nominalSteps_.push_back(steps);
-        // Products per minute: each work step saves the output ratio, a product costs its work steps. The products
-        // chosen equally often
+        // Products per minute (all together): every product is chosen for an equal part of the work steps, each step
+        // saves the output ratio for its product, a product costs its work steps (ProducedPerBuilding)
         Amount products = steps * static_cast<Amount>(recipe.outputRatio) / 100;
         if(!recipe.outputs.empty())
         {
-            Amount sumSteps = 0;
+            double perStep = 0;
             for(const unsigned productSteps : recipe.outputSteps)
-                sumSteps += productSteps;
-            products = steps * static_cast<Amount>(recipe.outputRatio) * static_cast<Amount>(recipe.outputs.size())
-                       / std::max<Amount>(1, sumSteps);
+                perStep += static_cast<double>(recipe.outputRatio) / std::max(1u, productSteps);
+            products = static_cast<Amount>(
+              std::llround(static_cast<double>(steps) * perStep / static_cast<double>(recipe.outputs.size())));
         }
         nominalProducts_.push_back(products);
     }
@@ -374,8 +374,16 @@ Amount EconomyForecast::ProducedPerBuilding(const BuildingType bld, const GoodTy
         const civai::Recipe& recipe = recipes[i];
         if(recipe.building != bld)
             continue;
-        if(helpers::contains(recipe.outputs, good))
-            return nominalProducts_[i] / static_cast<Amount>(std::max<size_t>(1u, recipe.outputs.size()));
+        for(unsigned k = 0; k < recipe.outputs.size(); ++k)
+        {
+            // An equal part of the work steps, the output ratio saved for it, divided by its work steps
+            if(recipe.outputs[k] == good)
+            {
+                return nominalSteps_[i] * static_cast<Amount>(recipe.outputRatio)
+                       / (static_cast<Amount>(recipe.outputs.size())
+                          * static_cast<Amount>(std::max(1u, recipe.outputSteps[k])));
+            }
+        }
         for(unsigned j = 0; j < recipe.byproducts.size(); ++j)
         {
             if(recipe.byproducts[j] == good)

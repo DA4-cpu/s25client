@@ -115,7 +115,12 @@ nobUsual::nobUsual(SerializedGameData& sgd, const unsigned obj_id)
         stepTools_.resize(sgd.PopUnsignedChar());
         for(GoodType& tool : stepTools_)
             tool = helpers::popEnum<GoodType>(sgd);
-        outputCredit_ = sgd.PopUnsignedShort();
+        productSavings_.resize(sgd.PopUnsignedShort());
+        for(auto& entry : productSavings_)
+        {
+            entry.first = helpers::popEnum<GoodType>(sgd);
+            entry.second = sgd.PopUnsignedShort();
+        }
         chosenProduct_ = sgd.PopOptionalEnum<GoodType>();
     }
     if(sgd.GetGameDataVersion() >= 30)
@@ -193,7 +198,12 @@ void nobUsual::Serialize(SerializedGameData& sgd) const
     sgd.PushUnsignedChar(static_cast<uint8_t>(stepTools_.size()));
     for(const GoodType tool : stepTools_)
         helpers::pushEnum<uint16_t>(sgd, tool);
-    sgd.PushUnsignedShort(outputCredit_);
+    sgd.PushUnsignedShort(static_cast<uint16_t>(productSavings_.size()));
+    for(const auto& entry : productSavings_)
+    {
+        helpers::pushEnum<uint16_t>(sgd, entry.first);
+        sgd.PushUnsignedShort(entry.second);
+    }
     sgd.PushOptionalEnum<uint16_t>(chosenProduct_);
     sgd.PushUnsignedInt(finishedGF_);
     sgd.PushUnsignedInt(workerSinceGF_);
@@ -835,12 +845,37 @@ unsigned nobUsual::GetStepOutputRatio(const helpers::OptionalEnum<GoodType> prod
     return CalcOutputRatio(stepTools_, product);
 }
 
-unsigned nobUsual::TakeNumProducts(const GoodType product)
+unsigned nobUsual::GetSavedSteps(const GoodType product) const
+{
+    const auto it = helpers::find_if(productSavings_, [product](const auto& entry) { return entry.first == product; });
+    return it == productSavings_.end() ? 0u : it->second;
+}
+
+unsigned nobUsual::GetProductSteps(const GoodType product) const
 {
     const civ::CustomBuilding* desc = civ::isEnabled(*world) ? civ::getActiveContent().GetBuilding(bldType_) : nullptr;
-    const unsigned steps = desc ? desc->GetProductSteps(product) : 100u;
-    const unsigned total = outputCredit_ + GetStepOutputRatio(product);
-    outputCredit_ = static_cast<uint16_t>(total % steps);
+    return desc ? desc->GetProductSteps(product) : 100u;
+}
+
+unsigned nobUsual::GetNumMadeInStep(const GoodType product) const
+{
+    return (GetSavedSteps(product) + GetStepOutputRatio(product)) / GetProductSteps(product);
+}
+
+unsigned nobUsual::TakeNumProducts(const GoodType product)
+{
+    const unsigned steps = GetProductSteps(product);
+    const unsigned total = GetSavedSteps(product) + GetStepOutputRatio(product);
+    const auto rest = static_cast<uint16_t>(total % steps);
+    auto it = helpers::find_if(productSavings_, [product](const auto& entry) { return entry.first == product; });
+    if(rest == 0)
+    {
+        if(it != productSavings_.end())
+            productSavings_.erase(it);
+    } else if(it != productSavings_.end())
+        it->second = rest;
+    else
+        productSavings_.emplace_back(product, rest);
     return total / steps;
 }
 
@@ -856,10 +891,10 @@ bool nobUsual::CanYieldProducts() const
     });
     if(!hasTagBonus)
         return GetStepOutputRatio(std::nullopt) > 0;
-    // Workshops from lua: the product being worked on, or any of the products
+    // Any of the products
     std::vector<GoodType> products;
     if(const civ::CustomBuilding* desc = content.GetBuilding(bldType_))
-        products = chosenProduct_ ? std::vector<GoodType>{*chosenProduct_} : desc->GetAllProducts();
+        products = desc->GetAllProducts();
     else
         products = civ::getBuildingProducts(*world, bldType_).products;
     if(products.empty())
@@ -870,9 +905,6 @@ bool nobUsual::CanYieldProducts() const
 bool nobUsual::BeginWorkStep()
 {
     stepTools_ = GetToolsInUse();
-    // The product being worked on yields nothing with these tools (negative bonus): choose anew
-    if(chosenProduct_ && GetStepOutputRatio(*chosenProduct_) == 0)
-        chosenProduct_.reset();
     // Output ratio 0 for every product: The work would be in vain
     if(!CanYieldProducts())
         return false;

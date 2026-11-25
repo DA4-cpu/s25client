@@ -60,17 +60,12 @@ protected:
     /// ratio) and their byproducts. Empty while `ware` is set: only `ware` and its byproducts (older savegames)
     std::vector<GoodType> carryList_;
 
-    /// To be called by derived classes right after a work step produced `ware` (or not). Civilization mode: Applies
-    /// the output ratio of the step (TakeProducts). Clears `ware` if the step yields no ware yet, otherwise `ware` is
-    /// the first product, and adds the further products of the step and the byproducts of all of them
+    /// To be called by derived classes right after a work step was done on `ware` (or produced nothing).
+    /// Civilization mode: The output ratio of the step is saved for this ware (nobUsual::TakeNumProducts). Clears
+    /// `ware` if its saved steps do not suffice yet, otherwise the step yields this many of `ware` (all the same ware,
+    /// Nutzer, 2026-11-25) with their byproducts. Mines and harvesters take exactly one unit of their resource per
+    /// work step, whatever the output ratio (Nutzer, 2026-11-24)
     void ProducedWare();
-    /// Products of the work step which produced `firstWare` (output ratio, saved work steps). Empty: none yet.
-    /// Default: TakeNumProducts of the building, the further products by ProduceExtraWare
-    virtual std::vector<GoodType> TakeProducts(GoodType firstWare);
-    /// A further product of the current work step (output ratio above 1). Default: the same ware again. Workers
-    /// choosing their product choose again. Mines and harvesters take no further unit of their resource: it loses
-    /// exactly one unit per work step, whatever the output ratio (Nutzer, 2026-11-24). Nothing: no further ware
-    virtual helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) { return firstWare; }
 
     /// wird von abgeleiteten Klassen aufgerufen, wenn sie die Ware an der Fahne vorm Gebäude ablegen wollen (oder auch
     /// nicht) also fertig mit Arbeiten sind

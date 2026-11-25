@@ -90,11 +90,11 @@ protected:
     /// Civilization mode: Tools in use when the current work step began (they count for the whole step, also if one
     /// broke at its beginning)
     std::vector<GoodType> stepTools_;
-    /// Civilization mode: Saved work steps in hundredths (output ratio of the past steps not yet spent on products).
-    /// Belongs to no product: the next product uses it, whichever it is (Nutzer, 2026-11-24)
-    uint16_t outputCredit_ = 0;
-    /// Civilization mode, workshops from lua: Product being worked on. It stays chosen until the saved work steps
-    /// suffice for it (Nutzer, 2026-11-24). Nothing: chosen when the next work step starts
+    /// Civilization mode: Saved work steps of each product in hundredths (output ratio of the past steps on it not yet
+    /// spent on the product). Each product has its own (Nutzer, 2026-11-25). Products without saved steps are missing
+    std::vector<std::pair<GoodType, uint16_t>> productSavings_;
+    /// Civilization mode, workshops from lua: Product of the current work step, chosen anew when every step starts
+    /// (Nutzer, 2026-11-25). Nothing: no step running
     helpers::OptionalEnum<GoodType> chosenProduct_;
     /// Tools in use (the tools of the tool slots)
     std::vector<GoodType> GetToolsInUse() const;
@@ -104,6 +104,8 @@ protected:
     unsigned CalcInputAmount(unsigned input, const std::vector<GoodType>& tools) const;
     /// Number of wares a work step with these tools takes from the input
     unsigned CalcNumNeeded(unsigned input, const std::vector<GoodType>& tools) const;
+    /// Work steps the product costs in hundredths (workshops from lua: steps in outputs, otherwise 100)
+    unsigned GetProductSteps(GoodType product) const;
     /// False if no product of the building yields a ware with the tools of the work step (output ratio 0)
     bool CanYieldProducts() const;
     /// Tool reform: Slot a tool is ordered for right now (not serialized), -1: none
@@ -202,14 +204,16 @@ public:
     unsigned GetOutputRatio(helpers::OptionalEnum<GoodType> product = std::nullopt) const;
     /// The same with the tools in use when the current work step began
     unsigned GetStepOutputRatio(helpers::OptionalEnum<GoodType> product) const;
-    /// Called by the worker when the current work step produced the product (one product per step): Number of
-    /// products it yields according to the output ratio of the step and the work steps of the product (0 if they do
-    /// not suffice yet, the saved work steps are kept for the next steps)
+    /// Called by the worker when the current work step was done on the product: The output ratio of the step is
+    /// saved for this product. Returns how many of it are made (saved steps / work steps of the product, 0 if they do
+    /// not suffice yet), the rest stays saved for the product
     unsigned TakeNumProducts(GoodType product);
-    /// Saved work steps in hundredths (outputCredit_)
-    unsigned GetOutputCredit() const { return outputCredit_; }
-    void SetOutputCredit(unsigned credit) { outputCredit_ = static_cast<uint16_t>(credit); }
-    /// Workshops from lua: product being worked on (chosenProduct_)
+    /// Saved work steps of the product in hundredths (productSavings_)
+    unsigned GetSavedSteps(GoodType product) const;
+    /// Number of the product the current work step makes if it is done on it (by its saved steps and the output ratio
+    /// with the tools of the step)
+    unsigned GetNumMadeInStep(GoodType product) const;
+    /// Workshops from lua: product of the current work step (chosenProduct_)
     helpers::OptionalEnum<GoodType> GetChosenProduct() const { return chosenProduct_; }
     void SetChosenProduct(helpers::OptionalEnum<GoodType> product) { chosenProduct_ = product; }
     /// Number of tools of this ware the building is missing (nothing in use or ordered)

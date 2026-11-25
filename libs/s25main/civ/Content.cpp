@@ -512,13 +512,6 @@ Content::Content(const WorldDescription& desc) : Content()
         else
             bld.workDesc.producedWare = bld.GetProduct(std::nullopt);
         bld.workDesc.useOneWareEach = true;
-        const std::vector<GoodType> allProducts = bld.GetAllProducts();
-        if(!allProducts.empty())
-        {
-            bld.minProductSteps = bld.GetProductSteps(allProducts.front());
-            for(const GoodType good : allProducts)
-                bld.minProductSteps = std::min(bld.minProductSteps, bld.GetProductSteps(good));
-        }
         outputRatios_[getCustomBuilding(i)] = static_cast<uint16_t>(wsDesc.outputRatio);
         bld.workGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.workTime)));
         bld.waitGFs = static_cast<unsigned>(duration_to_gfs(std::chrono::seconds(wsDesc.waitTime)));

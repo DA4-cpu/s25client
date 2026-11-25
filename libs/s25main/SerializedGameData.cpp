@@ -138,9 +138,10 @@
 /// 33: Inputs of buildings as input slots (wares per ware of the slot, wares used in advance), last consumed ware
 /// 34: Work steps per product: saved work steps and the product being worked on in the building, tools of the work
 ///     step instead of its output ratio; the custom worker keeps no product
-static const unsigned currentGameDataVersion = 34;
-/// Oldest game data that can still be loaded (buildings and custom workers changed in 34)
-static const unsigned minGameDataVersion = 34;
+/// 35: Saved work steps per product of a building instead of one for all products
+static const unsigned currentGameDataVersion = 35;
+/// Oldest game data that can still be loaded (saved work steps of buildings changed in 35)
+static const unsigned minGameDataVersion = 35;
 // clang-format on
 
 std::unique_ptr<GameObject> SerializedGameData::Create_GameObject(const GO_Type got, const unsigned obj_id)

@@ -366,21 +366,29 @@ namespace {
     }
 } // namespace
 
+void processOrders(GameWorld& world, const unsigned playerId, const GoodType good, const unsigned numMade)
+{
+    if(!isDistributionActive(world))
+        return;
+    const WareDistribution& distribution = world.GetPlayer(playerId).GetWareDistribution();
+    for(unsigned i = 0; i < numMade && distribution.GetOrders(good) > 0; ++i)
+        orderProcessed(world, playerId, good);
+}
+
 void startedWorkStep(GameWorld& world, const nobUsual& building)
 {
     if(!isDistributionActive(world))
         return;
     const BuildingProducts& products = getBuildingProducts(world, building.GetBuildingType());
-    // Several products: the order is processed when the product is chosen (chooseProduct)
+    // Several products: the orders are processed when the product is chosen (chooseProduct)
     if(products.products.size() != 1u)
         return;
     const GoodType good = products.products.front();
-    if(world.GetPlayer(building.GetPlayer()).GetWareDistribution().GetOrders(good) > 0)
-        orderProcessed(world, building.GetPlayer(), good);
+    processOrders(world, building.GetPlayer(), good, building.GetNumMadeInStep(good));
 }
 
 GoodType chooseProduct(GameWorld& world, const unsigned playerId, const std::vector<GoodType>& products,
-                       const unsigned objId)
+                       const unsigned objId, const std::function<unsigned(GoodType)>& numMadeOf)
 {
     RTTR_Assert(!products.empty());
     WareDistribution& distribution = world.GetPlayer(playerId).GetWareDistribution();
@@ -418,7 +426,8 @@ GoodType chooseProduct(GameWorld& world, const unsigned playerId, const std::vec
         }
         return candidates.back();
     };
-    // Orders first (shared by all buildings: whoever starts first fulfills it)
+    // Orders first (shared by all buildings: whoever makes it first fulfills it). A step that only saves for the ware
+    // leaves the order open
     std::vector<GoodType> candidates;
     for(const GoodType good : products)
     {
@@ -428,7 +437,7 @@ GoodType chooseProduct(GameWorld& world, const unsigned playerId, const std::vec
     if(!candidates.empty())
     {
         const GoodType good = pick(candidates, 1u);
-        orderProcessed(world, playerId, good);
+        processOrders(world, playerId, good, numMadeOf(good));
         return good;
     }
     // The wanted ones. None (a byproduct keeps the building working): all, equally

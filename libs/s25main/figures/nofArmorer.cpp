@@ -126,7 +126,9 @@ helpers::OptionalEnum<GoodType> nofArmorer::ProduceWare()
     {
         // Civilization mode: chosen by the distribution of all wares (shields of all nations count as one ware)
         const auto& products = civ::getBuildingProducts(*world, BuildingType::Armory).products;
-        sword_shield = civ::chooseProduct(*world, player, products, GetObjId()) == GoodType::Sword;
+        sword_shield = civ::chooseProduct(*world, player, products, GetObjId(),
+                                          [this](const GoodType good) { return workplace->GetNumMadeInStep(good); })
+                       == GoodType::Sword;
     } else
         sword_shield = !sword_shield;
 
@@ -134,9 +136,4 @@ helpers::OptionalEnum<GoodType> nofArmorer::ProduceWare()
         return GoodType::Sword;
     else
         return SHIELD_TYPES[world->GetPlayer(player).nation];
-}
-
-helpers::OptionalEnum<GoodType> nofArmorer::ProduceExtraWare(GoodType /*firstWare*/)
-{
-    return ProduceWare();
 }

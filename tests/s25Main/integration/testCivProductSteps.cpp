@@ -145,6 +145,18 @@ struct StepsFixture : public WorldWithGCExecution1P
     nobBaseWarehouse& hq() { return *world.GetPlayer(0).GetHQ(); }
     unsigned inInventory(GoodType good) { return world.GetPlayer(0).GetInventory()[good]; }
 
+    /// Only this product is chosen (value 1000, the other one 0)
+    void onlyChoose(GoodType good)
+    {
+        for(const GoodType other : {PIKE, SABER})
+        {
+            civ::WareSetting setting = world.GetPlayer(0).GetWareDistribution().GetSetting(other);
+            setting.manualValue = other == good ? 1000 : 0;
+            this->SetWareDistribution(false, {{other, setting}});
+        }
+        RTTR_SKIP_GFS(1);
+    }
+
     /// Place the finished shop connected to the HQ and wait for its worker (and its tool if given)
     nobUsual& placeShop(bool withTongs = false)
     {
@@ -206,7 +218,6 @@ rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "
     const civ::CustomBuilding& shop = *content.GetBuilding(SHOP);
     BOOST_TEST(shop.GetProductSteps(PIKE) == 100u);
     BOOST_TEST(shop.GetProductSteps(SABER) == 150u);
-    BOOST_TEST(shop.minProductSteps == 100u);
     const civ::ToolInfo& tongs = *content.GetTool(GoodType::Tongs);
     BOOST_TEST(tongs.GetOutputBonus(SABER) == 50);
     BOOST_TEST(tongs.GetOutputBonus(PIKE) == 0);
@@ -254,51 +265,77 @@ BOOST_FIXTURE_TEST_CASE(ProductCostingTwoSteps, StepsFixture)
     // 5 steps: every step takes its raw ware, every second one makes a pike. 1 saved step is left
     work(shop, 5);
     BOOST_TEST(inInventory(PIKE) == 2u);
-    BOOST_TEST(shop.GetOutputCredit() == 100u);
-    BOOST_TEST((shop.GetChosenProduct() == PIKE));
-}
-
-BOOST_FIXTURE_TEST_CASE(ProductStaysChosenUntilTheStepsSuffice, StepsFixture)
-{
-    // Pike 1 step, saber 1.5 steps
-    init(makeDesc(100, 100, 150));
-    nobUsual& shop = placeShop();
-    shop.SetChosenProduct(SABER);
-    // Step 1: 1 saved step, enough for a pike, but the saber stays chosen
-    work(shop, 1);
-    BOOST_TEST(inInventory(SABER) == 0u);
-    BOOST_TEST(inInventory(PIKE) == 0u);
-    BOOST_TEST(shop.GetOutputCredit() == 100u);
-    BOOST_TEST((shop.GetChosenProduct() == SABER));
-    // Step 2: the saber, half a step is left for the next product (not enough for any: chosen at the next step)
-    work(shop, 1);
-    BOOST_TEST(inInventory(SABER) == 1u);
-    BOOST_TEST(shop.GetOutputCredit() == 50u);
+    BOOST_TEST(shop.GetSavedSteps(PIKE) == 100u);
     BOOST_TEST(!shop.GetChosenProduct());
 }
 
-BOOST_FIXTURE_TEST_CASE(SavedStepsBelongToNoProduct, StepsFixture)
+BOOST_FIXTURE_TEST_CASE(EachProductSavesOnItsOwn, StepsFixture)
 {
-    // 1.21 per step: the rest of each step goes to the next product, whichever it is
-    init(makeDesc(121, 100, 100));
+    // Pike 1 step, saber 1.5 steps (Nutzer, 2026-11-25)
+    init(makeDesc(100, 100, 150));
     nobUsual& shop = placeShop();
-    work(shop, 10);
-    // 12.1 steps: 12 products, 0.1 left
-    BOOST_TEST(inInventory(PIKE) + inInventory(SABER) == 12u);
-    BOOST_TEST(inInventory(PIKE) > 0u);
-    BOOST_TEST(inInventory(SABER) > 0u);
-    BOOST_TEST(shop.GetOutputCredit() == 10u);
+    // Step 1 on the saber: 1 saved for it, no saber
+    onlyChoose(SABER);
+    work(shop, 1);
+    BOOST_TEST(inInventory(SABER) == 0u);
+    BOOST_TEST(shop.GetSavedSteps(SABER) == 100u);
+    // Step 2 on the pike: a pike, the saber keeps its saved step
+    onlyChoose(PIKE);
+    work(shop, 1);
+    BOOST_TEST(inInventory(PIKE) == 1u);
+    BOOST_TEST(shop.GetSavedSteps(PIKE) == 0u);
+    BOOST_TEST(shop.GetSavedSteps(SABER) == 100u);
+    // Step 3 on the saber: 2 saved, a saber, half a step left for the saber
+    onlyChoose(SABER);
+    work(shop, 1);
+    BOOST_TEST(inInventory(SABER) == 1u);
+    BOOST_TEST(shop.GetSavedSteps(SABER) == 50u);
+    BOOST_TEST(inInventory(PIKE) == 1u);
 }
 
-BOOST_FIXTURE_TEST_CASE(NextProductRightAwayIfTheStepsSuffice, StepsFixture)
+BOOST_FIXTURE_TEST_CASE(ChosenAnewForEveryStep, StepsFixture)
+{
+    // Equal values: both products are chosen, the saved steps of a product do not keep it chosen
+    init(makeDesc(50, 100, 100));
+    nobUsual& shop = placeShop();
+    work(shop, 20);
+    // 20 steps with 0.5 each: everything saved is in the products (1 step each) or still saved for a product
+    BOOST_TEST(inInventory(PIKE) > 0u);
+    BOOST_TEST(inInventory(SABER) > 0u);
+    BOOST_TEST((inInventory(PIKE) + inInventory(SABER)) * 100u + shop.GetSavedSteps(PIKE) + shop.GetSavedSteps(SABER)
+               == 20u * 50u);
+}
+
+BOOST_FIXTURE_TEST_CASE(RatioAboveTheCostMakesSeveralOfTheProduct, StepsFixture)
 {
     init(makeDesc(250, 100, 100));
     nobUsual& shop = placeShop();
-    // 2.5 saved steps: 2 products in the step, the half step is left
+    onlyChoose(SABER);
+    // 2.5 saved for the saber: 2 sabers in the step, half a step left for the saber
     work(shop, 1);
-    BOOST_TEST(inInventory(PIKE) + inInventory(SABER) == 2u);
-    BOOST_TEST(shop.GetOutputCredit() == 50u);
-    BOOST_TEST(!shop.GetChosenProduct());
+    BOOST_TEST(inInventory(SABER) == 2u);
+    BOOST_TEST(inInventory(PIKE) == 0u);
+    BOOST_TEST(shop.GetSavedSteps(SABER) == 50u);
+}
+
+BOOST_FIXTURE_TEST_CASE(OrderIsProcessedWhenTheProductIsMade, StepsFixture)
+{
+    // Saber 2 steps: the order stays open while the steps only save for it
+    init(makeDesc(100, 100, 200));
+    nobUsual& shop = placeShop();
+    onlyChoose(PIKE);
+    this->ChangeWareOrders(SABER, 1);
+    const civ::WareDistribution& distribution = world.GetPlayer(0).GetWareDistribution();
+    BOOST_TEST_REQUIRE(distribution.GetOrders(SABER) == 1u);
+    work(shop, 1);
+    BOOST_TEST(shop.GetSavedSteps(SABER) == 100u);
+    BOOST_TEST(distribution.GetOrders(SABER) == 1u);
+    work(shop, 1);
+    BOOST_TEST(inInventory(SABER) == 1u);
+    BOOST_TEST(distribution.GetOrders(SABER) == 0u);
+    // Then the values count again
+    work(shop, 1);
+    BOOST_TEST(inInventory(PIKE) == 1u);
 }
 
 BOOST_FIXTURE_TEST_CASE(ToolBonusForATag, StepsFixture)
@@ -330,7 +367,7 @@ BOOST_FIXTURE_TEST_CASE(ProductWithoutYieldIsNotChosen, StepsFixture)
     init(makeDesc(100, 100, 100, makeTongs(0, {{"Saber", -100}})));
     nobUsual& shop = placeShop(true);
     BOOST_TEST(shop.GetOutputRatio(SABER) == 0u);
-    shop.SetChosenProduct(SABER);
+    onlyChoose(SABER);
     work(shop, 6);
     BOOST_TEST(inInventory(PIKE) == 6u);
     BOOST_TEST(inInventory(SABER) == 0u);
@@ -378,13 +415,17 @@ BOOST_FIXTURE_TEST_CASE(ToolInputRatioDownToZero, StepsFixture)
     RTTR_EXEC_TILL(3000, inInventory(PIKE) >= 2u);
 }
 
-BOOST_FIXTURE_TEST_CASE(SerializeTheChosenProduct, StepsFixture)
+BOOST_FIXTURE_TEST_CASE(SerializeTheSavedSteps, StepsFixture)
 {
     init(makeDesc(100, 100, 300));
     nobUsual& shop = placeShop();
-    shop.SetChosenProduct(SABER);
+    onlyChoose(SABER);
     work(shop, 1);
-    BOOST_TEST(shop.GetOutputCredit() == 100u);
+    BOOST_TEST(shop.GetSavedSteps(SABER) == 100u);
+    // During a step: the chosen product is saved, too
+    hq().AddToInventory(GoodCounts::make(RAW, 1), true);
+    RTTR_EXEC_TILL(8000, shop.is_working);
+    BOOST_TEST((shop.GetChosenProduct() == SABER));
     const MapPoint shopPos = shop.GetPos();
 
     SerializedGameData sgd;
@@ -396,11 +437,12 @@ BOOST_FIXTURE_TEST_CASE(SerializeTheChosenProduct, StepsFixture)
     civ::startGame(world);
 
     nobUsual& loaded = *world.GetSpecObj<nobUsual>(shopPos);
-    BOOST_TEST(loaded.GetOutputCredit() == 100u);
+    BOOST_TEST(loaded.GetSavedSteps(SABER) == 100u);
     BOOST_TEST((loaded.GetChosenProduct() == SABER));
-    work(loaded, 2);
+    work(loaded, 1);
     BOOST_TEST(inInventory(SABER) == 1u);
     BOOST_TEST(inInventory(PIKE) == 0u);
+    BOOST_TEST(loaded.GetSavedSteps(SABER) == 0u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -116,7 +116,8 @@ GoodType nofCustomWorker::ChooseProduct(const civ::CustomBuilding& building)
             }
             if(candidates.empty())
                 candidates = building.productChoices;
-            return civ::chooseProduct(*world, player, candidates, GetObjId());
+            return civ::chooseProduct(*world, player, candidates, GetObjId(),
+                                      [this](const GoodType good) { return workplace->GetNumMadeInStep(good); });
         }
         case civ::ProductChoice::Knowledge: return ChooseKnowledgeProduct(building);
         case civ::ProductChoice::None: break;
@@ -129,9 +130,10 @@ bool nofCustomWorker::StartWorking()
 {
     const civ::CustomBuilding* desc = GetBuildingDesc();
     const bool hasProduct = desc && desc->HasProduct();
-    // Several products: chosen when the work on a product starts (orders are processed now). It stays chosen until
-    // the saved work steps suffice for it (Nutzer, 2026-11-24)
-    if(hasProduct && desc->productChoice != civ::ProductChoice::None && !workplace->GetChosenProduct())
+    // Several products: chosen anew for every work step, the saved steps of the products do not matter (Nutzer,
+    // 2026-11-25). Orders are processed now
+    workplace->SetChosenProduct(std::nullopt);
+    if(hasProduct && desc->productChoice != civ::ProductChoice::None)
         workplace->SetChosenProduct(ChooseProduct(*desc));
     const ResourceType ore = GetMineResource();
     if(ore != ResourceType::Nothing)
@@ -145,9 +147,15 @@ bool nofCustomWorker::StartWorking()
     }
     if(!nofWorkman::StartWorking())
         return false;
-    // One product: with inheritProperties it is decided by the ware consumed for the first work step on it
-    if(hasProduct && desc->productChoice == civ::ProductChoice::None && !workplace->GetChosenProduct())
-        workplace->SetChosenProduct(ChooseProduct(*desc));
+    // One product: with inheritProperties it is decided by the ware consumed from the first input
+    if(hasProduct && desc->productChoice == civ::ProductChoice::None)
+    {
+        const GoodType product = ChooseProduct(*desc);
+        workplace->SetChosenProduct(product);
+        // Several products by the inputs: their orders are processed now (one product: when the step starts)
+        if(desc->GetAllProducts().size() > 1u)
+            civ::processOrders(*world, player, product, workplace->GetNumMadeInStep(product));
+    }
     return true;
 }
 
@@ -156,32 +164,9 @@ helpers::OptionalEnum<GoodType> nofCustomWorker::ProduceWare()
     const civ::CustomBuilding* building = GetBuildingDesc();
     if(!building || !building->HasProduct())
         return std::nullopt;
-    if(const auto chosen = workplace->GetChosenProduct())
+    const auto chosen = workplace->GetChosenProduct();
+    workplace->SetChosenProduct(std::nullopt);
+    if(chosen)
         return chosen;
     return ChooseProduct(*building);
-}
-
-std::vector<GoodType> nofCustomWorker::TakeProducts(const GoodType firstWare)
-{
-    const civ::CustomBuilding* building = GetBuildingDesc();
-    if(!building)
-        return nofWorkman::TakeProducts(firstWare);
-    // The saved work steps belong to no product: the rest left after a product is used for the next product,
-    // whichever it is (Nutzer, 2026-11-24)
-    unsigned credit = workplace->GetOutputCredit() + workplace->GetStepOutputRatio(firstWare);
-    std::vector<GoodType> products;
-    helpers::OptionalEnum<GoodType> product = firstWare;
-    while(product && credit >= building->GetProductSteps(*product))
-    {
-        credit -= building->GetProductSteps(*product);
-        products.push_back(*product);
-        // The next product: chosen now if the saved work steps suffice for the cheapest product, otherwise when the
-        // next work step starts
-        product.reset();
-        if(credit >= building->minProductSteps)
-            product = ChooseProduct(*building);
-    }
-    workplace->SetOutputCredit(credit);
-    workplace->SetChosenProduct(product);
-    return products;
 }

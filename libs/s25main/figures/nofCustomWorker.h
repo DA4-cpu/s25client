@@ -20,11 +20,8 @@ class nofCustomWorker : public nofWorkman
 {
     void DrawWorking(DrawPoint drawPt) override;
     unsigned short GetCarryID() const override;
-    /// The product being worked on (nobUsual::GetChosenProduct)
+    /// The product chosen for this work step (nobUsual::GetChosenProduct)
     helpers::OptionalEnum<GoodType> ProduceWare() override;
-    /// The saved work steps of the building pay for the products: the product being worked on, then further products
-    /// while they suffice (the next product is chosen right away if they suffice for the cheapest product)
-    std::vector<GoodType> TakeProducts(GoodType firstWare) override;
     bool StartWorking() override;
     /// A librarian never "works": the library only stores media. A miner needs the ore in range, too
     bool AreWaresAvailable() const override;
@@ -32,7 +29,7 @@ class nofCustomWorker : public nofWorkman
     ResourceType GetMineResource() const;
     /// Definition of the workshop or nullptr
     const civ::CustomBuilding* GetBuildingDesc() const;
-    /// Next product to work on: by the distribution of all wares, by knowledge type or the one product (by the input
+    /// Product of the work step: by the distribution of all wares, by knowledge type or the one product (by the input
     /// consumed last with inheritProperties). Only products the tools of the work step let yield a ware
     GoodType ChooseProduct(const civ::CustomBuilding& building);
     /// outputChoice = "knowledge": Product weighted by the regulator "Wissen" of the owner

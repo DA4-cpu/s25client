@@ -227,7 +227,7 @@ void iwBuilding::DrawTools()
     // work speed (below the product), also the output ratio (wares per work step) unless it is 1 without tools
     const auto& slots = building->GetToolSlots();
     const DrawPoint speedPos = GetDrawPos() + DrawPoint(196, 66);
-    // For the product being worked on (the tools may give a bonus for it), otherwise for every product
+    // During a work step for its product (the tools may give a bonus for it), otherwise for every product
     const unsigned ratio = building->GetOutputRatio(building->GetChosenProduct());
     if(ratio != 100 || !slots.empty())
     {

@@ -42,23 +42,26 @@ rttr:AddWorkshop{...}:
               Mehrere Einträge: mehrere Produkte. Nicht für Sammler, Plantagen und Minen und nicht
               zusammen mit inheritProperties.
               Arbeitsschritte je Produkt: { "CopperSword", steps = 1.5 } (Standard 1, mehr als 0 bis 99, auch
-              Kommazahlen). Ein Produkt kostet so viele angesparte Arbeitsschritte (siehe outputRatio), z.B.
-              outputs = { "CopperSpear", { "CopperSword", steps = 1.5 } }: ein Speer kostet 1 Schritt, ein Schwert 1.5.
+              Kommazahlen). Ein Produkt kostet so viele für dieses Produkt angesparte Arbeitsschritte (siehe
+              outputRatio), z.B. outputs = { "CopperSpear", { "CopperSword", steps = 1.5 } }: ein Speer kostet 1
+              Schritt, ein Schwert 1.5.
   outputRatio optional (Standard 1): Waren pro Arbeitsschritt, 0 bis 8, auch Kommazahlen. 0.5 = eine Ware jeden 2.
               Schritt, 2 = zwei Waren je Schritt, 1.5 = abwechselnd 1 und 2.
-              Genau: Jeder Arbeitsschritt spart outputRatio Arbeitsschritte an. Sobald die angesparten Schritte für das
-              gewählte Produkt reichen (steps in outputs, sonst 1), entsteht es und seine Schritte werden abgezogen.
-              Der Rest gehört keinem Produkt: Er zählt für das nächste Produkt, egal welches. Reicht der Rest noch für
-              das billigste Produkt, wird sofort das nächste gewählt und, wenn es reicht, im selben Schritt
-              hergestellt. Sonst wird das nächste Produkt beim nächsten Arbeitsschritt gewählt. Ein gewähltes Produkt
-              bleibt gewählt, bis die angesparten Schritte dafür reichen.
-              Beispiel outputRatio = 1, Speer 1 Schritt, Schwert 1.5: Schwert gewählt -> Schritt 1: 1 angespart, noch
-              kein Schwert (es bleibt gewählt, obwohl 1 für einen Speer reichen würde) -> Schritt 2: 2 angespart,
-              Schwert entsteht, 0.5 bleibt -> Schritt 3: neues Produkt gewählt, 1.5 angespart ...
+              Genau: Jedes Produkt hat einen eigenen Sparwert. Zu Beginn jedes Arbeitsschritts wird das Produkt des
+              Schritts gewählt (die Sparwerte spielen dabei keine Rolle). Am Ende des Schritts kommt outputRatio auf
+              den Sparwert dieses Produkts. Erreicht er die Arbeitsschritte des Produkts (steps in outputs, sonst 1),
+              entsteht es, so oft der Sparwert reicht, und die Schritte werden abgezogen. Der Rest bleibt bei diesem
+              Produkt, die Sparwerte der anderen Produkte bleiben, wie sie sind.
+              Beispiel outputRatio = 1, Speer 1 Schritt, Schwert 1.5: Schritt 1 Schwert gewählt -> Schwert hat 1
+              gespart, nichts entsteht. Schritt 2 Speer gewählt -> Speer hat 1, ein Speer entsteht, Speer wieder 0,
+              Schwert weiter 1. Schritt 3 Schwert gewählt -> Schwert hat 2, ein Schwert entsteht, 0.5 bleiben beim
+              Schwert. Mit outputRatio 2.5 und Speer gewählt: 2 Speere, 0.5 bleiben beim Speer.
+              Eine Bestellung (Fenster "Gesamtverteilung") wird erst abgehakt, wenn das Produkt entsteht; Schritte,
+              die nur dafür sparen, lassen sie offen.
               Die Eingänge werden in jedem Schritt verbraucht (nur nach ihrem amount, nicht nach dem Ertrag).
               Die Werkzeuge in Gebrauch zählen ihr outputRatio aus tools.lua dazu (0.5 + Werkzeug 1 = 1.5), auch je
-              Produkt, höchstens 8 insgesamt, mindestens 0. Ein Produkt mit Summe 0 wird nicht gewählt; ist die Summe für
-              alle Produkte 0, arbeitet die Werkstatt nicht.
+              Produkt (es zählt der Bonus für das gewählte Produkt), höchstens 8 insgesamt, mindestens 0. Ein Produkt
+              mit Summe 0 wird nicht gewählt; ist die Summe für alle Produkte 0, arbeitet die Werkstatt nicht.
               Nebenprodukte (byproducts.lua) gibt es je Ware. Minen, Sammler und Plantagen nehmen je Arbeitsschritt
               genau 1 Einheit ihres Erzes bzw. Objekts, egal wie viele Waren herauskommen. Der Arbeiter legt alle
               zusammen an die Fahne, mehr als 8 nacheinander.
@@ -67,8 +70,8 @@ rttr:AddWorkshop{...}:
               "Verteilung" gewählt (z.B. geritzte Knochen für LWP, IWP und MWP). Jedes Produkt braucht knowledge in
               wares.lua (genau eine Art).
               Ohne outputChoice: Hat die Werkstatt mehrere Produkte, steuert sie die Gesamtverteilung (Fenster
-              "Gesamtverteilung"): Für jedes Produkt wählt sie gewichtet nach den Werten ihrer Produkte, Bestelltes
-              zuerst (wann gewählt wird: siehe outputRatio).
+              "Gesamtverteilung"): Zu Beginn jedes Arbeitsschritts wählt sie gewichtet nach den Werten ihrer Produkte,
+              Bestelltes zuerst (siehe outputRatio).
   inheritProperties  optional (Standard false): Das Produkt hat dieselben Eigenschaften wie die Ware, die zuletzt aus dem
               ersten Eingang verbraucht wurde (z.B. Nadelholz -> Nadelholzbretter). Zu jeder Ware des ersten Eingangs
               muss es genau ein passendes Produkt geben.

@@ -1974,66 +1974,83 @@ Waren herauskommen; Minen-Nahrung ein Platz mit 6 Plätzen.
 
 ## Notizen aus den Lua-Dateien, Schritt 3: Arbeitsschritte je Produkt und Werkzeug-Ratios (Stand 2026-11-25)
 
-Antworten des Nutzers (24.11.): Arbeitsschritte je Produkt „funktioniert exakt gleich wie das outputRatio, nur dass es
-an einzelne Outputs gekoppelt ist“; Schreibweise `outputs = { "CopperSpear", { "CopperSword", steps = 1.5 } }`; ein
-gewähltes Produkt bleibt gewählt, bis das Angesparte reicht (Frage 1 a); das Angesparte gehört keiner Ware („Wenn ein
-Arbeitsschritt fertig ist, kommt der nächste Arbeitsschritt, egal ob das die selbe Ware betrifft. Angesparte
-Arbeitsschritte bleiben erhalten.“); outputRatio und inputRatio der Werkzeuge als Zahl für alles oder je Tag („Coal =
--0.25 reduziert den Kohleverbrauch um 0.25 oder inputRatio = -0.2 reduziert den Input aller Waren“).
+Antworten des Nutzers (24./25.11.): Arbeitsschritte je Produkt „funktioniert exakt gleich wie das outputRatio, nur dass
+es an einzelne Outputs gekoppelt ist“; Schreibweise `outputs = { "CopperSpear", { "CopperSword", steps = 1.5 } }`;
+nicht zuerst die Ware fertig machen, für die Reste angespart sind („Wenn ein Arbeitsschritt fertig ist, kommt der nächste
+Arbeitsschritt, egal ob das die selbe Ware betrifft. Angesparte Arbeitsschritte bleiben erhalten.“); 25.11.: „man spart
+immer nur für eine Ware an, nicht ein allgemeines outputRatio. Also für jede Ware gibt es einen individuellen Sparwert.
+Nach jedem Arbeitsschritt wird neu gewählt.“ (ersetzt die Antwort „das gewählte Produkt bleibt gewählt, bis das
+Angesparte reicht“ und die Regel vom 12.11., nach der bei mehreren Waren je Schritt jede einzeln gewählt wurde);
+outputRatio und inputRatio der Werkzeuge als Zahl für alles oder je Tag („Coal = -0.25 reduziert den Kohleverbrauch um
+0.25 oder inputRatio = -0.2 reduziert den Input aller Waren“).
 
 - **Lua, Werkstatt:** Ein Eintrag von `outputs` darf `steps` haben: `{ "CopperSword", steps = 1.5 }` (Tag-Abfrage wie
   bisher, dazu `steps` mehr als 0 bis 99, mindestens 0,01, Standard 1). Andere Felder im Eintrag sind ein Ladefehler.
   `output` (eine Tag-Abfrage für mehrere Waren) hat keine `steps`, Sammler, Plantagen und Minen haben kein `outputs`.
   Code: `parseOutput`, `WorkshopDesc::outputSteps`, `CustomBuilding::productSteps`, `GetProductSteps`,
-  `minProductSteps`, `GetAllProducts`.
+  `GetAllProducts`.
 - **Lua, Werkzeug:** `outputRatio` und `inputRatio` in `rttr:AddTool` sind eine Zahl (gilt für alle Produkte bzw. alle
   Eingänge) oder eine Tabelle `{ Tag = Zahl }` (gilt nur für Produkte mit dem Tag bzw. für Eingänge, deren Waren alle den
   Tag haben). Beide Formen auch negativ: `outputRatio` −8 bis 8, `inputRatio` −99 bis 99. Ein Tag, den keine Ware hat,
   ist ein Ladefehler. Trifft ein Produkt mehrere Tags der Tabelle, zählen alle (additiv). Code: `parseToolRatio`,
   `ToolDesc`, `ToolInfo::outputRatioByTag`/`inputRatioByTag` (Tag → alle Waren mit dem Tag), `GetOutputBonus`,
   `GetInputBonus`, `GetBestOutputBonus`.
-- **Rechnung je Arbeitsschritt (Werkstätten aus Lua):** Das Gebäude hat angesparte Arbeitsschritte (`outputCredit_`,
-  Hundertstel) und ein gewähltes Produkt (`chosenProduct_`), beides im Spielstand. Beginnt ein Schritt und ist kein
-  Produkt gewählt, wird gewählt (Gesamtverteilung, Wissen oder bei einem Produkt dieses; mit `inheritProperties` nach der
-  Ware, die dieser Schritt aus dem ersten Eingang verbraucht hat). Am Ende des Schritts kommen die Arbeitsschritte des
-  Schritts dazu (outputRatio des Gebäudes + Werkzeuge, mit dem Tag-Bonus für das gewählte Produkt, 0 bis 8). Solange das
-  Angesparte für das gewählte Produkt reicht: Produkt entsteht, seine `steps` werden abgezogen; reicht der Rest noch für
-  das billigste Produkt der Werkstatt, wird sofort neu gewählt, sonst beim nächsten Schritt. Ein gewähltes Produkt bleibt
-  gewählt, bis das Angesparte reicht (auch wenn es für ein billigeres reichen würde). Beispiel outputRatio 1, Speer 1,
-  Schwert 1,5, Schwert gewählt: Schritt 1 → 1,0 angespart, nichts; Schritt 2 → Schwert, 0,5 bleiben, nichts gewählt;
-  Schritt 3 → neue Wahl, 1,5 angespart … Code: `nofCustomWorker::StartWorking`, `ProduceWare`, `TakeProducts`,
-  `ChooseProduct`. Die eingebauten Gebäude und Sammler/Plantagen nutzen weiter `nobUsual::TakeNumProducts(Produkt)`
-  (Kosten 1, Tag-Bonus für ihr Produkt); weitere Waren eines Schritts wählt `ProduceExtraWare` wie bisher.
+- **Rechnung je Arbeitsschritt (alle Gebäude):** Jedes Produkt eines Gebäudes hat einen eigenen Sparwert
+  (`nobUsual::productSavings_`, Hundertstel, Spielstand; Produkte mit 0 fehlen in der Liste). Zu Beginn jedes
+  Arbeitsschritts wird das Produkt des Schritts gewählt; die Sparwerte spielen dabei keine Rolle. Werkstätten aus Lua:
+  Gesamtverteilung oder Wissen, bei einem Produkt dieses, mit `inheritProperties` nach der Ware, die der Schritt aus dem
+  ersten Eingang verbraucht hat (`nofCustomWorker::StartWorking`, `chosenProduct_` im Gebäude, Spielstand); eingebaute
+  Gebäude wie bisher (Metallwerk zu Beginn, Waffenschmiede am Ende des Schritts). Am Ende des Schritts
+  (`nobUsual::TakeNumProducts`) kommt der Ertrag des Schritts (outputRatio des Gebäudes + Werkzeuge mit dem Tag-Bonus
+  für dieses Produkt, 0 bis 8) auf den Sparwert dieses Produkts; es entstehen Sparwert / `steps` Stück dieses Produkts,
+  der Rest bleibt bei ihm. Alle Stück eines Schritts sind dieselbe Ware (`ProduceExtraWare` entfällt), jedes mit seinen
+  Nebenprodukten. Beispiel outputRatio 1, Speer 1, Schwert 1,5: Schritt 1 Schwert → Schwert 1,0, nichts; Schritt 2
+  Speer → ein Speer, Speer 0, Schwert weiter 1,0; Schritt 3 Schwert → Schwert 2,0, ein Schwert, 0,5 bleiben beim Schwert.
+  outputRatio 2,5 mit Speer gewählt: 2 Speere, 0,5 bleiben beim Speer.
+- **Bestellungen (Gesamtverteilung):** Eine Bestellung wird erst abgehakt, wenn das Produkt entsteht. Bei der Wahl ist
+  bekannt, wie viele Stück der Schritt macht (`nobUsual::GetNumMadeInStep`: Sparwert + Ertrag mit den Werkzeugen des
+  Schritts, geteilt durch `steps`); so viele Bestellungen werden abgehakt (`civ::processOrders`, aufgerufen von
+  `chooseProduct`, von `startedWorkStep` bei einem Produkt und bei `inheritProperties` mit mehreren Produkten nach dem
+  Verbrauch). Ein Schritt, der nur spart, lässt die Bestellung offen; das bestellte Produkt wird weiter zuerst gewählt.
+  Vorher wurde die Bestellung bei jeder Wahl abgehakt, auch wenn der Schritt (outputRatio unter 1) nichts ergab.
 - **Werkzeuge eines Schritts:** `BeginWorkStep` merkt sich die Werkzeuge in Gebrauch (`stepTools_`, Spielstand), bevor
   sie sich abnutzen. Sie zählen für den ganzen Schritt (Ertrag am Ende und Verbrauch der Eingänge), auch wenn eines zu
-  Beginn kaputt geht. Ergibt das gewählte Produkt mit diesen Werkzeugen 0, wird es abgewählt; Produkte mit 0 werden nicht
-  gewählt (außer alle haben 0). Hat kein Produkt mehr als 0, arbeitet das Gebäude nicht (die Eingänge bleiben liegen).
+  Beginn kaputt geht. Produkte, die mit diesen Werkzeugen 0 ergeben, werden nicht gewählt (außer alle haben 0). Hat
+  kein Produkt mehr als 0, arbeitet das Gebäude nicht (die Eingänge bleiben liegen).
 - **Eingänge:** Waren je Schritt = `amount` des Platzes + `inputRatio` der Werkzeuge (für alle bzw. für die Tags, die
   alle Waren des Platzes haben), mindestens 0 (der Platz braucht nichts) und höchstens `storage` × 1 (sonst könnte das
   Gebäude nie arbeiten). Die Rechnung mit `prepaid` bleibt (`nobUsual::CalcInputAmount`, `GetInputAmount`). Geprüft wird
   mit den Werkzeugen in Gebrauch, verbraucht mit denen des Schritts (in derselben Spielrunde, also gleich); nimmt ein
   Schritt weniger, als er bräuchte (nur möglich, wenn sich die Werkzeuge dazwischen ändern), verfällt der Rest. Die
   eingebauten Minen (eine beliebige Nahrung je Schritt) beachten `inputRatio` nicht.
-- **Fenster:** „Ertrag“ zeigt den Ertrag für das gewählte Produkt (sonst ohne Tag-Bonus), „(x je Schritt)“ die Menge
-  mit den Werkzeugen in Gebrauch.
+- **Fenster:** „Ertrag“ zeigt während eines Schritts den Ertrag für dessen Produkt (sonst ohne Tag-Bonus), „(x je
+  Schritt)“ die Menge mit den Werkzeugen in Gebrauch.
 - **KI:** `Recipe::outputRatio` (outputRatio des Gebäudes ohne Werkzeuge) und `Recipe::outputSteps`. Die Prognose
-  rechnet die Nennleistung (nur solange keine Messung da ist) jetzt mit dem Ertrag: Produkte je Minute = Schritte je
-  Minute × outputRatio × Anzahl der Produkte / Summe ihrer `steps`, jedes Produkt ein gleicher Teil, Nebenprodukte je
-  Produkt (`EconomyForecast::nominalProducts_`). Vorher zählte jeder Schritt als eine Ware, eine Werkstatt mit
+  rechnet die Nennleistung (nur solange keine Messung da ist) jetzt mit dem Ertrag: jedes Produkt bekommt einen gleichen
+  Teil der Arbeitsschritte, je Minute also Schritte je Minute / Anzahl der Produkte × outputRatio / seine `steps`;
+  Nebenprodukte je Produkt (`EconomyForecast::ProducedPerBuilding`, `nominalProducts_` = alle Produkte zusammen). Vorher zählte jeder Schritt als eine Ware, eine Werkstatt mit
   outputRatio 0,5 wurde doppelt so stark geschätzt. Bei outputRatio 1 und `steps` 1 ist das Ergebnis gleich wie vorher.
   Die Güte eines Werkzeugs für die Bestellung ist Tempo + bester Ertragsbonus (`GetBestOutputBonus`), mindestens 0.
-- **Spielstand:** Version 34, ältere werden abgelehnt. Der Arbeiter einer Werkstatt speichert kein Produkt mehr.
-- **Tests:** `CivProductStepsSuite` (Lua, Produkt mit 2 Schritten, Produkt bleibt gewählt, Rest für das nächste Produkt,
-  zwei Produkte in einem Schritt, Werkzeug-Bonus je Tag und für alle, Produkt ohne Ertrag wird nicht gewählt, negativer
-  Bonus, inputRatio für alle, je Tag und bis 0, Spielstand).
+- **Spielstand:** Version 35 (34 hatte für kurze Zeit ein allgemeines Angespartes), ältere werden abgelehnt. Der
+  Arbeiter einer Werkstatt speichert kein Produkt mehr.
+- **Tests:** `CivProductStepsSuite` (Lua, Produkt mit 2 Schritten, eigener Sparwert je Produkt, neue Wahl in jedem
+  Schritt, mehrere Stück desselben Produkts in einem Schritt, Bestellung erst beim Herstellen abgehakt, Werkzeug-Bonus
+  je Tag und für alle, Produkt ohne Ertrag wird nicht gewählt, negativer Bonus, inputRatio für alle, je Tag und bis 0,
+  Spielstand).
 - **Testspiele** (512 × 512, 4 KI, 3 h, Kartenzufall 5 und 9, ausgelieferte Daten):
 
 | Kartenzufall | Land (Summe) | Gebäude | Militärstärke wächst ab (Ende) |
 |---|---|---|---|
 | 5 vorher (A4) | 32 277 | 1 130 | P1 2:17 (134), P2 2:05 (140), P0 und P3 nie |
-| 5 nachher | 34 885 | 1 152 | P1 2:13 (134), P2 1:27 (171), P3 2:22 (127), P0 nie |
+| 5 allgemeines Angespartes (`df2e9c1`) | 34 885 | 1 152 | P1 2:13 (134), P2 1:27 (171), P3 2:22 (127), P0 nie |
+| 5 Sparwert je Produkt | 32 524 | 1 084 | P0 2:18 (115), P2 2:07 (140), P3 2:59 (106), P1 nie |
 | 9 vorher (A4) | 40 174 | 1 245 | P0 2:29 (146), P1 2:46 (116), P2 2:06 (132), P3 1:54 (129) |
-| 9 nachher | 36 866 | 1 171 | P0 1:51 (147), P1 2:04 (128), P2 1:57 (112), P3 1:55 (124) |
+| 9 allgemeines Angespartes (`df2e9c1`) | 36 866 | 1 171 | P0 1:51 (147), P1 2:04 (128), P2 1:57 (112), P3 1:55 (124) |
+| 9 Sparwert je Produkt | 32 132 | 1 145 | P0 1:54 (140), P1 2:49 (113), P2 1:54 (131), P3 2:04 (126) |
+
+  Mit einem Sparwert je Produkt dauert es bei Werkstätten mit vielen Produkten und outputRatio unter 1 länger, bis das
+  erste Stück jedes Produkts entsteht (ObsidianWorkshop 7 Produkte mit 0,8, Copperworks 5 mit 0,5, Bronzeworks 9 mit
+  0,8): jedes Produkt braucht eigene Schritte. Auf Dauer ist die Menge je Schritt gleich.
 
 ## Gesamtverteilung (Stand 2026-11-21)
 

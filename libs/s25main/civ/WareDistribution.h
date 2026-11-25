@@ -9,6 +9,7 @@
 #include "gameTypes/BuildingType.h"
 #include "gameTypes/GoodTypes.h"
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 class GameWorld;
@@ -154,11 +155,15 @@ void updateDistribution(GameWorld& world, unsigned playerId);
 void wakeBuildingsFor(GameWorld& world, unsigned playerId, GoodType good);
 /// Is the building stopped by the distribution? All its products and byproducts are not wanted and none is ordered
 bool isPausedByDistribution(const GameWorldBase& world, const nobUsual& building);
-/// A building with one product started a work step: an order of its product is processed
+/// A building with one product started a work step: as many orders of its product are processed as the step makes
+/// of it (nobUsual::GetNumMadeInStep, 0 if the step only saves for it)
 void startedWorkStep(GameWorld& world, const nobUsual& building);
-/// Choose the product of a building with several products: the ordered ones first (the order is processed),
-/// otherwise weighted by the values of the wanted products, converted for the building (highest 100 %, lowest 0 %).
-/// `objId`: object id for the random number
-GoodType chooseProduct(GameWorld& world, unsigned playerId, const std::vector<GoodType>& products, unsigned objId);
+/// The work step of a building makes `numMade` of the ware: as many of its orders are processed
+void processOrders(GameWorld& world, unsigned playerId, GoodType good, unsigned numMade);
+/// Choose the product of a work step of a building with several products: the ordered ones first (as many orders are
+/// processed as the step makes of the chosen one: `numMadeOf`), otherwise weighted by the values of the wanted
+/// products, converted for the building (highest 100 %, lowest 0 %). `objId`: object id for the random number
+GoodType chooseProduct(GameWorld& world, unsigned playerId, const std::vector<GoodType>& products, unsigned objId,
+                       const std::function<unsigned(GoodType)>& numMadeOf);
 
 } // namespace civ

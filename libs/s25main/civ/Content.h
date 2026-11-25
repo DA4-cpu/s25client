@@ -113,8 +113,6 @@ struct CustomBuilding
 
     /// Work steps of the products of outputs which cost more or less than 1 step (hundredths)
     std::vector<std::pair<GoodType, unsigned>> productSteps;
-    /// Lowest work steps of all products in hundredths
-    unsigned minProductSteps = 100;
 
     /// Product for each input ware if the properties of the input are passed on. Otherwise empty
     std::vector<std::pair<GoodType, GoodType>> productByInput;

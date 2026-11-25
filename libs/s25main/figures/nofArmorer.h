@@ -22,8 +22,6 @@ protected:
     unsigned short GetCarryID() const override;
     /// Der Arbeiter erzeugt eine Ware
     helpers::OptionalEnum<GoodType> ProduceWare() override;
-    /// Civilization mode, output ratio above 1: alternating sword and shield as usual
-    helpers::OptionalEnum<GoodType> ProduceExtraWare(GoodType firstWare) override;
     void HandleDerivedEvent(unsigned id) override;
 
     /// Addon "half cost for military equipment": only without the distribution of all wares
