@@ -468,7 +468,8 @@ void GameWorld::RecalcTerritory(const noBaseBuilding& building, TerritoryChangeR
 
     // Recalc visibilities if building was destroyed
     // Otherwise just set everything to visible
-    const unsigned visualRadius = militaryRadius + VISUALRANGE_MILITARY;
+    const auto* milBld = dynamic_cast<const nobBaseMilitary*>(&building);
+    const unsigned visualRadius = milBld ? milBld->GetVisualRange() : militaryRadius + VISUALRANGE_MILITARY;
     if(reason == TerritoryChangeReason::Destroyed)
         RecalcVisibilitiesAroundPoint(building.GetPos(), visualRadius, building.GetPlayer(), &building);
     else
@@ -555,8 +556,8 @@ TerritoryRegion GameWorld::CreateTerritoryRegion(const noBaseBuilding& building,
     const Extent size = elMin(2u * radius2D + Extent(1, 1), Extent(GetSize()));
     TerritoryRegion region(startPt, size, *this);
 
-    // Alle Gebäude ihr Terrain in der Nähe neu berechnen
-    sortedMilitaryBlds buildings = LookForMilitaryBuildings(bldPos, 3);
+    // Alle Gebäude ihr Terrain in der Nähe neu berechnen (far enough for the biggest radius of the game)
+    sortedMilitaryBlds buildings = LookForMilitaryBuildings(bldPos, civ::getActiveContent().GetMilitarySearchSquares());
     for(const nobBaseMilitary* milBld : buildings)
     {
         if(reason != TerritoryChangeReason::Destroyed || milBld != &building)
@@ -1040,7 +1041,8 @@ bool GameWorld::IsValidPointForFighting(MapPoint pt, const nofActiveSoldier& sol
 bool GameWorld::IsPointCompletelyVisible(const MapPoint& pt, unsigned char player,
                                          const noBaseBuilding* exception) const
 {
-    sortedMilitaryBlds buildings = LookForMilitaryBuildings(pt, 3);
+    // Far enough for the biggest vision of the game
+    sortedMilitaryBlds buildings = LookForMilitaryBuildings(pt, civ::getActiveContent().GetMilitarySearchSquares());
 
     // Sichtbereich von Militärgebäuden
     for(const nobBaseMilitary* milBld : buildings)
@@ -1054,7 +1056,7 @@ bool GameWorld::IsPointCompletelyVisible(const MapPoint& pt, unsigned char playe
                     continue;
             }
 
-            if(CalcDistance(pt, milBld->GetPos()) <= unsigned(milBld->GetMilitaryRadius() + VISUALRANGE_MILITARY))
+            if(CalcDistance(pt, milBld->GetPos()) <= milBld->GetVisualRange())
                 return true;
         }
     }

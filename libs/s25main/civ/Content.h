@@ -15,6 +15,7 @@
 #include "gameTypes/BuildingTypes.h"
 #include "gameTypes/GoodTypes.h"
 #include "gameTypes/JobTypes.h"
+#include "gameTypes/Nation.h"
 #include "gameTypes/Resource.h"
 #include <memory>
 #include <optional>
@@ -90,6 +91,23 @@ enum class ProductChoice : uint8_t
     Distribution
 };
 
+/// Values of a military building: built-in ones from the original tables (gameData/MilitaryConsts.h), the ones
+/// defined in lua from military = { ... } (rttr:AddWorkshop)
+struct MilitaryValues
+{
+    /// Most soldiers in the building
+    unsigned soldiers = 0;
+    /// Land radius in nodes
+    unsigned radius = 0;
+    /// Sight in nodes from the building
+    unsigned vision = 0;
+    /// Places for gold coins (promotion) and for armor (leather addon)
+    unsigned coins = 0, armor = 0;
+    /// Index of the built-in military building whose graphics and flag positions are used: 0 Barracks, 1 Guardhouse,
+    /// 2 Watchtower, 3 Fortress
+    unsigned look = 0;
+};
+
 /// Workshop defined in lua (rttr:AddWorkshop)
 struct CustomBuilding
 {
@@ -131,6 +149,10 @@ struct CustomBuilding
     /// warehouse. Its capacity: Content::GetWarehouseCapacity
     std::vector<GoodType> warehouseWares;
     bool IsWarehouse() const { return !warehouseWares.empty(); }
+    /// Military building (military = { ... } in lua): soldiers occupy it and hold the land around it, no worker.
+    /// Empty: no military building
+    std::optional<MilitaryValues> military;
+    bool IsMilitary() const { return military.has_value(); }
     /// Collector: Index of the map object (Content::GetMapObject) the worker collects like the stonemason. -1: none
     int collectObject = -1;
     /// Collector: Maximum distance of the map objects
@@ -311,6 +333,17 @@ public:
     std::optional<BuildingType> FindBuilding(const std::string& identifier, bool allowHeadquarters = false) const;
     /// The building is a warehouse defined in lua (workshop with warehouse = { ... })
     bool IsCustomWarehouse(BuildingType bld) const;
+    /// The building is a military building defined in lua (workshop with military = { ... })
+    bool IsCustomMilitary(BuildingType bld) const;
+    /// Values of a military building (built-in or defined in lua). The built-in tables are the same for every people
+    MilitaryValues GetMilitaryValues(BuildingType bld, Nation nation = Nation::Romans) const;
+    /// All military buildings of the game (built-in and defined in lua), sorted by soldiers, then radius, then order of
+    /// definition (built-in ones first). The old AI takes its roles from this order: the 1st is the smallest, the 2nd
+    /// the "guardhouse", the one before the last the "watchtower", the last the biggest
+    const std::vector<BuildingType>& GetMilitaryBuildings() const { return militaryBuildings_; }
+    /// Military squares (gameData/MilitaryConsts.h, MILITARY_SQUARE_SIZE) around a node that contain every military
+    /// building whose land or sight can reach the land around a building or the node. At least 3 (original)
+    unsigned GetMilitarySearchSquares() const { return militarySearchSquares_; }
     /// A warehouse of the type stores the ware. Built-in warehouses store all wares
     bool WarehouseStores(BuildingType bld, GoodType good) const;
     /// Wares a warehouse of the type holds at most (rttr:SetWarehouseCapacity). 0: any number
@@ -332,6 +365,8 @@ private:
     /// Original costs of a built-in building (boards and stones)
     BuildingCosts makeBuiltinCost(BuildingType bld) const;
     BuildingCosts resolveCost(const std::vector<CostDesc>& desc, const std::string& context) const;
+    /// Sort the military buildings and set the search range (militaryBuildings_, militarySearchSquares_)
+    void initMilitary();
 
     std::vector<CustomWare> wares_;
     std::vector<CustomMapObject> mapObjects_;
@@ -352,6 +387,8 @@ private:
     unsigned toolReorderPercent_ = 10;
     helpers::EnumArray<unsigned, BuildingType> warehouseCapacity_{};
     unsigned flagWorkLimit_ = 8;
+    std::vector<BuildingType> militaryBuildings_;
+    unsigned militarySearchSquares_ = 3;
 };
 
 /// Content of the running game. Empty unless a game in the civilization mode is running.

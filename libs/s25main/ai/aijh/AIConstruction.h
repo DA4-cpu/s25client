@@ -73,6 +73,15 @@ public:
 
     helpers::OptionalEnum<BuildingType> GetSmallestAllowedMilBuilding() const;
     helpers::OptionalEnum<BuildingType> GetBiggestAllowedMilBuilding() const;
+    /// Roles of the military buildings by their place in BuildingProperties::GetMilitaryBuildings() (sorted by
+    /// soldiers, then radius, then order of definition). With the 4 built-in ones: barracks, guardhouse, watchtower,
+    /// fortress. The role of the guardhouse is the 2nd, the one of the watchtower the one before the last
+    static BuildingType GetGuardhouseRole();
+    static BuildingType GetWatchtowerRole();
+    /// The 1st or 2nd (like barracks and guardhouse)
+    static bool IsSmallMilitary(BuildingType bld);
+    /// The last or the one before (like watchtower and fortress)
+    static bool IsBigMilitary(BuildingType bld);
     /// Randomly chooses a military building, preferring bigger buildings if enemy nearby
     helpers::OptionalEnum<BuildingType> ChooseMilitaryBuilding(MapPoint pt);
     /// Checks whether a building type is wanted atm

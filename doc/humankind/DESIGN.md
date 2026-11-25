@@ -2065,6 +2065,57 @@ outputRatio und inputRatio der Werkzeuge als Zahl für alles oder je Tag („Coa
   erste Stück jedes Produkts entsteht (ObsidianWorkshop 7 Produkte mit 0,8, Copperworks 5 mit 0,5, Bronzeworks 9 mit
   0,8): jedes Produkt braucht eigene Schritte. Auf Dauer ist die Menge je Schritt gleich.
 
+## Notizen aus den Lua-Dateien, Schritt 4: Militärgebäude in Lua (C5, Stand 2026-11-25)
+
+Nutzer (25.11.): Vor C1 (eingebaute Gebäude aus Lua steuern) kommen Militärgebäude in Lua, „weil sie auch im Grundspiel
+drinnen sind und du sie nicht adden kannst, bevor du Militärgebäude in Lua geadded hast“. Bestätigt: die Felder
+soldiers, radius, Sichtweite, coins (F-12), dazu armor; die alte KI wählt nach den Werten statt nach dem Typ, mit den
+Rollen nach der sortierten Reihenfolge („Ok, sieht gut aus“).
+
+- **Lua:** `rttr:AddWorkshop{ name = "Palisade", title = "Palisade", size = "small", cost = { BasicBuildingMaterial = 3 },
+  look = "Barracks", knowledge = { MWP = 1 }, military = { soldiers = 3, radius = 9, vision = 14, coins = 1, armor = 1 } }`.
+  - `soldiers` (größte Besatzung, 1–255), `radius` (Landradius in Knoten, 1–255), `coins` (Plätze für Goldmünzen,
+    0–255) sind Pflicht. `vision` (Sichtweite in Knoten vom Gebäude, 1–255) ist freiwillig, Standard Radius + 5 wie bei
+    den eingebauten. `armor` (Plätze für Rüstungen, Leder-Addon, 0–255) ist freiwillig, Standard wie `coins`. Die
+    Grenze 255 kommt vom Spielstand (Besatzungsregler, Münzen und Rüstungen je 1 Byte). Nur ganze Zahlen.
+  - `look` muss Barracks, Guardhouse, Watchtower oder Fortress sein (Grafik, Positionen der Fahnen, Index `size` im
+    Gebäude). `size` small, medium oder large, nicht mine.
+  - Erlaubt sind nur name, title, description, size, cost, look, knowledge und military. worker, inputs, outputs,
+    workTime, waitTime, storage, tools, outputRatio, library, collect, plant, mine, warehouse und aiNearBorder sind ein
+    Ladefehler, ebenso Nebenprodukte (`rttr:AddByproduct`) für ein Militärgebäude.
+  - Code: `MilitaryDesc`, `WorkshopDesc::military` (`CivContentDesc`), `civ::MilitaryValues`,
+    `CustomBuilding::military`, `Content::IsCustomMilitary`, `Content::GetMilitaryValues` (eingebaute aus den Tabellen in
+    `MilitaryConsts.h`, je Volk). Kein Arbeiter (der Berufsplatz bleibt leer wie beim Lager aus Lua).
+- **Spiel:** `BuildingProperties::IsMilitary` ist für diese Gebäude wahr, die Fabrik baut ein `nobMilitary`. Es nimmt
+  Besatzung, Radius, Münzen, Rüstung und Sichtweite aus `Content::GetMilitaryValues` (`GetMaxTroopsCt`,
+  `GetMilitaryRadius`, `GetMaxCoinCt`, `GetMaxArmorCt`, neu `nobBaseMilitary::GetVisualRange`: Radius + 5, beim
+  Militärgebäude `vision`). Alles andere (Besetzen, Angriff, Eroberung, Besatzungsregler, Beförderung, Rüstung,
+  Wissenspunkte ab Fertigstellung, Niederlage) gilt wie bei den eingebauten, weil es über `IsMilitary` und
+  `nobMilitary` läuft. Spielstand unverändert (der Index `size` ist der der Grafik).
+- **Suchweite:** Land und Sicht suchen Militärgebäude in `Content::GetMilitarySearchSquares()` Militärquadraten (je
+  20 Knoten) statt fest 3: so viele, dass Gebäude bis 2 × größter Radius + 2 und bis zur größten Sichtweite gefunden
+  werden, mindestens 3 (mit den eingebauten bleibt es 3). Betroffen: `GameWorld::CreateTerritoryRegion`,
+  `GameWorld::IsPointCompletelyVisible`. Angriffe bleiben bei 3 (Laufweg höchstens 40 Knoten).
+- **Fenster:** Das Militärgebäude-Fenster wird breiter, wenn mehr als 10 Soldaten, Münzen oder Rüstungen hineinpassen
+  (22 Pixel je Platz); die Knöpfe rechts rücken mit. Im Baumenü stehen Militärgebäude aus Lua je nach Größe im passenden
+  Reiter und sind nur wählbar, wo auch die eingebauten erlaubt sind (`iwAction`). Im Produktivitätsfenster fehlen sie
+  wie die eingebauten.
+- **KI (alte KI und Planer):** `Content::GetMilitaryBuildings()` = alle Militärgebäude, sortiert nach `soldiers`, dann
+  `radius`, dann Reihenfolge der Definition (eingebaute zuerst); ersetzt `BuildingProperties::militaryBldTypes`. Rollen
+  (`AIConstruction`): kleinstes = 1., Wachstube = 2. (`GetGuardhouseRole`), Wachturm = vorletztes
+  (`GetWatchtowerRole`), größtes = letztes; „klein“ = 1. oder 2. (`IsSmallMilitary`, früher Baracke oder Wachstube),
+  „groß“ = letztes oder vorletztes (`IsBigMilitary`, früher Wachturm oder Festung). Ist das Gebäude einer Rolle nicht
+  erforscht, weicht die KI aus wie bisher. Umstieg auf ein größeres Gebäude an Plätzen, um die fast nichts bebaubar ist
+  (`Jobs.cpp`): das erste der Reihenfolge mit größerem `size`. Platzsuche im Grenzland wie bei den eingebauten.
+  Militärgebäude aus Lua werden nicht wie Werkstätten um die Lager herum gebaut (`AIPlayerJH`, `BuildingPlanner`),
+  sondern wie die eingebauten über die Militäraufträge. Mit den vier eingebauten ist die Wahl genau wie vorher.
+  Beispiel mit der Palisade: Baracke (2), Palisade (3, Radius 9), Wachstube (3, Radius 12), Wachturm (6), Festung (9);
+  die Palisade hat die Rolle der Wachstube.
+- **Katapult-Grenze** (Addon, Einstellung „proportional“): Militärgebäude aus Lua zählen wie das Gebäude ihres `look`
+  (Baracke 1/8, Wachstube 1/4, Wachturm 1/2, Festung 1).
+- **Tests:** `CivMilitarySuite` (Lua mit Standardwerten, Ladefehler, Reihenfolge und Suchweite, Rollen der alten KI,
+  Land bis Radius 9, Sicht bis 14, Spielstand, Abriss).
+
 ## Gesamtverteilung (Stand 2026-11-21)
 
 Entscheidungen des Nutzers vom 18. bis 21.11.2026 (Chats „Werkzeug-Prüfung für Gebäude“ und „Gesamtverteilung“).

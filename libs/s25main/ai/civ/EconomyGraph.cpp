@@ -139,7 +139,7 @@ void EconomyGraph::AddCustomRecipes(const GameWorldBase& world)
     {
         const BuildingType bld = getCustomBuilding(i);
         const civ::CustomBuilding& building = *content.GetBuilding(bld);
-        if(building.IsLibrary() || building.IsWarehouse())
+        if(building.IsLibrary() || building.IsWarehouse() || building.IsMilitary())
             continue;
         Recipe recipe;
         recipe.building = bld;

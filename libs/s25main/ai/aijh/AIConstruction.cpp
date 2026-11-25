@@ -686,7 +686,7 @@ bool AIConstruction::IsConnectedToRoadSystem(const noFlag* flag) const
 
 helpers::OptionalEnum<BuildingType> AIConstruction::GetSmallestAllowedMilBuilding() const
 {
-    for(BuildingType bld : BuildingProperties::militaryBldTypes)
+    for(BuildingType bld : BuildingProperties::GetMilitaryBuildings())
     {
         if(aii.CanBuildBuildingtype(bld))
             return bld;
@@ -696,12 +696,41 @@ helpers::OptionalEnum<BuildingType> AIConstruction::GetSmallestAllowedMilBuildin
 
 helpers::OptionalEnum<BuildingType> AIConstruction::GetBiggestAllowedMilBuilding() const
 {
-    for(BuildingType bld : boost::adaptors::reverse(BuildingProperties::militaryBldTypes))
+    for(BuildingType bld : boost::adaptors::reverse(BuildingProperties::GetMilitaryBuildings()))
     {
         if(aii.CanBuildBuildingtype(bld))
             return bld;
     }
     return std::nullopt;
+}
+
+BuildingType AIConstruction::GetGuardhouseRole()
+{
+    // There are always the 4 built-in military buildings
+    const std::vector<BuildingType>& military = BuildingProperties::GetMilitaryBuildings();
+    RTTR_Assert(military.size() >= 4u);
+    return military[1];
+}
+
+BuildingType AIConstruction::GetWatchtowerRole()
+{
+    const std::vector<BuildingType>& military = BuildingProperties::GetMilitaryBuildings();
+    RTTR_Assert(military.size() >= 4u);
+    return military[military.size() - 2];
+}
+
+bool AIConstruction::IsSmallMilitary(const BuildingType bld)
+{
+    const std::vector<BuildingType>& military = BuildingProperties::GetMilitaryBuildings();
+    const auto it = helpers::find(military, bld);
+    return it != military.end() && it - military.begin() <= 1;
+}
+
+bool AIConstruction::IsBigMilitary(const BuildingType bld)
+{
+    const std::vector<BuildingType>& military = BuildingProperties::GetMilitaryBuildings();
+    const auto it = helpers::find(military, bld);
+    return it != military.end() && military.end() - it <= 2;
 }
 
 helpers::OptionalEnum<BuildingType> AIConstruction::ChooseMilitaryBuilding(const MapPoint pt)
@@ -721,17 +750,20 @@ helpers::OptionalEnum<BuildingType> AIConstruction::ChooseMilitaryBuilding(const
     const BuildingType biggestBld = GetBiggestAllowedMilBuilding().value();
 
     const Inventory& inventory = aii.GetInventory();
+    // Roles by the place in the sorted military buildings (see GetGuardhouseRole)
+    const BuildingType guardhouse = GetGuardhouseRole();
+    const BuildingType watchtower = GetWatchtowerRole();
     if((inventory.people[Job::Private] < 15 || AI::randomChance(3))
        && (inventory.goods[GoodType::Stones] > 6 || bldPlanner.GetNumBuildings(BuildingType::Quarry) > 0))
-        bld = BuildingType::Guardhouse;
+        bld = guardhouse;
     if(aijh.getAIInterface().isHarborPosClose(pt, 19) && !AI::randomChance(10)
        && aijh.ggs.isEnabled(AddonId::SEA_ATTACK))
     {
-        if(aii.CanBuildBuildingtype(BuildingType::Watchtower))
-            return BuildingType::Watchtower;
+        if(aii.CanBuildBuildingtype(watchtower))
+            return watchtower;
         return GetBiggestAllowedMilBuilding();
     }
-    if(biggestBld == BuildingType::Watchtower || biggestBld == BuildingType::Fortress)
+    if(IsBigMilitary(biggestBld))
     {
         if(!aijh.UpdateUpgradeBuilding() && bldPlanner.GetNumBuildingSites(biggestBld) < 1
            && (inventory.goods[GoodType::Stones] > 20 || bldPlanner.GetNumBuildings(BuildingType::Quarry) > 0)
@@ -787,14 +819,14 @@ helpers::OptionalEnum<BuildingType> AIConstruction::ChooseMilitaryBuilding(const
                 // there are no big building spots in that direction
                 if(AI::randomChance(10))
                 {
-                    if(aii.CanBuildBuildingtype(BuildingType::Guardhouse))
-                        bld = BuildingType::Guardhouse;
+                    if(aii.CanBuildBuildingtype(guardhouse))
+                        bld = guardhouse;
                     else
                         bld = GetSmallestAllowedMilBuilding();
                 } else
                 {
-                    if(aii.CanBuildBuildingtype(BuildingType::Watchtower) && AI::randomChance())
-                        bld = BuildingType::Watchtower;
+                    if(aii.CanBuildBuildingtype(watchtower) && AI::randomChance())
+                        bld = watchtower;
                     else
                         bld = biggestBld;
                 }

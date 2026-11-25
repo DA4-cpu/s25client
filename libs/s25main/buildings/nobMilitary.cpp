@@ -14,6 +14,7 @@
 #include "Ware.h"
 #include "addons/const_addons.h"
 #include "buildings/nobBaseWarehouse.h"
+#include "civ/Content.h"
 #include "figures/nofAggressiveDefender.h"
 #include "figures/nofAttacker.h"
 #include "figures/nofDefender.h"
@@ -48,18 +49,10 @@ nobMilitary::nobMilitary(const BuildingType type, const MapPoint pos, const unsi
     // Gebäude entsprechend als Militärgebäude registrieren und in ein Militärquadrat eintragen
     world->GetMilitarySquares().Add(this);
 
-    // Größe ermitteln
-    switch(type)
-    {
-        case BuildingType::Barracks: size = 0; break;
-        case BuildingType::Guardhouse: size = 1; break;
-        case BuildingType::Watchtower: size = 2; break;
-        case BuildingType::Fortress: size = 3; break;
-        default:
-            RTTR_Assert(false);
-            size = 0xFF;
-            break;
-    }
+    // Größe ermitteln: Index of the built-in military building (graphics, flags). Military buildings defined in lua
+    // (civilization mode) use the one of their look
+    RTTR_Assert(BuildingProperties::IsMilitary(type));
+    size = static_cast<unsigned char>(civ::getActiveContent().GetMilitaryValues(type, nation).look);
     troop_limits.fill(GetMaxTroopsCt());
 
     // Tür aufmachen, bis Gebäude besetzt ist
@@ -397,21 +390,36 @@ void nobMilitary::HandleEvent(const unsigned id)
 
 unsigned nobMilitary::GetMilitaryRadius() const
 {
+    if(isCustomBuilding(bldType_))
+        return civ::getActiveContent().GetMilitaryValues(bldType_).radius;
     return MILITARY_RADIUS[size];
+}
+
+unsigned nobMilitary::GetVisualRange() const
+{
+    if(isCustomBuilding(bldType_))
+        return civ::getActiveContent().GetMilitaryValues(bldType_).vision;
+    return MILITARY_RADIUS[size] + VISUALRANGE_MILITARY;
 }
 
 unsigned nobMilitary::GetMaxCoinCt() const
 {
+    if(isCustomBuilding(bldType_))
+        return civ::getActiveContent().GetMilitaryValues(bldType_).coins;
     return NUM_GOLDS[nation][size];
 }
 
 unsigned nobMilitary::GetMaxArmorCt() const
 {
+    if(isCustomBuilding(bldType_))
+        return civ::getActiveContent().GetMilitaryValues(bldType_).armor;
     return NUM_ARMOR[nation][size];
 }
 
 unsigned nobMilitary::GetMaxTroopsCt() const
 {
+    if(isCustomBuilding(bldType_))
+        return civ::getActiveContent().GetMilitaryValues(bldType_).soldiers;
     return NUM_TROOPS[nation][size];
 }
 
@@ -1106,7 +1114,7 @@ void nobMilitary::Capture(const unsigned char new_owner)
     world->RecalcTerritory(*this, TerritoryChangeReason::Captured);
 
     // Sichtbarkeiten berechnen für alten Spieler
-    world->RecalcVisibilitiesAroundPoint(pos, GetMilitaryRadius() + VISUALRANGE_MILITARY + 1, old_player, nullptr);
+    world->RecalcVisibilitiesAroundPoint(pos, GetVisualRange() + 1, old_player, nullptr);
 
     // Grenzflagge entsprechend neu setzen von den Feinden
     LookForEnemyBuildings();

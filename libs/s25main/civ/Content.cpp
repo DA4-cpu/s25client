@@ -10,6 +10,7 @@
 #include "gameData/BuildingProperties.h"
 #include "gameData/GameConsts.h"
 #include "gameData/JobConsts.h"
+#include "gameData/MilitaryConsts.h"
 #include "gameData/ShieldConsts.h"
 #include "gameData/ToolConsts.h"
 #include "gameData/WorldDescription.h"
@@ -50,6 +51,10 @@ namespace {
         std::sort(rhs.begin(), rhs.end());
         return lhs == rhs;
     }
+
+    /// The built-in military buildings in the order of the original tables (gameData/MilitaryConsts.h)
+    constexpr std::array<BuildingType, NUM_MILITARY_BLDS> BUILTIN_MILITARY_BUILDINGS = {
+      BuildingType::Barracks, BuildingType::Guardhouse, BuildingType::Watchtower, BuildingType::Fortress};
 
 } // namespace
 
@@ -149,6 +154,7 @@ Content::Content()
         if(!isCustomBuilding(bld))
             costs_[bld] = makeBuiltinCost(bld);
     }
+    initMilitary();
 }
 
 Content::Content(const WorldDescription& desc) : Content()
@@ -292,6 +298,39 @@ Content::Content(const WorldDescription& desc) : Content()
             throw GameDataError(context + ": look must be a built-in building, not '" + wsDesc.look + "'");
         bld.look = *look;
         bld.aiNearBorder = wsDesc.aiNearBorder;
+
+        if(wsDesc.military)
+        {
+            // Military building: soldiers hold the land around it, no worker (the slot of the worker stays empty)
+            const auto itLook = helpers::find(BUILTIN_MILITARY_BUILDINGS, bld.look);
+            if(itLook == BUILTIN_MILITARY_BUILDINGS.end())
+            {
+                throw GameDataError(context
+                                    + ": the look of a military building must be a built-in military building "
+                                      "(Barracks, Guardhouse, Watchtower or Fortress), not '"
+                                    + wsDesc.look + "'");
+            }
+            const MilitaryDesc& milDesc = *wsDesc.military;
+            MilitaryValues values;
+            values.soldiers = milDesc.soldiers;
+            values.radius = milDesc.radius;
+            values.vision = milDesc.vision.value_or(milDesc.radius + VISUALRANGE_MILITARY);
+            values.coins = milDesc.coins;
+            values.armor = milDesc.armor.value_or(milDesc.coins);
+            values.look = static_cast<unsigned>(itLook - BUILTIN_MILITARY_BUILDINGS.begin());
+            bld.military = values;
+            bld.aiNearBorder = true;
+            bld.workDesc.job = std::nullopt;
+            bld.workDesc.producedWare = std::nullopt;
+            bld.workDesc.numSpacesPerWare = 0;
+            buildings_.push_back(std::move(bld));
+            CustomWorker noWorker;
+            noWorker.name = wsDesc.name;
+            noWorker.title = wsDesc.title;
+            noWorker.look = Job::Helper;
+            workers_.push_back(std::move(noWorker));
+            continue;
+        }
 
         if(wsDesc.warehouseCapacity > 0)
         {
@@ -502,6 +541,8 @@ Content::Content(const WorldDescription& desc) : Content()
         buildings_.push_back(std::move(bld));
         workers_.push_back(std::move(worker));
     }
+
+    initMilitary();
 
     // Construction costs of built-in buildings: boards and stones unless set in lua. The tags "Boards" and "Stones"
     // also match new wares with them as tag
@@ -741,6 +782,61 @@ bool Content::IsCustomWarehouse(const BuildingType bld) const
 {
     const CustomBuilding* building = GetBuilding(bld);
     return building && building->IsWarehouse();
+}
+
+bool Content::IsCustomMilitary(const BuildingType bld) const
+{
+    const CustomBuilding* building = GetBuilding(bld);
+    return building && building->IsMilitary();
+}
+
+MilitaryValues Content::GetMilitaryValues(const BuildingType bld, const Nation nation) const
+{
+    if(const CustomBuilding* building = GetBuilding(bld))
+        return building->military.value_or(MilitaryValues{});
+    const auto itBuiltin = helpers::find(BUILTIN_MILITARY_BUILDINGS, bld);
+    if(itBuiltin == BUILTIN_MILITARY_BUILDINGS.end())
+        return MilitaryValues{};
+    const auto idx = static_cast<unsigned>(itBuiltin - BUILTIN_MILITARY_BUILDINGS.begin());
+    MilitaryValues values;
+    values.soldiers = static_cast<unsigned>(NUM_TROOPS[nation][idx]);
+    values.radius = MILITARY_RADIUS[idx];
+    values.vision = MILITARY_RADIUS[idx] + VISUALRANGE_MILITARY;
+    values.coins = static_cast<unsigned>(NUM_GOLDS[nation][idx]);
+    values.armor = static_cast<unsigned>(NUM_ARMOR[nation][idx]);
+    values.look = idx;
+    return values;
+}
+
+void Content::initMilitary()
+{
+    militaryBuildings_.assign(BUILTIN_MILITARY_BUILDINGS.begin(), BUILTIN_MILITARY_BUILDINGS.end());
+    for(unsigned i = 0; i < buildings_.size(); ++i)
+    {
+        if(buildings_[i].IsMilitary())
+            militaryBuildings_.push_back(getCustomBuilding(i));
+    }
+    // By soldiers, then radius; equal ones stay in the order of definition (built-in ones first)
+    std::stable_sort(militaryBuildings_.begin(), militaryBuildings_.end(),
+                     [this](const BuildingType lhs, const BuildingType rhs) {
+                         const MilitaryValues lhsValues = GetMilitaryValues(lhs);
+                         const MilitaryValues rhsValues = GetMilitaryValues(rhs);
+                         if(lhsValues.soldiers != rhsValues.soldiers)
+                             return lhsValues.soldiers < rhsValues.soldiers;
+                         return lhsValues.radius < rhsValues.radius;
+                     });
+    // Land around a building reaches radius + 2 (GameWorld::RecalcTerritory), the land of another building reaches
+    // its radius: they can meet if the buildings are up to 2 * the biggest radius + 2 apart. The sight of a building
+    // reaches its vision
+    unsigned maxRadius = std::max(HQ_RADIUS, HARBOR_RADIUS), maxVision = 0;
+    for(const BuildingType bld : militaryBuildings_)
+    {
+        const MilitaryValues values = GetMilitaryValues(bld);
+        maxRadius = std::max(maxRadius, values.radius);
+        maxVision = std::max(maxVision, values.vision);
+    }
+    const unsigned maxDistance = std::max(2 * maxRadius + 2, maxVision);
+    militarySearchSquares_ = std::max(3u, (maxDistance + MILITARY_SQUARE_SIZE - 1) / MILITARY_SQUARE_SIZE);
 }
 
 bool Content::WarehouseStores(const BuildingType bld, const GoodType good) const

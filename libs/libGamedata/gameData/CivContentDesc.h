@@ -165,6 +165,23 @@ struct InputDesc
     unsigned storage = 0;
 };
 
+/// Values of a military building as read from lua (rttr:AddWorkshop, military = { ... })
+struct MilitaryDesc
+{
+    /// Most soldiers in the building
+    unsigned soldiers = 0;
+    /// Land radius in nodes
+    unsigned radius = 0;
+    /// Sight in nodes from the building. Not set: radius + 5 (like the built-in military buildings)
+    std::optional<unsigned> vision;
+    /// Places for gold coins (promotion of the soldiers)
+    unsigned coins = 0;
+    /// Places for armor (leather addon). Not set: same as coins (like the built-in military buildings)
+    std::optional<unsigned> armor;
+};
+/// Highest value of soldiers, radius, vision, coins and armor of a military building (stored with 1 byte)
+constexpr unsigned MAX_MILITARY_VALUE = 255;
+
 /// Simple production building of the civilization mode as read from lua (rttr:AddWorkshop):
 /// Takes input wares and produces an output ware or collects map objects (like the quarry)
 struct WorkshopDesc
@@ -198,6 +215,9 @@ struct WorkshopDesc
     /// people. It has no worker and produces nothing. 0: no warehouse
     unsigned warehouseCapacity = 0;
     std::vector<TagQuery> warehouseWares;
+    /// Military building: soldiers occupy it and hold the land around it. It has no worker and produces nothing.
+    /// Not set: no military building
+    std::optional<MilitaryDesc> military;
     /// Number of wares stored per input
     unsigned storage = 6;
     /// Seconds of work per product and seconds of waiting before

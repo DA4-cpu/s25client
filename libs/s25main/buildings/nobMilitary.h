@@ -122,6 +122,7 @@ public:
 
     /// Liefert Militärradius des Gebäudes
     unsigned GetMilitaryRadius() const override;
+    unsigned GetVisualRange() const override;
     unsigned GetMaxCoinCt() const;
     unsigned GetMaxArmorCt() const;
     unsigned GetMaxTroopsCt() const;

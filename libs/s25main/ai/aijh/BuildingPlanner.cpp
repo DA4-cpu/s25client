@@ -87,7 +87,7 @@ unsigned BuildingPlanner::GetNumBuildingSites(BuildingType type) const
 unsigned BuildingPlanner::GetNumMilitaryBlds() const
 {
     unsigned result = 0;
-    for(BuildingType bld : BuildingProperties::militaryBldTypes)
+    for(BuildingType bld : BuildingProperties::GetMilitaryBuildings())
         result += GetNumBuildings(bld);
     return result;
 }
@@ -95,7 +95,7 @@ unsigned BuildingPlanner::GetNumMilitaryBlds() const
 unsigned BuildingPlanner::GetNumMilitaryBldSites() const
 {
     unsigned result = 0;
-    for(BuildingType bld : BuildingProperties::militaryBldTypes)
+    for(BuildingType bld : BuildingProperties::GetMilitaryBuildings())
         result += GetNumBuildingSites(bld);
     return result;
 }
@@ -536,6 +536,9 @@ void BuildingPlanner::UpdateCustomBuildingsWanted(const AIPlayerJH& aijh)
     {
         const BuildingType bld = getCustomBuilding(i);
         const civ::CustomBuilding& building = *content.GetBuilding(bld);
+        // Military buildings: WantMoreMilitaryBlds (like the built-in ones)
+        if(building.IsMilitary())
+            continue;
         const unsigned numExisting = GetNumBuildings(bld);
         if(GetNumBuildingSites(bld) > 0)
             continue;

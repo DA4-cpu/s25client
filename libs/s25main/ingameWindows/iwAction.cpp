@@ -28,6 +28,7 @@
 #include "world/GameWorldViewer.h"
 #include "nodeObjs/noFlag.h"
 #include "gameData/BuildingConsts.h"
+#include "gameData/BuildingProperties.h"
 #include "gameData/GoodConsts.h"
 #include "gameData/const_gui_ids.h"
 #include <sstream>
@@ -142,10 +143,9 @@ iwAction::iwAction(GameInterface& gi, GameWorldView& gwv, const Tabs& tabs, MapP
 
         if(!military_buildings)
         {
-            building_available[BuildingType::Barracks] = false;
-            building_available[BuildingType::Guardhouse] = false;
-            building_available[BuildingType::Watchtower] = false;
-            building_available[BuildingType::Fortress] = false;
+            // Also the military buildings defined in lua (civilization mode)
+            for(const BuildingType bld : BuildingProperties::GetMilitaryBuildings())
+                building_available[bld] = false;
         }
 
         if(gwv.GetWorld().GetGGS().isEnabled(AddonId::CHANGE_GOLD_DEPOSITS))

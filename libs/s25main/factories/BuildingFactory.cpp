@@ -30,9 +30,11 @@ noBuilding* BuildingFactory::CreateBuilding(GameWorldBase& world, const Building
         case BuildingType::Shipyard: bld = new nobShipYard(pt, player, nation); break;
         case BuildingType::Temple: bld = new nobTemple(pt, player, nation); break;
         default:
-            // Warehouses defined in lua (civilization mode)
+            // Warehouses and military buildings defined in lua (civilization mode)
             if(BuildingProperties::IsWareHouse(type))
                 bld = new nobStorehouse(type, pt, player, nation);
+            else if(BuildingProperties::IsMilitary(type))
+                bld = new nobMilitary(type, pt, player, nation);
             else
                 bld = new nobUsual(type, pt, player, nation);
             break;

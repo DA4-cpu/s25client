@@ -143,12 +143,13 @@ void BuildJob::TryToBuild()
                 // not allow normal buildings (probably important map part)
                 AIInterface& aiInterface = aijh.GetInterface();
                 RTTR_Assert(aiInterface.GetBuildingQuality(foundPos) == aijh.GetAINode(foundPos).bq);
-                if(type != BuildingType::Fortress && aiInterface.GetBuildingQuality(foundPos) != BuildingQuality::Mine
+                const std::vector<BuildingType>& militaryTypes = BuildingProperties::GetMilitaryBuildings();
+                if(type != militaryTypes.back() && aiInterface.GetBuildingQuality(foundPos) != BuildingQuality::Mine
                    && aiInterface.GetBuildingQuality(foundPos) > BUILDING_SIZE[type]
                    && aijh.BQsurroundcheck(foundPos, 6, true, 10) < 10)
                 {
                     // more than 80% is unbuildable in range 7 -> upgrade
-                    for(BuildingType bld : BuildingProperties::militaryBldTypes)
+                    for(BuildingType bld : militaryTypes)
                     {
                         if(BUILDING_SIZE[bld] > BUILDING_SIZE[type] && aiInterface.CanBuildBuildingtype(bld))
                         {
@@ -160,7 +161,7 @@ void BuildJob::TryToBuild()
             } else if(aijh.GetBldPlanner().IsExpansionRequired() && BUILDING_SIZE[type] != BuildingQuality::Hut)
             {
                 // Downgrade to the next smaller building
-                for(BuildingType bld : BuildingProperties::militaryBldTypes | boost::adaptors::reversed)
+                for(BuildingType bld : BuildingProperties::GetMilitaryBuildings() | boost::adaptors::reversed)
                 {
                     if(BUILDING_SIZE[bld] < BUILDING_SIZE[type] && aijh.GetInterface().CanBuildBuildingtype(bld))
                     {

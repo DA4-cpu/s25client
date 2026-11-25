@@ -454,8 +454,9 @@ void AIPlayerJH::PlanNewBuildings(const unsigned gf)
             const civ::Content& content = civ::getActiveContent();
             for(unsigned i = 0; i < content.GetNumBuildings(); ++i)
             {
+                // Military buildings come with AddMilitaryBuildJob
                 const BuildingType bld = getCustomBuilding(i);
-                if(construction->Wanted(bld))
+                if(!BuildingProperties::IsMilitary(bld) && construction->Wanted(bld))
                     AddBuildJobAroundEveryWarehouse(bld);
             }
         }
@@ -1263,8 +1264,12 @@ MapPoint AIPlayerJH::FindPositionForBuildingAround(BuildingType type, const MapP
         default:
             // Civilization mode: Workshops collecting map objects (e.g. loam pit) go next to the objects, mines to
             // their ore, plantations where they can plant
+            // Military buildings defined in lua: in the border land like the built-in ones
             if(const civ::CustomBuilding* custom = civ::getActiveContent().GetBuilding(type);
-               custom && custom->IsCollector())
+               custom && custom->IsMilitary())
+                foundPos =
+                  FindBestPosition(around, AIResource::Borderland, BUILDING_SIZE[type], searchRadius, 1, borderReserve);
+            else if(custom && custom->IsCollector())
                 foundPos = FindCollectorPosition(around, type, *custom, searchRadius, borderReserve);
             else if(custom && custom->IsMine())
                 foundPos = FindCustomMinePosition(around, type, *custom, searchRadius, borderReserve);
@@ -1432,7 +1437,7 @@ void AIPlayerJH::HandleNewMilitaryBuildingOccupied(const MapPoint pt)
             aii.SetCoinsAllowed(pt, true);
         else if(haveUpgradeBld && !mil->IsGoldDisabled())
             aii.SetCoinsAllowed(pt, false);
-    } else if((mil->GetBuildingType() == BuildingType::Barracks || mil->GetBuildingType() == BuildingType::Guardhouse)
+    } else if(AIConstruction::IsSmallMilitary(mil->GetBuildingType())
               && mil->GetBuildingType() != construction->GetBiggestAllowedMilBuilding())
     {
         if(!mil->IsGoldDisabled())
@@ -2664,8 +2669,7 @@ const nobMilitary* AIPlayerJH::UpdateUpgradeBuilding()
         {
             // inland building, tower or fortress
             BuildingType bld = milBld->GetBuildingType();
-            if((bld == BuildingType::Watchtower || bld == BuildingType::Fortress)
-               && milBld->GetFrontierDistance() == FrontierDistance::Far)
+            if(AIConstruction::IsBigMilitary(bld) && milBld->GetFrontierDistance() == FrontierDistance::Far)
             {
                 if(construction->IsConnectedToRoadSystem(milBld->GetFlag()))
                 {

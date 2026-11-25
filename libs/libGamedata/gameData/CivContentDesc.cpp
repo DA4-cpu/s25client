@@ -354,6 +354,56 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         cost = parseBuildingCost(*costValue, context + ", cost");
     luaData.getOrThrow(look, "look");
 
+    if(auto militaryTable = luaData.getOptional<kaguya::LuaTable>("military"))
+    {
+        // A military building: soldiers hold the land around it, no worker, no production
+        CheckedLuaTable militaryData(*militaryTable);
+        const auto readValue = [&](const char* key, const unsigned minValue) -> std::optional<unsigned> {
+            const auto value = militaryData.getOptional<double>(key);
+            if(!value)
+                return std::nullopt;
+            if(*value != std::floor(*value) || *value < minValue || *value > MAX_MILITARY_VALUE)
+            {
+                throw GameDataError(context + ": military " + key + " must be a whole number in ["
+                                    + std::to_string(minValue) + ", " + std::to_string(MAX_MILITARY_VALUE) + "]");
+            }
+            return static_cast<unsigned>(*value);
+        };
+        const auto readRequired = [&](const char* key, const unsigned minValue) {
+            const auto value = readValue(key, minValue);
+            if(!value)
+            {
+                throw GameDataError(context + ": military needs " + key
+                                    + " (military = { soldiers = 2, radius = 10, coins = 1 })");
+            }
+            return *value;
+        };
+        MilitaryDesc mil;
+        mil.soldiers = readRequired("soldiers", 1);
+        mil.radius = readRequired("radius", 1);
+        mil.vision = readValue("vision", 1);
+        mil.coins = readRequired("coins", 0);
+        mil.armor = readValue("armor", 0);
+        militaryData.checkUnused();
+        military = mil;
+        if(size == "mine")
+            throw GameDataError(context + ": a military building can not stand on a mine place (size = \"mine\")");
+        for(const char* key : {"worker", "inputs", "consume", "library", "collect", "plant", "mine", "warehouse",
+                               "output", "outputs", "inheritProperties", "outputChoice", "storage", "workTime",
+                               "waitTime", "tools", "outputRatio", "aiNearBorder"})
+        {
+            if(luaData.getOptional<kaguya::LuaRef>(key))
+            {
+                throw GameDataError(context + ": a military building has no '" + key
+                                    + "' (it only holds soldiers; the AI may always build it near a border)");
+            }
+        }
+        if(const auto knowledgeTable = luaData.getOptional<kaguya::LuaTable>("knowledge"))
+            knowledge = parseKnowledge(*knowledgeTable, true, context + ", knowledge");
+        luaData.checkUnused();
+        return;
+    }
+
     if(auto warehouseTable = luaData.getOptional<kaguya::LuaTable>("warehouse"))
     {
         // A warehouse for some wares: no worker, no production

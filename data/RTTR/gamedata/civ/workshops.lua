@@ -116,6 +116,38 @@ rttr:AddWorkshop{...}:
               Beispiel:
                 rttr:AddWorkshop{ name = "WoodYard", title = "Holzlager", size = "medium", cost = { Boards = 3 },
                     look = "Storehouse", warehouse = { wares = { "Wood", "Boards" }, capacity = 100 } }
+  military    optional: macht das Gebäude zum Militärgebäude statt zur Werkstatt. Es verhält sich wie die eingebauten
+              Militärgebäude: Soldaten besetzen es, es hält das Land im Umkreis radius, es kann angegriffen und erobert
+              werden, die Besatzungsregler gelten, Soldaten werden mit Goldmünzen befördert und tragen mit dem
+              Leder-Addon Rüstung. Wissenspunkte (knowledge) zählen ab Fertigstellung wie bei allen Gebäuden.
+              military = { soldiers = 3, radius = 9, vision = 14, coins = 1, armor = 1 }
+              soldiers  größte Besatzung (1 bis 255)
+              radius    Landradius in Knoten (1 bis 255)
+              vision    optional (Standard radius + 5): Sichtweite in Knoten, vom Gebäude aus gemessen (1 bis 255)
+              coins     Plätze für Goldmünzen (0 bis 255; 0 = keine Beförderung in diesem Gebäude)
+              armor     optional (Standard wie coins): Plätze für Rüstungen (0 bis 255)
+              Zum Vergleich die eingebauten (Soldaten/Radius/Sichtweite/Münzen/Rüstung): Barracks 2/10/15/1/1,
+              Guardhouse 3/12/17/2/2, Watchtower 6/14/19/4/4, Fortress 9/16/21/6/6.
+              look muss ein eingebautes Militärgebäude sein (Barracks, Guardhouse, Watchtower oder Fortress): davon
+              kommen die Grafik und die Positionen der Fahnen. size "small", "medium" oder "large", nicht "mine".
+              Ein Militärgebäude hat nur name, title, description, size, cost, look, knowledge und military; worker,
+              inputs, outputs, workTime, waitTime, storage, tools, outputRatio, library, collect, plant, mine,
+              warehouse und aiNearBorder sind nicht erlaubt (Militärgebäude darf die KI immer an der Grenze bauen).
+              Im Baumenü steht es je nach size im passenden Reiter und ist nur dort wählbar, wo auch die eingebauten
+              Militärgebäude erlaubt sind. Freischalten wie jede Werkstatt über unlocks in techtree.lua.
+              KI: Alle Militärgebäude des Spiels (eingebaute und diese) sind nach soldiers sortiert, bei Gleichstand
+              nach radius, dann nach der Reihenfolge der Definition (eingebaute zuerst). Die alte KI nimmt ihre Rollen
+              aus dieser Reihenfolge: das 1. ist das kleinste, das 2. hat die Rolle der Wachstube, das vorletzte die
+              des Wachturms, das letzte ist das größte. Ist das Gebäude einer Rolle noch nicht erforscht, weicht sie
+              aus wie bei den eingebauten (z.B. auf das größte erlaubte).
+              Beispiel:
+                rttr:AddWorkshop{ name = "Palisade", title = "Palisade", size = "small",
+                    cost = { BasicBuildingMaterial = 3 }, look = "Barracks", knowledge = { MWP = 1 },
+                    military = { soldiers = 3, radius = 9, vision = 14, coins = 1, armor = 1 } }
+                Reihenfolge damit: Barracks (2), Palisade (3, Radius 9), Guardhouse (3, Radius 12), Watchtower (6),
+                Fortress (9). Die Palisade hat die Rolle der Wachstube. Eine Wachstube baut die alte KI dann nur noch,
+                wenn sie an einem Platz, um den fast nichts bebaubar ist, auf das nächstgrößere Gebäude (size)
+                umsteigt: das erste in der Reihenfolge, das größer ist (ai/aijh/Jobs.cpp).
   workTime    Arbeitszeit pro Produkt in Sekunden (Sammler und Plantagen: pro Gang)
   waitTime    optional: Wartezeit vor der Arbeit in Sekunden
   knowledge   optional: Wissenspunkte des fertigen Gebäudes wie in knowledge.lua, z.B. knowledge = { IWP = 2 }.
@@ -129,7 +161,7 @@ rttr:AddWorkshop{...}:
               eingebauten Gebäuden außer Holzfäller, Steinbruch, Fischer, Minen, Hafen und Katapult
               (ai/aijh/AIConstruction.cpp, BORDER_RESERVE_RADIUS und BUILDINGS_NEAR_BORDER).
 
-Man sollte hier auch custom Militärgebäude ergänzen können. und auch die im Spiel integrierten Gebäude anpassen können bzw. alle Gebäude sollten hier als
+Man sollte hier auch die im Spiel integrierten Gebäude anpassen können bzw. alle Gebäude sollten hier als
 lua Werkstatt stehen oder zumdindest von hier aus ansteuerbar sein
 
 Freischalten: In techtree.lua unter unlocks = { buildings = { "Name" } } eintragen. Wird eine Werkstatt von keiner

@@ -50,6 +50,7 @@
 #include "gameData/ShieldConsts.h"
 #include "gameData/ToolConsts.h"
 #include "s25util/Log.h"
+#include <array>
 #include <limits>
 #include <numeric>
 
@@ -2435,9 +2436,13 @@ bool GamePlayer::CanBuildCatapult() const
     // proportional?
     if(world.GetGGS().getSelection(AddonId::LIMIT_CATAPULTS) == 1)
     {
-        max = int(bc.buildings[BuildingType::Barracks] * 0.125 + bc.buildings[BuildingType::Guardhouse] * 0.25
-                  + bc.buildings[BuildingType::Watchtower] * 0.5 + bc.buildings[BuildingType::Fortress]
-                  + 0.111); // to avoid rounding errors
+        // Barracks 1/8, guardhouse 1/4, watchtower 1/2, fortress 1. Military buildings defined in lua count like the
+        // building of their look
+        constexpr std::array<double, 4> weights = {0.125, 0.25, 0.5, 1};
+        double sum = 0;
+        for(const BuildingType bld : BuildingProperties::GetMilitaryBuildings())
+            sum += bc.buildings[bld] * weights[civ::getActiveContent().GetMilitaryValues(bld).look];
+        max = int(sum + 0.111); // to avoid rounding errors
     } else if(world.GetGGS().getSelection(AddonId::LIMIT_CATAPULTS) < 8)
     {
         const std::array<unsigned, 6> limits = {{0, 3, 5, 10, 20, 30}};

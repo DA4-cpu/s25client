@@ -15,6 +15,7 @@
 #include "helpers/mathFuncs.h"
 #include "world/GameWorld.h"
 #include "gameData/BuildingConsts.h"
+#include "gameData/BuildingProperties.h"
 #include "gameData/const_gui_ids.h"
 #include "s25util/colors.h"
 
@@ -42,9 +43,12 @@ void iwBuildingProductivities::setBuildingOrder()
 {
     usedIcons.assign(allIcons.begin(), allIcons.end());
     helpers::erase_if(usedIcons, makeIsUnusedBuilding(player.GetGameWorld().GetGGS()));
-    // Workshops defined in lua (civilization mode)
+    // Workshops defined in lua (civilization mode), not the military buildings (they have no productivity)
     for(unsigned i = 0; i < civ::getActiveContent().GetNumBuildings(); ++i)
-        usedIcons.push_back(getCustomBuilding(i));
+    {
+        if(!BuildingProperties::IsMilitary(getCustomBuilding(i)))
+            usedIcons.push_back(getCustomBuilding(i));
+    }
 }
 
 /// Abstand vom linken, oberen Fensterrand

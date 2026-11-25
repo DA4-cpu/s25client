@@ -18,6 +18,7 @@
 #include "world/GameWorld.h"
 #include "gameData/BuildingProperties.h"
 #include "gameData/GameConsts.h"
+#include "gameData/MilitaryConsts.h"
 #include <boost/pointer_cast.hpp>
 #include <limits>
 
@@ -27,6 +28,11 @@ nobBaseMilitary::nobBaseMilitary(const BuildingType type, const MapPoint pos, co
 {}
 
 nobBaseMilitary::~nobBaseMilitary() = default;
+
+unsigned nobBaseMilitary::GetVisualRange() const
+{
+    return GetMilitaryRadius() + VISUALRANGE_MILITARY;
+}
 
 void nobBaseMilitary::DestroyBuilding()
 {

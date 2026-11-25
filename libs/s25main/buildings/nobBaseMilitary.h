@@ -57,6 +57,9 @@ public:
     /// Gibt Verteidiger zurück
     const nofDefender* GetDefender() const { return defender_; }
 
+    /// Sight in nodes from the building: its military radius + VISUALRANGE_MILITARY (military buildings: their vision)
+    virtual unsigned GetVisualRange() const;
+
     /// Compares according to build time (Age): Bigger objIds are "younger"
     bool operator<(const nobBaseMilitary& other) const noexcept { return GetObjId() > other.GetObjId(); }
 

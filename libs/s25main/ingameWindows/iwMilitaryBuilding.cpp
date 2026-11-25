@@ -26,6 +26,7 @@
 #include "gameData/BuildingConsts.h"
 #include "gameData/MilitaryConsts.h"
 #include "gameData/const_gui_ids.h"
+#include <algorithm>
 
 constexpr unsigned ARMOR_ENABLE_BUTTON_ID = 10 + NUM_SOLDIER_RANKS * 4 + 1;
 constexpr unsigned HEIGHT_OF_ROW = 38;
@@ -47,6 +48,13 @@ iwMilitaryBuilding::iwMilitaryBuilding(GameWorldView& gwv, GameCommandFactory& g
         btOffsetLeatherAddon = DrawPoint(addonStatusMilitaryControl == 0 ? 0 : 36, HEIGHT_OF_ROW);
         btOffset += btOffsetLeatherAddon;
     }
+    // Wider for more than 10 soldiers, coins or armor (22 pixels each, military buildings defined in lua): the buttons
+    // on the right move along
+    const unsigned maxSlots =
+      std::max({building->GetMaxTroopsCt(), building->GetMaxCoinCt(), building->GetMaxArmorCt()});
+    const int slotsWidth = static_cast<int>(22 * maxSlots + 6);
+    if(slotsWidth > 226 + btOffset.x)
+        btOffset.x = slotsWidth - 226;
 
     Resize(Extent(226 + btOffset.x, 194 + btOffset.y));
 

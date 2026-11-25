@@ -5,7 +5,7 @@
 #pragma once
 
 #include "gameTypes/BuildingType.h"
-#include <array>
+#include <vector>
 
 /// Static class to query properties of buildings (building types)
 class BuildingProperties
@@ -14,12 +14,13 @@ public:
     /// Static class only!
     BuildingProperties() = delete;
 
-    /// Stores the bld types that are military blds as a cache
-    static const std::array<BuildingType, 4> militaryBldTypes;
+    /// All military buildings of the running game (built-in and defined in lua), from the fewest soldiers to the most
+    /// (civ::Content::GetMilitaryBuildings)
+    static const std::vector<BuildingType>& GetMilitaryBuildings();
 
     /// True iff the building type is used (not nothing)
     static bool IsValid(BuildingType bld);
-    /// True iff this is a regular military building
+    /// True iff this is a regular military building (also one defined in lua with military = { ... })
     static bool IsMilitary(BuildingType bld);
     /// True iff this is a mine
     static bool IsMine(BuildingType bld);

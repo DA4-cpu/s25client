@@ -4,21 +4,12 @@
 
 #include "BuildingProperties.h"
 #include "civ/Content.h"
-#include "helpers/EnumRange.h"
 #include "gameData/BuildingConsts.h"
 
-const std::array<BuildingType, 4> BuildingProperties::militaryBldTypes = []() {
-    std::array<BuildingType, 4> result{};
-    unsigned cur = 0;
-    for(const auto bld : helpers::enumRange<BuildingType>())
-    {
-        if(BuildingProperties::IsMilitary(bld))
-            result[cur++] = bld;
-    }
-    if(cur != result.size())
-        throw "Invalid size";
-    return result;
-}();
+const std::vector<BuildingType>& BuildingProperties::GetMilitaryBuildings()
+{
+    return civ::getActiveContent().GetMilitaryBuildings();
+}
 
 bool BuildingProperties::IsMilitary(BuildingType bld)
 {
@@ -28,7 +19,8 @@ bool BuildingProperties::IsMilitary(BuildingType bld)
         case BuildingType::Guardhouse:
         case BuildingType::Watchtower:
         case BuildingType::Fortress: return true;
-        default: return false;
+        // Military buildings defined in lua (civilization mode)
+        default: return isCustomBuilding(bld) && civ::getActiveContent().IsCustomMilitary(bld);
     }
 }
 

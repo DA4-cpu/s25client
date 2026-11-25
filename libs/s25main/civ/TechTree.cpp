@@ -168,7 +168,7 @@ TechTree::TechTree(const WorldDescription& desc)
         const auto bld = content_->FindBuilding(bpDesc.building);
         if(!bld)
             throw GameDataError(context + ": not a building");
-        if(!BuildingProperties::IsUsual(*bld) && !isCustomBuilding(*bld))
+        if((!BuildingProperties::IsUsual(*bld) && !isCustomBuilding(*bld)) || content_->IsCustomMilitary(*bld))
             throw GameDataError(context + ": only production buildings can have byproducts");
         Byproduct byproduct;
         const std::vector<GoodType> wares = content_->FindWares(bpDesc.ware);
