@@ -134,7 +134,7 @@ rttr:SetBuildingTools{
     -- Nahrung und Landwirtschaft
     Fishery        = { baseSpeed = 0, tools = { "RodAndLine" } }, -- Fischer
     Hunter         = { baseSpeed = 0, tools = { "Bow" } },        -- Jäger
-    Farm           = { baseSpeed = 0, tools = { "Scythe" } },     -- Bauernhof
+    Farm           = { baseSpeed = 25, tools = { "Scythe" } },    -- Bauernhof
     Bakery         = { baseSpeed = 0, tools = { "Rollingpin" } }, -- Bäcker
     Slaughterhouse = { baseSpeed = 0, tools = { "Cleaver" } },    -- Fleischerei
     Vineyard       = { baseSpeed = 0, tools = { "Shovel" } },     -- Weinberg
