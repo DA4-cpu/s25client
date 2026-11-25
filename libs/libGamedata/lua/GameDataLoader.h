@@ -41,11 +41,11 @@ private:
     void AddWorkshop(const kaguya::LuaTable& data);
     void SetBuilding(const kaguya::LuaTable& data);
     /// Functions replaced by rttr:SetBuilding: they stop the loading with a hint
-    void SetBuildingCost(const kaguya::LuaTable& data);
-    void SetBuildingKnowledge(const kaguya::LuaTable& data);
-    void SetBuildingTools(const kaguya::LuaTable& data);
-    void SetBuildingOutputRatio(const kaguya::LuaTable& data);
-    void SetWarehouseCapacity(const kaguya::LuaTable& data);
+    [[noreturn]] void SetBuildingCost(const kaguya::LuaTable& data);
+    [[noreturn]] void SetBuildingKnowledge(const kaguya::LuaTable& data);
+    [[noreturn]] void SetBuildingTools(const kaguya::LuaTable& data);
+    [[noreturn]] void SetBuildingOutputRatio(const kaguya::LuaTable& data);
+    [[noreturn]] void SetWarehouseCapacity(const kaguya::LuaTable& data);
     void AddMapObject(const kaguya::LuaTable& data);
     void AddOre(const kaguya::LuaTable& data);
     void AddByproduct(const kaguya::LuaTable& data);

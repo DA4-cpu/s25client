@@ -29,11 +29,6 @@ class nofCustomWorker : public nofWorkman
     ResourceType GetMineResource() const;
     /// Definition of the workshop or nullptr
     const civ::CustomBuilding* GetBuildingDesc() const;
-    /// Product of the work step: by the distribution of all wares, by knowledge type or the one product (by the input
-    /// consumed last with inheritProperties). Only products the tools of the work step let yield a ware
-    GoodType ChooseProduct(const civ::CustomBuilding& building);
-    /// outputChoice = "knowledge": Product weighted by the regulator "Wissen" of the owner
-    GoodType ChooseKnowledgeProduct(const civ::CustomBuilding& building) const;
 
 public:
     nofCustomWorker(Job job, MapPoint pos, unsigned char player, nobUsual* workplace);

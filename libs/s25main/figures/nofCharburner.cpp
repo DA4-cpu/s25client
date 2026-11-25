@@ -87,7 +87,7 @@ void nofCharburner::WorkFinished()
         // Is Pile already in the normal "coal harvest mode"?
         if(static_cast<noCharburnerPile*>(no)->GetState() == noCharburnerPile::State::Harvest)
             // Then let's bring a coal to our house
-            ware = GoodType::Coal;
+            ware = TakeStepProduct(GoodType::Coal);
         // One step further
         static_cast<noCharburnerPile*>(no)->NextStep();
         return;
@@ -203,6 +203,9 @@ void nofCharburner::WalkingStarted()
 /// Draws the figure while returning home / entering the building (often carrying wares)
 void nofCharburner::DrawWalkingWithWare(DrawPoint drawPt)
 {
+    // Zivilisationsmodus: ein anderes Produkt (outputs) trägt er wie ein Träger
+    if(DrawCarryingOtherWare(drawPt))
+        return;
     DrawWalking(drawPt, "charburner_bobs", 200);
 }
 

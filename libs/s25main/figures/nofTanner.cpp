@@ -48,10 +48,14 @@ unsigned short nofTanner::GetCarryID() const
 
 void nofTanner::DrawWalkingWithWare(DrawPoint drawPt)
 {
+    // Zivilisationsmodus: ein anderes Produkt (outputs) trägt er wie ein Träger
+    if(DrawCarryingOtherWare(drawPt))
+        return;
     DrawWalking(drawPt, "leather_bobs", leatheraddon::bobIndex[leatheraddon::BobType::TannerCarryingLeatherInOut]);
 }
 
 helpers::OptionalEnum<GoodType> nofTanner::ProduceWare()
 {
-    return GoodType::Leather;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Leather);
 }

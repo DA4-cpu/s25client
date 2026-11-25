@@ -41,5 +41,6 @@ void nofIronfounder::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofIronfounder::ProduceWare()
 {
-    return GoodType::Iron;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Iron);
 }

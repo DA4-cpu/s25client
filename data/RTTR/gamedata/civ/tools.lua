@@ -55,15 +55,15 @@ rttr:SetToolReorder(n): Ein Ersatzwerkzeug wird bestellt, sobald das Werkzeug nu
 
 rttr:AddToolMaterial{ name = "Iron", title = "Iron" }
 
-rttr:AddTool{ ware = "Tongs",      material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Zange
-rttr:AddTool{ ware = "Hammer",     material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Hammer
-rttr:AddTool{ ware = "Axe",        material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Axt
-rttr:AddTool{ ware = "Saw",        material = "Iron", durability = 200, speed = 30, outputRatio = 0.7 } -- Säge
-rttr:AddTool{ ware = "PickAxe",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Spitzhacke
-rttr:AddTool{ ware = "Shovel",     material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schaufel
-rttr:AddTool{ ware = "Crucible",   material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schmelztiegel
-rttr:AddTool{ ware = "Scythe",     material = "Iron", durability = 200, speed = 50, outputRatio = 0.5 } -- Sense
-rttr:AddTool{ ware = "Cleaver",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Beil
+rttr:AddTool{ ware = "IronTongs",  material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Zange
+rttr:AddTool{ ware = "IronHammer", material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Hammer
+rttr:AddTool{ ware = "IronAxe",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Axt
+rttr:AddTool{ ware = "IronSaw",    material = "Iron", durability = 200, speed = 30, outputRatio = 0.7 } -- Säge
+rttr:AddTool{ ware = "IronPickAxe", material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Spitzhacke
+rttr:AddTool{ ware = "IronShovel", material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schaufel
+rttr:AddTool{ ware = "IronCrucible", material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Schmelztiegel
+rttr:AddTool{ ware = "IronScythe", material = "Iron", durability = 200, speed = 50, outputRatio = 0.5 } -- Sense
+rttr:AddTool{ ware = "IronCleaver", material = "Iron", durability = 200, speed = 100, outputRatio = 0 } -- Beil
 rttr:AddTool{ ware = "IronPlough",    material = "Iron", durability = 200, speed = 100, outputRatio = 0 }
 
 rttr:AddToolMaterial{ name = "Copper", title = "Copper" }

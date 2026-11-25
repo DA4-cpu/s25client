@@ -113,6 +113,11 @@ void nofArmorer::HandleDerivedEvent(const unsigned /*id*/)
     }
 }
 
+bool nofArmorer::HasCarryGraphic(const GoodType good) const
+{
+    return good == GoodType::Sword || ConvertShields(good) == GoodType::ShieldRomans;
+}
+
 bool nofArmorer::AreWaresAvailable() const
 {
     return workplace->WaresAvailable() || (HasHalfCost() && sword_shield);
@@ -128,13 +133,13 @@ helpers::OptionalEnum<GoodType> nofArmorer::ProduceWare()
 {
     if(civ::isDistributionActive(*world))
     {
-        // Civilization mode: chosen by the distribution of all wares (shields of all nations count as one ware)
-        const auto& products = civ::getBuildingProducts(*world, BuildingType::Armory).products;
-        sword_shield = civ::chooseProduct(*world, player, products, GetObjId(),
-                                          [this](const GoodType good) { return workplace->GetNumMadeInStep(good); })
-                       == GoodType::Sword;
-    } else
-        sword_shield = !sword_shield;
+        // Zivilisationsmodus: das beim Beginn des Schritts gewählte Produkt aus outputs (nofWorkman::StartWorking;
+        // die Schilde aller Völker zählen als eine Ware, hergestellt wird das des eigenen Volkes)
+        const auto product = TakeStepProduct(GoodType::Sword);
+        sword_shield = product == GoodType::Sword;
+        return product;
+    }
+    sword_shield = !sword_shield;
 
     if(sword_shield)
         return GoodType::Sword;

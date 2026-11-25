@@ -97,7 +97,7 @@ void nofWinegrower::WorkFinished()
         world->SetNO(pos, new noEnvObject(pos, wine_bobs, 7));
 
         // Take harvested grapes into hands
-        ware = GoodType::Grapes;
+        ware = TakeStepProduct(GoodType::Grapes);
     } else
     {
         // If the point got bad (e.g. something was build), abort work
@@ -187,6 +187,9 @@ void nofWinegrower::WalkingStarted()
 
 void nofWinegrower::DrawWalkingWithWare(DrawPoint drawPt)
 {
+    // Zivilisationsmodus: ein anderes Produkt (outputs) trägt er wie ein Träger
+    if(DrawCarryingOtherWare(drawPt))
+        return;
     DrawWalking(drawPt, "wine_bobs", bobIndex[BobTypes::WINEGROWER_WALKING_WITH_FULL_BASKET]);
 }
 

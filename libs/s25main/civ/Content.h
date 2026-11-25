@@ -25,6 +25,7 @@
 
 struct WorldDescription;
 struct CostDesc;
+struct InputDesc;
 
 namespace civ {
 
@@ -117,18 +118,10 @@ struct WorkTimes
 };
 
 /// Workshop defined in lua (rttr:AddWorkshop)
-struct CustomBuilding
+/// Produkte eines Gebäudes (outputs, steps, inheritProperties, outputChoice): Werkstätten aus rttr:AddWorkshop und
+/// eingebaute Gebäude aus rttr:SetBuilding (ohne Angabe die Produkte des Originalspiels)
+struct Products
 {
-    std::string name, title, description;
-    BuildingQuality size;
-    /// Built-in building whose graphics are used
-    BuildingType look;
-    /// What the building needs and produces (job is the custom worker slot)
-    BldWorkDescription workDesc;
-    /// Frames of work per work step, of waiting before the work and of waiting after the work (workTime, waitTime,
-    /// waitAfterTime)
-    unsigned workGFs = 0, waitGFs = 0, waitAfterGFs = 5;
-
     /// Product made from the given input ware (input may be empty, e.g. if nothing was consumed yet)
     GoodType GetProduct(std::optional<GoodType> consumedInput) const;
     /// Work steps the product costs in hundredths (outputs = { { "CopperSword", steps = 1.5 } }: 150). Default 100
@@ -152,6 +145,19 @@ struct CustomBuilding
     std::vector<GoodType> productChoices;
     /// ProductChoice::Knowledge: Knowledge type of each entry of productChoices
     std::vector<KnowledgeType> productChoiceTypes;
+};
+
+struct CustomBuilding : Products
+{
+    std::string name, title, description;
+    BuildingQuality size;
+    /// Built-in building whose graphics are used
+    BuildingType look;
+    /// What the building needs and produces (job is the custom worker slot)
+    BldWorkDescription workDesc;
+    /// Frames of work per work step, of waiting before the work and of waiting after the work (workTime, waitTime,
+    /// waitAfterTime)
+    unsigned workGFs = 0, waitGFs = 0, waitAfterGFs = 5;
     /// Library: stores up to this many knowledge media and produces nothing. 0: normal workshop
     unsigned libraryCapacity = 0;
     /// Warehouse (warehouse = { ... } in lua): stores only these wares (and no people), has no worker. Empty: no
@@ -293,7 +299,7 @@ public:
     /// All tags of the ware: Its identifier, kind and properties
     const std::vector<std::string>& GetTags(GoodType good) const { return tags_[good]; }
     /// New identifier of a built-in ware (rttr:SetWare), also its displayed name. Empty: not renamed
-    const std::string& GetBuiltinName(GoodType good) const { return builtinNames_[good]; }
+    const std::string& GetBuiltinName(GoodType good) const;
     /// Properties of the ware (part of the tags)
     const std::vector<std::string>& GetProperties(GoodType good) const { return properties_[good]; }
     /// True if the ware has all tags of the query
@@ -360,6 +366,10 @@ public:
     /// rttr:SetBuilding or the original value, the addons for the reach have no effect there). Nothing: other building
     /// or a built-in one outside the civilization mode (the original rules apply)
     std::optional<unsigned> GetWorkRadius(BuildingType bld) const;
+    /// Produkte eines Gebäudes im Zivilisationsmodus: Werkstatt (rttr:AddWorkshop) oder eingebautes
+    /// Produktionsgebäude (rttr:SetBuilding, ohne outputs die Produkte des Originalspiels). nullptr: Gebäude ohne
+    /// Produkte aus dem Inhalt (Lager, Militär, Eselzucht, Werft, Katapult, Spähturm, Tempel); dort gilt der Code
+    const Products* GetProducts(BuildingType bld) const;
     /// Ore a built-in mine digs (original or mine = { resource = ... }). Nothing for other buildings
     ResourceType GetMineResource(BuildingType bld) const;
     /// The AI may build the building near a land border (military buildings: always)
@@ -398,6 +408,16 @@ private:
     /// Original costs of a built-in building (boards and stones)
     BuildingCosts makeBuiltinCost(BuildingType bld) const;
     BuildingCosts resolveCost(const std::vector<CostDesc>& desc, const std::string& context) const;
+    /// Eingänge aus Lua (inputs): je Eintrag ein Platz für alle Waren der Tag-Abfrage. defaultStorage: Plätze eines
+    /// Eingangs ohne eigenes storage
+    std::vector<InputSlot> resolveInputs(const std::vector<InputDesc>& inputs, unsigned defaultStorage,
+                                         const std::string& context) const;
+    /// Produkte aus Lua (outputs mit steps, inheritProperties, outputChoice). inputs: die Eingänge des Gebäudes (für
+    /// inheritProperties). singleProduct: Sammler, Plantagen und Minen (genau ein Produkt, keine Wahl)
+    void resolveProducts(Products& result, const std::vector<TagQuery>& outputs,
+                         const std::vector<unsigned>& outputSteps, bool inheritProperties,
+                         const std::string& outputChoice, const std::vector<InputSlot>& inputs, bool singleProduct,
+                         const std::string& context) const;
     /// Sort the military buildings and set the search range (militaryBuildings_, militarySearchSquares_)
     void initMilitary();
     /// Original values of the built-in buildings (builtin_)
@@ -440,6 +460,11 @@ private:
         /// Military building with values of rttr:SetBuilding. Empty: the original tables
         std::optional<MilitaryValues> military;
         bool aiNearBorder = false;
+        /// Produkte (Original oder rttr:SetBuilding). Nur gültig, wenn hasProducts
+        Products products;
+        /// Produktionsgebäude, dessen Produkte der Inhalt festlegt (nicht Lager, Militär und die Gebäude, die vorerst
+        /// wie im Originalspiel bleiben)
+        bool hasProducts = false;
     };
     std::array<BuiltinBuilding, NUM_BUILTIN_BUILDINGS> builtin_;
     std::array<std::string, NUM_BUILTIN_JOBS> builtinJobTitles_;

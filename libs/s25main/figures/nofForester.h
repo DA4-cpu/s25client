@@ -23,6 +23,8 @@ private:
 
     /// Returns the quality of this working point or determines if the worker can work here at all
     PointQuality GetPointQuality(MapPoint pt, bool isBeforeWork) const override;
+    /// Zivilisationsmodus: Jedes Pflanzen verbraucht die Eingänge (inputs in rttr:SetBuilding)
+    void WalkingStarted() override;
 
 public:
     nofForester(MapPoint pos, unsigned char player, nobUsual* workplace);

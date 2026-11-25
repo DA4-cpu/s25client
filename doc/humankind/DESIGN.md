@@ -72,6 +72,7 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-11-25 | **`output` entfällt**, `outputs` übernimmt seine Rolle: ein Eintrag darf mehrere Waren treffen (jede ist ein Produkt), auch für Sammler, Plantagen, Minen, `inheritProperties` und `outputChoice`. |
 | 2026-11-25 | **Militärgebäude in Lua (C5):** `military = { soldiers, radius, vision, coins, armor }` in `rttr:AddWorkshop`; die alte KI wählt ihre Rollen aus der nach Besatzung sortierten Liste aller Militärgebäude (Abschnitt „Schritt 4“). |
 | 2026-11-25 | **Eingebaute Gebäude aus Lua steuern (C1 Teil 1):** `rttr:SetBuilding{ name = ..., ... }` mit vollständigem Eintrag je eingebautem Gebäude in `workshops.lua`; Zeiten in Frames (auch Werkstätten), neues Feld `waitAfterTime`; ein Beruf ist in allen Gebäuden derselbe; die alten `SetBuilding…`-Funktionen, `buildingcosts.lua` und `knowledge.lua` entfallen (Abschnitt „Schritt 5“). |
+| 2026-11-25 | **C1 Teil 2:** `inputs`, `outputs`, `steps`, `inheritProperties`, `outputChoice` für die eingebauten Produktionsgebäude; eingebaute Waren mit eindeutigem Namen (Cobblestones, IronAxe …, IronSword, IronShield, LeatherArmor, alter Name als Tag); Nahrung der Minen als gemischter Platz `Food` mit 6 Plätzen (Abschnitt „Schritt 5“, Teil 2). |
 
 ## Zuordnung Humankind → Siedler
 
@@ -2181,7 +2182,7 @@ stehen“). Entscheidungen des Nutzers (25.11.):
     eingebaute im Zivilisationsmodus: `collect`/`plant` oder der Originalwert 6/6/8/7/2/2/3, ohne Addons), außerhalb
     des Modus wie bisher nach Beruf und Addon. Benutzt vom Sammeln und Pflanzen, vom Förster (Felder des Bauernhofs
     freihalten), Jäger (`HUNTER_RADIUS` 19 als Standard), Prognose und KI.
-  - Mine: `nofMiner::GetRequiredResType` = `Content::GetMineResource`. Das Produkt bleibt das der Mine (Teil 2).
+  - Mine: `nofMiner::GetRequiredResType` = `Content::GetMineResource`. Das Produkt steht seit Teil 2 in `outputs`.
   - Lagerplätze: `storage` setzt `numSpacesPerWare` und die Plätze aller Eingänge.
   - Militär: `Content::GetMilitaryValues` nimmt `military` und `look` der eingebauten Militärgebäude.
 - **KI:** `AIConstruction::IsAllowedNearBorder` = `Content::IsAINearBorder` (die Liste `BUILDINGS_NEAR_BORDER` ist
@@ -2194,6 +2195,74 @@ stehen“). Entscheidungen des Nutzers (25.11.):
   wie vor der Änderung. Tests: `CivBuiltinBuildingsSuite` (ausgelieferte Werte = Original, Werte aus Lua, Ladefehler,
   Kohlemine baut Eisen ab), `GameData/LoadBuiltinBuildings`, `GameData/DetectInvalidBuiltinBuildings`; die Tests der
   Kosten, Werkzeuge, Erträge, Lager und Wissenspunkte nutzen `rttr:SetBuilding`.
+
+### Teil 2: Eingänge und Produkte (umgesetzt 2026-11-25)
+
+Entscheidungen des Nutzers (25.11.):
+- Keine eigene Schreibweise für „genau diese Ware“. Stattdessen werden die eingebauten Waren umbenannt, deren Name
+  zugleich eine Warenart ist. Der ursprüngliche Name kommt als Tag in `kind` (`wares.lua`, `rttr:SetWare`):
+
+  | eingebaut | neuer Name | Tag |
+  |---|---|---|
+  | Stones | Cobblestones | Stones |
+  | Tongs, Hammer, Axe, Saw, PickAxe, Shovel, Crucible, Scythe, Cleaver | IronTongs, IronHammer, IronAxe, IronSaw, IronPickAxe, IronShovel, IronCrucible, IronScythe, IronCleaver | der alte Name |
+  | Sword | IronSword | Sword |
+  | Shield | IronShield | Shield |
+  | Armor | LeatherArmor | Armor |
+
+  Grund: Jeder Eintrag in `outputs` ist eine Tag-Abfrage. `"Stones"` träfe auch LoamBrick (kind Stones), `"Axe"` auch die
+  Kupfer-, Bronze- und Obsidianäxte. Bow, Rollingpin und RodAndLine heißen weiter so (keine andere Ware hat diese
+  Tags). Folgen in den Daten: `tools.lua` nennt die Werkzeuge mit den neuen Namen (`AddTool{ ware = "IronAxe" }`), die
+  Technologiekosten in `techtree.lua` nennen `Cobblestones`. Baukosten `Stones = 4` treffen weiter Cobblestones und
+  LoamBrick (wie vorher). Im Spiel heißen die Waren so (alle Schilde „IronShield“, `Content::GetBuiltinName` über
+  `ConvertShields`).
+- Nahrung der Minen: Variante B, wie bei TinMine und LimeMine: `inputs = { { tags = "Food", storage = 6 } }`, ein
+  gemischter Platz mit 6 Plätzen, 1 beliebige Nahrung je Arbeitsschritt (auch Honig, Tag Food). „any“ des alten
+  Modells ist genau so ein gemischter Platz; nicht nachbilden lässt sich nur die alte Aufteilung in 3 getrennte
+  Plätze mit je 2. Das `inputRatio` der Werkzeuge wirkt jetzt auch in den eingebauten Minen.
+- Testspiele nur noch, um zu prüfen, ob alles läuft; keine Vergleiche der KI.
+- Köhler: Jeder Gang zum Meiler, der Holz oder Getreide bringt (Anlegen und Aufschichten), verbraucht alle Eingänge
+  einmal, mit dem `inputRatio` der Werkzeuge. Die Stufen des Meilers bleiben.
+- Neue Projektregel: Neue Erklärungen im C++-Code auf Deutsch, bestehende englische Kommentare bleiben; die deutschen
+  Texte im Spiel und in den Lua-Daten bleiben vorerst.
+
+Regeln:
+- `rttr:SetBuilding` hat bei den Produktionsgebäuden zusätzlich `inputs`, `outputs` (mit `steps`), `inheritProperties`,
+  `outputChoice`, Bedeutung wie bei `rttr:AddWorkshop`. Ohne `inputs`/`outputs` gilt das Originalspiel; `inputs = { }`
+  heißt: keine Eingänge. `inheritProperties` und `outputChoice` nur mit `outputs` im selben Eintrag (Ladefehler).
+- Sammler (Holzfäller, Steinbruch, Fischer, Jäger): keine `inputs`, genau 1 Produkt. Förster: `inputs` (je Pflanzen
+  verbraucht), keine `outputs`. Bauernhof, Weinberg: `inputs` je Pflanzen verbraucht, Ernten braucht nichts, genau 1
+  Produkt. Köhler: siehe oben, genau 1 Produkt. Minen: genau 1 Produkt. Alle anderen: bis zu 10 Eingänge, beliebig
+  viele Produkte (Gesamtverteilung, `outputChoice = "knowledge"` nach dem Regler „Wissen“).
+- Eselzucht, Werft, Katapult, Spähturm, Tempel, Lager und Militärgebäude haben keine dieser Felder.
+- Ein Eingang aus Lua: jeder Arbeitsschritt braucht von jedem Eingang seine Menge (`useOneWareEach`); Plätze `storage`
+  des Eingangs, sonst `storage` des Eintrags, sonst die Zahl des Originalspiels.
+- Das Produkt „IronShield“ ergibt das Schild des eigenen Volkes (`nofBuildingWorker::TakeStepProduct`).
+- Ein anderes Produkt als das des Originalspiels trägt der Arbeiter wie ein Träger
+  (`nofBuildingWorker::HasCarryGraphic`, `DrawCarryingOtherWare`; Schlosserei: alle 12 Originalwerkzeuge, Waffenschmiede:
+  Schwert und Schilde haben eigene Grafiken).
+- Die Statistik „Gold“ der Münzprägerei zählt nur noch hergestellte Münzen.
+
+Code:
+- `civ::Products` (aus `CustomBuilding` herausgelöst; `CustomBuilding` erbt davon): Produkt, Produkte je Eingangsware,
+  Wahl, steps. `Content::GetProducts(bld)` für Werkstätten und eingebaute Produktionsgebäude (`BuiltinBuilding::products`,
+  ohne Lua die Produkte des Originalspiels: Schlosserei die 12 Werkzeuge, Waffenschmiede Schwert und Schild, beide mit
+  Wahl nach der Gesamtverteilung). `nullptr` für Lager, Militär und die fünf Gebäude, die bleiben.
+- `Content::resolveInputs`, `Content::resolveProducts`: gemeinsam für `rttr:AddWorkshop` und `rttr:SetBuilding`
+  (gleiche Prüfungen und Meldungen).
+- Arbeiter: Die Produktwahl aus `nofCustomWorker` ist nach `nofBuildingWorker` gewandert (`ChooseProduct`,
+  `ChooseKnowledgeProduct`, `ChooseStepProduct`, `TakeStepProduct`). `nofWorkman::StartWorking` wählt für alle
+  Handwerker (vor dem Verbrauch bei einer Wahl, danach sonst). Jede eingebaute Arbeiterklasse gibt ihr Produkt über
+  `TakeStepProduct(Originalprodukt)` aus (außerhalb des Zivilisationsmodus unverändert das Original). Schlosserei und
+  Waffenschmiede wählen im Modus nicht mehr selbst.
+- Bauer und Förster: `WalkingStarted` verbraucht die Eingänge beim Pflanzen, der Bauer prüft vor dem Säen, ob sie da
+  sind (`GetPointQuality`), `AreWaresAvailable` ist für ihn immer wahr (Ernten). Brunnen: prüft jetzt auch die Eingänge.
+- `nobUsual::GetProductSteps`, `CanYieldProducts` und die KI (`EconomyGraph`: Produkte und steps der eingebauten
+  Gebäude aus `Content::GetProducts`, Tempel wie bisher) nutzen dieselben Produkte.
+- Daten: Jeder Eintrag der Produktionsgebäude in `workshops.lua` hat `inputs` und `outputs` mit den bisherigen Werten.
+- Tests: `CivBuiltinBuildingsSuite` (ausgelieferte Eingänge/Produkte = Original, Minen mit Food-Platz, Werte aus Lua,
+  Ladefehler, Steinmetz bringt das Lua-Produkt, Mühle mit anderem Eingang und Produkt, Bauer sät nur mit Eingängen,
+  Mine nimmt jede Nahrung), `GameData/LoadBuiltinBuildings`, `GameData/DetectInvalidBuiltinBuildings`.
 
 ### Später: eingebaute Objekte für andere Gebäude (Entscheidung 25.11.: zusammen mit F1–F4)
 

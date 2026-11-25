@@ -11,6 +11,9 @@
 class nobUsual;
 class nobBaseWarehouse;
 class SerializedGameData;
+namespace civ {
+struct Products;
+}
 
 /// Repräsentiert einen Arbeiter in einem Gebäude
 class nofBuildingWorker : public noFigure
@@ -81,6 +84,29 @@ protected:
     /// Duration of the work outside of the building which is not changed by the work speed of the building (tool
     /// reform). The waiting time before is changed for it instead. 0: the worker works in the building
     virtual unsigned GetOutsideWorkLength() const { return 0; }
+
+    /// Zivilisationsmodus: Produkte des Arbeitsplatzes (Werkstatt oder eingebautes Produktionsgebäude, outputs).
+    /// nullptr außerhalb des Modus und bei Gebäuden, deren Produkt der Code festlegt (Tempel, Eselzucht ...)
+    const civ::Products* GetCivProducts() const;
+    /// Produkt des Arbeitsschritts nach outputChoice: nach der Gesamtverteilung, nach dem Regler "Wissen" oder das eine
+    /// Produkt (mit inheritProperties nach der zuletzt aus dem ersten Eingang verbrauchten Ware). Bei einer Wahl nur
+    /// Produkte, die mit den Werkzeugen des Schritts eine Ware ergeben (wenn es solche gibt)
+    GoodType ChooseProduct(const civ::Products& products);
+    /// outputChoice = "knowledge": Produkt gewichtet nach dem Regler "Wissen" des Besitzers
+    GoodType ChooseKnowledgeProduct(const civ::Products& products) const;
+    /// Wählt das Produkt beim Beginn der Arbeit im Gebäude (nofWorkman::StartWorking): Bei einer Wahl
+    /// (outputChoice, mehrere Produkte) vor dem Verbrauch der Eingänge (beforeConsume), sonst danach (dann entscheidet
+    /// die verbrauchte Ware über das Produkt). Ohne Produkte aus dem Inhalt geschieht nichts
+    void ChooseStepProduct(bool beforeConsume);
+    /// Produkt des fertigen Arbeitsschritts: im Zivilisationsmodus das gewählte bzw. das nach den Produkten des
+    /// Gebäudes (outputs), sonst `original` (das Produkt des Originalspiels). Ein Schild wird das Schild des Volkes
+    helpers::OptionalEnum<GoodType> TakeStepProduct(helpers::OptionalEnum<GoodType> original);
+    /// Der Arbeiter hat eine eigene Grafik, um diese Ware zu tragen (GetCarryID). Sonst trägt er sie wie ein Träger
+    /// (z.B. ein Holzfäller, der eine andere Ware als Holz bringt)
+    virtual bool HasCarryGraphic(GoodType good) const;
+    /// Zeichnet den Arbeiter mit einer Ware ohne eigene Grafik wie einen Träger. false: die Ware hat eine eigene
+    /// Grafik (oder er trägt nichts), es wurde nichts gezeichnet
+    bool DrawCarryingOtherWare(DrawPoint drawPt);
 
 private:
     /// Wares to put at the flag when carrying out `ware`: the ware itself and its byproducts (civilization mode)

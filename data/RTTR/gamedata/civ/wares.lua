@@ -57,10 +57,26 @@ Baumaterial hat diese Eigenschaften bspw. hat Rope keine Eigenschaften. Dieses B
 
 rttr:SetWare{ Wood = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
 rttr:SetWare{ Boards = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
-rttr:SetWare{ Stones = { kind = { "BasicBuildingMaterial", "BasicRoofMaterial" } } }
+rttr:SetWare{ Stones = { name = "Cobblestones", kind = { "Stones", "BasicBuildingMaterial", "BasicRoofMaterial" } } }
 rttr:SetWare{ Fish = { kind = { "Food" } } }
 rttr:SetWare{ Meat = { kind = { "Food" } } }
 rttr:SetWare{ Bread = { kind = { "Food" } } }
+
+-- Eingebaute Waren mit eindeutigem Namen: Der ursprüngliche Name ist ein Tag (kind), den auch die neuen Waren derselben
+-- Art tragen (z.B. CopperAxe mit kind = "Axe"). Wo genau die eingebaute Ware gemeint ist (Produkte der eingebauten
+-- Gebäude in workshops.lua, Werkzeuge in tools.lua), steht der neue Name.
+rttr:SetWare{ Tongs = { name = "IronTongs", kind = { "Tongs" } } }
+rttr:SetWare{ Hammer = { name = "IronHammer", kind = { "Hammer" } } }
+rttr:SetWare{ Axe = { name = "IronAxe", kind = { "Axe" } } }
+rttr:SetWare{ Saw = { name = "IronSaw", kind = { "Saw" } } }
+rttr:SetWare{ PickAxe = { name = "IronPickAxe", kind = { "PickAxe" } } }
+rttr:SetWare{ Shovel = { name = "IronShovel", kind = { "Shovel" } } }
+rttr:SetWare{ Crucible = { name = "IronCrucible", kind = { "Crucible" } } }
+rttr:SetWare{ Scythe = { name = "IronScythe", kind = { "Scythe" } } }
+rttr:SetWare{ Cleaver = { name = "IronCleaver", kind = { "Cleaver" } } }
+rttr:SetWare{ Sword = { name = "IronSword", kind = { "Sword" } } }
+rttr:SetWare{ Shield = { name = "IronShield", kind = { "Shield" } } }
+rttr:SetWare{ Armor = { name = "LeatherArmor", kind = { "Armor" } } }
 
 
 rttr:AddWare{ name = "Loam", title = "Lehm", properties = { "muddy" }, look = "Leather", transport = "Boards" }

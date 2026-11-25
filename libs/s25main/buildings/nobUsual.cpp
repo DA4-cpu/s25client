@@ -853,8 +853,9 @@ unsigned nobUsual::GetSavedSteps(const GoodType product) const
 
 unsigned nobUsual::GetProductSteps(const GoodType product) const
 {
-    const civ::CustomBuilding* desc = civ::isEnabled(*world) ? civ::getActiveContent().GetBuilding(bldType_) : nullptr;
-    return desc ? desc->GetProductSteps(product) : 100u;
+    // Werkstätten und eingebaute Produktionsgebäude (steps in outputs)
+    const civ::Products* products = civ::isEnabled(*world) ? civ::getActiveContent().GetProducts(bldType_) : nullptr;
+    return products ? products->GetProductSteps(product) : 100u;
 }
 
 unsigned nobUsual::GetNumMadeInStep(const GoodType product) const
@@ -893,7 +894,7 @@ bool nobUsual::CanYieldProducts() const
         return GetStepOutputRatio(std::nullopt) > 0;
     // Any of the products
     std::vector<GoodType> products;
-    if(const civ::CustomBuilding* desc = content.GetBuilding(bldType_))
+    if(const civ::Products* desc = content.GetProducts(bldType_))
         products = desc->GetAllProducts();
     else
         products = civ::getBuildingProducts(*world, bldType_).products;

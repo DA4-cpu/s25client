@@ -14,11 +14,14 @@
 #include "buildings/nobUsual.h"
 #include "civ/Content.h"
 #include "civ/Research.h"
+#include "civ/TechTree.h"
 #include "civ/WareDistribution.h"
 #include "helpers/MaxEnumValue.h"
 #include "helpers/serializeEnums.h"
+#include "random/Random.h"
 #include "world/GameWorld.h"
 #include "nodeObjs/noFlag.h"
+#include "gameData/BuildingConsts.h"
 #include "gameData/JobConsts.h"
 #include "gameData/ShieldConsts.h"
 #include <algorithm>
@@ -431,9 +434,136 @@ void nofBuildingWorker::WorkplaceReached() {}
 /// Zeichnen der Figur in sonstigen Arbeitslagen
 void nofBuildingWorker::DrawOtherStates(DrawPoint) {}
 
+const civ::Products* nofBuildingWorker::GetCivProducts() const
+{
+    if(!workplace || !civ::isEnabled(*world))
+        return nullptr;
+    return civ::getActiveContent().GetProducts(workplace->GetBuildingType());
+}
+
+GoodType nofBuildingWorker::ChooseKnowledgeProduct(const civ::Products& products) const
+{
+    // Gewichtet nach dem Regler "Wissen" des Besitzers (synchroner Zufall des Spiels, alle Rechner wählen gleich).
+    // Sind alle Gewichte der möglichen Produkte 0, sind alle gleich wahrscheinlich. Produkte, die mit den Werkzeugen
+    // des Schritts keine Ware ergeben, sind nicht möglich (außer keines ergibt eine)
+    std::vector<bool> possible;
+    for(const GoodType good : products.productChoices)
+        possible.push_back(workplace->GetStepOutputRatio(good) > 0);
+    if(std::none_of(possible.begin(), possible.end(), [](const bool value) { return value; }))
+        possible.assign(possible.size(), true);
+    std::vector<unsigned> weights;
+    const civ::PlayerResearch& research = world->GetPlayer(player).GetResearch();
+    const auto distribution = research.GetKnowledgeDistribution(world->GetTechTree());
+    for(unsigned i = 0; i < products.productChoiceTypes.size(); ++i)
+        weights.push_back(possible[i] ? distribution[products.productChoiceTypes[i]] : 0u);
+    unsigned totalWeight = 0;
+    for(const unsigned weight : weights)
+        totalWeight += weight;
+    if(totalWeight == 0)
+    {
+        for(unsigned i = 0; i < weights.size(); ++i)
+            weights[i] = possible[i] ? 1u : 0u;
+        totalWeight = static_cast<unsigned>(std::count(possible.begin(), possible.end(), true));
+    }
+    unsigned pick = RANDOM_RAND(totalWeight);
+    for(unsigned i = 0; i < weights.size(); ++i)
+    {
+        if(pick < weights[i])
+            return products.productChoices[i];
+        pick -= weights[i];
+    }
+    return products.productChoices.back();
+}
+
+GoodType nofBuildingWorker::ChooseProduct(const civ::Products& products)
+{
+    switch(products.productChoice)
+    {
+        case civ::ProductChoice::Distribution:
+        {
+            std::vector<GoodType> candidates;
+            for(const GoodType good : products.productChoices)
+            {
+                if(workplace->GetStepOutputRatio(good) > 0)
+                    candidates.push_back(good);
+            }
+            if(candidates.empty())
+                candidates = products.productChoices;
+            return civ::chooseProduct(*world, player, candidates, GetObjId(),
+                                      [this](const GoodType good) { return workplace->GetNumMadeInStep(good); });
+        }
+        case civ::ProductChoice::Knowledge: return ChooseKnowledgeProduct(products);
+        case civ::ProductChoice::None: break;
+    }
+    const auto consumed = workplace->GetLastConsumedWare();
+    return products.GetProduct(consumed ? std::optional<GoodType>(*consumed) : std::nullopt);
+}
+
+void nofBuildingWorker::ChooseStepProduct(const bool beforeConsume)
+{
+    const civ::Products* products = GetCivProducts();
+    if(!products)
+        return;
+    const bool choice = products->productChoice != civ::ProductChoice::None;
+    if(beforeConsume)
+    {
+        // Mehrere Produkte: für jeden Arbeitsschritt neu gewählt, die angesparten Schritte zählen dabei nicht (Nutzer,
+        // 2026-11-25). Bestellungen werden dabei abgehakt (civ::chooseProduct)
+        workplace->SetChosenProduct(std::nullopt);
+        if(products->HasProduct() && choice)
+            workplace->SetChosenProduct(ChooseProduct(*products));
+        return;
+    }
+    if(!products->HasProduct() || choice)
+        return;
+    // Ein Produkt: mit inheritProperties entscheidet die aus dem ersten Eingang verbrauchte Ware
+    const GoodType product = ChooseProduct(*products);
+    workplace->SetChosenProduct(product);
+    // Mehrere Produkte nach den Eingängen: ihre Bestellungen jetzt (ein Produkt: beim Beginn des Schritts)
+    if(products->GetAllProducts().size() > 1u)
+        civ::processOrders(*world, player, product, workplace->GetNumMadeInStep(product));
+}
+
+helpers::OptionalEnum<GoodType> nofBuildingWorker::TakeStepProduct(const helpers::OptionalEnum<GoodType> original)
+{
+    const civ::Products* products = GetCivProducts();
+    if(!products)
+        return original;
+    if(!products->HasProduct())
+        return std::nullopt;
+    const auto chosen = workplace->GetChosenProduct();
+    workplace->SetChosenProduct(std::nullopt);
+    GoodType product = chosen ? *chosen : ChooseProduct(*products);
+    // Schilde: Die Produkte nennen das Schild der Römer, hergestellt wird das Schild des eigenen Volkes
+    if(ConvertShields(product) == GoodType::ShieldRomans)
+        product = SHIELD_TYPES[world->GetPlayer(player).nation];
+    return product;
+}
+
+bool nofBuildingWorker::HasCarryGraphic(const GoodType good) const
+{
+    // Werkstätten tragen ihre Waren immer wie Träger (GetCarryID der Werkstatt-Arbeiter); eingebaute Gebäude haben
+    // eine Grafik für das Produkt des Originalspiels
+    if(!workplace || isCustomBuilding(workplace->GetBuildingType()))
+        return true;
+    const auto& produced = BUILTIN_BLD_WORK_DESC[static_cast<unsigned>(workplace->GetBuildingType())].producedWare;
+    const auto* original = boost::variant2::get_if<GoodType>(&produced);
+    return original && *original == good;
+}
+
+bool nofBuildingWorker::DrawCarryingOtherWare(const DrawPoint drawPt)
+{
+    if(!ware || HasCarryGraphic(*ware))
+        return false;
+    DrawWalkingCarrier(drawPt, *ware, JOB_SPRITE_CONSTS[job_].isFat());
+    return true;
+}
+
 /// Zeichnet Figur beim Hereinlaufen/nach Hause laufen mit evtl. getragenen Waren
 void nofBuildingWorker::DrawWalkingWithWare(DrawPoint drawPt)
 {
+    if(DrawCarryingOtherWare(drawPt))
+        return;
     unsigned short id = GetCarryID();
     // >=CARRY_ID_CARRIER_OFFSET -> carrier.bob else jobs.bob!
     if(id >= CARRY_ID_CARRIER_OFFSET)

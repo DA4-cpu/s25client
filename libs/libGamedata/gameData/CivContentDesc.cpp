@@ -680,6 +680,38 @@ BuiltinBuildingDesc::BuiltinBuildingDesc(const kaguya::LuaTable& luaTable)
         warehouseCapacity = static_cast<unsigned>(*capacity);
         warehouseData.checkUnused();
     }
+    if(const auto inputTable = luaData.getOptional<kaguya::LuaTable>("inputs"))
+    {
+        // Eine leere Liste ist erlaubt: das Gebäude arbeitet dann ohne Eingänge
+        std::vector<InputDesc> parsed;
+        for(const kaguya::LuaRef& entry : inputTable->values())
+            parsed.push_back(parseInput(entry, context + ", inputs"));
+        if(parsed.size() > MAX_WORKSHOP_INPUTS)
+            throw GameDataError(context + ": at most " + std::to_string(MAX_WORKSHOP_INPUTS) + " inputs are possible");
+        inputs = std::move(parsed);
+    }
+    if(const auto outputsTable = luaData.getOptional<kaguya::LuaTable>("outputs"))
+    {
+        std::vector<TagQuery> parsed;
+        for(const kaguya::LuaRef& entry : outputsTable->values())
+        {
+            TagQuery tags;
+            outputSteps.push_back(parseOutput(entry, tags, context + ", outputs"));
+            parsed.push_back(std::move(tags));
+        }
+        if(parsed.empty())
+            throw GameDataError(context + ": outputs is empty");
+        if(parsed.size() > MAX_WORKSHOP_OUTPUTS)
+        {
+            throw GameDataError(context + ": at most " + std::to_string(MAX_WORKSHOP_OUTPUTS)
+                                + " entries in outputs are possible");
+        }
+        outputs = std::move(parsed);
+    }
+    inheritProperties = luaData.getOptional<bool>("inheritProperties");
+    outputChoice = luaData.getOptional<std::string>("outputChoice");
+    if((inheritProperties || outputChoice) && !outputs)
+        throw GameDataError(context + ": inheritProperties and outputChoice need outputs in the same entry");
     luaData.checkUnused();
 }
 

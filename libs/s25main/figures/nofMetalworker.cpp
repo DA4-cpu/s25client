@@ -142,11 +142,9 @@ bool nofMetalworker::AreWaresAvailable() const
 
 bool nofMetalworker::StartWorking()
 {
+    // Zivilisationsmodus: Das Produkt wählt nofWorkman::StartWorking nach der Gesamtverteilung (outputs)
     if(civ::isDistributionActive(*world))
-    {
-        nextProducedTool = ChooseByDistribution();
         return nofWorkman::StartWorking();
-    }
     nextProducedTool = GetOrderedTool();
     if(!nextProducedTool)
         nextProducedTool = GetRandomTool();
@@ -217,12 +215,11 @@ helpers::OptionalEnum<GoodType> nofMetalworker::GetRandomTool()
 
 helpers::OptionalEnum<GoodType> nofMetalworker::ProduceWare()
 {
-    return nextProducedTool;
+    // Zivilisationsmodus: das gewählte Produkt aus outputs, sonst das bestellte bzw. zufällige Werkzeug
+    return TakeStepProduct(nextProducedTool);
 }
 
-GoodType nofMetalworker::ChooseByDistribution()
+bool nofMetalworker::HasCarryGraphic(const GoodType good) const
 {
-    const auto& products = civ::getBuildingProducts(*world, BuildingType::Metalworks).products;
-    return civ::chooseProduct(*world, player, products, GetObjId(),
-                              [this](const GoodType good) { return workplace->GetNumMadeInStep(good); });
+    return helpers::contains(TOOL_TO_GOOD, good);
 }

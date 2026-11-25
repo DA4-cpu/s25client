@@ -20,6 +20,8 @@ protected:
     void DrawWorking(DrawPoint drawPt) override;
     /// Id in jobs.bob or carrier.bob when carrying a ware
     unsigned short GetCarryID() const override;
+    /// Eigene Grafik für Schwert und Schilde
+    bool HasCarryGraphic(GoodType good) const override;
     /// Der Arbeiter erzeugt eine Ware
     helpers::OptionalEnum<GoodType> ProduceWare() override;
     void HandleDerivedEvent(unsigned id) override;

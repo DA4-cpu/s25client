@@ -30,6 +30,12 @@ private:
     /// Returns the quality of this working point or determines if the worker can work here at all
     PointQuality GetPointQuality(MapPoint pt, bool isBeforeWork) const override;
     using nofFarmhand::GetPointQuality;
+    /// Zivilisationsmodus: Jedes Säen verbraucht die Eingänge (inputs in rttr:SetBuilding), Ernten nicht
+    void WalkingStarted() override;
+    /// Ernten braucht keine Waren; ob er säen kann, prüft GetPointQuality
+    bool AreWaresAvailable() const override;
+    /// Das Gebäude hat Eingänge (nur im Zivilisationsmodus mit inputs möglich)
+    bool HasInputs() const;
 
 public:
     nofFarmer(MapPoint pos, unsigned char player, nobUsual* workplace);

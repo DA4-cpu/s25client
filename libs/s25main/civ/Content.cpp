@@ -106,7 +106,7 @@ namespace {
 
 } // namespace
 
-GoodType CustomBuilding::GetProduct(std::optional<GoodType> consumedInput) const
+GoodType Products::GetProduct(std::optional<GoodType> consumedInput) const
 {
     if(productByInput.empty())
         return product;
@@ -121,7 +121,7 @@ GoodType CustomBuilding::GetProduct(std::optional<GoodType> consumedInput) const
     return productByInput.front().second;
 }
 
-unsigned CustomBuilding::GetProductSteps(const GoodType good) const
+unsigned Products::GetProductSteps(const GoodType good) const
 {
     for(const auto& entry : productSteps)
     {
@@ -131,7 +131,7 @@ unsigned CustomBuilding::GetProductSteps(const GoodType good) const
     return 100;
 }
 
-std::vector<GoodType> CustomBuilding::GetAllProducts() const
+std::vector<GoodType> Products::GetAllProducts() const
 {
     if(!productChoices.empty())
         return productChoices;
@@ -463,119 +463,18 @@ Content::Content(const WorldDescription& desc) : Content()
         }
 
         // Inputs: a place for all wares of the tag query each
-        for(const InputDesc& input : wsDesc.inputs)
-        {
-            InputSlot slot;
-            slot.wares = FindWares(input.tags);
-            if(slot.wares.empty())
-                throw GameDataError(context + ": input " + joinTags(input.tags) + " matches no ware");
-            slot.amount = static_cast<uint16_t>(input.amount);
-            slot.storage = static_cast<uint8_t>(input.storage != 0 ? input.storage : wsDesc.storage);
-            if(slot.amount > slot.storage * 100u)
-            {
-                throw GameDataError(context + ": input " + joinTags(input.tags)
-                                    + " needs more wares per work step (amount) than it holds (storage)");
-            }
-            bld.workDesc.inputs.push_back(std::move(slot));
-        }
-
-        // Products: every ware matching an entry of outputs (an entry may match several, e.g. all carved bones)
+        bld.workDesc.inputs = resolveInputs(wsDesc.inputs, wsDesc.storage, context);
         const bool hasOutput = !wsDesc.outputs.empty();
-        std::vector<GoodType> outputMatches;
-        for(unsigned k = 0; k < wsDesc.outputs.size(); ++k)
-        {
-            const TagQuery& query = wsDesc.outputs[k];
-            const std::vector<GoodType> matches = FindWares(query);
-            if(matches.empty())
-                throw GameDataError(context + ": entry " + joinTags(query) + " of outputs matches no ware");
-            const unsigned steps = k < wsDesc.outputSteps.size() ? wsDesc.outputSteps[k] : 100u;
-            for(const GoodType good : matches)
-            {
-                if(helpers::contains(outputMatches, good))
-                {
-                    throw GameDataError(context + ": the ware '" + getIdentifierOf(good)
-                                        + "' is in outputs twice (entry " + joinTags(query) + ")");
-                }
-                outputMatches.push_back(good);
-                if(steps != 100u)
-                    bld.productSteps.emplace_back(good, steps);
-            }
-        }
         if(!hasOutput)
         {
             // Plantation that only plants (like the forester)
             if(wsDesc.inheritProperties || !wsDesc.outputChoice.empty())
                 throw GameDataError(context + ": inheritProperties and outputChoice need outputs");
+        } else
+        {
+            resolveProducts(bld, wsDesc.outputs, wsDesc.outputSteps, wsDesc.inheritProperties, wsDesc.outputChoice,
+                            bld.workDesc.inputs, bld.IsCollector() || bld.IsPlanter() || bld.IsMine(), context);
         }
-        if(!wsDesc.outputChoice.empty() && (bld.IsCollector() || bld.IsPlanter() || bld.IsMine()))
-            throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
-        if(wsDesc.inheritProperties)
-        {
-            // The ware used from the first input decides the product
-            if(bld.workDesc.inputs.empty())
-                throw GameDataError(context + ": inheritProperties requires inputs");
-            for(const GoodType input : bld.workDesc.inputs.front().wares)
-            {
-                std::vector<GoodType> products;
-                for(const GoodType candidate : outputMatches)
-                {
-                    if(sameProperties(GetProperties(candidate), GetProperties(input)))
-                        products.push_back(candidate);
-                }
-                if(products.size() != 1u)
-                {
-                    throw GameDataError(context + ": for input '" + getIdentifierOf(input) + "' "
-                                        + std::to_string(products.size())
-                                        + " wares of outputs have the same properties (expected exactly 1)");
-                }
-                bld.productByInput.emplace_back(input, products.front());
-            }
-        } else if(wsDesc.outputChoice == "knowledge")
-        {
-            // One product per knowledge type, e.g. carved bones for LWP, IWP and MWP
-            for(const GoodType candidate : outputMatches)
-            {
-                const KnowledgePoints knowledge = GetKnowledgeOf(candidate);
-                std::vector<KnowledgeType> types;
-                for(const auto type : helpers::enumRange<KnowledgeType>())
-                {
-                    if(knowledge[type] != 0)
-                        types.push_back(type);
-                }
-                if(types.size() != 1u)
-                {
-                    throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of outputs"
-                                        + " needs knowledge points of exactly one type (LWP, IWP or MWP), but '"
-                                        + getIdentifierOf(candidate) + "' has " + std::to_string(types.size()));
-                }
-                bld.productChoiceTypes.push_back(types.front());
-            }
-            bld.productChoice = ProductChoice::Knowledge;
-            bld.productChoices = outputMatches;
-            bld.product = outputMatches.front();
-        } else if(!wsDesc.outputChoice.empty())
-        {
-            throw GameDataError(context + ": outputChoice '" + wsDesc.outputChoice
-                                + "' does not exist. Only \"knowledge\" is left: a workshop with several products is "
-                                  "steered by the distribution of all wares (Gesamtverteilung)");
-        } else if(hasOutput && outputMatches.size() > 1u)
-        {
-            if(bld.IsCollector() || bld.IsPlanter() || bld.IsMine())
-                throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
-            for(const GoodType candidate : outputMatches)
-            {
-                const KnowledgePoints knowledge = GetKnowledgeOf(candidate);
-                if(std::any_of(knowledge.begin(), knowledge.end(), [](const auto points) { return points != 0; }))
-                {
-                    throw GameDataError(context + ": the product '" + getIdentifierOf(candidate)
-                                        + "' is a knowledge medium: several of them need outputChoice = \"knowledge\"");
-                }
-            }
-            bld.productChoice = ProductChoice::Distribution;
-            bld.productChoices = outputMatches;
-            bld.product = outputMatches.front();
-        } else if(hasOutput)
-            bld.product = outputMatches.front();
 
         bld.workDesc.job = getCustomJob(i);
         if(!hasOutput)
@@ -868,6 +767,126 @@ MilitaryValues Content::GetMilitaryValues(const BuildingType bld, const Nation n
     return values;
 }
 
+std::vector<InputSlot> Content::resolveInputs(const std::vector<InputDesc>& inputs, const unsigned defaultStorage,
+                                              const std::string& context) const
+{
+    std::vector<InputSlot> result;
+    for(const InputDesc& input : inputs)
+    {
+        InputSlot slot;
+        slot.wares = FindWares(input.tags);
+        if(slot.wares.empty())
+            throw GameDataError(context + ": input " + joinTags(input.tags) + " matches no ware");
+        slot.amount = static_cast<uint16_t>(input.amount);
+        slot.storage = static_cast<uint8_t>(input.storage != 0 ? input.storage : defaultStorage);
+        if(slot.amount > slot.storage * 100u)
+        {
+            throw GameDataError(context + ": input " + joinTags(input.tags)
+                                + " needs more wares per work step (amount) than it holds (storage)");
+        }
+        result.push_back(std::move(slot));
+    }
+    return result;
+}
+
+void Content::resolveProducts(Products& result, const std::vector<TagQuery>& outputs,
+                              const std::vector<unsigned>& outputSteps, const bool inheritProperties,
+                              const std::string& outputChoice, const std::vector<InputSlot>& inputs,
+                              const bool singleProduct, const std::string& context) const
+{
+    result = Products{};
+    // Products: every ware matching an entry of outputs (an entry may match several, e.g. all carved bones)
+    std::vector<GoodType> outputMatches;
+    for(unsigned k = 0; k < outputs.size(); ++k)
+    {
+        const TagQuery& query = outputs[k];
+        const std::vector<GoodType> matches = FindWares(query);
+        if(matches.empty())
+            throw GameDataError(context + ": entry " + joinTags(query) + " of outputs matches no ware");
+        const unsigned steps = k < outputSteps.size() ? outputSteps[k] : 100u;
+        for(const GoodType good : matches)
+        {
+            if(helpers::contains(outputMatches, good))
+            {
+                throw GameDataError(context + ": the ware '" + getIdentifierOf(good) + "' is in outputs twice (entry "
+                                    + joinTags(query) + ")");
+            }
+            outputMatches.push_back(good);
+            if(steps != 100u)
+                result.productSteps.emplace_back(good, steps);
+        }
+    }
+    if(!outputChoice.empty() && singleProduct)
+        throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
+    if(inheritProperties)
+    {
+        // The ware used from the first input decides the product
+        if(inputs.empty())
+            throw GameDataError(context + ": inheritProperties requires inputs");
+        for(const GoodType input : inputs.front().wares)
+        {
+            std::vector<GoodType> products;
+            for(const GoodType candidate : outputMatches)
+            {
+                if(sameProperties(GetProperties(candidate), GetProperties(input)))
+                    products.push_back(candidate);
+            }
+            if(products.size() != 1u)
+            {
+                throw GameDataError(context + ": for input '" + getIdentifierOf(input) + "' "
+                                    + std::to_string(products.size())
+                                    + " wares of outputs have the same properties (expected exactly 1)");
+            }
+            result.productByInput.emplace_back(input, products.front());
+        }
+    } else if(outputChoice == "knowledge")
+    {
+        // One product per knowledge type, e.g. carved bones for LWP, IWP and MWP
+        for(const GoodType candidate : outputMatches)
+        {
+            const KnowledgePoints knowledge = GetKnowledgeOf(candidate);
+            std::vector<KnowledgeType> types;
+            for(const auto type : helpers::enumRange<KnowledgeType>())
+            {
+                if(knowledge[type] != 0)
+                    types.push_back(type);
+            }
+            if(types.size() != 1u)
+            {
+                throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of outputs"
+                                    + " needs knowledge points of exactly one type (LWP, IWP or MWP), but '"
+                                    + getIdentifierOf(candidate) + "' has " + std::to_string(types.size()));
+            }
+            result.productChoiceTypes.push_back(types.front());
+        }
+        result.productChoice = ProductChoice::Knowledge;
+        result.productChoices = outputMatches;
+        result.product = outputMatches.front();
+    } else if(!outputChoice.empty())
+    {
+        throw GameDataError(context + ": outputChoice '" + outputChoice
+                            + "' does not exist. Only \"knowledge\" is left: a building with several products is "
+                              "steered by the distribution of all wares (Gesamtverteilung)");
+    } else if(outputMatches.size() > 1u)
+    {
+        if(singleProduct)
+            throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
+        for(const GoodType candidate : outputMatches)
+        {
+            const KnowledgePoints knowledge = GetKnowledgeOf(candidate);
+            if(std::any_of(knowledge.begin(), knowledge.end(), [](const auto points) { return points != 0; }))
+            {
+                throw GameDataError(context + ": the product '" + getIdentifierOf(candidate)
+                                    + "' is a knowledge medium: several of them need outputChoice = \"knowledge\"");
+            }
+        }
+        result.productChoice = ProductChoice::Distribution;
+        result.productChoices = outputMatches;
+        result.product = outputMatches.front();
+    } else if(!outputMatches.empty())
+        result.product = outputMatches.front();
+}
+
 void Content::initBuiltinBuildings()
 {
     for(unsigned i = 0; i < NUM_BUILTIN_BUILDINGS; ++i)
@@ -886,7 +905,25 @@ void Content::initBuiltinBuildings()
             building.times = WorkTimes{jobConst.work_length, jobConst.wait1_length, jobConst.wait2_length};
         }
         building.aiNearBorder = helpers::contains(BUILTIN_NEAR_BORDER, bld);
+        // Produkte des Originalspiels: die Produktionsgebäude mit Arbeiter außer denen, die vorerst bleiben, wie sie
+        // sind (Eselzucht, Werft, Katapult, Spähturm, Tempel). Militärgebäude haben den Beruf "Private"
+        const bool isProduction = building.workDesc.job && BuildingProperties::IsUsual(bld)
+                                  && !helpers::contains(KEPT_BUILDINGS, bld)
+                                  && !helpers::contains(BUILTIN_MILITARY_BUILDINGS, bld);
+        if(isProduction)
+        {
+            building.hasProducts = true;
+            if(const auto* good = boost::variant2::get_if<GoodType>(&building.workDesc.producedWare))
+                building.products.product = *good;
+        }
     }
+    // Schlosserei und Waffenschmiede wählen ihr Produkt (im Zivilisationsmodus nach der Gesamtverteilung)
+    Products& metalworks = builtin_[static_cast<unsigned>(BuildingType::Metalworks)].products;
+    metalworks.productChoice = ProductChoice::Distribution;
+    metalworks.productChoices.assign(TOOL_TO_GOOD.begin(), TOOL_TO_GOOD.end());
+    Products& armory = builtin_[static_cast<unsigned>(BuildingType::Armory)].products;
+    armory.productChoice = ProductChoice::Distribution;
+    armory.productChoices = {GoodType::Sword, GoodType::ShieldRomans};
     builtin_[static_cast<unsigned>(BuildingType::GraniteMine)].mineResource = ResourceType::Granite;
     builtin_[static_cast<unsigned>(BuildingType::CoalMine)].mineResource = ResourceType::Coal;
     builtin_[static_cast<unsigned>(BuildingType::IronMine)].mineResource = ResourceType::Iron;
@@ -958,9 +995,19 @@ void Content::applyBuiltinBuildings(const WorldDescription& desc)
             const bool isPlantation = helpers::contains(BUILTIN_PLANTATIONS, *bld);
             if(!isCollector && !isPlantation)
                 allowed.push_back("waitAfterTime");
-            // Places only for the wares of inputs
-            if(!building.workDesc.inputs.empty())
+            // Plätze gibt es nur für Eingänge (die des Originalspiels oder inputs aus Lua)
+            if(!building.workDesc.inputs.empty() || (bldDesc.inputs && !bldDesc.inputs->empty()))
                 allowed.push_back("storage");
+            // Sammler nehmen nichts aus Eingängen (wie die Sammler aus rttr:AddWorkshop)
+            if(!isCollector)
+                allowed.push_back("inputs");
+            // Der Förster pflanzt nur, er hat kein Produkt
+            if(*bld != BuildingType::Forester)
+            {
+                allowed.push_back("outputs");
+                allowed.push_back("inheritProperties");
+                allowed.push_back("outputChoice");
+            }
             if(isCollector)
                 allowed.push_back("collect");
             if(isPlantation)
@@ -1033,11 +1080,28 @@ void Content::applyBuiltinBuildings(const WorldDescription& desc)
             }
             setting.building = bldDesc.name;
         }
-        if(bldDesc.storage)
+        if(bldDesc.inputs)
+        {
+            // Eingänge aus Lua ersetzen die des Originalspiels. Jeder Arbeitsschritt braucht dann von jedem Eingang
+            // seine Menge (auch bei den Minen: Nahrung als ein gemischter Platz, z.B. { tags = "Food", storage = 6 })
+            const unsigned defaultStorage = bldDesc.storage.value_or(building.workDesc.numSpacesPerWare);
+            building.workDesc.inputs = resolveInputs(*bldDesc.inputs, defaultStorage, context);
+            building.workDesc.numSpacesPerWare = static_cast<uint8_t>(defaultStorage);
+            building.workDesc.useOneWareEach = true;
+        } else if(bldDesc.storage)
         {
             building.workDesc.numSpacesPerWare = static_cast<uint8_t>(*bldDesc.storage);
             for(InputSlot& input : building.workDesc.inputs)
                 input.storage = static_cast<uint8_t>(*bldDesc.storage);
+        }
+        if(bldDesc.outputs)
+        {
+            const bool singleProduct =
+              helpers::contains(BUILTIN_COLLECTORS, *bld) || helpers::contains(BUILTIN_PLANTATIONS, *bld) || isMine;
+            resolveProducts(building.products, *bldDesc.outputs, bldDesc.outputSteps,
+                            bldDesc.inheritProperties.value_or(false), bldDesc.outputChoice.value_or(std::string()),
+                            building.workDesc.inputs, singleProduct, context);
+            building.workDesc.producedWare = building.products.GetProduct(std::nullopt);
         }
         if(bldDesc.workTime)
             building.times.work = *bldDesc.workTime;
@@ -1131,6 +1195,23 @@ std::optional<unsigned> Content::GetWorkRadius(const BuildingType bld) const
         return std::max(building->collectRadius, building->plantRadius);
     }
     return builtin_[static_cast<unsigned>(bld)].workRadius;
+}
+
+const Products* Content::GetProducts(const BuildingType bld) const
+{
+    if(isCustomBuilding(bld))
+        return GetBuilding(bld);
+    const BuiltinBuilding& building = builtin_[static_cast<unsigned>(bld)];
+    return building.hasProducts ? &building.products : nullptr;
+}
+
+const std::string& Content::GetBuiltinName(const GoodType good) const
+{
+    static const std::string empty;
+    if(isCustomGood(good) || good == GoodType::Nothing)
+        return empty;
+    // Alle Schilde heißen wie das Schild der Römer (nur dieses hat einen Bezeichner)
+    return builtinNames_[ConvertShields(good)];
 }
 
 ResourceType Content::GetMineResource(const BuildingType bld) const

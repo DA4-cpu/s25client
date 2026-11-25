@@ -42,6 +42,9 @@ void nofMinter::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofMinter::ProduceWare()
 {
-    world->GetPlayer(player).ChangeStatisticValue(StatisticType::Gold, 1);
-    return GoodType::Coins;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: Münzen). Die Statistik zählt nur Münzen
+    const auto product = TakeStepProduct(GoodType::Coins);
+    if(product == GoodType::Coins)
+        world->GetPlayer(player).ChangeStatisticValue(StatisticType::Gold, 1);
+    return product;
 }

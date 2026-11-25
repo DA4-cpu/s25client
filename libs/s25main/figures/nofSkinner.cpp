@@ -84,6 +84,9 @@ unsigned short nofSkinner::GetCarryID() const
 
 void nofSkinner::DrawWalkingWithWare(DrawPoint drawPt)
 {
+    // Zivilisationsmodus: ein anderes Produkt (outputs) trägt er wie ein Träger
+    if(DrawCarryingOtherWare(drawPt))
+        return;
     DrawWalking(drawPt, "leather_bobs", bobIndex[BobType::SkinnerCarryingSkins]);
 }
 
@@ -273,5 +276,6 @@ void nofSkinner::WalkedDerived()
 
 helpers::OptionalEnum<GoodType> nofSkinner::ProduceWare()
 {
-    return GoodType::Skins;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Skins);
 }

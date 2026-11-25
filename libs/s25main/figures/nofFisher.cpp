@@ -115,7 +115,7 @@ void nofFisher::WorkStarted()
 void nofFisher::WorkFinished()
 {
     if(successful)
-        ware = GoodType::Fish;
+        ware = TakeStepProduct(GoodType::Fish);
     else
         ware = std::nullopt;
 }

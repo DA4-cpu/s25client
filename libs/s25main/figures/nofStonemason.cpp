@@ -48,7 +48,7 @@ void nofStonemason::WorkFinished()
 {
     HewStone();
     // Stein in die Hand nehmen
-    ware = GoodType::Stones;
+    ware = TakeStepProduct(GoodType::Stones);
 }
 
 bool nofStonemason::HewStone()

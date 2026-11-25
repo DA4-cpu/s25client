@@ -4,6 +4,7 @@
 
 #include "GamePlayer.h"
 #include "GlobalGameSettings.h"
+#include "RttrForeachPt.h"
 #include "addons/const_addons.h"
 #include "buildings/nobBaseWarehouse.h"
 #include "buildings/nobHQ.h"
@@ -19,8 +20,11 @@
 #include "helpers/containerUtils.h"
 #include "lua/GameDataLoader.h"
 #include "worldFixtures/WorldWithGCExecution.h"
+#include "nodeObjs/noGrainfield.h"
+#include "nodeObjs/noGranite.h"
 #include "gameData/BuildingConsts.h"
 #include "gameData/BuildingProperties.h"
+#include "gameData/GoodConsts.h"
 #include "gameData/JobConsts.h"
 #include "gameData/WorldDescription.h"
 #include "rttr/test/LogAccessor.hpp"
@@ -113,10 +117,37 @@ BOOST_AUTO_TEST_CASE(ShippedBuildingsKeepTheOriginalValues)
                                 original.GetMilitaryValues(bld, Nation::Romans)));
         const BldWorkDescription& workDesc = content.GetBuiltinWorkDesc(bld);
         const BldWorkDescription& originalWorkDesc = original.GetBuiltinWorkDesc(bld);
-        BOOST_TEST(workDesc.numSpacesPerWare == originalWorkDesc.numSpacesPerWare);
-        BOOST_TEST_REQUIRE(workDesc.inputs.size() == originalWorkDesc.inputs.size());
-        for(unsigned i = 0; i < workDesc.inputs.size(); ++i)
-            BOOST_TEST(workDesc.inputs[i].storage == originalWorkDesc.inputs[i].storage);
+        if(BuildingProperties::IsMine(bld))
+        {
+            // Entscheidung des Nutzers (25.11.): Die Nahrung der Minen ist ein gemischter Platz mit 6 Plätzen, jeder
+            // Arbeitsschritt braucht 1 beliebige Nahrung
+            BOOST_TEST_REQUIRE(workDesc.inputs.size() == 1u);
+            BOOST_TEST(workDesc.inputs[0].storage == 6u);
+            BOOST_TEST(workDesc.inputs[0].amount == 100u);
+            for(const GoodType food : {GoodType::Fish, GoodType::Meat, GoodType::Bread})
+                BOOST_TEST(helpers::contains(workDesc.inputs[0].wares, food));
+            BOOST_TEST(workDesc.useOneWareEach);
+        } else
+        {
+            BOOST_TEST(workDesc.numSpacesPerWare == originalWorkDesc.numSpacesPerWare);
+            BOOST_TEST_REQUIRE(workDesc.inputs.size() == originalWorkDesc.inputs.size());
+            for(unsigned i = 0; i < workDesc.inputs.size(); ++i)
+            {
+                BOOST_TEST(workDesc.inputs[i].storage == originalWorkDesc.inputs[i].storage);
+                BOOST_TEST((workDesc.inputs[i].wares == originalWorkDesc.inputs[i].wares));
+                BOOST_TEST(workDesc.inputs[i].amount == originalWorkDesc.inputs[i].amount);
+            }
+        }
+        // Produkte wie im Originalspiel (mit den umbenannten Waren)
+        const civ::Products* products = content.GetProducts(bld);
+        const civ::Products* originalProducts = original.GetProducts(bld);
+        BOOST_TEST_REQUIRE((products == nullptr) == (originalProducts == nullptr));
+        if(products)
+        {
+            BOOST_TEST((products->GetAllProducts() == originalProducts->GetAllProducts()));
+            BOOST_TEST((products->productChoice == originalProducts->productChoice));
+            BOOST_TEST(products->productSteps.empty());
+        }
         // In the civilization mode the collectors and plantations have the original radius, the others none
         const auto itRadius = radius.find(bld);
         if(itRadius == radius.end())
@@ -198,6 +229,85 @@ rttr:SetBuilding{ name = "Quarry", aiNearBorder = false }
     BOOST_TEST(content.IsAINearBorder(BuildingType::Guardhouse));
 }
 
+BOOST_AUTO_TEST_CASE(InputsAndOutputsFromLua)
+{
+    WorldDescription desc;
+    BOOST_TEST_REQUIRE(loadLua(R"(
+rttr:AddWare{ name = "Raw", kind = "Material", properties = { "Soft" }, look = "Wood", transport = "Wood" }
+rttr:AddWare{ name = "HardRaw", kind = "Material", properties = { "Hard" }, look = "Wood", transport = "Wood" }
+rttr:AddWare{ name = "SoftPlank", kind = "Plank", properties = { "Soft" }, look = "Boards", transport = "Boards" }
+rttr:AddWare{ name = "HardPlank", kind = "Plank", properties = { "Hard" }, look = "Boards", transport = "Boards" }
+rttr:AddWare{ name = "CopperAxe", kind = "Axe", look = "Axe", transport = "Axe" }
+rttr:SetWare{ Axe = { name = "IronAxe", kind = { "Axe" } } }
+rttr:SetWare{ Shield = { name = "IronShield", kind = { "Shield" } } }
+rttr:SetBuilding{ name = "Sawmill", inputs = { "Material" }, outputs = { "Plank" }, inheritProperties = true }
+rttr:SetBuilding{ name = "Metalworks", inputs = { "Iron", { tags = "Coal", amount = 2, storage = 4 } },
+    outputs = { "IronAxe", { "CopperAxe", steps = 2 } } }
+rttr:SetBuilding{ name = "Armory", outputs = { "IronShield" } }
+rttr:SetBuilding{ name = "Well", inputs = { "Raw" }, outputs = { "Fish" } }
+rttr:SetBuilding{ name = "Bakery", inputs = { } }
+rttr:SetBuilding{ name = "CoalMine", inputs = { { tags = "Fish", storage = 3 } }, outputs = { "Gold" } }
+rttr:SetBuilding{ name = "Farm", inputs = { "Water" }, outputs = { "Raw" } }
+rttr:SetBuilding{ name = "Woodcutter", outputs = { "HardRaw" } }
+)",
+                               desc));
+    const ActiveContent active(desc);
+    const civ::Content& content = *active.content;
+    const GoodType raw = GoodType::Custom0;
+    const GoodType hardRaw = getCustomGood(1);
+    const GoodType softPlank = getCustomGood(2);
+    const GoodType hardPlank = getCustomGood(3);
+    const GoodType copperAxe = getCustomGood(4);
+    // Sägewerk: Eingang nach Tag, Produkt nach den Eigenschaften der verbrauchten Ware
+    const BldWorkDescription& sawmill = BLD_WORK_DESC[BuildingType::Sawmill];
+    BOOST_TEST_REQUIRE(sawmill.inputs.size() == 1u);
+    BOOST_TEST((sawmill.inputs[0].wares == std::vector<GoodType>{raw, hardRaw}));
+    BOOST_TEST(sawmill.inputs[0].storage == 6u);
+    const civ::Products& sawmillProducts = *content.GetProducts(BuildingType::Sawmill);
+    BOOST_TEST((sawmillProducts.GetProduct(raw) == softPlank));
+    BOOST_TEST((sawmillProducts.GetProduct(hardRaw) == hardPlank));
+    BOOST_TEST((boost::variant2::get<GoodType>(sawmill.producedWare) == softPlank));
+    // Schlosserei: nur die beiden Äxte (der Tag "Axe" träfe beide, der Name nur die eingebaute), mit steps
+    const BldWorkDescription& metalworks = BLD_WORK_DESC[BuildingType::Metalworks];
+    BOOST_TEST_REQUIRE(metalworks.inputs.size() == 2u);
+    BOOST_TEST(metalworks.inputs[1].amount == 200u);
+    BOOST_TEST(metalworks.inputs[1].storage == 4u);
+    const civ::Products& metalworksProducts = *content.GetProducts(BuildingType::Metalworks);
+    BOOST_TEST((metalworksProducts.GetAllProducts() == std::vector<GoodType>{GoodType::Axe, copperAxe}));
+    BOOST_TEST((metalworksProducts.productChoice == civ::ProductChoice::Distribution));
+    BOOST_TEST(metalworksProducts.GetProductSteps(copperAxe) == 200u);
+    BOOST_TEST(metalworksProducts.GetProductSteps(GoodType::Axe) == 100u);
+    // Waffenschmiede nur noch Schilde: ein Produkt, keine Wahl
+    const civ::Products& armoryProducts = *content.GetProducts(BuildingType::Armory);
+    BOOST_TEST((armoryProducts.GetAllProducts() == std::vector<GoodType>{GoodType::ShieldRomans}));
+    BOOST_TEST((armoryProducts.productChoice == civ::ProductChoice::None));
+    // Alle Schilde heißen wie das umbenannte Schild der Römer
+    BOOST_TEST(WARE_NAMES[GoodType::ShieldVikings] == "IronShield");
+    // Brunnen mit Eingang, Bäckerei ohne Eingänge
+    BOOST_TEST(BLD_WORK_DESC[BuildingType::Well].inputs.size() == 1u);
+    BOOST_TEST((content.GetProducts(BuildingType::Well)->product == GoodType::Fish));
+    BOOST_TEST(BLD_WORK_DESC[BuildingType::Bakery].inputs.empty());
+    BOOST_TEST((content.GetProducts(BuildingType::Bakery)->product == GoodType::Bread));
+    // Mine: der Eingang aus Lua, jeder Schritt braucht ihn (nicht mehr "eine beliebige Nahrung" aus 3 Plätzen)
+    const BldWorkDescription& coalMine = BLD_WORK_DESC[BuildingType::CoalMine];
+    BOOST_TEST_REQUIRE(coalMine.inputs.size() == 1u);
+    BOOST_TEST((coalMine.inputs[0].wares == std::vector<GoodType>{GoodType::Fish}));
+    BOOST_TEST(coalMine.inputs[0].storage == 3u);
+    BOOST_TEST(coalMine.useOneWareEach);
+    BOOST_TEST((content.GetProducts(BuildingType::CoalMine)->product == GoodType::Gold));
+    BOOST_TEST((content.GetMineResource(BuildingType::CoalMine) == ResourceType::Coal));
+    // Bauernhof mit Eingang, Holzfäller mit anderem Produkt
+    BOOST_TEST(BLD_WORK_DESC[BuildingType::Farm].inputs.size() == 1u);
+    BOOST_TEST((content.GetProducts(BuildingType::Farm)->product == raw));
+    BOOST_TEST((content.GetProducts(BuildingType::Woodcutter)->product == hardRaw));
+    // Nicht gesetzt: die Produkte des Originalspiels; Tempel, Eselzucht und Militär ohne Produkte aus dem Inhalt
+    BOOST_TEST((content.GetProducts(BuildingType::Mill)->product == GoodType::Flour));
+    BOOST_TEST(!content.GetProducts(BuildingType::Forester)->HasProduct());
+    BOOST_TEST(!content.GetProducts(BuildingType::Temple));
+    BOOST_TEST(!content.GetProducts(BuildingType::DonkeyBreeder));
+    BOOST_TEST(!content.GetProducts(BuildingType::Barracks));
+}
+
 BOOST_AUTO_TEST_CASE(InvalidBuildings)
 {
     for(const std::string& invalid :
@@ -215,6 +325,23 @@ BOOST_AUTO_TEST_CASE(InvalidBuildings)
          std::string(R"(rttr:SetBuilding{ name = "DonkeyBreeder", workTime = 100 })"),
          std::string(R"(rttr:SetBuilding{ name = "Storehouse", military = { soldiers = 1, radius = 5, coins = 0 } })"),
          std::string(R"(rttr:SetBuilding{ name = "Woodcutter", warehouse = { capacity = 5 } })"),
+         // Eingänge und Produkte
+         std::string(R"(rttr:SetBuilding{ name = "Woodcutter", inputs = { "Water" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Forester", outputs = { "Wood" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Temple", outputs = { "Gold" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Temple", inputs = { "Wine" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Barracks", inputs = { "Coins" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Quarry", outputs = { "Stones", "Wood" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "IronMine", outputs = { "IronOre", "Coal" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Farm", outputs = { "Grain", "Wood" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Mill", outputs = { "Flour" }, outputChoice = "tools" })"),
+         std::string(
+           R"(rttr:SetBuilding{ name = "Mill", outputs = { "Flour", "Bread" }, outputChoice = "knowledge" })"),
+         std::string(R"(rttr:SetBuilding{ name = "Mill", outputs = { "Flour", "Flour" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Mill", outputs = { "Nothing2" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Mill", inputs = { "Nothing2" } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Mill", inputs = { { tags = "Grain", amount = 7 } } })"),
+         std::string(R"(rttr:SetBuilding{ name = "Mill", outputs = { "Flour", "Bread" }, inheritProperties = true })"),
          // Size and look
          std::string(R"(rttr:SetBuilding{ name = "Mill", size = "mine" })"),
          std::string(R"(rttr:SetBuilding{ name = "CoalMine", size = "small" })"),
@@ -288,6 +415,106 @@ BOOST_FIXTURE_TEST_CASE(MineDigsTheOreOfLua, MineFixture)
     BOOST_TEST(world.GetNode(coalPt).resources.getAmount() == 5u);
     RTTR_SKIP_GFS(1000);
     BOOST_TEST(countInHQ(GoodType::Coal) == coalBefore + 3u);
+}
+
+namespace {
+const std::string otherProductsLua = R"(
+rttr:AddWare{ name = "Raw", look = "Wood", transport = "Wood" }
+rttr:SetBuilding{ name = "Quarry", outputs = { "Raw" }, waitTime = 20 }
+rttr:SetBuilding{ name = "Mill", inputs = { "Raw" }, outputs = { "Fish" }, workTime = 20, waitTime = 20 }
+rttr:SetBuilding{ name = "Farm", inputs = { "Raw" }, waitTime = 20 }
+)";
+const GoodType RAW = GoodType::Custom0;
+
+struct OtherProductsFixture : public BuiltinWorldFixture
+{
+    OtherProductsFixture() : BuiltinWorldFixture(otherProductsLua) {}
+    unsigned numGrainfields()
+    {
+        unsigned result = 0;
+        RTTR_FOREACH_PT(MapPoint, world.GetSize())
+        {
+            if(world.GetNO(pt)->GetType() == NodalObjectType::Grainfield)
+                ++result;
+        }
+        return result;
+    }
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(CollectorBringsTheProductOfLua, OtherProductsFixture)
+{
+    // Der Steinmetz nimmt je Gang ein Stück vom Steinhaufen und bringt die Ware aus outputs statt Steinen
+    hq().AddToInventory(GoodCounts::make(GoodType::PickAxe, 1), true);
+    const MapPoint pilePos = world.MakeMapPoint(hqPos + Position(8, 0));
+    world.DestroyNO(pilePos, false);
+    world.SetNO(pilePos, new noGranite(GraniteType::One, 1));
+    const unsigned numStones = countInHQ(GoodType::Stones);
+    placeConnectedBuilding(BuildingType::Quarry, Position(6, 2));
+    RTTR_EXEC_TILL(30000, world.GetNO(pilePos)->GetType() != NodalObjectType::Granite);
+    RTTR_EXEC_TILL(3000, countInHQ(RAW) == 2u);
+    BOOST_TEST(countInHQ(GoodType::Stones) == numStones);
+}
+
+BOOST_FIXTURE_TEST_CASE(WorkerUsesTheInputsOfLua, OtherProductsFixture)
+{
+    // Die Mühle braucht je Schritt 1 Raw statt Getreide und bringt Fisch statt Mehl
+    hq().AddToInventory(GoodCounts::make(RAW, 2), true);
+    const unsigned numFish = countInHQ(GoodType::Fish);
+    placeConnectedBuilding(BuildingType::Mill);
+    RTTR_EXEC_TILL(8000, countInHQ(GoodType::Fish) == numFish + 2u);
+    RTTR_SKIP_GFS(2000);
+    BOOST_TEST(countInHQ(GoodType::Fish) == numFish + 2u);
+    BOOST_TEST(world.GetPlayer(0).GetInventory().goods[RAW] == 0u);
+}
+
+BOOST_FIXTURE_TEST_CASE(FarmerPlantsOnlyWithItsInputs, OtherProductsFixture)
+{
+    // Jedes Säen verbraucht 1 Raw: mit 2 Raw entstehen höchstens 2 Felder
+    hq().AddToInventory(GoodCounts::make(GoodType::Scythe, 1), true);
+    hq().AddToInventory(GoodCounts::make(RAW, 2), true);
+    const unsigned numFieldsBefore = numGrainfields();
+    placeConnectedBuilding(BuildingType::Farm, Position(6, 2));
+    RTTR_EXEC_TILL(20000, world.GetPlayer(0).GetInventory().goods[RAW] == 0u);
+    RTTR_SKIP_GFS(1000);
+    BOOST_TEST(numGrainfields() == numFieldsBefore + 2u);
+    RTTR_SKIP_GFS(5000);
+    BOOST_TEST(numGrainfields() <= numFieldsBefore + 2u);
+}
+
+namespace {
+struct FoodMineFixture : public BuiltinWorldFixture
+{
+    // Eine Kohlemine mit der Nahrung als gemischtem Platz (wie in workshops.lua)
+    FoodMineFixture()
+        : BuiltinWorldFixture(R"(rttr:SetWare{ Bread = { kind = { "Food" } } }
+rttr:SetWare{ Fish = { kind = { "Food" } } }
+rttr:SetBuilding{ name = "CoalMine", inputs = { { tags = "Food", storage = 6 } }, workTime = 20, waitTime = 20 })")
+    {}
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(MineTakesAnyFoodOfItsInput, FoodMineFixture)
+{
+    hq().AddToInventory(GoodCounts::make(GoodType::PickAxe, 1), true);
+    // Nur Brot und Fisch, kein Fleisch
+    GamePlayer& owner = world.GetPlayer(0);
+    hq().AddToInventory(GoodCounts::make(GoodType::Bread, 2), true);
+    hq().AddToInventory(GoodCounts::make(GoodType::Fish, 1), true);
+    const unsigned numBread = owner.GetInventory().goods[GoodType::Bread];
+    const unsigned numFish = owner.GetInventory().goods[GoodType::Fish];
+    // 3 Einheiten Kohle: genau 3 Arbeitsschritte
+    const MapPoint bldPos = world.MakeMapPoint(hqPos + Position(4, 2));
+    world.SetResource(world.MakeMapPoint(bldPos + Position(1, 0)), Resource(ResourceType::Coal, 3));
+    const unsigned coalBefore = countInHQ(GoodType::Coal);
+    placeConnectedBuilding(BuildingType::CoalMine);
+    RTTR_EXEC_TILL(8000, countInHQ(GoodType::Coal) == coalBefore + 3u);
+    RTTR_SKIP_GFS(2000);
+    BOOST_TEST(countInHQ(GoodType::Coal) == coalBefore + 3u);
+    // Jeder Arbeitsschritt hat genau eine Nahrung verbraucht, egal welche
+    const unsigned usedFood =
+      (numBread - owner.GetInventory().goods[GoodType::Bread]) + (numFish - owner.GetInventory().goods[GoodType::Fish]);
+    BOOST_TEST(usedFood == 3u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

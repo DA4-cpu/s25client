@@ -15,7 +15,6 @@
 #include "gameData/BuildingProperties.h"
 #include "gameData/GameConsts.h"
 #include "gameData/JobConsts.h"
-#include "gameData/ToolConsts.h"
 #include <chrono>
 
 namespace civai {
@@ -83,16 +82,14 @@ namespace {
         return 0;
     }
 
-    /// Products of the built-in buildings which choose between several wares
-    std::vector<GoodType> getBuiltinOutputs(const BuildingType bld)
+    /// Produkte der eingebauten Gebäude: die aus dem Inhalt (outputs in rttr:SetBuilding, sonst die des
+    /// Originalspiels). Der Tempel bleibt vorerst wie im Originalspiel
+    std::vector<GoodType> getBuiltinOutputs(const civ::Content& content, const BuildingType bld)
     {
-        switch(bld)
-        {
-            case BuildingType::Metalworks: return std::vector<GoodType>(TOOL_TO_GOOD.begin(), TOOL_TO_GOOD.end());
-            case BuildingType::Armory: return {GoodType::Sword, GoodType::ShieldRomans};
-            case BuildingType::Temple: return {GoodType::Gold, GoodType::IronOre, GoodType::Coal, GoodType::Stones};
-            default: break;
-        }
+        if(bld == BuildingType::Temple)
+            return {GoodType::Gold, GoodType::IronOre, GoodType::Coal, GoodType::Stones};
+        if(const civ::Products* products = content.GetProducts(bld))
+            return products->GetAllProducts();
         std::vector<GoodType> result;
         if(const auto* good = boost::variant2::get_if<GoodType>(&BLD_WORK_DESC[bld].producedWare))
             result.push_back(*good);
@@ -126,7 +123,7 @@ void EconomyGraph::AddBuiltinRecipes(const GameWorldBase& world)
         Recipe recipe;
         recipe.building = bld;
         recipe.inputs = makeRecipeInputs(workDesc);
-        recipe.outputs = getBuiltinOutputs(bld);
+        recipe.outputs = getBuiltinOutputs(world.GetTechTree().GetContent(), bld);
         recipe.source = getBuiltinSource(bld);
         // Frames of the worker (original or rttr:SetBuilding)
         const civ::WorkTimes times = civ::getActiveContent().GetWorkTimes(bld);
@@ -146,17 +143,7 @@ void EconomyGraph::AddCustomRecipes(const GameWorldBase& world)
         Recipe recipe;
         recipe.building = bld;
         recipe.inputs = makeRecipeInputs(building.workDesc);
-        if(!building.productChoices.empty())
-            recipe.outputs = building.productChoices;
-        else if(!building.productByInput.empty())
-        {
-            for(const auto& entry : building.productByInput)
-            {
-                if(!helpers::contains(recipe.outputs, entry.second))
-                    recipe.outputs.push_back(entry.second);
-            }
-        } else if(building.product != GoodType::Nothing)
-            recipe.outputs.push_back(building.product);
+        recipe.outputs = building.GetAllProducts();
         if(building.IsCollector())
             recipe.source = {SourceKind::MapObject, static_cast<unsigned>(building.collectObject)};
         else if(building.IsPlanter())
@@ -198,9 +185,9 @@ void EconomyGraph::AddRecipe(const GameWorldBase& world, Recipe recipe, const un
         return; // Makes no wares (forester, donkey breeder ...)
     const civ::Content& content = world.GetTechTree().GetContent();
     recipe.outputRatio = content.GetOutputRatio(recipe.building);
-    const civ::CustomBuilding* custom = content.GetBuilding(recipe.building);
+    const civ::Products* products = content.GetProducts(recipe.building);
     for(const GoodType good : recipe.outputs)
-        recipe.outputSteps.push_back(custom ? custom->GetProductSteps(good) : 100u);
+        recipe.outputSteps.push_back(products ? products->GetProductSteps(good) : 100u);
     recipe.requiredTools = GetWorkTools(content, recipe.building);
     recipe.lockedAtStart = world.GetTechTree().IsLockedAtStart(recipe.building);
     recipe.reach = getReach(recipe.source, recipe.building);

@@ -82,7 +82,7 @@ void nofWoodcutter::WorkStarted()
 void nofWoodcutter::WorkFinished()
 {
     // Holz in die Hand nehmen
-    ware = GoodType::Wood;
+    ware = TakeStepProduct(GoodType::Wood);
 }
 
 /// Returns the quality of this working point or determines if the worker can work here at all

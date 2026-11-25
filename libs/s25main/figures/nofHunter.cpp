@@ -393,7 +393,7 @@ void nofHunter::HandleStateEviscerating()
     animal = nullptr;
 
     // Fleisch in die Hand nehmen
-    ware = GoodType::Meat;
+    ware = TakeStepProduct(GoodType::Meat);
     // Zivilisationsmodus: Ertrag des Arbeitsschritts (outputRatio)
     ProducedWare();
     // und zurück zur Hütte

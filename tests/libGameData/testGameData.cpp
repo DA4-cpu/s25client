@@ -245,7 +245,8 @@ rttr:SetBuilding{ name = "Woodcutter", title = "Holzfaeller", size = "medium", c
     look = "Sawmill", worker = { title = "Faeller", look = "Carpenter" }, collect = { radius = 9 },
     outputRatio = 1.5, tools = { baseSpeed = 25, tools = { "Axe" } }, workTime = 100, waitTime = 200,
     aiNearBorder = false, knowledge = { IWP = 2 } }
-rttr:SetBuilding{ name = "Sawmill", storage = 4, waitAfterTime = 0 }
+rttr:SetBuilding{ name = "Sawmill", storage = 4, waitAfterTime = 0, inputs = { "Wood", { tags = "Coal", amount = 0.5 } },
+    outputs = { "Boards", { "Planks", steps = 2 } }, inheritProperties = true }
 rttr:SetBuilding{ name = "IronMine", mine = { resource = "Gold" } }
 rttr:SetBuilding{ name = "Barracks", military = { soldiers = 4, radius = 9, coins = 0 } }
 rttr:SetBuilding{ name = "Storehouse", warehouse = { capacity = 300 } }
@@ -273,6 +274,16 @@ rttr:SetBuilding{ name = "Storehouse", warehouse = { capacity = 300 } }
     BOOST_TEST(*sawmill.storage == 4u);
     BOOST_TEST(*sawmill.waitAfterTime == 0u);
     BOOST_TEST(!sawmill.title);
+    BOOST_TEST_REQUIRE(sawmill.inputs->size() == 2u);
+    BOOST_TEST(((*sawmill.inputs)[1].tags == TagQuery{"Coal"}));
+    BOOST_TEST((*sawmill.inputs)[1].amount == 50u);
+    BOOST_TEST_REQUIRE(sawmill.outputs->size() == 2u);
+    BOOST_TEST(((*sawmill.outputs)[1] == TagQuery{"Planks"}));
+    BOOST_TEST((sawmill.outputSteps == std::vector<unsigned>{100u, 200u}));
+    BOOST_TEST(*sawmill.inheritProperties);
+    BOOST_TEST(!sawmill.outputChoice);
+    BOOST_TEST(!woodcutter.inputs);
+    BOOST_TEST(!woodcutter.outputs);
     BOOST_TEST(*desc.builtinBuildings[2].mineResource == "Gold");
     const MilitaryDesc& military = *desc.builtinBuildings[3].military;
     BOOST_TEST(military.soldiers == 4u);
@@ -315,6 +326,12 @@ BOOST_AUTO_TEST_CASE(DetectInvalidBuiltinBuildings)
     expectLoadFailure(R"(rttr:SetBuilding{ name = "IronMine", mine = { } })");
     expectLoadFailure(R"(rttr:SetBuilding{ name = "Storehouse", warehouse = { capacity = 0 } })");
     expectLoadFailure(R"(rttr:SetBuilding{ name = "Barracks", military = { soldiers = 0, radius = 9, coins = 1 } })");
+    // Eingänge und Produkte
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Mill", outputs = { } })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Mill", inheritProperties = true })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Mill", outputChoice = "knowledge" })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Mill", inputs = { { tags = "Grain", amount = -1 } } })");
+    expectLoadFailure(R"(rttr:SetBuilding{ name = "Mill", outputs = { { "Flour", steps = 0 } } })");
     // Set twice
     expectLoadFailure(R"(rttr:SetBuilding{ name = "Mill", workTime = 100 }
 rttr:SetBuilding{ name = "Mill", waitTime = 100 })");

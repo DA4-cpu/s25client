@@ -101,5 +101,6 @@ void nofMiller::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofMiller::ProduceWare()
 {
-    return GoodType::Flour;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Flour);
 }

@@ -47,10 +47,13 @@ rttr:SetBuilding{...}: stellt ein eingebautes Gebäude ein
     Eselzucht (DonkeyBreeder), Werft (Shipyard), Katapult (Catapult), Spähturm (LookoutTower), Tempel (Temple):
       nur cost, knowledge, tools, outputRatio, aiNearBorder. Ihre Arbeitsweise, Eingänge und Produkte bleiben vorerst
       wie im Originalspiel.
-    Alle anderen (Produktionsgebäude): title, description, size, cost, look, worker, knowledge, tools, outputRatio,
-      storage, workTime, waitTime, waitAfterTime, aiNearBorder und je nach Gebäude collect, plant oder mine.
+    Alle anderen (Produktionsgebäude): title, description, size, cost, look, worker, inputs, storage, outputs,
+      inheritProperties, outputChoice, knowledge, tools, outputRatio, workTime, waitTime, waitAfterTime, aiNearBorder
+      und je nach Gebäude collect, plant oder mine.
       Ausnahmen: Der Brunnen (Well) hat kein worker (sein Arbeiter ist der Gehilfe). Der Jäger (Hunter) hat kein
-      workTime. Sammler und Plantagen haben kein waitAfterTime. storage haben nur Gebäude mit Eingängen.
+      workTime. Sammler und Plantagen haben kein waitAfterTime. storage haben nur Gebäude mit Eingängen. Sammler
+      (Holzfäller, Steinbruch, Fischer, Jäger) haben keine inputs. Der Förster (Forester) hat keine outputs,
+      inheritProperties und outputChoice (er pflanzt nur).
 
   Felder, die es nur hier gibt oder die hier anders sind:
     worker     stellt den Beruf des Gebäudes ein: worker = { title = "Holzfäller", look = "Woodcutter" }.
@@ -70,8 +73,30 @@ rttr:SetBuilding{...}: stellt ein eingebautes Gebäude ein
                Umkreis eines eigenen Bauernhofs Felder werden können.
     mine       Minen (GraniteMine, CoalMine, IronMine, GoldMine): mine = { resource = "Iron" }, das Erz, das die Mine
                abbaut: "Granite", "Coal", "Iron", "Gold" oder ein Erz aus mapobjects.lua (rttr:AddOre). Das Produkt
-               bleibt vorerst das der Mine: Eine Kohlemine mit resource = "Iron" baut Eisenerz ab und bringt Kohle.
-    storage    Plätze je Eingang (Standard wie im Originalspiel: 6, Minen 2 je Nahrung, Abdecker 3).
+               steht in outputs: Eine Kohlemine mit resource = "Iron" und outputs = { "Coal" } baut Eisenerz ab und
+               bringt Kohle.
+    inputs     Eingänge wie bei rttr:AddWorkshop, z.B. inputs = { "Wood" } oder inputs = { { tags = "Food", storage = 6 } }.
+               Ersetzen die Eingänge des Originalspiels. Ohne inputs bleiben die des Originalspiels. inputs = { }
+               heißt: keine Eingänge. Jeder Arbeitsschritt braucht von jedem Eingang seine Menge (amount, mit dem
+               inputRatio der Werkzeuge), auch in den Minen. Wann verbraucht wird:
+                 Arbeiter im Gebäude (Sägewerk, Minen, Brunnen ...): beim Beginn der Arbeit im Gebäude.
+                 Förster, Bauernhof, Weinberg: bei jedem Pflanzen (Ernten braucht nichts).
+                 Köhler: bei jedem Gang, der einen Meiler anlegt oder weiter aufschichtet (im Original abwechselnd mit
+                 Holz und mit Getreide; jeder dieser Gänge verbraucht alle Eingänge einmal), nicht beim Abdecken und
+                 beim Ernten der Kohle. Die Stufen des Meilers bleiben, wie sie sind.
+    storage    Plätze je Eingang (Standard wie im Originalspiel: 6, Abdecker 3). Ein Eingang mit eigenem storage
+               (inputs = { { tags = "Food", storage = 6 } }) hat seine eigene Zahl.
+    outputs    Produkte wie bei rttr:AddWorkshop (mit steps je Produkt), z.B. outputs = { "Boards" }. Ersetzen die
+               Produkte des Originalspiels. Ohne outputs bleiben die des Originalspiels. Sammler, Plantagen und Minen
+               haben genau ein Produkt. Mehrere Produkte (z.B. Schlosserei, Waffenschmiede) wählt die
+               Gesamtverteilung, mit outputChoice = "knowledge" der Regler "Wissen". "IronShield" ergibt das Schild des
+               eigenen Volkes. Ein anderes Produkt als das des Originalspiels trägt der Arbeiter wie ein Träger (die
+               Grafik der Ware).
+               Wichtig: Jeder Eintrag ist eine Tag-Abfrage. Deshalb tragen die eingebauten Waren, deren Name auch eine
+               Warenart ist, eigene Namen (wares.lua): Cobblestones (Tag Stones), IronAxe, IronSaw usw. (Tags Axe,
+               Saw ...), IronSword (Sword), IronShield (Shield), LeatherArmor (Armor). "Stones" träfe auch LoamBrick,
+               "Axe" auch die Kupfer-, Bronze- und Obsidianäxte.
+    inheritProperties, outputChoice  wie bei rttr:AddWorkshop, nur zusammen mit outputs im selben Eintrag.
     outputRatio Standard 1. Bedeutung wie bei rttr:AddWorkshop. Ein Holzfäller mit 2 bringt 2 Holz je Baum. Minen und
                Sammler nehmen je Arbeitsschritt genau 1 Einheit ihres Vorkommens, egal wie viele Waren herauskommen:
                Ein Steinbruch mit 2 nimmt 1 Stück vom Steinhaufen und bringt 2 Steine, ein Fischer mit 2 fängt 1 Fisch
@@ -86,8 +111,8 @@ rttr:SetBuilding{...}: stellt ein eingebautes Gebäude ein
                wie im Originalspiel (alle Waren und Personen).
   Im Zivilisationsmodus wirkungslos: die Addons für die Reichweite von Holzfäller, Förster und Steinmetz (dafür gibt es
   collect und plant).
-  Noch nicht einstellbar: inputs, outputs, steps, inheritProperties und outputChoice der eingebauten Gebäude und eine
-  andere Arbeitsweise (z.B. ein Steinbruch, der Lehm sammelt). Das kommt in den nächsten Schritten.
+  Noch nicht einstellbar: eine andere Arbeitsweise (z.B. ein Steinbruch, der Lehm sammelt). Das kommt im nächsten
+  Schritt.
 
   Bezeichner der eingebauten Gebäude: Headquarters, Storehouse, HarborBuilding, Barracks, Guardhouse, Watchtower,
   Fortress, LookoutTower, Catapult, Woodcutter, Forester, Sawmill, Quarry, GraniteMine, CoalMine, IronMine, GoldMine,
@@ -117,7 +142,8 @@ rttr:AddWorkshop{...}: definiert ein neues Gebäude
               Ware hat. Höchstens 4 Einträge und höchstens 31 Waren insgesamt je Gebäude.
               Der Bauarbeiter verbaut die Einträge nacheinander. Die erste Hälfte des Baufortschritts zeigt das Gerüst,
               die zweite die Mauern.
-              "Boards" und "Stones" sind die Bezeichner der eingebauten Bretter und Steine (zugleich ihre Tags). Neue
+              "Boards" ist der Bezeichner der eingebauten Bretter (zugleich ihr Tag). "Stones" ist ein Tag der
+              eingebauten Steine (Cobblestones, wares.lua) und jeder Ware mit kind = "Stones" (z.B. LoamBrick). Neue
               Waren zählen dazu, wenn sie diesen Tag haben (z.B. kind = "Boards"), oder man gibt den eingebauten Waren
               mit rttr:SetWare (wares.lua) eine Warenart und fragt nach ihr.
               Beim Abriss mit Rückerstattung (Addon) gibt es von jedem Eintrag die erste passende Ware zurück.
@@ -412,6 +438,7 @@ rttr:SetBuilding{
     look = "Woodcutter",
     worker = { title = "Woodchopper", look = "Woodcutter" },
     collect = { radius = 6 },
+    outputs = { "Wood" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "Axe" } },
     workTime = 148,
@@ -442,7 +469,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 3 },
     look = "Sawmill",
     worker = { title = "Carpenter", look = "Carpenter" },
+    inputs = { "Wood" },
     storage = 6,
+    outputs = { "Boards" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "Saw" } },
     workTime = 479,
@@ -460,6 +489,7 @@ rttr:SetBuilding{
     look = "Quarry",
     worker = { title = "Stonemason", look = "Stonemason" },
     collect = { radius = 8 },
+    outputs = { "Cobblestones" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "PickAxe" } },
     workTime = 129,
@@ -476,7 +506,8 @@ rttr:SetBuilding{
     look = "GraniteMine",
     worker = { title = "Miner", look = "Miner" },
     mine = { resource = "Granite" },
-    storage = 2,
+    inputs = { { tags = "Food", storage = 6 } },
+    outputs = { "Cobblestones" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "PickAxe" } },
     workTime = 583,
@@ -494,7 +525,8 @@ rttr:SetBuilding{
     look = "CoalMine",
     worker = { title = "Miner", look = "Miner" },
     mine = { resource = "Coal" },
-    storage = 2,
+    inputs = { { tags = "Food", storage = 6 } },
+    outputs = { "Coal" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "PickAxe" } },
     workTime = 583,
@@ -512,7 +544,8 @@ rttr:SetBuilding{
     look = "IronMine",
     worker = { title = "Miner", look = "Miner" },
     mine = { resource = "Iron" },
-    storage = 2,
+    inputs = { { tags = "Food", storage = 6 } },
+    outputs = { "IronOre" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "PickAxe" } },
     workTime = 583,
@@ -530,7 +563,8 @@ rttr:SetBuilding{
     look = "GoldMine",
     worker = { title = "Miner", look = "Miner" },
     mine = { resource = "Gold" },
-    storage = 2,
+    inputs = { { tags = "Food", storage = 6 } },
+    outputs = { "Gold" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "PickAxe" } },
     workTime = 583,
@@ -548,7 +582,9 @@ rttr:SetBuilding{
     look = "Charburner",
     worker = { title = "Charburner", look = "CharBurner" },
     plant = { radius = 3 },
+    inputs = { "Wood", "Grain" },
     storage = 6,
+    outputs = { "Coal" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "Shovel" } },
     workTime = 117,
@@ -569,6 +605,7 @@ rttr:SetBuilding{
     look = "Fishery",
     worker = { title = "Fisher", look = "Fisher" },
     collect = { radius = 7 },
+    outputs = { "Fish" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "RodAndLine" } },
     workTime = 729,
@@ -585,6 +622,7 @@ rttr:SetBuilding{
     look = "Hunter",
     worker = { title = "Huntsman", look = "Hunter" },
     collect = { radius = 19 },
+    outputs = { "Meat" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Bow" } },
     waitTime = 900,
@@ -598,6 +636,7 @@ rttr:SetBuilding{
     size = "small",
     cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Rope = 1 },
     look = "Well",
+    outputs = { "Water" },
     outputRatio = 1,
     workTime = 385,
     waitTime = 400,
@@ -614,6 +653,7 @@ rttr:SetBuilding{
     look = "Farm",
     worker = { title = "Farmer", look = "Farmer" },
     plant = { radius = 2 },
+    outputs = { "Grain" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "Scythe" } },
     workTime = 117,
@@ -629,7 +669,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 2 },
     look = "Mill",
     worker = { title = "Miller", look = "Miller" },
+    inputs = { "Grain" },
     storage = 6,
+    outputs = { "Flour" },
     outputRatio = 1,
     workTime = 470,
     waitTime = 595,
@@ -645,7 +687,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 4, BasicRoofMaterial = 2, Stones = 3 },
     look = "Bakery",
     worker = { title = "Baker", look = "Baker" },
+    inputs = { "Flour", "Water" },
     storage = 6,
+    outputs = { "Bread" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Rollingpin" } },
     workTime = 470,
@@ -662,7 +706,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 8, BasicRoofMaterial = 5 },
     look = "PigFarm",
     worker = { title = "Pig breeder", look = "PigBreeder" },
+    inputs = { "Grain", "Water" },
     storage = 6,
+    outputs = { "Ham" },
     outputRatio = 1,
     workTime = 390,
     waitTime = 660,
@@ -678,7 +724,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 2 },
     look = "Slaughterhouse",
     worker = { title = "Butcher", look = "Butcher" },
+    inputs = { "Ham" },
     storage = 6,
+    outputs = { "Meat" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Cleaver" } },
     workTime = 478,
@@ -695,7 +743,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 5 },
     look = "Brewery",
     worker = { title = "Brewer", look = "Brewer" },
+    inputs = { "Grain", "Water" },
     storage = 6,
+    outputs = { "Beer" },
     outputRatio = 1,
     workTime = 530,
     waitTime = 500,
@@ -719,7 +769,9 @@ rttr:SetBuilding{
     look = "Vineyard",
     worker = { title = "Winegrower", look = "Winegrower" },
     plant = { radius = 2 },
+    inputs = { "Wood", "Water" },
     storage = 6,
+    outputs = { "Grapes" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Shovel" } },
     workTime = 117,
@@ -735,7 +787,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 3 },
     look = "Winery",
     worker = { title = "Vintner", look = "Vintner" },
+    inputs = { "Grapes" },
     storage = 6,
+    outputs = { "Wine" },
     outputRatio = 1,
     workTime = 470,
     waitTime = 595,
@@ -755,7 +809,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4, Stones = 4 },
     look = "Ironsmelter",
     worker = { title = "Iron founder", look = "IronFounder" },
+    inputs = { "IronOre", "Coal" },
     storage = 6,
+    outputs = { "Iron" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "Crucible" } },
     workTime = 950,
@@ -772,7 +828,10 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4, Stones = 2 },
     look = "Metalworks",
     worker = { title = "Metalworker", look = "Metalworker" },
+    inputs = { "Iron", "Boards" },
     storage = 6,
+    outputs = { "IronTongs", "IronHammer", "IronAxe", "IronSaw", "IronPickAxe", "IronShovel", "IronCrucible",
+        "RodAndLine", "IronScythe", "IronCleaver", "Rollingpin", "Bow" },
     outputRatio = 1,
     tools = { baseSpeed = 25, tools = { "Tongs" } },
     workTime = 850,
@@ -789,7 +848,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 5, Stones = 5 },
     look = "Armory",
     worker = { title = "Armorer", look = "Armorer" },
+    inputs = { "Iron", "Coal" },
     storage = 6,
+    outputs = { "IronSword", "IronShield" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Hammer" } },
     workTime = 940,
@@ -806,7 +867,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 6, BasicRoofMaterial = 5, Stones = 5 },
     look = "Mint",
     worker = { title = "Minter", look = "Minter" },
+    inputs = { "Gold", "Coal" },
     storage = 6,
+    outputs = { "Coins" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Crucible" } },
     workTime = 1050,
@@ -840,7 +903,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 1 },
     look = "Skinner",
     worker = { title = "Skinner", look = "Skinner" },
+    inputs = { "Ham" },
     storage = 3,
+    outputs = { "Skins" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Cleaver" } },
     workTime = 470,
@@ -857,7 +922,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4 },
     look = "Tannery",
     worker = { title = "Tanner", look = "Tanner" },
+    inputs = { "Skins", "Boards" },
     storage = 6,
+    outputs = { "Leather" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Saw" } },
     workTime = 470,
@@ -874,7 +941,9 @@ rttr:SetBuilding{
     cost = { BasicBuildingMaterial = 5, BasicRoofMaterial = 4 },
     look = "LeatherWorks",
     worker = { title = "Leatherworker", look = "LeatherWorker" },
+    inputs = { "Leather" },
     storage = 6,
+    outputs = { "LeatherArmor" },
     outputRatio = 1,
     tools = { baseSpeed = 0, tools = { "Tongs" } },
     workTime = 470,

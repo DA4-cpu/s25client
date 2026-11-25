@@ -11,12 +11,14 @@
 #include "SoundManager.h"
 #include "addons/const_addons.h"
 #include "buildings/noBaseBuilding.h"
+#include "buildings/nobUsual.h"
 #include "network/GameClient.h"
 #include "nofFarmer.h"
 #include "ogl/glArchivItem_Bitmap_Player.h"
 #include "random/Random.h"
 #include "world/GameWorld.h"
 #include "nodeObjs/noTree.h"
+#include "gameData/BuildingConsts.h"
 #include <boost/container/static_vector.hpp>
 
 namespace {
@@ -107,6 +109,12 @@ void nofForester::WorkFinished()
 }
 
 /// Returns the quality of this working point or determines if the worker can work here at all
+void nofForester::WalkingStarted()
+{
+    if(!BLD_WORK_DESC[workplace->GetBuildingType()].inputs.empty())
+        workplace->ConsumeWares();
+}
+
 nofFarmhand::PointQuality nofForester::GetPointQuality(const MapPoint pt, bool /* isBeforeWork */) const
 {
     // Der Platz muss frei sein

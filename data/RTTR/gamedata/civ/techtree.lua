@@ -16,10 +16,12 @@ Felder von rttr:AddTechnology{...}:
               Vorratshaltung und dazu Mahlen und Backen oder Viehzucht.
   knowledge   Kosten in Wissenspunkten, z.B. { LWP = 4, IWP = 2 } (LWP Landwirtschaft, IWP Industrie, MWP Militär). Standardwert+Wissensmedienzusatz
               Werden erst beim Abschluss abgebucht. Die WP der Gebäude stehen in workshops.lua (knowledge).
-  cost        Warenkosten, z.B. { Boards = 4, Stones = 2 }. Bezeichner wie im Enum GoodType:
-              Beer Tongs Hammer Axe Saw PickAxe Shovel Crucible RodAndLine Scythe Water Cleaver Rollingpin Bow
-              Boat Sword Iron Flour Fish Bread Shield Wood Boards Stones Grain Coins Gold IronOre Coal Meat Ham
-              Grapes Wine Skins Leather Armor
+  cost        Warenkosten, z.B. { Boards = 4, Cobblestones = 2 }. Bezeichner der Waren (keine Tag-Abfrage): die
+              neuen Waren aus wares.lua und die eingebauten:
+              Beer IronTongs IronHammer IronAxe IronSaw IronPickAxe IronShovel IronCrucible RodAndLine IronScythe
+              Water IronCleaver Rollingpin Bow Boat IronSword Iron Flour Fish Bread IronShield Wood Boards
+              Cobblestones Grain Coins Gold IronOre Coal Meat Ham Grapes Wine Skins Leather LeatherArmor
+              (wares.lua benennt mit rttr:SetWare Stones, Sword, Shield, Armor und die Eisenwerkzeuge um)
   time        Mindestdauer in Sekunden ab Forschungsbeginn
   unlocks     { buildings = {...} } Bezeichner wie im Enum BuildingType:
               Barracks Guardhouse Watchtower Fortress LookoutTower Catapult Woodcutter Forester Quarry Fishery
@@ -400,7 +402,7 @@ rttr:AddTechnology{
     era = 2,
     requires = { "metallurgy", "lookout" },
     knowledge = { MWP = 12+4 },
-    cost = { Stones = 6 },
+    cost = { Cobblestones = 6 },
     time = 120,
     unlocks = { buildings = { "Watchtower" } },
     aiPriority = 91,
@@ -439,7 +441,7 @@ rttr:AddTechnology{
     era = 2,
     requires = { "fortification" },
     knowledge = { MWP = 30+4 },
-    cost = { Stones = 1 },
+    cost = { Cobblestones = 1 },
     time = 160,
     unlocks = { buildings = { "Catapult" } },
     aiPriority = 20,

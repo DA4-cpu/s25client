@@ -8,11 +8,13 @@
 #include "Loader.h"
 #include "SerializedGameData.h"
 #include "SoundManager.h"
+#include "buildings/nobUsual.h"
 #include "network/GameClient.h"
 #include "ogl/glArchivItem_Bitmap_Player.h"
 #include "world/GameWorld.h"
 #include "nodeObjs/noEnvObject.h"
 #include "nodeObjs/noGrainfield.h"
+#include "gameData/BuildingConsts.h"
 
 nofFarmer::nofFarmer(const MapPoint pos, const unsigned char player, nobUsual* workplace)
     : nofFarmhand(Job::Farmer, pos, player, workplace), harvest(false)
@@ -114,7 +116,7 @@ void nofFarmer::WorkFinished()
         world->SetNO(pos, new noEnvObject(pos, mapLstId));
 
         // Getreide, was wir geerntet haben, in die Hand nehmen
-        ware = GoodType::Grain;
+        ware = TakeStepProduct(GoodType::Grain);
     } else
     {
         // If the point got bad (e.g. something was build), abort work
@@ -141,7 +143,7 @@ void nofFarmer::WorkFinished()
 }
 
 /// Returns the quality of this working point or determines if the worker can work here at all
-nofFarmhand::PointQuality nofFarmer::GetPointQuality(const MapPoint pt, bool /* isBeforeWork */) const
+nofFarmhand::PointQuality nofFarmer::GetPointQuality(const MapPoint pt, const bool isBeforeWork) const
 {
     // Entweder gibts ein Getreidefeld, das wir abernten können...
     if(world->GetNO(pt)->GetType() == NodalObjectType::Grainfield)
@@ -151,9 +153,29 @@ nofFarmhand::PointQuality nofFarmer::GetPointQuality(const MapPoint pt, bool /* 
         else
             return PointQuality::NotPossible;
     }
-    // oder einen freien Platz, wo wir ein neues sähen können
+    // oder einen freien Platz, wo wir ein neues sähen können (mit Eingängen nur, wenn ihre Waren da sind)
     else
+    {
+        if(isBeforeWork && HasInputs() && !workplace->WaresAvailable())
+            return PointQuality::NotPossible;
         return GetNewFieldPointQuality(*world, pt);
+    }
+}
+
+bool nofFarmer::HasInputs() const
+{
+    return workplace && !BLD_WORK_DESC[workplace->GetBuildingType()].inputs.empty();
+}
+
+void nofFarmer::WalkingStarted()
+{
+    if(HasInputs() && world->GetNO(dest)->GetType() != NodalObjectType::Grainfield)
+        workplace->ConsumeWares();
+}
+
+bool nofFarmer::AreWaresAvailable() const
+{
+    return true;
 }
 
 void nofFarmer::WorkAborted()

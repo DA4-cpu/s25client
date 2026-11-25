@@ -39,5 +39,6 @@ void nofBrewer::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofBrewer::ProduceWare()
 {
-    return GoodType::Beer;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Beer);
 }

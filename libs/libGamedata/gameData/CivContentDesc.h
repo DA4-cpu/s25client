@@ -291,6 +291,14 @@ struct BuiltinBuildingDesc
     std::optional<MilitaryDesc> military;
     /// Warehouse: wares it holds at most (warehouse = { capacity = 400 })
     std::optional<unsigned> warehouseCapacity;
+    /// Eingänge wie bei rttr:AddWorkshop. Nicht gesetzt: die Eingänge des Originalspiels
+    std::optional<std::vector<InputDesc>> inputs;
+    /// Produkte wie bei rttr:AddWorkshop (je Eintrag eine Tag-Abfrage). Nicht gesetzt: die des Originalspiels
+    std::optional<std::vector<TagQuery>> outputs;
+    /// Arbeitsschritte je Eintrag von outputs in Hundertsteln (gleiche Reihenfolge, 100 = 1 Schritt)
+    std::vector<unsigned> outputSteps;
+    std::optional<bool> inheritProperties;
+    std::optional<std::string> outputChoice;
 
     BuiltinBuildingDesc() = default;
     explicit BuiltinBuildingDesc(const kaguya::LuaTable& luaData);

@@ -117,5 +117,6 @@ void nofBaker::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofBaker::ProduceWare()
 {
-    return GoodType::Bread;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Bread);
 }

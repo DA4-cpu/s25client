@@ -29,7 +29,8 @@ protected:
     helpers::OptionalEnum<GoodType> GetRandomTool();
 
     /// Civilization mode: next tool by the distribution of all wares (orders first)
-    GoodType ChooseByDistribution();
+    /// Eigene Grafik für die Werkzeuge des Originalspiels
+    bool HasCarryGraphic(GoodType good) const override;
     bool HasToolOrder() const;
 
     bool AreWaresAvailable() const override;

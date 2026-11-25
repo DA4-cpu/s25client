@@ -38,5 +38,6 @@ void nofCarpenter::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofCarpenter::ProduceWare()
 {
-    return GoodType::Boards;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Boards);
 }

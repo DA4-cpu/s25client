@@ -63,10 +63,14 @@ unsigned short nofLeatherWorker::GetCarryID() const
 
 void nofLeatherWorker::DrawWalkingWithWare(DrawPoint drawPt)
 {
+    // Zivilisationsmodus: ein anderes Produkt (outputs) trägt er wie ein Träger
+    if(DrawCarryingOtherWare(drawPt))
+        return;
     DrawWalking(drawPt, "leather_bobs", bobIndex[BobType::LeatherworkerCarryingArmorInOut]);
 }
 
 helpers::OptionalEnum<GoodType> nofLeatherWorker::ProduceWare()
 {
-    return GoodType::Armor;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Armor);
 }

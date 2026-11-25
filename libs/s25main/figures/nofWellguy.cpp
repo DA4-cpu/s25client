@@ -112,11 +112,15 @@ void nofWellguy::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofWellguy::ProduceWare()
 {
-    return GoodType::Water;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Water);
 }
 
 bool nofWellguy::AreWaresAvailable() const
 {
+    // Zivilisationsmodus: auch die Eingänge aus Lua (inputs in rttr:SetBuilding; ohne Eingänge immer erfüllt)
+    if(!nofWorkman::AreWaresAvailable())
+        return false;
     // Check for water
     return FindPointWithResource(ResourceType::Water).isValid();
 }

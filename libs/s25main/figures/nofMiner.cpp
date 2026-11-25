@@ -61,12 +61,13 @@ unsigned short nofMiner::GetCarryID() const
 
 helpers::OptionalEnum<GoodType> nofMiner::ProduceWare()
 {
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
     switch(workplace->GetBuildingType())
     {
-        case BuildingType::GoldMine: return GoodType::Gold;
-        case BuildingType::IronMine: return GoodType::IronOre;
-        case BuildingType::CoalMine: return GoodType::Coal;
-        default: return GoodType::Stones;
+        case BuildingType::GoldMine: return TakeStepProduct(GoodType::Gold);
+        case BuildingType::IronMine: return TakeStepProduct(GoodType::IronOre);
+        case BuildingType::CoalMine: return TakeStepProduct(GoodType::Coal);
+        default: return TakeStepProduct(GoodType::Stones);
     }
 }
 

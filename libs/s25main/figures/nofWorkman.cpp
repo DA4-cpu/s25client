@@ -30,12 +30,16 @@ void nofWorkman::HandleDerivedEvent(const unsigned /*id*/)
 
 bool nofWorkman::StartWorking()
 {
+    // Zivilisationsmodus: Produkt des Schritts wählen (bei einer Wahl vor dem Verbrauch der Eingänge)
+    ChooseStepProduct(true);
     current_ev = GetEvMgr().AddEvent(
       this, workplace->ScaleWorkDuration(civ::getActiveContent().GetWorkTimes(workplace->GetBuildingType()).work), 1);
     state = State::Work;
     workplace->is_working = true;
     // Waren verbrauchen
     workplace->ConsumeWares();
+    // Ein Produkt (oder eines je Eingangsware mit inheritProperties): nach der verbrauchten Ware
+    ChooseStepProduct(false);
     return true;
 }
 

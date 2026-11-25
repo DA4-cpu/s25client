@@ -59,10 +59,14 @@ unsigned short nofVintner::GetCarryID() const
 
 void nofVintner::DrawWalkingWithWare(DrawPoint drawPt)
 {
+    // Zivilisationsmodus: ein anderes Produkt (outputs) trägt er wie ein Träger
+    if(DrawCarryingOtherWare(drawPt))
+        return;
     DrawWalking(drawPt, "wine_bobs", bobIndex[BobTypes::VINTNER_CARRYING_WINE_IN_OUT]);
 }
 
 helpers::OptionalEnum<GoodType> nofVintner::ProduceWare()
 {
-    return GoodType::Wine;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Wine);
 }

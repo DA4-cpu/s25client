@@ -37,5 +37,6 @@ void nofButcher::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofButcher::ProduceWare()
 {
-    return GoodType::Meat;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Meat);
 }

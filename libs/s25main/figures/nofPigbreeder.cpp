@@ -66,7 +66,8 @@ void nofPigbreeder::DrawWorking(DrawPoint drawPt)
 
 helpers::OptionalEnum<GoodType> nofPigbreeder::ProduceWare()
 {
-    return GoodType::Ham;
+    // Zivilisationsmodus: das Produkt aus outputs (Standard: das des Originalspiels)
+    return TakeStepProduct(GoodType::Ham);
 }
 
 void nofPigbreeder::MakePigSounds()
