@@ -112,7 +112,7 @@ rttr:SetBuildingCost{
     Sawmill = { { tags = "Stones", amount = 1 }, { tags = { "Bretter", "Nadel" }, amount = 2 } },
 }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { { tags = "Bretter", amount = 3 } }, look = "Sawmill",
-    worker = { look = "Carpenter" }, inputs = { "Stones" }, output = "Boards", workTime = 5 }
+    worker = { look = "Carpenter" }, inputs = { "Stones" }, outputs = { "Boards" }, workTime = 5 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));

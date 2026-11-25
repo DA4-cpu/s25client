@@ -73,11 +73,11 @@ WorldDescription makeDesc(bool lockPit = false)
     WorkshopDesc pit = makeWorkshop("Pit");
     pit.collectObject = "LoamDeposit";
     pit.collectRadius = 6;
-    pit.output = {"Loam"};
+    pit.outputs = {{"Loam"}};
     desc.workshops.push_back(pit);
     WorkshopDesc kiln = makeWorkshop("Kiln");
     kiln.inputs = {InputDesc{{"Loam"}}};
-    kiln.output = {"Clay"};
+    kiln.outputs = {{"Clay"}};
     desc.workshops.push_back(kiln);
     if(lockPit)
     {
@@ -287,7 +287,7 @@ BOOST_AUTO_TEST_CASE(ExpandingBuildingsFromLua)
     const std::string workshop = R"(
 rttr:AddWare{ name = "Loam", look = "Stones", transport = "Stones" }
 rttr:AddWorkshop{ name = "Pit", size = "small", cost = { Boards = 2 }, look = "Quarry",
-    worker = { look = "Stonemason" }, output = "Loam", workTime = 5 }
+    worker = { look = "Stonemason" }, outputs = { "Loam" }, workTime = 5 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(workshop + R"(rttr:SetAIExpandingBuildings{ "Woodcutter", "Pit", "Barracks" })", desc));
@@ -353,7 +353,7 @@ BOOST_AUTO_TEST_CASE(BasicEconomyAndStartStockFromLua)
     const std::string workshop = R"(
 rttr:AddWare{ name = "Loam", kind = "Soil", look = "Stones", transport = "Stones" }
 rttr:AddWorkshop{ name = "Pit", size = "small", cost = { Boards = 2 }, look = "Quarry",
-    worker = { look = "Stonemason" }, output = "Loam", workTime = 5 }
+    worker = { look = "Stonemason" }, outputs = { "Loam" }, workTime = 5 }
 )";
     WorldDescription desc;
     // Tag queries: "Wood" (name of a built-in ware), "Soil" (kind of Loam), a list of tags

@@ -181,9 +181,8 @@ struct WorkshopDesc
     WorkerDesc worker;
     /// Inputs. A work step needs and uses the amount of every input
     std::vector<InputDesc> inputs;
-    /// Tag query of the product
-    TagQuery output;
-    /// Alternative to output: List of products, each a tag query that must match exactly one ware
+    /// Products: each entry a tag query, every ware it matches is a product (e.g. "GeritzterKnochen" for all carved
+    /// bones). Empty: no product (library, plantation that only plants)
     std::vector<TagQuery> outputs;
     /// Work steps each product of outputs costs in hundredths (same order as outputs, 100 = 1 step)
     std::vector<unsigned> outputSteps;
@@ -208,7 +207,7 @@ struct WorkshopDesc
     std::string collectObject;
     /// Collector: Maximum distance of the map objects in nodes
     unsigned collectRadius = 0;
-    /// Plantation: Identifier of the map object the worker plants (rttr:AddMapObject with growTime). With an output he
+    /// Plantation: Identifier of the map object the worker plants (rttr:AddMapObject with growTime). With outputs he
     /// also harvests grown objects of this kind. Empty: no plantation
     std::string plantObject;
     /// Plantation: Maximum distance of the planted objects in nodes

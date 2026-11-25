@@ -370,8 +370,8 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         if(size == "mine")
             throw GameDataError(context + ": a warehouse is no mine");
         for(const char* key :
-            {"worker", "inputs", "consume", "library", "collect", "plant", "mine", "output", "outputs",
-             "inheritProperties", "outputChoice", "storage", "workTime", "waitTime", "tools", "outputRatio"})
+            {"worker", "inputs", "consume", "library", "collect", "plant", "mine", "outputs", "inheritProperties",
+             "outputChoice", "storage", "workTime", "waitTime", "tools", "outputRatio"})
         {
             if(luaData.getOptional<kaguya::LuaRef>(key))
                 throw GameDataError(context + ": a warehouse has no '" + key + "' (it only stores wares)");
@@ -439,7 +439,7 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         if(isLibrary || !collectObject.empty())
             throw GameDataError(context
                                 + ": a plantation is no library and does not collect (it harvests its own "
-                                  "objects if it has an output)");
+                                  "objects if it has outputs)");
     }
     if(auto mineTable = luaData.getOptional<kaguya::LuaTable>("mine"))
     {
@@ -458,17 +458,19 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         throw GameDataError(context
                             + ": a library has no inputs, it takes all wares with knowledge points (knowledge media)");
     }
-    const auto outputValue = luaData.getOptional<kaguya::LuaRef>("output");
+    if(luaData.getOptional<kaguya::LuaRef>("output"))
+    {
+        throw GameDataError(
+          context
+          + ": output does not exist anymore. The products are in outputs, e.g. outputs = { \"Clay\" } "
+            "or outputs = { { \"Saw\", \"Copper\" } } for a ware with both tags");
+    }
     const auto outputsTable = luaData.getOptional<kaguya::LuaTable>("outputs");
-    if(outputValue && outputsTable)
-        throw GameDataError(context + ": use either output or outputs");
     if(isLibrary)
     {
-        if(outputValue || outputsTable)
-            throw GameDataError(context + ": a library produces nothing (no output)");
-    } else if(outputValue)
-        output = parseTagQuery(*outputValue, context + ", output");
-    else if(outputsTable)
+        if(outputsTable)
+            throw GameDataError(context + ": a library produces nothing (no outputs)");
+    } else if(outputsTable)
     {
         for(const kaguya::LuaRef& entry : outputsTable->values())
         {
@@ -483,10 +485,8 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
             throw GameDataError(context + ": at most " + std::to_string(MAX_WORKSHOP_OUTPUTS)
                                 + " entries in outputs are possible");
         }
-        if(!collectObject.empty() || !plantObject.empty() || !mineResource.empty())
-            throw GameDataError(context + ": collectors, plantations and mines have a single output, not outputs");
     } else if(plantObject.empty())
-        throw GameDataError(context + ": output is missing (only a plantation may have none: then it only plants)");
+        throw GameDataError(context + ": outputs is missing (only a plantation may have none: then it only plants)");
     inheritProperties = luaData.getOrDefault("inheritProperties", false);
     outputChoice = luaData.getOrDefault("outputChoice", std::string());
     if(!outputChoice.empty() && outputChoice != "knowledge")
@@ -497,8 +497,6 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
     }
     if(!outputChoice.empty() && inheritProperties)
         throw GameDataError(context + ": outputChoice and inheritProperties can not be combined");
-    if(!outputs.empty() && inheritProperties)
-        throw GameDataError(context + ": outputs and inheritProperties can not be combined (use output)");
     storage = luaData.getOrDefault("storage", 6u);
     if(storage == 0 || storage > 99)
         throw GameDataError(context + ": storage must be in [1, 99]");
@@ -518,8 +516,8 @@ WorkshopDesc::WorkshopDesc(const kaguya::LuaTable& luaTable)
         tools = parseBuildingTools(*toolsTable, context);
     if(const auto ratio = luaData.getOptional<double>("outputRatio"))
     {
-        if(isLibrary || (output.empty() && outputs.empty()))
-            throw GameDataError(context + ": outputRatio needs a product (output or outputs)");
+        if(isLibrary || outputs.empty())
+            throw GameDataError(context + ": outputRatio needs a product (outputs)");
         outputRatio = parseOutputRatio(*ratio, context);
     }
     luaData.checkUnused();

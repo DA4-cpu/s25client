@@ -68,6 +68,8 @@ Alles ist ein **optionaler Spielmodus** (Addon „Zivilisationsmodus“); normal
 | 2026-11-12 | Mehrere Waren in einem Schritt: Mit `outputChoice` wird **jede Ware einzeln gewählt**; **Nebenprodukte je Ware**. |
 | 2026-11-12 | **Neue KI** (Konzept von Claude, vom Nutzer übernommen): datengetrieben in fünf Schichten (Wahrnehmung, Wirtschaftsmodell, Ziele, Planung, Ausführung), siehe Abschnitt „Neue KI“. Die KI **kennt die ganze Karte**; ihre **Ausrichtung ergibt sich nur aus Karte und Lage** (keine festen Persönlichkeiten); Schwierigkeitsgrade **ohne Boni**; Alternativen kommen über **abstrakte Tags** in den Daten. Alle Schritte so effizient wie möglich. |
 | 2026-11-12 | **Baukosten nach Tags**: jede Ware kann Baumaterial sein. Auch die eingebauten Gebäude bekommen ihre Kosten aus Lua (`rttr:SetBuildingCost`). Kurzform `{ Boards = 2 }` und Langform `{ { tags = ..., amount = ... } }`. Verbaut wird **nur nach Reihenfolge** (erste Hälfte des Fortschritts = Gerüst). Die Baustelle bestellt aus dem **nächsten Lager mit irgendeiner passenden Ware**. |
+| 2026-11-25 | **Sparwert je Ware:** Jede Ware eines Gebäudes hat ihren eigenen Sparwert, zu Beginn jedes Arbeitsschritts wird neu gewählt, der Ertrag des Schritts kommt nur auf den Sparwert der gewählten Ware. Mehrere Stück in einem Schritt sind dieselbe Ware (ersetzt „jede Ware einzeln gewählt“ vom 2026-11-12). Kosten je Ware: `steps` an Einträgen von `outputs`. |
+| 2026-11-25 | **`output` entfällt**, `outputs` übernimmt seine Rolle: ein Eintrag darf mehrere Waren treffen (jede ist ein Produkt), auch für Sammler, Plantagen, Minen, `inheritProperties` und `outputChoice`. |
 
 ## Zuordnung Humankind → Siedler
 
@@ -259,6 +261,9 @@ Die WP-Kosten der Technologien sind Startwerte von Claude (2026-10-21). Alle Wer
   Flagge, bis genug Plätze frei sind. Es wird also nichts zurückgelassen, und der Spielstand braucht keine neuen Daten.
 
 ### Mehrere mögliche Produkte (Stand 2026-11-12)
+
+Überholt in Teilen (2026-11-25): `output` gibt es nicht mehr, `outputs` übernimmt alles (siehe „Notizen aus den
+Lua-Dateien, Schritt 3: Arbeitsschritte je Produkt und Werkzeug-Ratios“).
 
 - Produkte: `output` (eine Tag-Abfrage, darf mit `outputChoice` mehrere Waren treffen) oder `outputs` (Liste, jeder
   Eintrag trifft genau eine Ware, höchstens 16; nicht für Sammler, Plantagen, Minen und nicht mit `inheritProperties`).
@@ -1986,9 +1991,17 @@ outputRatio und inputRatio der Werkzeuge als Zahl für alles oder je Tag („Coa
 
 - **Lua, Werkstatt:** Ein Eintrag von `outputs` darf `steps` haben: `{ "CopperSword", steps = 1.5 }` (Tag-Abfrage wie
   bisher, dazu `steps` mehr als 0 bis 99, mindestens 0,01, Standard 1). Andere Felder im Eintrag sind ein Ladefehler.
-  `output` (eine Tag-Abfrage für mehrere Waren) hat keine `steps`, Sammler, Plantagen und Minen haben kein `outputs`.
-  Code: `parseOutput`, `WorkshopDesc::outputSteps`, `CustomBuilding::productSteps`, `GetProductSteps`,
+  Trifft ein Eintrag mehrere Waren, gilt `steps` für jede. Code: `parseOutput`, `WorkshopDesc::outputSteps`, `CustomBuilding::productSteps`, `GetProductSteps`,
   `GetAllProducts`.
+- **`output` entfällt (Nutzer 2026-11-25: „Lösche einfach output und lass outputs diese Rolle übernehmen“):** Jede
+  Werkstatt mit Produkt hat `outputs`. Ein Eintrag ist eine Tag-Abfrage (Text = ein Tag, Liste = alle diese Tags), jede
+  Ware, die er trifft, ist ein Produkt: `outputs = { "GeritzterKnochen" }` = alle geritzten Knochen (früher
+  `output = "GeritzterKnochen"`), `outputs = { { "Saw", "Copper" } }` = die Ware mit beiden Tags (früher
+  `output = { "Saw", "Copper" }`). Trifft ein Eintrag keine Ware oder kommt eine Ware zweimal vor, ist das ein
+  Ladefehler. `outputs` geht jetzt auch für Sammler, Plantagen und Minen (genau ein Produkt) und mit `inheritProperties`
+  und `outputChoice`. Ohne `outputs`: Bibliothek oder Plantage, die nur pflanzt. `output` in Lua ist ein Ladefehler mit
+  Hinweis auf `outputs`. Code: `WorkshopDesc::outputs` (Feld `output` entfernt), `Content` (alle Treffer jedes
+  Eintrags). Alle Werkstätten in `workshops.lua` umgestellt.
 - **Lua, Werkzeug:** `outputRatio` und `inputRatio` in `rttr:AddTool` sind eine Zahl (gilt für alle Produkte bzw. alle
   Eingänge) oder eine Tabelle `{ Tag = Zahl }` (gilt nur für Produkte mit dem Tag bzw. für Eingänge, deren Waren alle den
   Tag haben). Beide Formen auch negativ: `outputRatio` −8 bis 8, `inputRatio` −99 bis 99. Ein Tag, den keine Ware hat,

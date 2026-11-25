@@ -391,44 +391,34 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.workDesc.inputs.push_back(std::move(slot));
         }
 
-        // Output: Either all wares matching output or one ware per entry of outputs
-        const bool hasOutput = !wsDesc.output.empty() || !wsDesc.outputs.empty();
+        // Products: every ware matching an entry of outputs (an entry may match several, e.g. all carved bones)
+        const bool hasOutput = !wsDesc.outputs.empty();
         std::vector<GoodType> outputMatches;
-        std::string outputText;
-        if(!wsDesc.outputs.empty())
+        for(unsigned k = 0; k < wsDesc.outputs.size(); ++k)
         {
-            outputText = "outputs";
-            for(unsigned k = 0; k < wsDesc.outputs.size(); ++k)
+            const TagQuery& query = wsDesc.outputs[k];
+            const std::vector<GoodType> matches = FindWares(query);
+            if(matches.empty())
+                throw GameDataError(context + ": entry " + joinTags(query) + " of outputs matches no ware");
+            const unsigned steps = k < wsDesc.outputSteps.size() ? wsDesc.outputSteps[k] : 100u;
+            for(const GoodType good : matches)
             {
-                const TagQuery& query = wsDesc.outputs[k];
-                const std::vector<GoodType> matches = FindWares(query);
-                if(matches.size() != 1u)
+                if(helpers::contains(outputMatches, good))
                 {
-                    throw GameDataError(context + ": entry " + joinTags(query) + " of outputs matches "
-                                        + std::to_string(matches.size()) + " wares (expected exactly 1)");
+                    throw GameDataError(context + ": the ware '" + getIdentifierOf(good)
+                                        + "' is in outputs twice (entry " + joinTags(query) + ")");
                 }
-                if(helpers::contains(outputMatches, matches.front()))
-                {
-                    throw GameDataError(context + ": the ware '" + getIdentifierOf(matches.front())
-                                        + "' is in outputs twice");
-                }
-                outputMatches.push_back(matches.front());
-                const unsigned steps = k < wsDesc.outputSteps.size() ? wsDesc.outputSteps[k] : 100u;
+                outputMatches.push_back(good);
                 if(steps != 100u)
-                    bld.productSteps.emplace_back(matches.front(), steps);
+                    bld.productSteps.emplace_back(good, steps);
             }
-        } else if(!wsDesc.output.empty())
-        {
-            outputText = "output " + joinTags(wsDesc.output);
-            outputMatches = FindWares(wsDesc.output);
         }
         if(!hasOutput)
         {
             // Plantation that only plants (like the forester)
             if(wsDesc.inheritProperties || !wsDesc.outputChoice.empty())
-                throw GameDataError(context + ": inheritProperties and outputChoice need an output");
-        } else if(outputMatches.empty())
-            throw GameDataError(context + ": " + outputText + " matches no ware");
+                throw GameDataError(context + ": inheritProperties and outputChoice need outputs");
+        }
         if(!wsDesc.outputChoice.empty() && (bld.IsCollector() || bld.IsPlanter() || bld.IsMine()))
             throw GameDataError(context + ": collectors, plantations and mines can not choose their product");
         if(wsDesc.inheritProperties)
@@ -447,8 +437,8 @@ Content::Content(const WorldDescription& desc) : Content()
                 if(products.size() != 1u)
                 {
                     throw GameDataError(context + ": for input '" + getIdentifierOf(input) + "' "
-                                        + std::to_string(products.size()) + " wares match the output "
-                                        + joinTags(wsDesc.output) + " with the same properties (expected exactly 1)");
+                                        + std::to_string(products.size())
+                                        + " wares of outputs have the same properties (expected exactly 1)");
                 }
                 bld.productByInput.emplace_back(input, products.front());
             }
@@ -466,7 +456,7 @@ Content::Content(const WorldDescription& desc) : Content()
                 }
                 if(types.size() != 1u)
                 {
-                    throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of the " + outputText
+                    throw GameDataError(context + ": with outputChoice = \"knowledge\" every ware of outputs"
                                         + " needs knowledge points of exactly one type (LWP, IWP or MWP), but '"
                                         + getIdentifierOf(candidate) + "' has " + std::to_string(types.size()));
                 }
@@ -497,14 +487,7 @@ Content::Content(const WorldDescription& desc) : Content()
             bld.productChoices = outputMatches;
             bld.product = outputMatches.front();
         } else if(hasOutput)
-        {
-            if(outputMatches.size() != 1u)
-            {
-                throw GameDataError(context + ": " + outputText + " matches " + std::to_string(outputMatches.size())
-                                    + " wares (expected exactly 1, or use outputChoice)");
-            }
             bld.product = outputMatches.front();
-        }
 
         bld.workDesc.job = getCustomJob(i);
         if(!hasOutput)

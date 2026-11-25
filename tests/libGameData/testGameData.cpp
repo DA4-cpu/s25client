@@ -247,9 +247,9 @@ rttr:AddWorkshop{ name = "Shop", title = "Werkstatt", description = "Desc", size
                   cost = { Boards = 2, Stones = 1 }, look = "Sawmill",
                   worker = { title = "Arbeiter", look = "Carpenter" },
                   inputs = { "Raw", { "Bretter", "Nadelholz" }, { tags = "RawKind", amount = 2.5, storage = 3 } },
-                  output = "Product",
+                  outputs = { "Product" },
                   inheritProperties = true, storage = 4, workTime = 20, waitTime = 5 }
-rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = { "Product" }, workTime = 1,
+rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", outputs = { "Product" }, workTime = 1,
                   worker = { look = "Helper" } }
 )";
     }
@@ -297,7 +297,7 @@ rttr:AddWorkshop{ name = "Shop2", size = "small", look = "Woodcutter", output = 
     BOOST_TEST((shop.inputs[2].tags == TagQuery{"RawKind"}));
     BOOST_TEST(shop.inputs[2].amount == 250u);
     BOOST_TEST(shop.inputs[2].storage == 3u);
-    BOOST_TEST((shop.output == TagQuery{"Product"}));
+    BOOST_TEST((shop.outputs == std::vector<TagQuery>{{"Product"}}));
     BOOST_TEST(shop.inheritProperties);
     BOOST_TEST(shop.storage == 4u);
     BOOST_TEST(shop.workTime == 20u);
@@ -340,28 +340,32 @@ rttr:SetWare{ Boards = { kind = "B" } })");
     expectLoadFailure(R"(rttr:SetWareTags{ Boards = { kind = "Bretter" } })");
     expectLoadFailure(R"(rttr:AddWare{ name = "Bones", kind = { "A", 2 }, look = "Stones", transport = "Stones" })");
     // The worker has no tool any more (tools of a workshop: tools = { ... })
-    expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards",
+    expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", outputs = { "Boards" },
                       workTime = 1, worker = { tool = "Saw", look = "Helper" } })");
     // Workshops
     expectLoadFailure(
-      R"(rttr:AddWorkshop{ name = "W", size = "huge", look = "Sawmill", output = "Boards", workTime = 1, )" + worker
-      + " }");
+      R"(rttr:AddWorkshop{ name = "W", size = "huge", look = "Sawmill", outputs = { "Boards" }, workTime = 1, )"
+      + worker + " }");
     expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", workTime = 1, )" + worker
                       + " }");
-    expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", )" + worker
-                      + " }");
+    expectLoadFailure(R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", outputs = { "Boards" }, )"
+                      + worker + " }");
     expectLoadFailure(
-      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1 })");
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", outputs = { "Boards" }, workTime = 1 })");
     expectLoadFailure(
-      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1,
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", outputs = { "Boards" }, workTime = 1,
                       inputs = { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K" }, )"
       + worker + " }");
     expectLoadFailure(
-      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1,
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", outputs = { "Boards" }, workTime = 1,
                       consume = "any", )"
       + worker + " }");
     expectLoadFailure(
-      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = { 1 }, workTime = 1, )" + worker
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", outputs = { 1 }, workTime = 1, )" + worker
+      + " }");
+    // output does not exist anymore (outputs has all products)
+    expectLoadFailure(
+      R"(rttr:AddWorkshop{ name = "W", size = "small", look = "Sawmill", output = "Boards", workTime = 1, )" + worker
       + " }");
 }
 

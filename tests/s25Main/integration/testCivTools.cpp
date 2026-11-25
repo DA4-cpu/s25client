@@ -147,10 +147,10 @@ rttr:SetBuildingTools{
     Mill = { baseSpeed = 70 },
 }
 rttr:AddWorkshop{ name = "Joinery", size = "small", cost = { Boards = 2 }, look = "Sawmill",
-    worker = { look = "Carpenter" }, inputs = { "Boards" }, output = "Stones", workTime = 5,
+    worker = { look = "Carpenter" }, inputs = { "Boards" }, outputs = { "Stones" }, workTime = 5,
     tools = { tools = { "Saw" } } }
 rttr:AddWorkshop{ name = "Thresher", size = "small", cost = { Boards = 2 }, look = "Mill",
-    worker = { look = "Miller" }, inputs = { "Grain" }, output = "Flour", workTime = 5,
+    worker = { look = "Miller" }, inputs = { "Grain" }, outputs = { "Flour" }, workTime = 5,
     tools = { baseSpeed = 20, tools = { "Plough" } } }
 )";
     WorldDescription desc;

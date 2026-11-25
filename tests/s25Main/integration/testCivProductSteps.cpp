@@ -200,10 +200,12 @@ rttr:AddTool{ ware = "Hammer", material = "Iron", durability = 100, speed = 100,
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "Metalworks",
     worker = { look = "Metalworker" }, inputs = { "Raw" }, outputs = { "Pike", { "Weapon", "Long", steps = 1.5 } },
     workTime = 5 }
+rttr:AddWorkshop{ name = "Smithy", size = "small", cost = { Boards = 2 }, look = "Metalworks",
+    worker = { look = "Metalworker" }, inputs = { "Raw" }, outputs = { { "Weapon", steps = 2 } }, workTime = 5 }
 )";
     WorldDescription desc;
     BOOST_TEST_REQUIRE(loadLua(base, desc));
-    BOOST_TEST_REQUIRE(desc.workshops.size() == 1u);
+    BOOST_TEST_REQUIRE(desc.workshops.size() == 2u);
     BOOST_TEST((desc.workshops[0].outputs[1] == TagQuery{"Weapon", "Long"}));
     BOOST_TEST((desc.workshops[0].outputSteps == std::vector<unsigned>{100, 150}));
     BOOST_TEST_REQUIRE(desc.tools.size() == 2u);
@@ -218,6 +220,11 @@ rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "
     const civ::CustomBuilding& shop = *content.GetBuilding(SHOP);
     BOOST_TEST(shop.GetProductSteps(PIKE) == 100u);
     BOOST_TEST(shop.GetProductSteps(SABER) == 150u);
+    // An entry matching several wares: each is a product with the steps of the entry
+    const civ::CustomBuilding& smithy = *content.GetBuilding(getCustomBuilding(1));
+    BOOST_TEST((smithy.productChoices == std::vector<GoodType>{PIKE, SABER}));
+    BOOST_TEST(smithy.GetProductSteps(PIKE) == 200u);
+    BOOST_TEST(smithy.GetProductSteps(SABER) == 200u);
     const civ::ToolInfo& tongs = *content.GetTool(GoodType::Tongs);
     BOOST_TEST(tongs.GetOutputBonus(SABER) == 50);
     BOOST_TEST(tongs.GetOutputBonus(PIKE) == 0);

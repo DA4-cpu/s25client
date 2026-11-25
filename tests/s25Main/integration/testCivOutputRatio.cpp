@@ -73,7 +73,7 @@ WorldDescription makeDesc(unsigned outputRatio, bool withByproduct = false)
     shop.worker.title = "ShopWorker";
     shop.worker.look = "Carpenter";
     shop.inputs = {InputDesc{{"Raw"}}};
-    shop.output = {"Product"};
+    shop.outputs = {{"Product"}};
     shop.workTime = 2;
     shop.outputRatio = outputRatio;
     desc.workshops.push_back(shop);
@@ -140,11 +140,11 @@ rttr:AddToolMaterial{ name = "Iron" }
 rttr:AddTool{ ware = "Saw", material = "Iron", durability = 100, speed = 100, outputRatio = 0.5 }
 rttr:AddTool{ ware = "CopperSaw", material = "Iron", durability = 100, speed = 50 }
 rttr:AddWorkshop{ name = "Shop", size = "small", cost = { Boards = 2 }, look = "Sawmill",
-    worker = { look = "Carpenter" }, tools = { tools = { "Saw" } }, inputs = { "Raw" }, output = "Product",
+    worker = { look = "Carpenter" }, tools = { tools = { "Saw" } }, inputs = { "Raw" }, outputs = { "Product" },
     workTime = 5,
     outputRatio = 1.25 }
 rttr:AddWorkshop{ name = "Plain", size = "small", cost = { Boards = 2 }, look = "Sawmill",
-    worker = { look = "Carpenter" }, inputs = { "Raw" }, output = "Product", workTime = 5 }
+    worker = { look = "Carpenter" }, inputs = { "Raw" }, outputs = { "Product" }, workTime = 5 }
 rttr:SetBuildingOutputRatio{ Woodcutter = 2, Quarry = 0.25 }
 )";
     WorldDescription desc;

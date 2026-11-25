@@ -84,11 +84,11 @@ WorldDescription makeDesc(const std::vector<std::string>& expanding = {},
     WorkshopDesc pit = makeWorkshop("Pit");
     pit.collectObject = "LoamDeposit";
     pit.collectRadius = 6;
-    pit.output = {"Loam"};
+    pit.outputs = {{"Loam"}};
     desc.workshops.push_back(pit);
     WorkshopDesc kiln = makeWorkshop("Kiln");
     kiln.inputs = {InputDesc{{"Loam"}}};
-    kiln.output = {"Clay"};
+    kiln.outputs = {{"Clay"}};
     desc.workshops.push_back(kiln);
     TechnologyDesc tech;
     tech.name = "pottery";
@@ -538,7 +538,7 @@ BOOST_FIXTURE_TEST_CASE(OneExpandingOrderPerBuildingType, PlannerFixture)
         desc.wares.push_back(ware);
     }
     WorkshopDesc carver = makeWorkshop("Carver");
-    carver.output = {"Carved"};
+    carver.outputs = {{"Carved"}};
     carver.outputChoice = "knowledge";
     desc.workshops.push_back(carver);
     startGame(desc);
@@ -707,7 +707,7 @@ BOOST_FIXTURE_TEST_CASE(NoOrdersForInputsOfABuildingThatCannotWork, PlannerFixtu
     desc.wares.push_back(makeWare("Glass"));
     WorkshopDesc glassworks = makeWorkshop("Glassworks");
     glassworks.inputs = {InputDesc{{"Loam"}}, InputDesc{{"Sand"}}};
-    glassworks.output = {"Glass"};
+    glassworks.outputs = {{"Glass"}};
     desc.workshops.push_back(glassworks);
     TechnologyDesc tech;
     tech.name = "windows";
@@ -743,7 +743,7 @@ WorldDescription makeBrickworksDesc()
     desc.wares.push_back(makeWare("Brick"));
     WorkshopDesc brickworks = makeWorkshop("Brickworks");
     brickworks.inputs = {InputDesc{{"Loam"}}};
-    brickworks.output = {"Brick"};
+    brickworks.outputs = {{"Brick"}};
     brickworks.workTime = 200;
     desc.workshops.push_back(brickworks);
     TechnologyDesc tech;
@@ -1186,7 +1186,7 @@ BOOST_FIXTURE_TEST_CASE(GroupsOfWaresAConsumerTakes, PlannerFixture)
     WorkshopDesc mixer = makeWorkshop("Mixer");
     // One input for both
     mixer.inputs = {InputDesc{{"Aggregate"}}};
-    mixer.output = {"Concrete"};
+    mixer.outputs = {{"Concrete"}};
     desc.workshops.push_back(mixer);
     startGame(desc);
     const GoodType sand = getCustomGood(2), gravel = getCustomGood(3);
@@ -1212,7 +1212,7 @@ BOOST_FIXTURE_TEST_CASE(NoOrdersForConstructionMaterial, PlannerFixture)
     WorldDescription desc = makeDesc({}, {{"Loam", 5}, {"Mortar", 5}});
     desc.wares.push_back(makeWare("Mortar"));
     WorkshopDesc mixer = makeWorkshop("Mixer");
-    mixer.output = {"Mortar"};
+    mixer.outputs = {{"Mortar"}};
     desc.workshops.push_back(mixer);
     const BuildingType MIXER = getCustomBuilding(2);
     startGame(desc, 0);
@@ -1262,7 +1262,7 @@ WorldDescription makeHutDesc()
     desc.wares.push_back(makeWare("Hutwork"));
     WorkshopDesc hut = makeWorkshop("Hut");
     hut.cost = {{{"Wall"}, 2}, {{"Roof"}, 2}};
-    hut.output = {"Hutwork"};
+    hut.outputs = {{"Hutwork"}};
     desc.workshops.push_back(hut);
     return desc;
 }

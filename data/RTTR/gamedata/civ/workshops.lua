@@ -35,14 +35,15 @@ rttr:AddWorkshop{...}:
               Platz wird die Ware genommen, von der am meisten dort liegt (gleich viele: die zuerst definierte).
               Bestellt wird jede passende Ware aus dem nächsten Lager, das eine davon hat. Eine Ware, die zu mehreren
               Eingängen passt, kommt in den ersten, der noch Platz hat.
-  output      Tag-Abfrage der hergestellten Ware. Sie darf mehrere Waren treffen (mehrere Produkte), z.B.
-              output = "GeritzterKnochen" für alle geritzten Knochen.
-  outputs     optional statt output: Liste der Produkte, jeder Eintrag eine Tag-Abfrage, die genau eine Ware trifft:
-              outputs = { "CopperAxe", { "Hammer", "Copper" } } (ein Text = ein Tag, eine Liste = alle diese Tags).
-              Mehrere Einträge: mehrere Produkte. Nicht für Sammler, Plantagen und Minen und nicht
-              zusammen mit inheritProperties.
+  outputs     Liste der Produkte. Jeder Eintrag ist eine Tag-Abfrage (ein Text = ein Tag, eine Liste = alle diese
+              Tags), jede Ware, die sie trifft, ist ein Produkt:
+              outputs = { "CopperAxe", { "Hammer", "Copper" } }: die Kupferaxt und der Hammer mit dem Tag Copper.
+              outputs = { "GeritzterKnochen" }: alle geritzten Knochen (mehrere Produkte mit einem Eintrag).
+              Eine Ware darf nur einmal vorkommen. Sammler, Plantagen und Minen haben genau ein Produkt. Ohne
+              outputs: nur eine Bibliothek oder eine Plantage, die nur pflanzt. (Das frühere Feld output gibt es
+              nicht mehr: output = "Clay" heißt jetzt outputs = { "Clay" }.)
               Arbeitsschritte je Produkt: { "CopperSword", steps = 1.5 } (Standard 1, mehr als 0 bis 99, auch
-              Kommazahlen). Ein Produkt kostet so viele für dieses Produkt angesparte Arbeitsschritte (siehe
+              Kommazahlen; trifft der Eintrag mehrere Waren, gilt es für jede). Ein Produkt kostet so viele für dieses Produkt angesparte Arbeitsschritte (siehe
               outputRatio), z.B. outputs = { "CopperSpear", { "CopperSword", steps = 1.5 } }: ein Speer kostet 1
               Schritt, ein Schwert 1.5.
   outputRatio optional (Standard 1): Waren pro Arbeitsschritt, 0 bis 8, auch Kommazahlen. 0.5 = eine Ware jeden 2.
@@ -79,9 +80,9 @@ rttr:AddWorkshop{...}:
   library     optional: macht die Werkstatt zur Bibliothek, z.B. library = { capacity = 20 }.
               Eine Bibliothek bestellt alle Wissensmedien (Waren mit knowledge in wares.lua) per Träger, bis capacity
               erreicht ist, und stellt nichts her. Darin zählen die WP der Medien voll (in Lagern nur halb). Wird sie
-              zerstört, sind die Medien verloren. Ohne inputs, output und workTime.
+              zerstört, sind die Medien verloren. Ohne inputs, outputs und workTime.
   collect     optional: macht die Werkstatt zum Sammler wie den Steinbruch. Der Arbeiter geht zu Objekten auf der Karte
-              (mapobjects.lua) im Umkreis radius, arbeitet dort workTime Sekunden und bringt output nach Hause:
+              (mapobjects.lua) im Umkreis radius, arbeitet dort workTime Sekunden und bringt sein Produkt (outputs) nach Hause:
               collect = { object = "LoamDeposit", radius = 8 }. Ohne inputs. Man sollte auch mehrere objects zum Collecten angeben können  
               Arbeitsanimation je nach worker.look: "Planer" gräbt mit der Schaufel, "Woodcutter" hackt,
               "Farmer" mäht mit der Sense, sonst klopft er wie der Steinmetz.
@@ -94,8 +95,8 @@ rttr:AddWorkshop{...}:
               (damit Wege frei bleiben). Fahnen dürfen daneben stehen wie bei Steinen.
               Jedes Pflanzen verbraucht die Eingänge (inputs wie oben), z.B. inputs = { "Water" } zum Gießen.
               Ohne inputs braucht er dafür nichts.
-              Mit output erntet er außerdem selbst wie der Bauer: ausgewachsene Objekte dieser Art im Umkreis (auch
-              natürlich gewachsene), eine Ware pro Gang; Ernten geht vor Pflanzen. Ohne output pflanzt er nur (wie der
+              Mit outputs erntet er außerdem selbst wie der Bauer: ausgewachsene Objekte dieser Art im Umkreis (auch
+              natürlich gewachsene), eine Ware pro Gang; Ernten geht vor Pflanzen. Ohne outputs pflanzt er nur (wie der
               Förster), ernten kann dann z.B. ein Sammler (collect).
               Arbeitsanimation beim Pflanzen: worker.look "Farmer" sät, sonst pflanzt er wie der Förster.
               Beim Ernten wie beim Sammler (siehe collect).
@@ -111,7 +112,7 @@ rttr:AddWorkshop{...}:
               zusammen (siehe storage.lua). Es nimmt nur diese Waren auf und keine Personen, erzeugt keine Gehilfen
               und hat keinen Arbeiter. Baustellen und Werkstätten holen ihre Waren auch von dort.
               Ein Lager hat nur name, title, description, size, cost, look, knowledge und aiNearBorder; worker, inputs,
-              output, workTime usw. sind nicht erlaubt. Die KI baut solche Lager noch nicht.
+              outputs, workTime usw. sind nicht erlaubt. Die KI baut solche Lager noch nicht.
               Beispiel:
                 rttr:AddWorkshop{ name = "WoodYard", title = "Holzlager", size = "medium", cost = { Boards = 3 },
                     look = "Storehouse", warehouse = { wares = { "Wood", "Boards" }, capacity = 100 } }
@@ -147,7 +148,7 @@ rttr:AddWorkshop{
     look = "Woodcutter",
     worker = { title = "Beispiel-Arbeiter", look = "Carpenter" },
     inputs = { "ExampleRaw" },
-    output = "ExampleProduct",
+    outputs = { "ExampleProduct" },
     workTime = 20,
 }
 ]]
@@ -160,7 +161,7 @@ rttr:AddWorkshop{
     look = "Woodcutter",
     worker = { title = "Lehmverarbeiter", look = "Miner" },
     inputs = { "Loam" },
-    output = "Clay",
+    outputs = { "Clay" },
     outputRatio = 0.5,
     workTime = 37,
 }
@@ -178,7 +179,7 @@ rttr:AddWorkshop{
     look = "Hunter",      
     worker = { title = "BoneCarver", look = "Butcher" },
     inputs = { "Bones" },
-    output = "GeritzterKnochen",
+    outputs = { "GeritzterKnochen" },
     outputChoice = "knowledge",
     tools = { baseSpeed = 0, tools = { "Cleaver" } },
     workTime = 50,         
@@ -211,7 +212,7 @@ rttr:AddWorkshop{
     look = "Quarry",                
     worker = { title = "Lehmstecher", look = "Planer" },
     collect = { object = "LoamDeposit", radius = 9 }, 
-    output = "Loam",
+    outputs = { "Loam" },
     outputRatio = 0.75,
     tools = { baseSpeed = 25, tools = { "Shovel" } },
     workTime = 7,                    
@@ -228,7 +229,7 @@ rttr:AddWorkshop{
     look = "Quarry",                
     worker = { title = "Lehmstecher", look = "Planer" },
     collect = { object = "PeatDeposit", radius = 9 }, 
-    output = "Coal",
+    outputs = { "Coal" },
     outputRatio = 0.4,
     tools = { baseSpeed = 25, tools = { "Shovel", "Bucket" } },
     workTime = 7,                    
@@ -245,7 +246,7 @@ rttr:AddWorkshop{
     look = "Quarry",                
     worker = { title = "Miner", look = "Miner" },
     collect = { object = "TinDeposit", radius = 9 }, 
-    output = "TinOre",
+    outputs = { "TinOre" },
     outputRatio = 0.6,
     tools = { baseSpeed = 0, tools = { "PickAxe", "Bucket" } },
     workTime = 7,                    
@@ -262,7 +263,7 @@ rttr:AddWorkshop{
     look = "Quarry",                
     worker = { title = "Miner", look = "Miner" },
     collect = { object = "CopperDeposit", radius = 9 }, 
-    output = "CopperOre",
+    outputs = { "CopperOre" },
     outputRatio = 0.5,
     tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
     workTime = 7,                    
@@ -279,7 +280,7 @@ rttr:AddWorkshop{
     look = "Quarry",                
     worker = { title = "Miner", look = "Miner" },
     collect = { object = "IronDeposit", radius = 9 }, 
-    output = "IronOre",
+    outputs = { "IronOre" },
     outputRatio = 0.7,
     tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
     workTime = 7,                    
@@ -296,7 +297,7 @@ rttr:AddWorkshop{
     look = "Quarry",                
     worker = { title = "Miner", look = "Miner" },
     collect = { object = "ObsidianDeposit", radius = 9 }, 
-    output = "Obsidian",
+    outputs = { "Obsidian" },
     outputRatio = 0.3,
     tools = { baseSpeed = 25, tools = { "PickAxe", "Bucket" } },
     workTime = 7,                    
@@ -318,7 +319,7 @@ rttr:AddWorkshop{
     worker = { title = "Miner", look = "Miner" },
     inputs = { { tags = "Food", storage = 6 } },
     mine = { resource = "Copper" },
-    output = "CopperOre",
+    outputs = { "CopperOre" },
     outputRatio = 0.5,
     tools = { baseSpeed = 25, tools = { "PickAxe" } },
     workTime = 28,
@@ -338,7 +339,7 @@ rttr:AddWorkshop{
     inputs = { "Wood", { tags = "Food", storage = 6 } },
     storage = 2,
     mine = { resource = "Tin" },
-    output = "TinOre",
+    outputs = { "TinOre" },
     outputRatio = 0.7,
     tools = { baseSpeed = 0, tools = { "PickAxe" } },
     workTime = 28,
@@ -358,7 +359,7 @@ rttr:AddWorkshop{
     inputs = { "Wood", { tags = "Food", storage = 6 } },
     storage = 2,
     mine = { resource = "Lime" },
-    output = "Lime",
+    outputs = { "Lime" },
     outputRatio = 0.8,
     tools = { baseSpeed = 0, tools = { "PickAxe" } },
     workTime = 28,
@@ -382,7 +383,7 @@ rttr:AddWorkshop{
     worker = { title = "Papyrusbauer", look = "Farmer" },
     inputs = { "Water" },
     plant = { object = "PapyrusDeposit", radius = 9 },
-    output = "PapyrusPlant",
+    outputs = { "PapyrusPlant" },
     outputRatio = 0.5,
     tools = { baseSpeed = 0, tools = { "Scythe" } },
     workTime = 6,
@@ -398,7 +399,7 @@ rttr:AddWorkshop{
     look = "Winery",
     worker = { title = "Spinner", look = "Farmer" },
     inputs = { { tags = "Fibers" } },
-    output = "Rope",
+    outputs = { "Rope" },
     outputRatio = 0.8,
     workTime = 6,
     waitTime = 30,
@@ -531,7 +532,7 @@ rttr:AddWorkshop{
     look = "Ironsmelter",
     worker = { title = "Iron founder", look = "Minter" },
     inputs = { "CopperOre", "Coal", "TinOre" },
-    output = { "BronzeIngot" },
+    outputs = { "BronzeIngot" },
     outputRatio = 0.5,
     tools = { baseSpeed = 25, tools = { "Crucible" } },
     workTime = 50,
@@ -576,7 +577,7 @@ rttr:AddWorkshop{
     look = "Sawmill",
     worker = { title = "Copperworker", look = "Metalworker" },
     inputs = { "Holzstamm"},
-    output = { "Boards" },
+    outputs = { "Boards" },
     tools = { baseSpeed = 0, tools = { "Scythe" } },
     workTime = 120,
 }]]

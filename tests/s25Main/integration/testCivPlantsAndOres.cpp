@@ -95,7 +95,7 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     mine.inputs = {InputDesc{{"Food"}}};
     mine.storage = 2;
     mine.mineResource = "Copper";
-    mine.output = {"CopperOre"};
+    mine.outputs = {{"CopperOre"}};
     mine.workTime = 1;
     mine.waitTime = 1;
     desc.workshops.push_back(mine);
@@ -111,7 +111,7 @@ WorldDescription makeDesc(unsigned plantRadius = 3)
     plantation.inputs = {InputDesc{{"Water"}}};
     plantation.plantObject = "Papyrus";
     plantation.plantRadius = plantRadius;
-    plantation.output = {"PapyrusPlant"};
+    plantation.outputs = {{"PapyrusPlant"}};
     plantation.workTime = 1;
     plantation.waitTime = 1;
     desc.workshops.push_back(plantation);
@@ -229,11 +229,11 @@ rttr:AddMapObject{ name = "PapyrusDeposit", title = "Papyrus", sizes = 8, look =
 rttr:AddOre{ name = "Copper", title = "Kupfer", look = "Iron", tint = 0xC07040 }
 rttr:AddWorkshop{ name = "CopperMine", title = "Kupfermine", size = "mine", cost = { Boards = 4 }, look = "IronMine",
     worker = { title = "Bergmann", look = "Miner" }, inputs = { { tags = "Food", storage = 6 } },
-    mine = { resource = "Copper" }, output = "CopperOre", workTime = 28, waitTime = 29,
+    mine = { resource = "Copper" }, outputs = { "CopperOre" }, workTime = 28, waitTime = 29,
     knowledge = { IWP = 2 } }
 rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small", cost = { Boards = 2 },
     look = "Farm", worker = { title = "Bauer", look = "Farmer" }, inputs = { "Water" },
-    plant = { object = "PapyrusDeposit", radius = 4 }, output = "PapyrusPlant", workTime = 6 }
+    plant = { object = "PapyrusDeposit", radius = 4 }, outputs = { "PapyrusPlant" }, workTime = 6 }
 )";
     {
         WorldDescription desc;
@@ -286,8 +286,8 @@ rttr:AddWorkshop{ name = "Plantation", title = "Papyrusplantage", size = "small"
     // Plantation without output: only plants
     {
         std::string onlyPlant = base;
-        const auto pos = onlyPlant.find(R"(output = "PapyrusPlant", )");
-        onlyPlant.erase(pos, std::string(R"(output = "PapyrusPlant", )").size());
+        const auto pos = onlyPlant.find(R"(outputs = { "PapyrusPlant" }, )");
+        onlyPlant.erase(pos, std::string(R"(outputs = { "PapyrusPlant" }, )").size());
         WorldDescription desc;
         BOOST_TEST_REQUIRE(loadLua(onlyPlant, desc));
         const civ::Content content(desc);
